@@ -5255,7 +5255,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduz o tamanho do arquivo de áudio sem afetar a precisão da transcrição.';
+      'Reduz o tamanho do arquivo de áudio, mas a reamostragem pode alterar o áudio e afetar a precisão da transcrição.';
 
   @override
   String get providerPreprocessingMethod => 'Método de pré-processamento';
@@ -5313,11 +5313,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get providerPreprocessNone => 'Nenhum';
 
   @override
-  String get providerPreprocessResample => 'Otimização WAV (16 kHz mono)';
+  String get providerPreprocessResample => 'Reamostragem WAV (mono 16 kHz)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Reamostra para 16 kHz e converte para mono. Reduz o tamanho em cerca de 4–6x, com pouco efeito na precisão da transcrição.';
+      'Reamostra para 16 kHz e converte para mono; isso pode alterar o áudio.';
 
   @override
   String get providerPreprocessNoneHelp =>
@@ -17344,7 +17344,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduz o tamanho do arquivo de áudio sem afetar a precisão da transcrição.';
+      'Reduz o tamanho do arquivo de áudio, mas a reamostragem pode alterar o áudio e afetar a precisão da transcrição.';
 
   @override
   String get providerPreprocessingMethod => 'Método de pré-processamento';
@@ -17402,11 +17402,11 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get providerPreprocessNone => 'Nenhum';
 
   @override
-  String get providerPreprocessResample => 'Otimização WAV (16 kHz mono)';
+  String get providerPreprocessResample => 'Reamostragem WAV (mono 16 kHz)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Reamostra para 16 kHz e converte para mono. Reduz o tamanho em cerca de 4–6x, com pouco efeito na precisão da transcrição.';
+      'Reamostra para 16 kHz e converte para mono; isso pode alterar o áudio.';
 
   @override
   String get providerPreprocessNoneHelp =>

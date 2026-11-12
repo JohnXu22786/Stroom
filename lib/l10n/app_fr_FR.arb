@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "Stratégie de repli",
   "providerFallbackMethod": "Méthode de repli",
   "providerPreprocessing": "Prétraitement audio",
-  "providerPreprocessingHelp": "Réduit la taille des fichiers audio sans affecter la précision de la transcription.",
+  "providerPreprocessingHelp": "Réduit la taille des fichiers audio, mais le rééchantillonnage peut modifier l’audio et affecter la précision de la transcription.",
   "providerPreprocessingMethod": "Méthode de prétraitement",
   "@providerParamNameInvalid": {
     "placeholders": {
@@ -2489,8 +2489,8 @@
   "providerFallbackAllHelp": "Essayer d’abord le Base64 dans la limite du corps de requête. Puis, si l’option est activée, compresser le WAV entier ; s’il dépasse toujours la limite et que le découpage est activé, fractionner le PCM source et encoder chaque segment. WAV PCM uniquement.",
   "providerFallbackRejectHelp": "Rejeter le fichier s’il dépasse la limite ; ne pas essayer de méthode de repli.",
   "providerPreprocessNone": "Aucun",
-  "providerPreprocessResample": "Optimisation WAV (mono 16 kHz)",
-  "providerPreprocessResampleHelp": "Rééchantillonne à 16 kHz et convertit en mono. Réduit la taille d’environ 4 à 6 fois avec peu d’effet sur la précision de la transcription.",
+  "providerPreprocessResample": "Rééchantillonnage WAV (mono 16 kHz)",
+  "providerPreprocessResampleHelp": "Rééchantillonne à 16 kHz et convertit en mono ; cela peut modifier l’audio.",
   "providerPreprocessNoneHelp": "Aucun prétraitement ; envoyer tel quel.",
   "assistantDefaultsScopeHelp": "Le modèle et les outils par défaut ne s’appliquent qu’aux nouvelles conversations créées avec cet assistant. Les conversations existantes conservent leurs propres paramètres. La troncature des sorties d’outils s’applique à toutes les conversations.",
   "assistantDefaultModelTitle": "Modèle par défaut",

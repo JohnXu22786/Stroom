@@ -5205,7 +5205,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduces audio file size without affecting transcription accuracy.';
+      'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.';
 
   @override
   String get providerPreprocessingMethod => 'Preprocessing method';
@@ -5263,12 +5263,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample =>
-      'WAV optimization (16 kHz mono, recommended)';
+  String get providerPreprocessResample => 'WAV resampling (16 kHz mono)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.';
+      'Resamples to 16 kHz and mixes to mono; this can change the audio.';
 
   @override
   String get providerPreprocessNoneHelp => 'No preprocessing; send as is.';
@@ -17135,7 +17134,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduces audio file size without affecting transcription accuracy.';
+      'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.';
 
   @override
   String get providerPreprocessingMethod => 'Preprocessing method';
@@ -17193,12 +17192,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample =>
-      'WAV optimization (16 kHz mono, recommended)';
+  String get providerPreprocessResample => 'WAV resampling (16 kHz mono)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.';
+      'Resamples to 16 kHz and mixes to mono; this can change the audio.';
 
   @override
   String get providerPreprocessNoneHelp => 'No preprocessing; send as is.';

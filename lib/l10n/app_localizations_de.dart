@@ -5278,7 +5278,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Verringert die Größe der Audiodatei, ohne die Transkriptionsgenauigkeit zu beeinträchtigen.';
+      'Verringert die Größe der Audiodatei, aber das Resampling kann das Audio verändern und die Transkriptionsgenauigkeit beeinträchtigen.';
 
   @override
   String get providerPreprocessingMethod => 'Vorverarbeitungsmethode';
@@ -5336,12 +5336,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get providerPreprocessNone => 'Keine';
 
   @override
-  String get providerPreprocessResample =>
-      'WAV-Optimierung (16 kHz, Mono, empfohlen)';
+  String get providerPreprocessResample => 'WAV-Resampling (16 kHz, Mono)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Wandelt die Abtastrate in 16 kHz um und mischt das Audio auf Mono herunter. Verringert die Größe etwa um das 4- bis 6-Fache bei geringem Einfluss auf die Transkriptionsgenauigkeit.';
+      'Wandelt die Abtastrate in 16 kHz um und mischt auf Mono herunter; dadurch kann sich das Audio verändern.';
 
   @override
   String get providerPreprocessNoneHelp =>
@@ -17372,7 +17371,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get providerPreprocessingHelp =>
-      'Verringert die Größe der Audiodatei, ohne die Transkriptionsgenauigkeit zu beeinträchtigen.';
+      'Verringert die Größe der Audiodatei, aber das Resampling kann das Audio verändern und die Transkriptionsgenauigkeit beeinträchtigen.';
 
   @override
   String get providerPreprocessingMethod => 'Vorverarbeitungsmethode';
@@ -17430,12 +17429,11 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get providerPreprocessNone => 'Keine';
 
   @override
-  String get providerPreprocessResample =>
-      'WAV-Optimierung (16 kHz, Mono, empfohlen)';
+  String get providerPreprocessResample => 'WAV-Resampling (16 kHz, Mono)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Wandelt die Abtastrate in 16 kHz um und mischt das Audio auf Mono herunter. Verringert die Größe etwa um das 4- bis 6-Fache bei geringem Einfluss auf die Transkriptionsgenauigkeit.';
+      'Wandelt die Abtastrate in 16 kHz um und mischt auf Mono herunter; dadurch kann sich das Audio verändern.';
 
   @override
   String get providerPreprocessNoneHelp =>

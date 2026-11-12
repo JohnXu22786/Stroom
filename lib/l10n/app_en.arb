@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "Fallback strategy",
   "providerFallbackMethod": "Fallback method",
   "providerPreprocessing": "Audio preprocessing",
-  "providerPreprocessingHelp": "Reduces audio file size without affecting transcription accuracy.",
+  "providerPreprocessingHelp": "Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.",
   "providerPreprocessingMethod": "Preprocessing method",
   "@providerParamNameInvalid": {
     "placeholders": {
@@ -2489,8 +2489,8 @@
   "providerFallbackAllHelp": "Try Base64 within the request-body limit first. Then, if enabled, compress the full WAV; if it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.",
   "providerFallbackRejectHelp": "Reject the file if it exceeds the limit; do not try a fallback.",
   "providerPreprocessNone": "None",
-  "providerPreprocessResample": "WAV optimization (16 kHz mono, recommended)",
-  "providerPreprocessResampleHelp": "Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.",
+  "providerPreprocessResample": "WAV resampling (16 kHz mono)",
+  "providerPreprocessResampleHelp": "Resamples to 16 kHz and mixes to mono; this can change the audio.",
   "providerPreprocessNoneHelp": "No preprocessing; send as is.",
   "assistantDefaultsScopeHelp": "Default model and tools apply only to new conversations created under this assistant. Existing conversations keep their own settings. Tool output truncation applies to all conversations.",
   "assistantDefaultModelTitle": "Default model",

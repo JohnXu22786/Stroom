@@ -25,6 +25,36 @@ void main() {
       }
     });
 
+    test('rejects animated GIF with conversion guidance', () {
+      final encoder = img.GifEncoder();
+      encoder.addFrame(img.Image(width: 2, height: 2), duration: 10);
+      encoder.addFrame(img.Image(width: 2, height: 2), duration: 10);
+      final animatedGif = encoder.finish()!;
+
+      expect(
+        () => prepareOcrImagePayloadSync(animatedGif),
+        throwsA(isA<OcrImagePayloadException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('不支持'), contains('转换为 PNG'), contains('WebP')),
+        )),
+      );
+    });
+
+    test('retains support for non-animated GIF', () {
+      final gif = Uint8List.fromList(
+        img.encodeGif(img.Image(width: 2, height: 2)),
+      );
+
+      final prepared = prepareOcrImagePayloadSync(gif);
+
+      expect(prepared.format, 'gif');
+      expect(prepared.mimeType, 'image/gif');
+      expect(prepared.bytes, gif);
+      expect(prepared.width, 2);
+      expect(prepared.height, 2);
+    });
+
     test('rejects empty and corrupt data and guides unsupported formats',
         () async {
       await expectLater(

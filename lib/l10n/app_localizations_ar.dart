@@ -5249,7 +5249,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'تقلل حجم الملف الصوتي من دون التأثير في دقة التفريغ النصي.';
+      'تقلل حجم الملف الصوتي، لكن إعادة أخذ العينات قد تغيّر الصوت وتؤثر في دقة التفريغ النصي.';
 
   @override
   String get providerPreprocessingMethod => 'طريقة المعالجة المسبقة';
@@ -5307,11 +5307,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get providerPreprocessResample =>
-      'تحسين WAV (16 kHz أحادي القناة، موصى به)';
+      'إعادة أخذ عينات WAV (16 kHz أحادي القناة)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'يعيد أخذ العينات إلى 16 kHz ويمزج الصوت إلى قناة واحدة. يقلل الحجم بنحو 4–6 أضعاف مع تأثير ضئيل في دقة التفريغ النصي.';
+      'يعيد أخذ العينات إلى 16 kHz ويمزج الصوت إلى قناة واحدة؛ قد يؤدي ذلك إلى تغيير الصوت.';
 
   @override
   String get providerPreprocessNoneHelp => 'دون معالجة مسبقة؛ يُرسل كما هو.';
@@ -17292,7 +17292,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get providerPreprocessingHelp =>
-      'تقلل حجم الملف الصوتي من دون التأثير في دقة التفريغ النصي.';
+      'تقلل حجم الملف الصوتي، لكن إعادة أخذ العينات قد تغيّر الصوت وتؤثر في دقة التفريغ النصي.';
 
   @override
   String get providerPreprocessingMethod => 'طريقة المعالجة المسبقة';
@@ -17350,11 +17350,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get providerPreprocessResample =>
-      'تحسين WAV (16 kHz أحادي القناة، موصى به)';
+      'إعادة أخذ عينات WAV (16 kHz أحادي القناة)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'يعيد أخذ العينات إلى 16 kHz ويمزج الصوت إلى قناة واحدة. يقلل الحجم بنحو 4–6 أضعاف مع تأثير ضئيل في دقة التفريغ النصي.';
+      'يعيد أخذ العينات إلى 16 kHz ويمزج الصوت إلى قناة واحدة؛ قد يؤدي ذلك إلى تغيير الصوت.';
 
   @override
   String get providerPreprocessNoneHelp => 'دون معالجة مسبقة؛ يُرسل كما هو.';
