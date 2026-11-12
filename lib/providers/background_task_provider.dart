@@ -4004,6 +4004,16 @@ dynamic _sanitizeSkippedOcrCredentialFields(
   return value;
 }
 
+bool _hasDroppedOcrCredentialFields(Map<dynamic, dynamic> taskRow) =>
+    taskRow.entries.any(
+      (entry) =>
+          entry.key is String &&
+          _isOcrCredentialField(entry.key) &&
+          entry.value is String &&
+          (entry.value as String).trim().isNotEmpty &&
+          !_knownSkippedOcrTaskFields.contains(entry.key),
+    );
+
 Map<String, dynamic> _safeUnsupportedOcrRetryData(
   String taskId,
   Map<String, dynamic> malformedRetryData, {
@@ -6269,7 +6279,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       for (final entry in _skippedTaskEntries)
         if (entry is Map &&
             entry['type'] == BackgroundTaskType.ocr.name &&
-            _hasUnserializedTaskOcrCacheReferences(entry) &&
+            (_hasUnserializedTaskOcrCacheReferences(entry) ||
+                _hasDroppedOcrCredentialFields(entry)) &&
             !hasUnknownOcrCacheOwnershipRecord(entry))
           _unrestoredTaskRecord(
             retryAudioOwnershipKnown: true,

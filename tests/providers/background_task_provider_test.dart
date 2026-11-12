@@ -26575,6 +26575,12 @@ void main() {
                 .single['storageRef'],
             cacheReference,
           );
+          final ownershipMarker = rows.whereType<Map>().singleWhere(
+                (row) =>
+                    row['_unrestoredTaskRecord'] == true &&
+                    row['ocrCacheTaskId'] == skippedTaskId,
+              );
+          expect(ownershipMarker['ocrCacheOwnershipKnown'], isFalse);
           expect(
             await notifier.ocrCacheReferencesForCleanup(),
             isNull,
