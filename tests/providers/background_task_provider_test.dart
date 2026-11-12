@@ -19677,6 +19677,91 @@ void main() {
       },
     );
 
+    test('legacy task-row credentials redact OCR status collisions everywhere',
+        () {
+      const credential = 'HTTP 429';
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-row-status-collision',
+        'type': 'ocr',
+        'title': 'Legacy OCR task',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'apiKey': credential,
+        'error': credential,
+        'retryData': {
+          'type': 'ocr',
+          'version': OcrRetrySnapshot.currentVersion,
+          'images': <dynamic>[],
+          'batchMode': 'joint',
+          'perImageConcurrency': 1,
+          'requestSizeBudgetBytes': 1024,
+          'instructionContent': 'Use $credential',
+        },
+        'steps': [
+          {'label': 'OCR', 'status': 'failed', 'error': credential},
+        ],
+        'ocrPageOutcomes': [
+          {
+            'imageIndex': 0,
+            'status': 'failed',
+            'error': credential,
+          },
+        ],
+      });
+      final persisted = jsonEncode(task.toMap());
+
+      expect(task.error, 'OCR 错误详情已隐藏');
+      expect(task.steps.single.error, 'OCR 错误详情已隐藏');
+      expect(task.ocrPageOutcomes.single.error, 'OCR 错误详情已隐藏');
+      expect(task.retryData!['instructionContent'], isNull);
+      expect(persisted, isNot(contains(credential)));
+      expect(persisted, isNot(contains('apiKey')));
+    });
+
+    test(
+        'legacy task-row credentials block colliding page-summary relocalization',
+        () async {
+      const taskId = 'legacy-ocr-row-page-summary-collision';
+      final sourceStrings = lookupAppLocalizations(const Locale('en', 'US'));
+      final targetStrings = lookupAppLocalizations(const Locale('es'));
+      final credential = targetStrings.bgTaskOcrPageFailed('1');
+      final sourceSummary = sourceStrings.bgTaskOcrIncompleteError(
+        sourceStrings.bgTaskOcrPagesIncomplete(
+          sourceStrings.bgTaskOcrPageFailed('1'),
+        ),
+      );
+      final file = _tasksFileIn(testDir.path);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode([
+        {
+          'id': taskId,
+          'type': 'ocr',
+          'title': 'Legacy OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'apiKey': credential,
+          'error': sourceSummary,
+        },
+      ]));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => targetStrings,
+      );
+
+      try {
+        expect(await notifier.restoreFromPersistence(), isTrue);
+        final task = notifier.taskById(taskId)!;
+        expect(task.error, sourceSummary);
+        expect(task.hasOcrErrorLocalizationCredentialCollision, isTrue);
+        await notifier.pendingPersistence;
+        final persisted = await file.readAsString();
+        expect(persisted, isNot(contains(credential)));
+        expect(persisted, isNot(contains('apiKey')));
+      } finally {
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      }
+    });
+
     test(
       'legacy OCR task and step errors hide unclassified provider echoes',
       () {
