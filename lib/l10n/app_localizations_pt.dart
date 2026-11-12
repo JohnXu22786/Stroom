@@ -5255,7 +5255,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduz o tamanho do arquivo de áudio sem afetar a precisão da transcrição.';
+      'Reduz o tamanho do arquivo de áudio, mas a reamostragem pode alterar o áudio e afetar a precisão da transcrição.';
 
   @override
   String get providerPreprocessingMethod => 'Método de pré-processamento';
@@ -17339,7 +17339,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduz o tamanho do arquivo de áudio sem afetar a precisão da transcrição.';
+      'Reduz o tamanho do arquivo de áudio, mas a reamostragem pode alterar o áudio e afetar a precisão da transcrição.';
 
   @override
   String get providerPreprocessingMethod => 'Método de pré-processamento';

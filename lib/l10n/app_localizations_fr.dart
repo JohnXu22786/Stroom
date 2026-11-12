@@ -5287,7 +5287,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Réduit la taille des fichiers audio sans affecter la précision de la transcription.';
+      'Réduit la taille des fichiers audio, mais le rééchantillonnage peut modifier l’audio et affecter la précision de la transcription.';
 
   @override
   String get providerPreprocessingMethod => 'Méthode de prétraitement';
@@ -17435,7 +17435,7 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get providerPreprocessingHelp =>
-      'Réduit la taille des fichiers audio sans affecter la précision de la transcription.';
+      'Réduit la taille des fichiers audio, mais le rééchantillonnage peut modifier l’audio et affecter la précision de la transcription.';
 
   @override
   String get providerPreprocessingMethod => 'Méthode de prétraitement';

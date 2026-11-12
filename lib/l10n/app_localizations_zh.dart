@@ -4957,7 +4957,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPreprocessing => '音频预处理';
 
   @override
-  String get providerPreprocessingHelp => '降低音频文件大小，不影响转写准确率。';
+  String get providerPreprocessingHelp => '降低音频文件大小，但重采样可能会改变音频并影响转写准确率。';
 
   @override
   String get providerPreprocessingMethod => '预处理方式';
@@ -16250,7 +16250,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerPreprocessing => '音频预处理';
 
   @override
-  String get providerPreprocessingHelp => '降低音频文件大小，不影响转写准确率。';
+  String get providerPreprocessingHelp => '降低音频文件大小，但重采样可能会改变音频并影响转写准确率。';
 
   @override
   String get providerPreprocessingMethod => '预处理方式';

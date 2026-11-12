@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "Stratégie de repli",
   "providerFallbackMethod": "Méthode de repli",
   "providerPreprocessing": "Prétraitement audio",
-  "providerPreprocessingHelp": "Réduit la taille des fichiers audio sans affecter la précision de la transcription.",
+  "providerPreprocessingHelp": "Réduit la taille des fichiers audio, mais le rééchantillonnage peut modifier l’audio et affecter la précision de la transcription.",
   "providerPreprocessingMethod": "Méthode de prétraitement",
   "@providerParamNameInvalid": {
     "placeholders": {

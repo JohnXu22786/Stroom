@@ -5080,7 +5080,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      '전사 정확도에 영향을 거의 주지 않으면서 오디오 파일 크기를 줄입니다.';
+      '오디오 파일 크기를 줄이지만, 리샘플링으로 오디오가 변경되어 전사 정확도에 영향을 줄 수 있습니다.';
 
   @override
   String get providerPreprocessingMethod => '전처리 방식';
@@ -16686,7 +16686,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get providerPreprocessingHelp =>
-      '전사 정확도에 영향을 거의 주지 않으면서 오디오 파일 크기를 줄입니다.';
+      '오디오 파일 크기를 줄이지만, 리샘플링으로 오디오가 변경되어 전사 정확도에 영향을 줄 수 있습니다.';
 
   @override
   String get providerPreprocessingMethod => '전처리 방식';

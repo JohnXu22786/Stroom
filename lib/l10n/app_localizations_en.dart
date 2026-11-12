@@ -5205,7 +5205,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduces audio file size without affecting transcription accuracy.';
+      'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.';
 
   @override
   String get providerPreprocessingMethod => 'Preprocessing method';
@@ -17129,7 +17129,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduces audio file size without affecting transcription accuracy.';
+      'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.';
 
   @override
   String get providerPreprocessingMethod => 'Preprocessing method';
