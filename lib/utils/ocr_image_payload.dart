@@ -209,6 +209,13 @@ OcrImagePayload prepareOcrImagePayloadSync(
     );
   }
 
+  if (format == 'gif' && decoder.numFrames() > 1) {
+    throw OcrImagePayloadException(
+      OcrImagePayloadFailure.unsupportedFormat,
+      _unsupportedFormatMessage(bytes),
+    );
+  }
+
   int? encodedOrientation = img.decodeJpgExif(bytes)?.imageIfd.orientation;
   if (encodedOrientation == null && decoder is img.WebPDecoder) {
     final exif = decoder.info?.exif;
@@ -236,8 +243,8 @@ OcrImagePayload prepareOcrImagePayloadSync(
 
   late final img.Image decoded;
   try {
-    // OCR sends the original encoded image, so validate only its first frame
-    // instead of allocating every frame of an animated image.
+    // Animated GIFs were rejected above, so decode only the single supported
+    // frame while validating a static image.
     final image = decoder.decodeFrame(0);
     if (image == null) throw const FormatException('无法解码图片');
     decoded = image;
