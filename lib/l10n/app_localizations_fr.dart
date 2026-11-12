@@ -22161,11 +22161,6 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   }
 
   @override
-  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
-    return 'La taille JSON de la requête OCR est de $encodedBytes octets, au-dessus de la limite configurée de $budgetBytes octets.';
-  }
-
-  @override
   String bgTaskOcrError(String details) {
     return 'Échec de l’OCR : $details';
   }
@@ -22929,99 +22924,6 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get appLogCopyDone => 'Tout le contenu des journaux a été copié';
-
-  @override
-  String get appLogSettings => 'Log settings';
-
-  @override
-  String get appLogSettingsTitle => 'Application log settings';
-
-  @override
-  String appLogStorageUsage(int count, String size) {
-    return '$count files · $size used';
-  }
-
-  @override
-  String get appLogRetentionDays => 'Keep logs for';
-
-  @override
-  String appLogDays(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '# days',
-      one: '# day',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get appLogMinimumLevel => 'Minimum detail level';
-
-  @override
-  String get appLogStorageLimit => 'Maximum log storage';
-
-  @override
-  String get appLogUnlimited => 'Unlimited';
-
-  @override
-  String get appLogSettingsHelp =>
-      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
-
-  @override
-  String get appLogSettingsSaved => 'Log settings saved';
-
-  @override
-  String appLogSettingsError(Object error) {
-    return 'Could not save log settings: $error';
-  }
-
-  @override
-  String get appLogSave => 'Save';
-
-  @override
-  String get appLogLevelDebug => 'Debug · most detail';
-
-  @override
-  String get appLogLevelInfo => 'Info';
-
-  @override
-  String get appLogLevelWarning => 'Warning';
-
-  @override
-  String get appLogLevelError => 'Error';
-
-  @override
-  String get appLogFilter => 'Filter log entries';
-
-  @override
-  String get appLogSearch => 'Keyword';
-
-  @override
-  String get appLogSource => 'Source';
-
-  @override
-  String get appLogLevel => 'Level';
-
-  @override
-  String get appLogAnyLevel => 'Any level';
-
-  @override
-  String get appLogFromTime => 'From';
-
-  @override
-  String get appLogUntilTime => 'Until';
-
-  @override
-  String get appLogClearFilters => 'Clear filters';
-
-  @override
-  String get appLogNoMatches => 'No entries match these filters';
-
-  @override
-  String appLogFilteredLineCount(int visible, int total) {
-    return '$visible of $total lines';
-  }
 
   @override
   String get iosContinuedTaskTitle => 'Tâche en arrière-plan';
@@ -24321,16 +24223,4 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   @override
   String get providerMaxUploadSizePositive =>
       'La taille maximale d’envoi doit être un nombre positif.';
-
-  @override
-  String get ocrSamplingTemperatureOutOfRange =>
-      'La température enregistrée est hors de la plage 0–2. Réglez le curseur ou désactivez l’option avant d’enregistrer.';
-
-  @override
-  String get ocrSamplingTopPOutOfRange =>
-      'La valeur top-P enregistrée est hors de la plage 0–1. Réglez le curseur ou désactivez l’option avant d’enregistrer.';
-
-  @override
-  String get ocrSamplingSliderRepairRequired =>
-      'Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.';
 }

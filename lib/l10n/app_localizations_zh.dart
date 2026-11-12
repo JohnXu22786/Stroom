@@ -11311,7 +11311,8 @@ class AppLocalizationsZh extends AppLocalizations {
       '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
 
   @override
-  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
+  String get ocrSamplingSliderRepairRequired =>
+      '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -20599,11 +20600,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
-    return 'OCR 请求 JSON 大小为 $encodedBytes 字节，超过配置的 $budgetBytes 字节上限。';
-  }
-
-  @override
   String bgTaskOcrError(String details) {
     return 'OCR识别失败：$details';
   }
@@ -21323,92 +21319,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get appLogCopyDone => '已复制全部日志内容';
-
-  @override
-  String get appLogSettings => '日志设置';
-
-  @override
-  String get appLogSettingsTitle => '应用日志设置';
-
-  @override
-  String appLogStorageUsage(int count, String size) {
-    return '$count 个文件 · 已用 $size';
-  }
-
-  @override
-  String get appLogRetentionDays => '保留期限';
-
-  @override
-  String appLogDays(int count) {
-    return '$count 天';
-  }
-
-  @override
-  String get appLogMinimumLevel => '记录详细度';
-
-  @override
-  String get appLogStorageLimit => '日志空间上限';
-
-  @override
-  String get appLogUnlimited => '不限制';
-
-  @override
-  String get appLogSettingsHelp => '超出保留期限或空间上限的旧日志会自动清理；当前小时的日志文件会保留。';
-
-  @override
-  String get appLogSettingsSaved => '日志设置已保存';
-
-  @override
-  String appLogSettingsError(Object error) {
-    return '保存日志设置失败：$error';
-  }
-
-  @override
-  String get appLogSave => '保存';
-
-  @override
-  String get appLogLevelDebug => '调试 · 最详细';
-
-  @override
-  String get appLogLevelInfo => '信息';
-
-  @override
-  String get appLogLevelWarning => '警告';
-
-  @override
-  String get appLogLevelError => '错误';
-
-  @override
-  String get appLogFilter => '筛选日志';
-
-  @override
-  String get appLogSearch => '关键词';
-
-  @override
-  String get appLogSource => '来源';
-
-  @override
-  String get appLogLevel => '级别';
-
-  @override
-  String get appLogAnyLevel => '全部级别';
-
-  @override
-  String get appLogFromTime => '开始时间';
-
-  @override
-  String get appLogUntilTime => '结束时间';
-
-  @override
-  String get appLogClearFilters => '清除筛选';
-
-  @override
-  String get appLogNoMatches => '没有符合筛选条件的日志';
-
-  @override
-  String appLogFilteredLineCount(int visible, int total) {
-    return '显示 $visible / $total 行';
-  }
 
   @override
   String get iosContinuedTaskTitle => 'Stroom 后台任务';
@@ -22610,15 +22520,4 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
-
-  @override
-  String get ocrSamplingTemperatureOutOfRange =>
-      '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。';
-
-  @override
-  String get ocrSamplingTopPOutOfRange =>
-      '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
-
-  @override
-  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
 }

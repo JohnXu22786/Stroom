@@ -16416,17 +16416,14 @@ abstract class AppLocalizations {
   /// **'Saving speech transcription failed: {details}'**
   String bgTaskAsrSaveError(String details);
 
-  /// No description provided for @bgTaskOcrRequestSizeExceeded.
-  ///
-  /// In en, this message translates to:
-  /// **'OCR request JSON size is {encodedBytes} bytes, exceeding the configured limit of {budgetBytes} bytes.'**
-  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes);
-
   /// No description provided for @bgTaskOcrError.
   ///
   /// In en, this message translates to:
   /// **'OCR failed: {details}'**
   String bgTaskOcrError(String details);
+
+  /// OCR request JSON size exceeded the configured request budget.
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes);
 
   /// No description provided for @bgTaskOcrSaveError.
   ///

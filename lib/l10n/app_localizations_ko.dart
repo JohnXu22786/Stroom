@@ -21161,11 +21161,6 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   }
 
   @override
-  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
-    return 'OCR 요청 JSON 크기 $encodedBytes바이트가 설정된 제한 $budgetBytes바이트를 초과했습니다.';
-  }
-
-  @override
   String bgTaskOcrError(String details) {
     return 'OCR 실패: $details';
   }
@@ -21907,99 +21902,6 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get appLogCopyDone => '모든 로그 내용을 복사했습니다';
-
-  @override
-  String get appLogSettings => 'Log settings';
-
-  @override
-  String get appLogSettingsTitle => 'Application log settings';
-
-  @override
-  String appLogStorageUsage(int count, String size) {
-    return '$count files · $size used';
-  }
-
-  @override
-  String get appLogRetentionDays => 'Keep logs for';
-
-  @override
-  String appLogDays(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '# days',
-      one: '# day',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get appLogMinimumLevel => 'Minimum detail level';
-
-  @override
-  String get appLogStorageLimit => 'Maximum log storage';
-
-  @override
-  String get appLogUnlimited => 'Unlimited';
-
-  @override
-  String get appLogSettingsHelp =>
-      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
-
-  @override
-  String get appLogSettingsSaved => 'Log settings saved';
-
-  @override
-  String appLogSettingsError(Object error) {
-    return 'Could not save log settings: $error';
-  }
-
-  @override
-  String get appLogSave => 'Save';
-
-  @override
-  String get appLogLevelDebug => 'Debug · most detail';
-
-  @override
-  String get appLogLevelInfo => 'Info';
-
-  @override
-  String get appLogLevelWarning => 'Warning';
-
-  @override
-  String get appLogLevelError => 'Error';
-
-  @override
-  String get appLogFilter => 'Filter log entries';
-
-  @override
-  String get appLogSearch => 'Keyword';
-
-  @override
-  String get appLogSource => 'Source';
-
-  @override
-  String get appLogLevel => 'Level';
-
-  @override
-  String get appLogAnyLevel => 'Any level';
-
-  @override
-  String get appLogFromTime => 'From';
-
-  @override
-  String get appLogUntilTime => 'Until';
-
-  @override
-  String get appLogClearFilters => 'Clear filters';
-
-  @override
-  String get appLogNoMatches => 'No entries match these filters';
-
-  @override
-  String appLogFilteredLineCount(int visible, int total) {
-    return '$visible of $total lines';
-  }
 
   @override
   String get iosContinuedTaskTitle => '백그라운드 작업';
@@ -23237,16 +23139,4 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get providerMaxUploadSizePositive => '최대 업로드 크기는 양수여야 합니다.';
-
-  @override
-  String get ocrSamplingTemperatureOutOfRange =>
-      '저장된 온도 값이 0–2 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
-
-  @override
-  String get ocrSamplingTopPOutOfRange =>
-      '저장된 top-P 값이 0–1 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
-
-  @override
-  String get ocrSamplingSliderRepairRequired =>
-      '범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.';
 }
