@@ -245,8 +245,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _maxFileSizeController = TextEditingController(
         text: _maxFileSizeMb.toString(),
       );
-      _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
-      _chunking = c.typeConfig['chunking'] as String? ?? 'silence';
+      final savedPreprocessing =
+          c.typeConfig['preprocessing'] as String? ?? 'none';
+      _preprocessing =
+          savedPreprocessing == 'resampleMono' ? savedPreprocessing : 'none';
+      final savedChunking = c.typeConfig['chunking'] as String? ?? 'silence';
+      _chunking = const {'none', 'silence', 'fixedDuration', 'fixedSize'}
+              .contains(savedChunking)
+          ? savedChunking
+          : 'silence';
       // Only codecs with valid standalone output are supported
       // ('opus'/'mp3' encoders are experimental and produce undecodable
       // output — legacy saved values are normalized to 'none').
@@ -254,7 +261,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _compression = (savedCompression == 'adpcm' || savedCompression == 'flac')
           ? savedCompression
           : 'none';
-      _fallbackMethod = c.typeConfig['fallbackMethod'] as String? ?? 'all';
+      final savedFallbackMethod =
+          c.typeConfig['fallbackMethod'] as String? ?? 'all';
+      _fallbackMethod = const {'none', 'specific', 'generic', 'all'}
+              .contains(savedFallbackMethod)
+          ? savedFallbackMethod
+          : 'all';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
     }

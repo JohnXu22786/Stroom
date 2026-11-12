@@ -5,6 +5,59 @@ import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
 
 void main() {
+  testWidgets('ASR settings normalize unsupported saved enum values', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => showProviderSettingsPanel(
+                  context: context,
+                  config: ProviderConfigItem(
+                    providerName: 'ASR provider',
+                    host: 'https://api.example.com',
+                    key: 'test-key',
+                    typeConfig: {
+                      'preprocessing': 'legacyPreprocessing',
+                      'chunking': 'legacyChunking',
+                      'fallbackMethod': 'legacyFallback',
+                    },
+                  ),
+                  providerType: 'asr',
+                ),
+                child: const Text('Open provider settings'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open provider settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Parameter settings'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    for (final expected in ['none', 'silence', 'all']) {
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButton<String> && widget.value == expected,
+        ),
+        findsOneWidget,
+      );
+    }
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('ASR preprocessing defaults to none and preserves saved choice', (
     tester,
   ) async {
