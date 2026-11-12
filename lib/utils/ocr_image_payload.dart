@@ -209,7 +209,7 @@ OcrImagePayload prepareOcrImagePayloadSync(
     );
   }
 
-  if (format == 'gif' && decoder.numFrames() > 1) {
+  if (decoder.numFrames() > 1) {
     throw OcrImagePayloadException(
       OcrImagePayloadFailure.unsupportedFormat,
       _unsupportedFormatMessage(bytes),
@@ -243,8 +243,8 @@ OcrImagePayload prepareOcrImagePayloadSync(
 
   late final img.Image decoded;
   try {
-    // Animated GIFs were rejected above, so decode only the single supported
-    // frame while validating a static image.
+    // Animated images were rejected above, so decode only frame zero while
+    // validating a static image.
     final image = decoder.decodeFrame(0);
     if (image == null) throw const FormatException('无法解码图片');
     decoded = image;

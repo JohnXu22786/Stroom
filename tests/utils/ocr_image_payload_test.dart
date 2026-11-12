@@ -41,6 +41,42 @@ void main() {
       );
     });
 
+    test('rejects animated PNG with conversion guidance', () {
+      final image = img.Image(width: 2, height: 2, numChannels: 3)
+        ..clear(img.ColorRgb8(255, 255, 255));
+      image.addFrame(img.Image(width: 2, height: 2, numChannels: 3)
+        ..clear(img.ColorRgb8(0, 0, 0)));
+      final animatedPng = img.encodePng(image);
+      expect((img.PngDecoder()..startDecode(animatedPng)).numFrames(), 2);
+
+      expect(
+        () => prepareOcrImagePayloadSync(animatedPng),
+        throwsA(isA<OcrImagePayloadException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('不支持'), contains('转换为 PNG'), contains('WebP')),
+        )),
+      );
+    });
+
+    test('rejects animated WebP with conversion guidance', () {
+      final image = img.Image(width: 2, height: 2, numChannels: 3)
+        ..clear(img.ColorRgb8(255, 255, 255));
+      image.addFrame(img.Image(width: 2, height: 2, numChannels: 3)
+        ..clear(img.ColorRgb8(0, 0, 0)));
+      final animatedWebp = img.encodeWebP(image);
+      expect((img.WebPDecoder()..startDecode(animatedWebp)).numFrames(), 2);
+
+      expect(
+        () => prepareOcrImagePayloadSync(animatedWebp),
+        throwsA(isA<OcrImagePayloadException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('不支持'), contains('转换为 PNG'), contains('WebP')),
+        )),
+      );
+    });
+
     test('retains support for non-animated GIF', () {
       final gif = Uint8List.fromList(
         img.encodeGif(img.Image(width: 2, height: 2)),
