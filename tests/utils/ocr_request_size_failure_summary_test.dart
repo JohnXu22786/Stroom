@@ -24,11 +24,11 @@ void main() {
           target.bgTaskOcrRequestSizeExceeded(123456, 200000),
         );
         expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
-      final wrappedSummary = source.bgTaskOcrError(summary);
-      expect(
-        OcrDiagnosticSnapshot.sanitizeStoredTaskError(wrappedSummary),
-        wrappedSummary,
-      );
+        final wrappedSummary = source.bgTaskOcrError(summary);
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(wrappedSummary),
+          wrappedSummary,
+        );
       }
 
       const arbitrary = 'OCR request JSON size is 123456 bytes; token=secret';
