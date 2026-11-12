@@ -4868,6 +4868,38 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["formula_fidelity"]["value"], 1
                 )
 
+    def test_formula_fidelity_allows_english_prose_after_formula_starting_with_i(self):
+        for text in ("x=1\nI think so", "x=1\nI think so…"):
+            with self.subTest(text=text):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "english-prose-after-formula",
+                            "gold_text": text,
+                            "formula_text": "x=1",
+                            "categories": ["english", "formula"],
+                        }
+                    ]
+                }
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [
+                            {
+                                "fixture_id": "english-prose-after-formula",
+                                "text": text,
+                            }
+                        ]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["character_error_rate"]["value"], 0
+                )
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 1
+                )
+
     def test_formula_fidelity_still_rejects_adjacent_math_after_formula(self):
         manifest = {
             "fixtures": [
@@ -4880,7 +4912,14 @@ class EvaluateTests(unittest.TestCase):
             ]
         }
 
-        for text in ("x=1y", "x=1 + y", "x=1 plus y"):
+        for text in (
+            "x=1y",
+            "x=1 + y",
+            "x=1 plus y",
+            "x=1 I is identity",
+            "x=1 I, think so",
+            "x=1 I think so + y",
+        ):
             with self.subTest(text=text):
                 report = evaluate_predictions(
                     manifest,

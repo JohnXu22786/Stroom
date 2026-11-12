@@ -1826,6 +1826,25 @@ def _formula_span_matches(
         token_without_punctuation = (
             token[:-1] if has_trailing_punctuation else token
         )
+        prose_tail_token = tokens[2] if len(tokens) > 2 else ""
+        while prose_tail_token and unicodedata.category(
+            prose_tail_token[-1]
+        ).startswith("P"):
+            prose_tail_token = prose_tail_token[:-1]
+        if (
+            from_right
+            and token_without_punctuation == "I"
+            and has_trailing_punctuation
+        ):
+            return True
+        if (
+            from_right
+            and token == "I"
+            and len(tokens) == 3
+            and tokens[1].casefold() == "think"
+            and prose_tail_token.casefold() == "so"
+        ):
+            return False
         if token_without_punctuation.casefold() in math_word_operators:
             if len(tokens) == 1:
                 return True
