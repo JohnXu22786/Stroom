@@ -26503,6 +26503,8 @@ void main() {
             ((retryData['images'] as List).single as Map)['storageRef']
                 as String;
         const providerDiagnostic = 'unclassified provider response detail';
+        final unknownCacheReference = 'ocr_retry_cache/${'a' * 64}.bin';
+        final providerError = '$providerDiagnostic $unknownCacheReference';
         final skippedRow = <String, dynamic>{
           'id': skippedTaskId,
           'type': 'ocr',
@@ -26511,7 +26513,7 @@ void main() {
           'createdAt': DateTime.utc(2026).toIso8601String(),
           'steps': <dynamic>[],
           'retryData': retryData,
-          'providerError': providerDiagnostic,
+          'providerError': providerError,
         };
         final file = _tasksFileIn(testDir.path);
         await file.parent.create(recursive: true);
@@ -26539,10 +26541,23 @@ void main() {
             jsonEncode(savedSkippedRow),
             isNot(contains(providerDiagnostic)),
           );
+          expect(
+            jsonEncode(savedSkippedRow),
+            isNot(contains(unknownCacheReference)),
+          );
           expect(savedSkippedRow['retryData'], retryData);
           expect(
             await notifier.ocrCacheReferencesForCleanup(),
-            contains(cacheReference),
+            isNull,
+          );
+          final ownershipMarker = rows.whereType<Map>().singleWhere(
+                (row) => row['_unrestoredTaskRecord'] == true,
+              );
+          expect(ownershipMarker['ocrCacheOwnershipKnown'], isFalse);
+          expect(
+            ((savedSkippedRow['retryData'] as Map)['images'] as List)
+                .single['storageRef'],
+            cacheReference,
           );
           expect(await OcrRetryStorage.read(cacheReference), imageBytes);
         } finally {

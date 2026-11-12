@@ -6236,11 +6236,37 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           ])
         : const <dynamic>[];
     final retireUnrestoredRecords = _restoreGeneration > 0;
+    bool hasUnknownOcrCacheOwnershipRecord(Map entry) {
+      final taskId = entry['id'] is String ? entry['id'] as String : null;
+      return _unrestoredTaskRecords.any(
+        (record) =>
+            record is Map &&
+            record['ocrCacheOwnershipKnown'] == false &&
+            record['ocrCacheTaskId'] == taskId,
+      );
+    }
+
+    final skippedOcrCacheOwnershipRecords = [
+      for (final entry in _skippedTaskEntries)
+        if (entry is Map &&
+            entry['type'] == BackgroundTaskType.ocr.name &&
+            _hasUnserializedTaskOcrCacheReferences(entry) &&
+            !hasUnknownOcrCacheOwnershipRecord(entry))
+          _unrestoredTaskRecord(
+            retryAudioOwnershipKnown: true,
+            ocrCacheOwnershipKnown: false,
+            ocrCacheTaskId:
+                entry['id'] is String ? entry['id'] as String : null,
+          ),
+    ];
     // A durable replacement snapshot removes an unknown task row and all of
     // its discarded fields. Keep its credential-free diagnostic marker while
     // resolving OCR ownership; conservatively retain unknown audio ownership.
     final unrestoredRecords = List<dynamic>.unmodifiable([
-      for (final record in _unrestoredTaskRecords)
+      for (final record in [
+        ..._unrestoredTaskRecords,
+        ...skippedOcrCacheOwnershipRecords,
+      ])
         if (!retireUnrestoredRecords ||
             record is! Map ||
             record['retireAfterSnapshot'] != true)
