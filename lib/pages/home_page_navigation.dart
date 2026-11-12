@@ -200,7 +200,12 @@ extension _HomePageNavigationExt on _HomePageState {
   Widget _buildPageContent(AppPage page) {
     switch (page) {
       case AppPage.home:
-        return _buildHomeContent();
+        return TickerMode(
+          enabled:
+              ref.read(selectedPageProvider) == AppPage.home &&
+              TickerMode.of(context),
+          child: _buildHomeContent(),
+        );
       case AppPage.chat:
         return _buildChatOrAssistantPage();
       case AppPage.files:

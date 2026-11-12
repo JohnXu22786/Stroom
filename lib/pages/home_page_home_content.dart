@@ -48,6 +48,268 @@ class HomeStatusLabel extends StatelessWidget {
   }
 }
 
+/// Reveals the full label when it cannot fit in its home-card text slot.
+/// The full value remains available as one accessible label while the visual
+/// copy travels in both directions with a two-second pause at each edge.
+class _HomeOverflowMarquee extends StatefulWidget {
+  const _HomeOverflowMarquee({
+    required this.text,
+    required this.style,
+    this.textAlign,
+    this.speed = 24,
+    this.maxLines = 1,
+    this.overflow = TextOverflow.ellipsis,
+    this.softWrap = true,
+    this.marqueeTextAlign,
+    this.centerInViewport = false,
+  });
+
+  final String text;
+  final TextStyle style;
+  final TextAlign? textAlign;
+  final double speed;
+  final int? maxLines;
+  final TextOverflow overflow;
+  final bool softWrap;
+  final TextAlign? marqueeTextAlign;
+  final bool centerInViewport;
+
+  @override
+  State<_HomeOverflowMarquee> createState() => _HomeOverflowMarqueeState();
+}
+
+class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 8),
+  );
+  Animation<double> _position = const AlwaysStoppedAnimation(0);
+  double _overflow = 0;
+  double _measuredWidth = 0;
+  TextDirection? _measuredDirection;
+  TextScaler? _measuredScaler;
+  TextStyle? _measuredStyle;
+  Locale? _measuredLocale;
+  bool _isAnimating = false;
+
+  @override
+  void didUpdateWidget(covariant _HomeOverflowMarquee oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text ||
+        oldWidget.style != widget.style ||
+        oldWidget.speed != widget.speed ||
+        oldWidget.maxLines != widget.maxLines ||
+        oldWidget.overflow != widget.overflow ||
+        oldWidget.softWrap != widget.softWrap ||
+        oldWidget.textAlign != widget.textAlign ||
+        oldWidget.marqueeTextAlign != widget.marqueeTextAlign ||
+        oldWidget.centerInViewport != widget.centerInViewport) {
+      _measuredWidth = 0;
+      _measuredDirection = null;
+      _measuredScaler = null;
+      _measuredStyle = null;
+      _measuredLocale = null;
+      _controller.stop();
+      _controller.value = 0;
+      _isAnimating = false;
+    }
+  }
+
+  void _measure(
+    double width,
+    TextDirection direction,
+    TextScaler scaler,
+    TextStyle textStyle,
+    Locale? locale,
+    bool allowMotion,
+  ) {
+    if (width != _measuredWidth ||
+        direction != _measuredDirection ||
+        scaler != _measuredScaler ||
+        textStyle != _measuredStyle ||
+        locale != _measuredLocale) {
+      _measuredWidth = width;
+      _measuredDirection = direction;
+      _measuredScaler = scaler;
+      _measuredStyle = textStyle;
+      _measuredLocale = locale;
+      final nextOverflow = _measureOverflow(
+        width,
+        direction,
+        scaler,
+        textStyle,
+        locale,
+      );
+      if (nextOverflow != _overflow) {
+        _overflow = nextOverflow;
+        _controller.stop();
+        _controller.value = 0;
+        _isAnimating = false;
+      }
+    }
+
+    final shouldAnimate = _overflow > 0 && allowMotion;
+    if (shouldAnimate && !_isAnimating) {
+      final travelMilliseconds =
+          math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
+      _controller.duration = Duration(
+        milliseconds: travelMilliseconds * 2 + 4000,
+      );
+      _position = TweenSequence<double>([
+        TweenSequenceItem(tween: ConstantTween(0), weight: 2000),
+        TweenSequenceItem(
+          tween: Tween(begin: 0, end: 1),
+          weight: travelMilliseconds.toDouble(),
+        ),
+        TweenSequenceItem(tween: ConstantTween(1), weight: 2000),
+        TweenSequenceItem(
+          tween: Tween(begin: 1, end: 0),
+          weight: travelMilliseconds.toDouble(),
+        ),
+      ]).animate(_controller);
+      _controller.repeat();
+      _isAnimating = true;
+    } else if (!shouldAnimate && _isAnimating) {
+      _controller.stop();
+      _isAnimating = false;
+    }
+  }
+
+  double _measureOverflow(
+    double width,
+    TextDirection direction,
+    TextScaler scaler,
+    TextStyle textStyle,
+    Locale? locale,
+  ) {
+    if (width <= 0) return 0;
+    final text = TextSpan(text: widget.text, style: textStyle);
+    if (widget.maxLines != null) {
+      final constrainedPainter = TextPainter(
+        text: text,
+        textDirection: direction,
+        textScaler: scaler,
+        locale: locale,
+        textAlign: widget.textAlign ?? TextAlign.start,
+        maxLines: widget.maxLines,
+        ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
+      )..layout(maxWidth: width);
+      if (!constrainedPainter.didExceedMaxLines) return 0;
+
+      final naturalPainter = TextPainter(
+        text: text,
+        textDirection: direction,
+        textScaler: scaler,
+        locale: locale,
+        textAlign: widget.textAlign ?? TextAlign.start,
+        maxLines: widget.maxLines,
+      )..layout();
+      return (naturalPainter.width - width)
+          .clamp(0.0, double.infinity)
+          .toDouble();
+    }
+
+    final wrappedPainter = TextPainter(
+      text: text,
+      textDirection: direction,
+      textScaler: scaler,
+      locale: locale,
+      textAlign: widget.textAlign ?? TextAlign.start,
+    )..layout(maxWidth: width);
+    double overflow = 0;
+    for (final line in wrappedPainter.computeLineMetrics()) {
+      overflow = math.max(overflow, line.width - width).toDouble();
+    }
+    return overflow.clamp(0.0, double.infinity).toDouble();
+  }
+
+  Widget _buildOriginalText() => Text(
+    widget.text,
+    style: widget.style,
+    textAlign: widget.textAlign,
+    maxLines: widget.maxLines,
+    overflow: widget.overflow,
+    softWrap: widget.softWrap,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final direction = Directionality.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final textStyle = DefaultTextStyle.of(context).style.merge(widget.style);
+    final locale = Localizations.maybeLocaleOf(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final tickerEnabled = TickerMode.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        if (width.isFinite) {
+          _measure(
+            width,
+            direction,
+            scaler,
+            textStyle,
+            locale,
+            !reduceMotion && tickerEnabled,
+          );
+        }
+        final isMoving = _overflow > 0 && !reduceMotion && tickerEnabled;
+        if (!isMoving) return _buildOriginalText();
+
+        final alignment = widget.centerInViewport
+            ? Alignment.center
+            : AlignmentDirectional.centerStart;
+        return Semantics(
+          label: widget.text,
+          child: SizedBox(
+            width: width,
+            child: ClipRect(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
+                  final position = _position.value;
+                  final textOffset = widget.centerInViewport
+                      ? (direction == TextDirection.ltr
+                          ? _overflow * (0.5 - position)
+                          : _overflow * (position - 0.5))
+                      : (direction == TextDirection.ltr
+                          ? -_overflow * position
+                          : _overflow * position);
+                  return Align(
+                    alignment: alignment,
+                    child: Transform.translate(
+                      offset: Offset(textOffset, 0),
+                      child: ExcludeSemantics(
+                        child: Text(
+                          widget.text,
+                          style: widget.style,
+                          textAlign: widget.marqueeTextAlign ??
+                              widget.textAlign ??
+                              TextAlign.start,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Aggregated task counts for the home status card.
 ///
 /// Watches all three task providers plus flow executions and computes the
@@ -231,6 +493,7 @@ extension _HomePageHomeContentExt on _HomePageState {
         icon: Icons.language,
         label: AppLocalizations.of(context)!.homeWebDownloadTitle,
         subtitle: AppLocalizations.of(context)!.homeWebDownloadSubtitle,
+        subtitleSpeed: 24,
         color: Colors.purple,
         onTap: () {
           Navigator.push(
@@ -308,6 +571,7 @@ extension _HomePageHomeContentExt on _HomePageState {
     required IconData icon,
     required String label,
     required String subtitle,
+    double subtitleSpeed = 24,
     required Color color,
     required VoidCallback onTap,
   }) {
@@ -337,23 +601,23 @@ extension _HomePageHomeContentExt on _HomePageState {
                 child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(height: 4),
-              Text(
-                label,
+              _HomeOverflowMarquee(
+                text: label,
+                centerInViewport: true,
+                marqueeTextAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 1),
-              Text(
-                subtitle,
+              _HomeOverflowMarquee(
+                text: subtitle,
                 style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                speed: subtitleSpeed,
+                centerInViewport: true,
               ),
             ],
           ),
@@ -401,8 +665,10 @@ extension _HomePageHomeContentExt on _HomePageState {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      AppLocalizations.of(context)!.homeTaskFlowTitle,
+                    _HomeOverflowMarquee(
+                      text: AppLocalizations.of(context)!.homeTaskFlowTitle,
+                      maxLines: null,
+                      overflow: TextOverflow.clip,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -410,11 +676,13 @@ extension _HomePageHomeContentExt on _HomePageState {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      taskFlows.isEmpty
+                    _HomeOverflowMarquee(
+                      maxLines: null,
+                      overflow: TextOverflow.clip,
+                      text: taskFlows.isEmpty
                           ? AppLocalizations.of(context)!.homeTaskFlowEmpty
-                          : AppLocalizations.of(context)!
-                              .homeTaskFlowManage(taskFlows.length),
+                              : AppLocalizations.of(context)!
+                                  .homeTaskFlowManage(taskFlows.length),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onSurfaceVariant,
