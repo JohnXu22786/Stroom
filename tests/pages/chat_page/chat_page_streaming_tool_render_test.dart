@@ -24,7 +24,6 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/tool_call.dart'
     show ToolCallData, ToolCallStatus, ToolDefinition;
 import 'package:stroom/pages/chat_page.dart';
-import 'package:stroom/pages/chat/widgets/message_action_row.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -184,21 +183,13 @@ void main() {
         ChatMessage(role: 'user', content: 'Later question', id: 'u-tail'),
         ChatMessage(role: 'assistant', content: 'Later answer', id: 'a-tail'),
       ];
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(_buildTestApp(manager, history: history));
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
-      final actionRow = find.ancestor(
-        of: find.text('Original question'),
-        matching: find.byType(MessageActionRow),
-      );
-      await tester.tap(
-        find.descendant(
-          of: actionRow,
-          matching: find.byIcon(Icons.edit_outlined),
-        ),
-      );
+      await tester.tap(find.byIcon(Icons.edit_outlined).first);
       await tester.pump();
       await _sendMessage(tester, 'Edited question');
 
@@ -250,21 +241,13 @@ void main() {
         ChatMessage(role: 'user', content: 'Later question', id: 'u-tail'),
         ChatMessage(role: 'assistant', content: 'Later answer', id: 'a-tail'),
       ];
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(_buildTestApp(manager, history: history));
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
-      final actionRow = find.ancestor(
-        of: find.text('Old answer'),
-        matching: find.byType(MessageActionRow),
-      );
-      await tester.tap(
-        find.descendant(
-          of: actionRow,
-          matching: find.byIcon(Icons.refresh),
-        ),
-      );
+      await tester.tap(find.byIcon(Icons.refresh).first);
       await tester.pump();
       await tester.tap(find.text('确定'));
       for (int i = 0; i < 10; i++) {
