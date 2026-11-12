@@ -892,6 +892,13 @@ String? _sanitizeOcrTaskError(
     ..._legacyOcrCredentialValues(rawRequest),
     ...additionalCredentialValues,
   }.toList();
+  if (error != null &&
+      credentialValues.any(
+        (value) => _isCredentialHttpStatusCollision(error, value),
+      )) {
+    final strings = localizations ?? lookupAppLocalizations(const Locale('zh'));
+    return _localizedOcrHiddenTaskError(strings, credentialValues);
+  }
   if (error != null) {
     for (final locale in AppLocalizations.supportedLocales) {
       final strings = lookupAppLocalizations(locale);
@@ -1116,6 +1123,11 @@ bool _legacyOcrTextContainsCredential(
   String text,
   Iterable<String> credentialValues,
 ) {
+  if (credentialValues.any(
+    (value) => _isCredentialHttpStatusCollision(text, value),
+  )) {
+    return true;
+  }
   if (OcrDiagnosticSnapshot.containsCredential(
     text,
     excludedValues: credentialValues.where(
@@ -1132,6 +1144,10 @@ bool _legacyOcrTextContainsCredential(
   }
   return _legacyOcrTextContainsMaskedCredential(text, credentialValues);
 }
+
+bool _isCredentialHttpStatusCollision(String text, String credentialValue) =>
+    text == credentialValue &&
+    RegExp(r'^HTTP\s+[1-5][0-9]{2}$', caseSensitive: false).hasMatch(text);
 
 bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
   String text,
@@ -6540,6 +6556,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         !_canSafelySerializeKnownTasks(snapshot)) {
       return false;
     }
+    bool isCredentialStatusSummary(
+      Object? value,
+      Iterable<String> credentials,
+    ) =>
+        value is String &&
+        credentials.any(
+          (credential) => _isCredentialHttpStatusCollision(value, credential),
+        );
     for (final entry in _skippedTaskEntries) {
       if (entry is! Map) return false;
       if (entry.keys.any((key) => key is! String) ||
@@ -6554,12 +6578,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final error = entry['error'];
       if (error != null &&
           (error is! String ||
-              _sanitizeOcrTaskError(
+              (!isCredentialStatusSummary(
                     error,
-                    null,
-                    additionalCredentialValues: entryCredentialValues,
-                  ) !=
-                  error)) {
+                    entryCredentialValues,
+                  ) &&
+                  _sanitizeOcrTaskError(
+                        error,
+                        null,
+                        additionalCredentialValues: entryCredentialValues,
+                      ) !=
+                      error))) {
         return false;
       }
       final rawSteps = entry['steps'];
@@ -6573,12 +6601,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           final stepError = rawStep['error'];
           if (stepError != null &&
               (stepError is! String ||
-                  _sanitizeOcrTaskError(
+                  (!isCredentialStatusSummary(
                         stepError,
-                        null,
-                        additionalCredentialValues: entryCredentialValues,
-                      ) !=
-                      stepError)) {
+                        entryCredentialValues,
+                      ) &&
+                      _sanitizeOcrTaskError(
+                            stepError,
+                            null,
+                            additionalCredentialValues: entryCredentialValues,
+                          ) !=
+                          stepError))) {
             return false;
           }
         }
@@ -6592,12 +6624,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           final outcomeError = rawOutcome['error'];
           if (outcomeError != null &&
               (outcomeError is! String ||
-                  _sanitizeOcrTaskError(
+                  (!isCredentialStatusSummary(
                         outcomeError,
-                        null,
-                        additionalCredentialValues: entryCredentialValues,
-                      ) !=
-                      outcomeError)) {
+                        entryCredentialValues,
+                      ) &&
+                      _sanitizeOcrTaskError(
+                            outcomeError,
+                            null,
+                            additionalCredentialValues: entryCredentialValues,
+                          ) !=
+                          outcomeError))) {
             return false;
           }
         }
