@@ -8877,13 +8877,13 @@ abstract class AppLocalizations {
   /// No description provided for @providerPreprocessResample.
   ///
   /// In en, this message translates to:
-  /// **'WAV optimization (16 kHz mono, recommended)'**
+  /// **'WAV resampling (16 kHz mono)'**
   String get providerPreprocessResample;
 
   /// No description provided for @providerPreprocessResampleHelp.
   ///
   /// In en, this message translates to:
-  /// **'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.'**
+  /// **'Resamples to 16 kHz and mixes to mono; this can change the audio.'**
   String get providerPreprocessResampleHelp;
 
   /// No description provided for @providerPreprocessNoneHelp.

@@ -5338,12 +5338,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get providerPreprocessNone => 'Ninguno';
 
   @override
-  String get providerPreprocessResample =>
-      'Optimización WAV (mono de 16 kHz, recomendado)';
+  String get providerPreprocessResample => 'Remuestreo WAV (mono de 16 kHz)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Remuestrea a 16 kHz y mezcla en mono. Reduce el tamaño entre 4 y 6 veces con poco efecto en la precisión de la transcripción.';
+      'Remuestrea a 16 kHz y mezcla a mono; esto puede cambiar el audio.';
 
   @override
   String get providerPreprocessNoneHelp =>
@@ -17458,12 +17457,11 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get providerPreprocessNone => 'Ninguno';
 
   @override
-  String get providerPreprocessResample =>
-      'Optimización WAV (mono de 16 kHz, recomendado)';
+  String get providerPreprocessResample => 'Remuestreo WAV (mono de 16 kHz)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Remuestrea a 16 kHz y mezcla en mono. Reduce el tamaño entre 4 y 6 veces con poco efecto en la precisión de la transcripción.';
+      'Remuestrea a 16 kHz y mezcla a mono; esto puede cambiar el audio.';
 
   @override
   String get providerPreprocessNoneHelp =>

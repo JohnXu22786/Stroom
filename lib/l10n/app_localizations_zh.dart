@@ -5013,11 +5013,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPreprocessNone => '无';
 
   @override
-  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道，推荐）';
+  String get providerPreprocessResample => 'WAV 重采样（16 kHz 单声道）';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。';
+      '重采样至 16 kHz 并混合为单声道；此操作可能会改变音频。';
 
   @override
   String get providerPreprocessNoneHelp => '不进行预处理，原样发送。';
@@ -16306,11 +16306,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerPreprocessNone => '无';
 
   @override
-  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道，推荐）';
+  String get providerPreprocessResample => 'WAV 重采样（16 kHz 单声道）';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。';
+      '重采样至 16 kHz 并混合为单声道；此操作可能会改变音频。';
 
   @override
   String get providerPreprocessNoneHelp => '不进行预处理，原样发送。';
