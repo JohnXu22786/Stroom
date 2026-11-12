@@ -247,9 +247,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       );
       final savedPreprocessing =
           c.typeConfig['preprocessing'] as String? ?? 'none';
-      _preprocessing = savedPreprocessing == 'resampleMono'
-          ? savedPreprocessing
-          : 'none';
+      _preprocessing =
+          savedPreprocessing == 'resampleMono' ? savedPreprocessing : 'none';
       final savedChunking = c.typeConfig['chunking'] as String? ?? 'silence';
       _chunking = const {'none', 'silence', 'fixedDuration', 'fixedSize'}
               .contains(savedChunking)
