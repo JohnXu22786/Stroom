@@ -3946,6 +3946,9 @@ const _knownSkippedOcrTaskFields = <String>{
   'downloadedFilePath',
   'retryData',
   'ocrPageOutcomes',
+  // Older skipped-row snapshots may carry safe extensions that are retained
+  // by the existing partial-restore contract.
+  'extensionData',
 };
 
 dynamic _sanitizeSkippedOcrCredentialFields(
@@ -7069,11 +7072,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     for (final entry in taskRow.entries) {
       final isRawDiagnosticField =
           entry.key == 'rawRequest' || entry.key == 'rawResponse';
+      final isPreservedOcrExtension =
+          taskRow['type'] == BackgroundTaskType.ocr.name &&
+              entry.key == 'extensionData';
       final rawDiagnosticsAreSanitized =
           taskRow['type'] == BackgroundTaskType.ocr.name ||
               taskRow['type'] == BackgroundTaskType.asr.name;
       final isDiscardedField = (!serializedTaskFields.contains(entry.key) &&
-              !(!rawDiagnosticsAreSanitized && isRawDiagnosticField)) ||
+              !(!rawDiagnosticsAreSanitized && isRawDiagnosticField) &&
+              !isPreservedOcrExtension) ||
           (rawDiagnosticsAreSanitized && isRawDiagnosticField);
       if (isDiscardedField &&
           (containsCacheReference(entry.key) ||
