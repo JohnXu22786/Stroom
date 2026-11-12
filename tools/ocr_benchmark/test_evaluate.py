@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock, patch
 
 from evaluate import (
     EvaluationError,
@@ -5515,14 +5516,16 @@ class EvaluateTests(unittest.TestCase):
     def test_oversized_fixture_png_is_rejected_before_opening(self):
         image_path = Mock()
         image_path.stat.return_value.st_size = MAX_PNG_ENCODED_BYTES + 1
+        image_path.stat.return_value.st_mode = stat.S_IFREG | 0o644
 
-        with self.assertRaisesRegex(
-            EvaluationError,
-            "oversized: PNG exceeds the maximum encoded fixture size",
-        ):
-            _read_fixture_png(image_path, "oversized")
+        with patch("evaluate.os.open") as open_file:
+            with self.assertRaisesRegex(
+                EvaluationError,
+                "oversized: PNG exceeds the maximum encoded fixture size",
+            ):
+                _read_fixture_png(image_path, "oversized")
 
-        image_path.open.assert_not_called()
+        open_file.assert_not_called()
 
     def test_fixture_png_growth_after_stat_is_bounded_and_rejected(self):
         with TemporaryDirectory() as directory:
@@ -5535,25 +5538,17 @@ class EvaluateTests(unittest.TestCase):
                     growing_file.write(b"y" * 4096)
                 return before_growth
 
-            with fixture_path.open("rb") as fixture_file:
-                image_file = Mock(wraps=fixture_file)
-                image_context = MagicMock()
-                image_context.__enter__.return_value = image_file
-                image_path = Mock(spec=Path)
-                image_path.stat.side_effect = stat_then_grow
-                image_path.open.return_value = image_context
+            image_path = Mock()
+            image_path.__fspath__ = Mock(return_value=str(fixture_path))
+            image_path.stat.side_effect = stat_then_grow
 
-                with self.assertRaisesRegex(
-                    EvaluationError,
-                    "growing: PNG exceeds the maximum encoded fixture size",
-                ):
-                    _read_fixture_png(image_path, "growing")
+            with self.assertRaisesRegex(
+                EvaluationError,
+                "growing: PNG exceeds the maximum encoded fixture size",
+            ):
+                _read_fixture_png(image_path, "growing")
 
-                image_path.stat.assert_called_once_with()
-                image_path.open.assert_called_once_with("rb")
-                image_file.read.assert_called_once_with(MAX_PNG_ENCODED_BYTES + 1)
-                self.assertEqual(fixture_file.tell(), MAX_PNG_ENCODED_BYTES + 1)
-                image_context.__exit__.assert_called_once_with(None, None, None)
+            image_path.stat.assert_called_once_with()
 
     def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
         with TemporaryDirectory() as directory:
@@ -5582,6 +5577,45 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertRegex(result.stderr, r"^evaluation error: .*cannot resolve")
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_fixture_verification_rejects_fifo_without_blocking(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            fixtures_dir = fixture_root / "fixtures"
+            fixtures_dir.mkdir()
+            fifo_path = fixtures_dir / "input.png"
+            os.mkfifo(fifo_path)
+            fifo_alias = fixtures_dir / "input-symlink.png"
+            fifo_alias.symlink_to(fifo_path.name)
+
+            for image_path in (fifo_path, fifo_alias):
+                with self.subTest(image_path=image_path.name):
+                    manifest = json.loads((ROOT / "manifest.json").read_text())
+                    manifest["fixtures"][0]["image"] = str(
+                        image_path.relative_to(fixture_root)
+                    )
+                    manifest_path = fixture_root / "manifest.json"
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "evaluate.py"),
+                            "--manifest",
+                            str(manifest_path),
+                            "--verify-fixtures",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertRegex(
+                        result.stderr, r"^evaluation error: .*regular file"
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
 
     def test_fixture_verification_rejects_image_path_outside_fixture_root(self):
         with TemporaryDirectory() as directory:
