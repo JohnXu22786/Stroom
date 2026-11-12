@@ -161,6 +161,100 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
 
+    def test_cli_rejects_table_category_without_reference_annotation(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "unannotated-table",
+                                "gold_text": "A | B",
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path.write_text(
+                json.dumps(
+                    predictions(
+                        [{"fixture_id": "unannotated-table", "text": "A | B"}]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unannotated-table: table fixture needs table_text", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_rejects_formula_category_without_reference_annotation(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "unannotated-formula",
+                                "gold_text": "x=1",
+                                "categories": ["english", "formula"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path.write_text(
+                json.dumps(
+                    predictions(
+                        [{"fixture_id": "unannotated-formula", "text": "x=1"}]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "unannotated-formula: formula fixture needs formula_text", result.stderr
+        )
+        self.assertNotIn("Traceback", result.stderr)
+
     def _run_cli_with_output(self, directory, output_path):
         directory_path = Path(directory)
         manifest_path = directory_path / "manifest.json"
@@ -2175,7 +2269,7 @@ class EvaluateTests(unittest.TestCase):
                         "id": "table-with-formula",
                         "gold_text": expected,
                         "table_text": expected,
-                        "categories": ["english", "table", "formula"],
+                        "categories": ["english", "table"],
                     }
                 ]
             },
@@ -2519,6 +2613,7 @@ class EvaluateTests(unittest.TestCase):
                 {
                     "id": "markdown-table",
                     "gold_text": "Inventory\nCode Count\nP-12 3",
+                    "table_text": "Code Count\nP-12 3",
                     "categories": ["english", "table"],
                 }
             ]
@@ -2644,6 +2739,7 @@ class EvaluateTests(unittest.TestCase):
                     "id": "table-with-following-pipes",
                     "gold_text": f"{table}\n{following_text}",
                     "table_text": table,
+                    "formula_text": "|x| = 2",
                     "categories": ["english", "table", "formula"],
                 }
             ]
@@ -2746,6 +2842,7 @@ class EvaluateTests(unittest.TestCase):
                 {
                     "id": "absolute-value",
                     "gold_text": "The absolute value is |x|.",
+                    "formula_text": "|x|",
                     "categories": ["english", "formula"],
                 }
             ]
@@ -3601,6 +3698,7 @@ class EvaluateTests(unittest.TestCase):
                         {
                             "id": "sizing-delimiters",
                             "gold_text": expected,
+                            "formula_text": expected,
                             "categories": ["formula"],
                         }
                     ]
