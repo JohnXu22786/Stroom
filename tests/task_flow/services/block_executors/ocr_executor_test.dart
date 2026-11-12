@@ -89,6 +89,10 @@ class _CapturingSuccessAdapter implements HttpClientAdapter {
 }
 
 class _IncompleteOcrAdapter implements HttpClientAdapter {
+  _IncompleteOcrAdapter({this.finishReason = 'length'});
+
+  final String finishReason;
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -99,7 +103,14 @@ class _IncompleteOcrAdapter implements HttpClientAdapter {
       await for (final _ in requestStream) {}
     }
     return ResponseBody.fromString(
-      '{"choices":[{"message":{"content":"partial OCR text"},"finish_reason":"length"}]}',
+      jsonEncode({
+        'choices': [
+          {
+            'message': {'content': 'partial OCR text'},
+            'finish_reason': finishReason,
+          }
+        ],
+      }),
       200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -261,7 +272,7 @@ void main() {
     required String expectedError,
   }) async {
     expect(
-      localizations.bgTaskOcrResultIncomplete('length'),
+      localizations.bgTaskOcrResultIncomplete('unknown'),
       expectedError,
       reason: 'The injected localization should provide the expected locale',
     );
@@ -546,15 +557,59 @@ void main() {
   test('incomplete OCR failure is localized in English', () async {
     await expectIncompleteOcrLocalization(
       localizations: AppLocalizationsEn(),
-      expectedError: 'OCR returned an incomplete result (finish_reason=length)',
+      expectedError:
+          'OCR returned an incomplete result (finish_reason=unknown)',
     );
   });
 
   test('incomplete OCR failure is localized in Chinese', () async {
     await expectIncompleteOcrLocalization(
       localizations: AppLocalizationsZhCn(),
-      expectedError: 'OCR 返回了不完整结果（finish_reason=length）',
+      expectedError: 'OCR 返回了不完整结果（finish_reason=unknown）',
     );
+  });
+
+  test('untrusted OCR finish reason is absent from persisted flow errors',
+      () async {
+    final source = await File('${directory.path}/untrusted_finish_reason.png')
+        .writeAsBytes(_validPng());
+    final secret = 'sk-secret-${List.filled(128, 'x').join()}';
+    final dio = Dio()
+      ..httpClientAdapter = _IncompleteOcrAdapter(finishReason: secret);
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        ocrDio: dio,
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    } finally {
+      dio.close(force: true);
+    }
+
+    expect(failure, isNotNull);
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.result, 'partial OCR text');
+    expect(task.resultIsComplete, isFalse);
+    expect(task.error, isNot(contains(secret)));
+    expect(failure!.message, isNot(contains(secret)));
+
+    executions.failExecution(execId, error: failure.toString());
+    final persistedExecution =
+        jsonEncode(executions.execution(execId)!.toMap());
+    expect(persistedExecution, isNot(contains(secret)));
+    expect(executions.execution(execId)!.status, FlowExecutionStatus.failed);
   });
 
   test('OCR failure summaries are localized in English', () async {
