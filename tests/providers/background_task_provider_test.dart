@@ -19719,6 +19719,59 @@ void main() {
     });
 
     test(
+      'legacy row credential collisions preserve OCR cache ownership',
+      () async {
+        WebFileStore.enableTestMode();
+        const taskId = 'legacy-ocr-row-cache-reference-collision';
+        final imageBytes = Uint8List.fromList([51, 52, 53, 54]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: taskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([
+          {
+            'id': taskId,
+            'type': 'ocr',
+            'title': 'Legacy OCR task with cache reference collision',
+            'status': 'failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'apiKey': cacheReference,
+            'retryData': retryData,
+          },
+        ]));
+        final notifier = BackgroundTaskNotifier();
+
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+          final rows = jsonDecode(await file.readAsString()) as List;
+          expect(jsonEncode(rows), isNot(contains(cacheReference)));
+          expect(
+            rows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['ocrCacheOwnershipKnown'] == false &&
+                      row['ocrCacheTaskId'] == taskId,
+                ),
+            isTrue,
+          );
+          expect(await notifier.ocrCacheReferencesForCleanup(), isNull);
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
         'legacy task-row credentials block colliding page-summary relocalization',
         () async {
       const taskId = 'legacy-ocr-row-page-summary-collision';
