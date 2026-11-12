@@ -34,6 +34,107 @@ Future<Uint8List> _readInputBytesUpTo(File file, int maxBytes) async {
   return bytes.takeBytes();
 }
 
+String _localizedSafeOcrTaskError(
+  Object error, {
+  required AppLocalizations localizations,
+  Iterable<String> excludedValues = const [],
+}) {
+  final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+    error.toString(),
+    excludedValues: excludedValues,
+  );
+  if (sanitized == null) {
+    return OcrDiagnosticSnapshot.safeTaskError(
+      error,
+      excludedValues: excludedValues,
+      localizations: localizations,
+    );
+  }
+
+  final hiddenPrefixes = <String>{
+    'OCR 错误详情已隐藏',
+    'OCR error details were hidden',
+    'Los detalles del error de OCR estaban ocultos',
+    'OCR エラーの詳細は非表示になりました',
+    '错误详情已隐藏',
+    'Error details were hidden',
+    'Los detalles del error estaban ocultos',
+    'エラーの詳細は非表示になりました',
+    '请求失败',
+    '请重试',
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+  };
+  var isHiddenSummary = false;
+  String? details;
+  for (final prefix in hiddenPrefixes) {
+    if (sanitized == prefix) {
+      isHiddenSummary = true;
+      break;
+    }
+    if (sanitized.startsWith('$prefix（') && sanitized.endsWith('）')) {
+      isHiddenSummary = true;
+      details = sanitized.substring(prefix.length + 1, sanitized.length - 1);
+      break;
+    }
+  }
+  if (isHiddenSummary) {
+    final localizedError = details == null
+        ? localizations.bgTaskOcrErrorDetailsHidden
+        : '${localizations.bgTaskOcrErrorDetailsHidden}（$details）';
+    if (!OcrDiagnosticSnapshot.containsCredential(
+      localizedError,
+      excludedValues: excludedValues,
+    )) {
+      return localizedError;
+    }
+  }
+
+  if (sanitized == localizations.ocrProcessingOcrFailed ||
+      sanitized == localizations.bgTaskOcrErrorDetailsHidden) {
+    return sanitized;
+  }
+  final httpStatus = RegExp(r'^HTTP\s+[1-5]\d{2}$').firstMatch(sanitized);
+  if (httpStatus != null) {
+    final localizedError =
+        '${localizations.bgTaskOcrErrorDetailsHidden}（${httpStatus.group(0)}）';
+    if (!OcrDiagnosticSnapshot.containsCredential(
+      localizedError,
+      excludedValues: excludedValues,
+    )) {
+      return localizedError;
+    }
+  }
+  return OcrDiagnosticSnapshot.safeTaskError(
+    error,
+    excludedValues: excludedValues,
+    localizations: localizations,
+  );
+}
+
+String _safeOcrFinishReason(
+  String? reason, {
+  Iterable<String> excludedValues = const [],
+}) {
+  const knownReasons = {
+    'stop',
+    'length',
+    'max_tokens',
+    'content_filter',
+    'function_call',
+    'tool_calls',
+  };
+  if (reason == null || reason.length > 48 || !knownReasons.contains(reason)) {
+    return 'unknown';
+  }
+  return OcrDiagnosticSnapshot.containsCredential(
+    reason,
+    excludedValues: excludedValues,
+  )
+      ? 'unknown'
+      : reason;
+}
+
 Future<String> executeOcrBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -162,11 +263,11 @@ Future<String> executeOcrBlock({
       imageFormat: 'png',
     );
   } catch (e) {
-    final safeError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-          e.toString(),
-          excludedValues: [config.key],
-        ) ??
-        OcrDiagnosticSnapshot.safeTaskError(e, excludedValues: [config.key]);
+    final safeError = _localizedSafeOcrTaskError(
+      e,
+      localizations: strings,
+      excludedValues: [config.key],
+    );
     bgNotifier.updateStep(
       taskId,
       0,
@@ -357,7 +458,10 @@ Future<String> executeOcrBlock({
         }
         bgNotifier.setResult(taskId, ocrResult.text, isComplete: false);
         final error = strings.bgTaskOcrResultIncomplete(
-          'unknown',
+          _safeOcrFinishReason(
+            ocrResult.finishReason,
+            excludedValues: [config.key],
+          ),
         );
         bgNotifier.updateStep(
           taskId,
@@ -417,14 +521,11 @@ Future<String> executeOcrBlock({
     return result;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
-    final safeError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-          e.toString(),
-          excludedValues: [config.key],
-        ) ??
-        OcrDiagnosticSnapshot.safeTaskError(
-          e,
-          excludedValues: [config.key],
-        );
+    final safeError = _localizedSafeOcrTaskError(
+      e,
+      localizations: strings,
+      excludedValues: [config.key],
+    );
     bgNotifier.updateStep(
       taskId,
       0,

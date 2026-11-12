@@ -272,7 +272,7 @@ void main() {
     required String expectedError,
   }) async {
     expect(
-      localizations.bgTaskOcrResultIncomplete('unknown'),
+      localizations.bgTaskOcrResultIncomplete('length'),
       expectedError,
       reason: 'The injected localization should provide the expected locale',
     );
@@ -377,6 +377,11 @@ void main() {
     expect(estimatorFailure, isNotNull);
     final estimatorDetail = estimatorFailure!.message;
     expect(estimatorDetail, isNotEmpty);
+    expect(
+      estimatorDetail,
+      localizations.bgTaskOcrErrorDetailsHidden,
+      reason: 'unsafe estimator details should use the active locale',
+    );
     final estimatorTaskId =
         executions.execution(execId)!.subTasks.single.subTaskId;
     final estimatorTask = background.taskById(estimatorTaskId)!;
@@ -424,6 +429,12 @@ void main() {
     expect(requestDetail, isNotEmpty);
     expect(requestDetail, contains('HTTP 429'));
     expect(requestDetail, isNot(contains('test-key')));
+    expect(
+      requestDetail,
+      '${localizations.bgTaskOcrErrorDetailsHidden}（HTTP 429）',
+      reason:
+          'unsafe request details should use the active locale and keep safe status metadata',
+    );
     final requestTaskId =
         executions.execution(execId)!.subTasks.single.subTaskId;
     final requestTask = background.taskById(requestTaskId)!;
@@ -557,15 +568,14 @@ void main() {
   test('incomplete OCR failure is localized in English', () async {
     await expectIncompleteOcrLocalization(
       localizations: AppLocalizationsEn(),
-      expectedError:
-          'OCR returned an incomplete result (finish_reason=unknown)',
+      expectedError: 'OCR returned an incomplete result (finish_reason=length)',
     );
   });
 
   test('incomplete OCR failure is localized in Chinese', () async {
     await expectIncompleteOcrLocalization(
       localizations: AppLocalizationsZhCn(),
-      expectedError: 'OCR 返回了不完整结果（finish_reason=unknown）',
+      expectedError: 'OCR 返回了不完整结果（finish_reason=length）',
     );
   });
 
@@ -603,6 +613,10 @@ void main() {
     expect(task.result, 'partial OCR text');
     expect(task.resultIsComplete, isFalse);
     expect(task.error, isNot(contains(secret)));
+    expect(
+      task.error,
+      AppLocalizationsEn().bgTaskOcrResultIncomplete('unknown'),
+    );
     expect(failure!.message, isNot(contains(secret)));
 
     executions.failExecution(execId, error: failure.toString());
@@ -627,6 +641,101 @@ void main() {
 
   test('OCR failure summaries are localized in Japanese', () async {
     await expectLocalizedFailureSummaries(localizations: AppLocalizationsJa());
+  });
+
+  test('localized OCR fallback never echoes a colliding API key', () async {
+    final localizations = AppLocalizationsEn();
+    final apiKey = localizations.bgTaskOcrErrorDetailsHidden;
+    final source = await File('${directory.path}/localized_key_collision.png')
+        .writeAsBytes(_validPng());
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        localizations: localizations,
+        requestOcr: (_, _) async => throw StateError('private provider data'),
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(failure!.message, isNot(contains(apiKey)));
+    expect(background.state.single.error, isNot(contains(apiKey)));
+    executions.failExecution(execId, error: failure.toString());
+    expect(
+      executions.execution(execId)!.error,
+      isNot(contains(apiKey)),
+    );
+  });
+
+  test('known-safe OCR parser errors use the selected locale', () async {
+    final localizations = AppLocalizationsEn();
+    final source = await File('${directory.path}/localized_parser_error.png')
+        .writeAsBytes(_validPng());
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async =>
+            throw Exception('API 返回中的 finish_reason 格式异常'),
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(failure!.message, localizations.bgTaskOcrErrorDetailsHidden);
+    expect(failure.message, isNot(contains('格式异常')));
+  });
+
+  test('localized safe HTTP metadata is preserved during relocalization',
+      () async {
+    final localizations = AppLocalizationsEn();
+    final source = await File('${directory.path}/localized_http_status.png')
+        .writeAsBytes(_validPng());
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async =>
+            throw StateError('Error details were hidden（HTTP 429）'),
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(
+      failure!.message,
+      '${localizations.bgTaskOcrErrorDetailsHidden}（HTTP 429）',
+    );
   });
 
   test('OCR failure prefix credentials are not restored into task errors',
