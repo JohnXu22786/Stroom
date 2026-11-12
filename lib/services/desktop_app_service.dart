@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 6028)
-Total output lines: 599
-
 import 'dart:async';
 import 'dart:io' show exit;
 
@@ -81,7 +78,6 @@ abstract interface class DesktopWindowManagerAdapter {
 class _LegacyDesktopWindowManagerAdapter
     implements DesktopWindowManagerAdapter {
   final _listeners = <DesktopWindowListener, _WindowManagerListenerBridge>{};
-
   @override
   Future<void> ensureInitialized() =>
       window_api.windowManager.ensureInitialized();
@@ -119,15 +115,6 @@ class _LegacyDesktopWindowManagerAdapter
     final bridge = _listeners.remove(listener);
     if (bridge != null) window_api.windowManager.removeListener(bridge);
   }
-}
-
-class _WindowManagerListenerBridge extends window_api.WindowListener {
-  _WindowManagerListenerBridge(this.listener);
-
-  final DesktopWindowListener listener;
-
-  @override
-  void onWindowClose() => listener.onWindowClose();
 }
 
 // ====================================================================
@@ -311,7 +298,8 @@ class DesktopAppService with TrayListener implements DesktopWindowListener {
             )
             .timeout(_trayTimeout);
         // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
-        // 单独捕获，避免拖垮整个托盘注册流程；同…28 tokens truncated…
+        // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
+        // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
           await _trayAdapter
               .setToolTip(
