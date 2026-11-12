@@ -985,6 +985,10 @@ void main() {
       finishReason: 'length',
     );
     await incompletePagePublished.future.timeout(const Duration(seconds: 2));
+    expect(
+      notifier.state.single.ocrPageOutcomes.first.error,
+      contains('length'),
+    );
     diagnosticsAdapter.complete(
       2,
       text: 'failed page response',
