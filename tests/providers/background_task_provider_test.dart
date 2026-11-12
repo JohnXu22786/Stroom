@@ -350,6 +350,60 @@ void main() {
       }
     });
 
+    test('OCR request-size summaries and page details refresh with the locale',
+        () async {
+      var strings = lookupAppLocalizations(const Locale('fr', 'FR'));
+      final source = strings;
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final jointId = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'Joint OCR',
+      );
+      notifier.failTask(
+        jointId,
+        error: source.bgTaskOcrError(
+          source.bgTaskOcrRequestSizeExceeded(123456, 200000),
+        ),
+      );
+
+      final perImageId = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'Per-image OCR',
+      );
+      notifier.setOcrPageOutcomes(perImageId, [
+        OcrPageOutcome(
+          imageIndex: 0,
+          status: OcrPageOutcomeStatus.failed,
+          error: source.bgTaskOcrRequestSizeExceeded(123456, 200000),
+        ),
+      ]);
+      notifier.failTask(
+        perImageId,
+        error: source.bgTaskOcrIncompleteError(
+          source.bgTaskOcrPagesIncomplete(source.bgTaskOcrPageFailed('1')),
+        ),
+      );
+
+      strings = lookupAppLocalizations(const Locale('en', 'US'));
+      notifier.refreshLocalizations();
+
+      expect(
+        notifier.taskById(jointId)!.error,
+        strings.bgTaskOcrError(
+          strings.bgTaskOcrRequestSizeExceeded(123456, 200000),
+        ),
+      );
+      expect(
+        notifier.taskById(perImageId)!.ocrPageOutcomes.single.error,
+        strings.bgTaskOcrRequestSizeExceeded(123456, 200000),
+      );
+
+      await notifier.pendingPersistence;
+      notifier.dispose();
+    });
+
     test('localized hidden details never echo a matching OCR API key',
         () async {
       const apiKey = 'OCR error details were hidden';

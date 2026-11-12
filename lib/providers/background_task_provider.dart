@@ -21,6 +21,7 @@ import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/ocr_diagnostics.dart';
 import '../utils/ocr_page_failure_summary.dart';
+import '../utils/ocr_request_size_failure_summary.dart';
 import 'locale_provider.dart';
 import 'task_provider.dart';
 
@@ -521,6 +522,21 @@ String? _localizeStoredBackgroundError(
 ) {
   if (error == null) return null;
   if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
+  final requestSizeSummary =
+      OcrRequestSizeFailureSummary.localize(error, strings);
+  if (requestSizeSummary != null) return requestSizeSummary;
+  for (final locale in AppLocalizations.supportedLocales) {
+    final source = lookupAppLocalizations(locale);
+    final prefix = source.bgTaskOcrError('');
+    if (!error.startsWith(prefix)) continue;
+    final requestSizeDetail = OcrRequestSizeFailureSummary.localize(
+      error.substring(prefix.length),
+      strings,
+    );
+    if (requestSizeDetail != null) {
+      return strings.bgTaskOcrError(requestSizeDetail);
+    }
+  }
   final hiddenDetailsPrefixes = {
     for (final locale in AppLocalizations.supportedLocales)
       lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
@@ -682,6 +698,9 @@ String? _localizeStoredOcrPageFailureSummary(
   String error,
   AppLocalizations strings,
 ) {
+  final requestSizeSummary =
+      OcrRequestSizeFailureSummary.localize(error, strings);
+  if (requestSizeSummary != null) return requestSizeSummary;
   return OcrPageFailureSummary.localize(error, strings);
 }
 
