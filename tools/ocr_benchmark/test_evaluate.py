@@ -4869,6 +4869,27 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["formula_fidelity"]["value"], 1
                 )
 
+    def test_formula_fidelity_accepts_hangul_prose_after_formula(self):
+        text = "x=1입니다"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "hangul-prose-after-formula",
+                        "gold_text": text,
+                        "formula_text": "x=1",
+                        "categories": ["mixed_language", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [{"fixture_id": "hangul-prose-after-formula", "text": text}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
     def test_formula_fidelity_allows_english_prose_after_formula_starting_with_i(self):
         for text in ("x=1\nI think so", "x=1\nI think so…"):
             with self.subTest(text=text):

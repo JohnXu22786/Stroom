@@ -1964,6 +1964,7 @@ def _formula_span_matches(
                 not following.isspace()
                 and (following.isalnum() or following in "^_")
                 and not is_cjk_text_character(following)
+                and not is_hangul_text_character(following)
             ):
                 continue
             next_non_space = after.lstrip()[:1]
