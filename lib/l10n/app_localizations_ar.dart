@@ -9912,6 +9912,11 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'حجم JSON لطلب OCR هو $encodedBytes بايت، ويتجاوز الحد المُعدّ البالغ $budgetBytes بايت.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'فشل OCR: $details';
   }

@@ -16422,6 +16422,9 @@ abstract class AppLocalizations {
   /// **'OCR failed: {details}'**
   String bgTaskOcrError(String details);
 
+  /// OCR request JSON size exceeded the configured request budget.
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes);
+
   /// No description provided for @bgTaskOcrSaveError.
   ///
   /// In en, this message translates to:

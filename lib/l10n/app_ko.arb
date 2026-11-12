@@ -5345,6 +5345,13 @@
       }
     }
   },
+  "bgTaskOcrRequestSizeExceeded": "OCR 요청 JSON 크기 {encodedBytes}바이트가 설정된 제한 {budgetBytes}바이트를 초과했습니다.",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "OCR 실패: {details}",
   "@bgTaskOcrError": {
     "placeholders": {

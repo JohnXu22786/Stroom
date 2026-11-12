@@ -205,6 +205,85 @@ void main() {
     await running;
   });
 
+  test('joint request-size failures are localized and redact credentials',
+      () async {
+    locale = const Locale('fr', 'FR');
+    final strings = lookupAppLocalizations(locale);
+    final config = _config.copyWith(requestSizeBudgetBytes: 1);
+    final measuringService = OcrService(config: config);
+    final encodedBytes = measuringService.encodedRequestSizeBytes(
+      imageBytesList: [(input, 'png')],
+    );
+    measuringService.close();
+    final sizeRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: config,
+      images: [(input, 'png')],
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    await sizeRunner.run();
+
+    final detail = strings.bgTaskOcrRequestSizeExceeded(encodedBytes, 1);
+    expect(notifier.state.single.error, contains(detail));
+    expect(notifier.state.single.error, isNot(contains(_config.apiKey)));
+    expect(notifier.state.single.steps.first.error, contains(detail));
+    expect(adapter.calls, 0, reason: 'size rejection must remain preflight');
+    expect(saves, 0);
+  });
+
+  test('per-image request-size failures are localized and redact credentials',
+      () async {
+    locale = const Locale('fr', 'FR');
+    final strings = lookupAppLocalizations(locale);
+    final config = _config.copyWith(requestSizeBudgetBytes: 1);
+    final measuringService = OcrService(config: config);
+    final encodedBytes = measuringService.encodedRequestSizeBytes(
+      imageBytesList: [(input, 'png')],
+    );
+    measuringService.close();
+    final sizeRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: config,
+      images: [(input, 'png')],
+      executionMode: OcrBatchMode.perImage,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    await sizeRunner.run();
+
+    final detail = strings.bgTaskOcrRequestSizeExceeded(encodedBytes, 1);
+    final summary = strings.bgTaskOcrIncompleteError(
+      strings.bgTaskOcrPagesIncomplete(strings.bgTaskOcrPageFailed('1')),
+    );
+    expect(notifier.state.single.error, summary);
+    expect(notifier.state.single.error, isNot(contains(_config.apiKey)));
+    expect(
+      notifier.state.single.ocrPageOutcomes.single.error,
+      contains(detail),
+    );
+    expect(adapter.calls, 0, reason: 'size rejection must remain preflight');
+    expect(saves, 0);
+  });
+
   test('owned runner snapshots input and duplicate run submits only once',
       () async {
     input[0] = 99;

@@ -5342,6 +5342,13 @@
       }
     }
   },
+  "bgTaskOcrRequestSizeExceeded": "حجم JSON لطلب OCR هو {encodedBytes} بايت، ويتجاوز الحد المُعدّ البالغ {budgetBytes} بايت.",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "فشل OCR: {details}",
   "@bgTaskOcrError": {
     "placeholders": {

@@ -9538,6 +9538,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR 요청 JSON 크기 $encodedBytes바이트가 설정된 제한 $budgetBytes바이트를 초과했습니다.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR 실패: $details';
   }

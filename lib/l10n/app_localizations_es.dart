@@ -9972,6 +9972,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'El JSON de la solicitud OCR ocupa $encodedBytes bytes y supera el límite configurado de $budgetBytes bytes.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'Error de OCR: $details';
   }

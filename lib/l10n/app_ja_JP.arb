@@ -2706,6 +2706,13 @@
   "bgTaskCancelled": "キャンセル",
   "bgTaskAsrError": "音声の文字起こしに失敗しました: {details}",
   "bgTaskAsrSaveError": "音声文字起こしの保存に失敗しました: {details}",
+  "bgTaskOcrRequestSizeExceeded": "OCRリクエストのJSONサイズは{encodedBytes}バイトで、設定された上限{budgetBytes}バイトを超えています。",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "OCR が失敗しました: {details}",
   "bgTaskOcrSaveError": "OCR 結果の保存に失敗しました: {details}",
   "bgTaskOcrIncompleteError": "OCR 結果が不完全です: {details}",
