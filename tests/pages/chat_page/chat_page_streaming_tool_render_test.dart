@@ -202,6 +202,7 @@ void main() {
       await tester.pump();
       await _sendMessage(tester, 'Edited question');
 
+      expect(find.text('Old answer'), findsNothing);
       expect(find.text('Later question'), findsNothing);
       expect(find.text('Later answer'), findsNothing);
       expect(manager.pending, hasLength(1));
