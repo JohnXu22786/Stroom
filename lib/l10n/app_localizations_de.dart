@@ -5278,7 +5278,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Verringert die Größe der Audiodatei, ohne die Transkriptionsgenauigkeit zu beeinträchtigen.';
+      'Verringert die Größe der Audiodatei, aber das Resampling kann das Audio verändern und die Transkriptionsgenauigkeit beeinträchtigen.';
 
   @override
   String get providerPreprocessingMethod => 'Vorverarbeitungsmethode';
@@ -17366,7 +17366,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get providerPreprocessingHelp =>
-      'Verringert die Größe der Audiodatei, ohne die Transkriptionsgenauigkeit zu beeinträchtigen.';
+      'Verringert die Größe der Audiodatei, aber das Resampling kann das Audio verändern und die Transkriptionsgenauigkeit beeinträchtigen.';
 
   @override
   String get providerPreprocessingMethod => 'Vorverarbeitungsmethode';

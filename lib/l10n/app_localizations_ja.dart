@@ -5080,7 +5080,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      '文字起こしの精度に影響を与えることなく、音声ファイルのサイズを削減します。';
+      '音声ファイルのサイズを削減しますが、リサンプリングによって音声が変化し、文字起こしの精度に影響する場合があります。';
 
   @override
   String get providerPreprocessingMethod => '前処理方法';
@@ -16696,7 +16696,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get providerPreprocessingHelp =>
-      '文字起こしの精度に影響を与えることなく、音声ファイルのサイズを削減します。';
+      '音声ファイルのサイズを削減しますが、リサンプリングによって音声が変化し、文字起こしの精度に影響する場合があります。';
 
   @override
   String get providerPreprocessingMethod => '前処理方法';

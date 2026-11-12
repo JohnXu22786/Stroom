@@ -2409,7 +2409,7 @@
   "providerFallbackStrategy": "Rückfallstrategie",
   "providerFallbackMethod": "Rückfallmethode",
   "providerPreprocessing": "Audio-Vorverarbeitung",
-  "providerPreprocessingHelp": "Verringert die Größe der Audiodatei, ohne die Transkriptionsgenauigkeit zu beeinträchtigen.",
+  "providerPreprocessingHelp": "Verringert die Größe der Audiodatei, aber das Resampling kann das Audio verändern und die Transkriptionsgenauigkeit beeinträchtigen.",
   "providerPreprocessingMethod": "Vorverarbeitungsmethode",
   "@providerParamNameInvalid": {
     "placeholders": {

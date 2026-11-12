@@ -5249,7 +5249,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'تقلل حجم الملف الصوتي من دون التأثير في دقة التفريغ النصي.';
+      'تقلل حجم الملف الصوتي، لكن إعادة أخذ العينات قد تغيّر الصوت وتؤثر في دقة التفريغ النصي.';
 
   @override
   String get providerPreprocessingMethod => 'طريقة المعالجة المسبقة';
@@ -17287,7 +17287,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get providerPreprocessingHelp =>
-      'تقلل حجم الملف الصوتي من دون التأثير في دقة التفريغ النصي.';
+      'تقلل حجم الملف الصوتي، لكن إعادة أخذ العينات قد تغيّر الصوت وتؤثر في دقة التفريغ النصي.';
 
   @override
   String get providerPreprocessingMethod => 'طريقة المعالجة المسبقة';

@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "استراتيجية الرجوع الاحتياطي",
   "providerFallbackMethod": "طريقة الرجوع الاحتياطي",
   "providerPreprocessing": "المعالجة المسبقة للصوت",
-  "providerPreprocessingHelp": "تقلل حجم الملف الصوتي من دون التأثير في دقة التفريغ النصي.",
+  "providerPreprocessingHelp": "تقلل حجم الملف الصوتي، لكن إعادة أخذ العينات قد تغيّر الصوت وتؤثر في دقة التفريغ النصي.",
   "providerPreprocessingMethod": "طريقة المعالجة المسبقة",
   "@providerParamNameInvalid": {
     "placeholders": {

@@ -1436,7 +1436,7 @@
   "providerFallbackStrategy": "フォールバック戦略",
   "providerFallbackMethod": "フォールバック方式",
   "providerPreprocessing": "オーディオの前処理",
-  "providerPreprocessingHelp": "文字起こしの精度に影響を与えることなく、音声ファイルのサイズを削減します。",
+  "providerPreprocessingHelp": "音声ファイルのサイズを削減しますが、リサンプリングによって音声が変化し、文字起こしの精度に影響する場合があります。",
   "providerPreprocessingMethod": "前処理方法",
   "providerUploadMultipartHelp": "マルチパート/フォームデータの直接アップロード。リクエスト本文には、オーディオ、フォーム フィールド、およびマルチパート境界が含まれます。",
   "providerUploadBase64Help": "JSON で Base64 を送信します。これにより、一部のプロバイダーのマルチパート固有の制限を回避できます。 Base64 拡張フィールドと JSON フィールドはアップロード制限にカウントされます。",

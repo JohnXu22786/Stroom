@@ -8781,7 +8781,7 @@ abstract class AppLocalizations {
   /// No description provided for @providerPreprocessingHelp.
   ///
   /// In en, this message translates to:
-  /// **'Reduces audio file size without affecting transcription accuracy.'**
+  /// **'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.'**
   String get providerPreprocessingHelp;
 
   /// No description provided for @providerPreprocessingMethod.

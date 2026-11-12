@@ -5280,7 +5280,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduce el tamaño del archivo de audio sin afectar la precisión de la transcripción.';
+      'Reduce el tamaño del archivo de audio, pero el remuestreo puede cambiar el audio y afectar la precisión de la transcripción.';
 
   @override
   String get providerPreprocessingMethod => 'Método de preprocesamiento';
@@ -17399,7 +17399,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduce el tamaño del archivo de audio sin afectar la precisión de la transcripción.';
+      'Reduce el tamaño del archivo de audio, pero el remuestreo puede cambiar el audio y afectar la precisión de la transcripción.';
 
   @override
   String get providerPreprocessingMethod => 'Método de preprocesamiento';

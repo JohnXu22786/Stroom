@@ -2409,7 +2409,7 @@
   "providerFallbackStrategy": "兜底策略",
   "providerFallbackMethod": "兜底方式",
   "providerPreprocessing": "音频预处理",
-  "providerPreprocessingHelp": "降低音频文件大小，不影响转写准确率。",
+  "providerPreprocessingHelp": "降低音频文件大小，但重采样可能会改变音频并影响转写准确率。",
   "providerPreprocessingMethod": "预处理方式",
   "@providerParamNameInvalid": {
     "placeholders": {

@@ -2409,7 +2409,7 @@
   "providerFallbackStrategy": "Fallback strategy",
   "providerFallbackMethod": "Fallback method",
   "providerPreprocessing": "Audio preprocessing",
-  "providerPreprocessingHelp": "Reduces audio file size without affecting transcription accuracy.",
+  "providerPreprocessingHelp": "Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.",
   "providerPreprocessingMethod": "Preprocessing method",
   "@providerParamNameInvalid": {
     "placeholders": {

@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "Estratégia alternativa",
   "providerFallbackMethod": "Método alternativo",
   "providerPreprocessing": "Pré-processamento de áudio",
-  "providerPreprocessingHelp": "Reduz o tamanho do arquivo de áudio sem afetar a precisão da transcrição.",
+  "providerPreprocessingHelp": "Reduz o tamanho do arquivo de áudio, mas a reamostragem pode alterar o áudio e afetar a precisão da transcrição.",
   "providerPreprocessingMethod": "Método de pré-processamento",
   "@providerParamNameInvalid": {
     "placeholders": {
