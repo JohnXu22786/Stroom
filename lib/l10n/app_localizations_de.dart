@@ -12096,6 +12096,18 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'Die maximale Uploadgröße muss eine positive Zahl sein.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Der gespeicherte Temperaturwert liegt außerhalb von 0–2. Passe den Regler an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Der gespeicherte top-P-Wert liegt außerhalb von 0–1. Passe den Regler an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.';
 }
 
 /// The translations for German, as used in Germany (`de_DE`).

@@ -11932,6 +11932,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'Maximum upload size must be a positive number.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Adjust each out-of-range sampling slider or turn it off before saving.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).

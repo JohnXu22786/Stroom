@@ -7086,5 +7086,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "保存された温度が 0～2 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "保存された top-P が 0～1 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

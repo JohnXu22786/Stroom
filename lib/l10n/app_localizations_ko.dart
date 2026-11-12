@@ -11614,6 +11614,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get providerMaxUploadSizePositive => '최대 업로드 크기는 양수여야 합니다.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '저장된 온도 값이 0–2 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '저장된 top-P 값이 0–1 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.';
 }
 
 /// The translations for Korean, as used in Republic of Korea (`ko_KR`).

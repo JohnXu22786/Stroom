@@ -12156,6 +12156,18 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'La taille maximale d’envoi doit être un nombre positif.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'La température enregistrée est hors de la plage 0–2. Réglez le curseur ou désactivez l’option avant d’enregistrer.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'La valeur top-P enregistrée est hors de la plage 0–1. Réglez le curseur ou désactivez l’option avant d’enregistrer.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.';
 }
 
 /// The translations for French, as used in France (`fr_FR`).

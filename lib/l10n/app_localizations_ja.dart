@@ -11624,6 +11624,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get providerMaxUploadSizePositive => '最大アップロードサイズは正の数である必要があります。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '保存された温度が 0～2 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '保存された top-P が 0～1 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。';
 }
 
 /// The translations for Japanese, as used in Japan (`ja_JP`).

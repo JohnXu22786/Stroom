@@ -12092,6 +12092,18 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'O tamanho máximo de envio deve ser um número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'A temperatura salva está fora do intervalo de 0–2. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'O valor top-P salvo está fora do intervalo de 0–1. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).

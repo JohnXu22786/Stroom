@@ -12127,6 +12127,18 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'El tamaño máximo de carga debe ser un número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
 }
 
 /// The translations for Spanish Castilian, as used in Spain (`es_ES`).

@@ -7086,5 +7086,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "قيمة درجة الحرارة المحفوظة خارج النطاق 0–2. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "قيمة top-P المحفوظة خارج النطاق 0–1. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

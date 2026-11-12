@@ -12046,6 +12046,18 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'يجب أن يكون الحد الأقصى لحجم الرفع رقمًا موجبًا.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'قيمة درجة الحرارة المحفوظة خارج النطاق 0–2. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'قيمة top-P المحفوظة خارج النطاق 0–1. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.';
 }
 
 /// The translations for Arabic, as used in Saudi Arabia (`ar_SA`).
