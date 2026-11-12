@@ -26488,6 +26488,113 @@ void main() {
     );
 
     test(
+      'partial restore excludes skipped OCR credentials without rejecting other rows',
+      () async {
+        WebFileStore.enableTestMode();
+        const skippedTaskId = 'skipped-ocr-http-credential-collision';
+        const credential = 'HTTP 429';
+        final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: skippedTaskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final skippedRow = <String, dynamic>{
+          'id': skippedTaskId,
+          'type': 'ocr',
+          'title': 'Malformed OCR row with HTTP metadata credential collision',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'apiKey': credential,
+          'error': credential,
+          'steps': [
+            {'error': credential},
+          ],
+          'ocrPageOutcomes': [
+            {'error': credential},
+          ],
+          'retryData': retryData,
+        };
+        final otherSkippedRow = <String, dynamic>{
+          'id': 'skipped-ocr-colliding-status-diagnostic',
+          'type': 'ocr',
+          'title': 'Malformed OCR row with a colliding status diagnostic',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'error': credential,
+          'steps': <dynamic>[],
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1024,
+          },
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow, otherSkippedRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger sanitized partial snapshot',
+            startImmediately: false,
+            taskId: 'sanitize-http-credential-collision-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final savedSkippedRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == skippedTaskId,
+              );
+          expect(jsonEncode(savedSkippedRow), isNot(contains(credential)));
+          expect(savedSkippedRow, isNot(contains('apiKey')));
+          expect(savedSkippedRow['title'], skippedRow['title']);
+          expect(savedSkippedRow['retryData'], retryData);
+          final savedOtherSkippedRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == otherSkippedRow['id'],
+              );
+          expect(savedOtherSkippedRow['title'], otherSkippedRow['title']);
+          expect(savedOtherSkippedRow['error'], credential);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) =>
+                      row['id'] == 'sanitize-http-credential-collision-trigger',
+                ),
+            isTrue,
+          );
+          expect(
+            ((savedSkippedRow['retryData'] as Map)['images'] as List)
+                .single['storageRef'],
+            cacheReference,
+          );
+          final ownershipMarker = rows.whereType<Map>().singleWhere(
+                (row) =>
+                    row['_unrestoredTaskRecord'] == true &&
+                    row['ocrCacheTaskId'] == skippedTaskId,
+              );
+          expect(ownershipMarker['ocrCacheOwnershipKnown'], isFalse);
+          expect(
+            await notifier.ocrCacheReferencesForCleanup(),
+            isNull,
+          );
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'partial restore omits unknown provider diagnostics from skipped OCR rows',
       () async {
         WebFileStore.enableTestMode();
