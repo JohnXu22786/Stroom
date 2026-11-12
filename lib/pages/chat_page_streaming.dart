@@ -325,7 +325,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (mounted) setState(() {});
   }
 
-  Future<void> _startStreaming(
+  Future<StreamResult?> _startStreaming(
     String text, {
     String? capturedConvId,
     List<ChatMessage>? historyOverride,
@@ -387,13 +387,13 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final histBefore = historyOverride ?? List<ChatMessage>.from(_history);
     // Guard: only block if THIS conversation is streaming, not another.
     if (ref.read(streamingConversationsProvider).contains(effectiveConvId)) {
-      return;
+      return null;
     }
 
     await AppLogService.info(
         'ChatPage', '开始流式请求, capturedConvId=$capturedConvId');
     if (mounted && ref.read(activeConversationIdProvider) != effectiveConvId) {
-      return;
+      return null;
     }
     final aiMsgId = 'a${DateTime.now().microsecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
@@ -418,7 +418,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
         _streamingMsgId = null;
       }
       ref.read(isStreamingProvider(effectiveConvId).notifier).state = false;
-      return;
+      return null;
     }
 
     // Delegate streaming to ChatStreamManager (runs background loop).
@@ -432,7 +432,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
         _streamingMsgId = null;
       }
       ref.read(isStreamingProvider(effectiveConvId).notifier).state = false;
-      return;
+      return null;
     }
     // Advertise a stoppable stream immediately before manager registration.
     // startStreaming registers its state synchronously before its first await,
@@ -442,25 +442,50 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (mounted) setState(() {});
     _registerContinuationHandler(manager, effectiveConvId, aiMsgId);
 
-    final streamFuture = manager.startStreaming(
-      text: text,
-      convId: effectiveConvId,
-      history: histBefore,
-      requestHistoryOverride: requestHistoryOverride,
-      historyOnSuccess: historyOnSuccess,
-      replaceHistoryOnError: replaceHistoryOnError,
-      tools: filteredTools,
-      reasoning: reasoning,
-      reasoningEffort: reasoningEffort,
-      reasoningParamValues: reasoningParamValues,
-      customParamValues: customParamValues,
-      streamingMsgId: aiMsgId,
-    );
-    _attachStreamPage(manager, effectiveConvId, aiMsgId);
-    final StreamResult result = await streamFuture;
+    late final StreamResult result;
+    try {
+      final streamFuture = manager.startStreaming(
+        text: text,
+        convId: effectiveConvId,
+        history: histBefore,
+        requestHistoryOverride: requestHistoryOverride,
+        historyOnSuccess: historyOnSuccess,
+        replaceHistoryOnError: replaceHistoryOnError,
+        tools: filteredTools,
+        reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
+        reasoningParamValues: reasoningParamValues,
+        customParamValues: customParamValues,
+        streamingMsgId: aiMsgId,
+      );
+      _attachStreamPage(manager, effectiveConvId, aiMsgId);
+      result = await streamFuture;
+    } catch (_) {
+      _detachStreamPageFor(effectiveConvId, aiMsgId);
+      if (_streamingMsgId == aiMsgId) {
+        _streamingMsgId = null;
+        _isStreamingActive = false;
+      }
+      _convertedStreamingPlaceholderIds.remove(aiMsgId);
+      try {
+        await streamController?.removeMessage(placeholder);
+        await _removeMessageFromController(aiMsgId);
+      } catch (cleanupError) {
+        debugPrint(
+          '[ChatPage] failed stream placeholder cleanup: $cleanupError',
+        );
+      }
+      try {
+        manager.recoverUnexpectedStreamFailure(effectiveConvId, aiMsgId);
+      } catch (cleanupError) {
+        debugPrint('[ChatPage] failed manager stream cleanup: $cleanupError');
+      }
+      if (mounted) setState(() {});
+      rethrow;
+    }
     _detachStreamPageFor(effectiveConvId, aiMsgId);
 
-    if (!mounted) return;
+    if (!mounted) return result;
 
     // ── Post-stream completion ──
     // CRITICAL: Update _history FIRST, before any debug/log calls that
@@ -592,6 +617,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       }
       setState(() {});
     }
+    return result;
   }
 
   /// Builds the final [_chatSegments] entry for a completed assistant message.

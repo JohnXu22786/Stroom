@@ -6,6 +6,67 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageEditingExt on _ChatPageState {
+  /// Temporarily removes the visible controller suffix while keeping its
+  /// history entries and rendering caches available for failure recovery.
+  Future<List<Message>> _detachVisibleSuffix(
+    String messageId, {
+    required InMemoryChatController? controller,
+  }) async {
+    if (controller == null) return const <Message>[];
+    final messages = List<Message>.from(controller.messages);
+    final index = messages.indexWhere((message) => message.id == messageId);
+    if (index < 0) return const <Message>[];
+    final suffix = messages.sublist(index);
+    for (final message in suffix.reversed) {
+      await controller.removeMessage(message);
+    }
+    if (mounted) setState(() {});
+    return suffix;
+  }
+
+  /// Restores a detached transcript suffix before [beforeMessageId], or at
+  /// the end when the attempted replacement produced no controller item.
+  Future<void> _restoreVisibleSuffix(
+    List<Message> suffix, {
+    required InMemoryChatController? controller,
+    required String? conversationId,
+    String? beforeMessageId,
+  }) async {
+    if (!mounted ||
+        controller == null ||
+        suffix.isEmpty ||
+        !identical(_controller, controller) ||
+        ref.read(activeConversationIdProvider) != conversationId) {
+      return;
+    }
+    var index = beforeMessageId == null
+        ? -1
+        : controller.messages.indexWhere(
+            (message) => message.id == beforeMessageId,
+          );
+    if (index < 0) index = controller.messages.length;
+    for (final message in suffix) {
+      await controller.insertMessage(message, index: index++);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _discardReplacedSuffixCaches(
+    List<Message> suffix, {
+    required InMemoryChatController? controller,
+    required String? conversationId,
+  }) async {
+    if (!mounted ||
+        controller == null ||
+        !identical(_controller, controller) ||
+        ref.read(activeConversationIdProvider) != conversationId) {
+      return;
+    }
+    for (final message in suffix) {
+      await _removeMessageFromController(message.id);
+    }
+  }
+
   /// Removes [messageId]'s controller item and all per-message caches.
   ///
   /// Shared by the edit / retry truncation loops. The controller removal is
@@ -23,6 +84,24 @@ extension _ChatPageEditingExt on _ChatPageState {
     _finalizedMessages.remove(messageId);
     _isReasoningCompletedForMsg.remove(messageId);
     _messageKeys.remove(messageId);
+    _streamingMarkdownCache
+        .removeWhere((key, _) => key.startsWith('$messageId:'));
+    _streamingFenceInfoCaches
+        .removeWhere((key, _) => key.startsWith('$messageId:'));
+    _streamingSearchOccurrenceCache
+        .removeWhere((key, _) => key.startsWith('$messageId:'));
+    _liveMarkdownSearchPreviews
+        .removeWhere((key, _) => key.startsWith('$messageId:'));
+    _liveMarkdownAppendCounts
+        .removeWhere((key, _) => key.startsWith('$messageId:'));
+    _livePlainTextFragments
+        .removeWhere((key, _) => key.startsWith('$messageId:'));
+    _legacyFullReplySnapshots
+        .removeWhere((key, _) => key.endsWith(':$messageId'));
+    _legacyFullReplySequences
+        .removeWhere((key, _) => key.endsWith(':$messageId'));
+    _legacyFullReplyGenerations
+        .removeWhere((key, _) => key.endsWith(':$messageId'));
   }
 
   /// Removes every controller message that is NOT part of [_history].
@@ -138,15 +217,56 @@ extension _ChatPageEditingExt on _ChatPageState {
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index >= _history.length) return;
+      final originalController = _controller;
+      final originalConversationId = ref.read(activeConversationIdProvider);
+      final detachedSuffix = await _detachVisibleSuffix(
+        messageId,
+        controller: originalController,
+      );
+      if (!mounted ||
+          !identical(_controller, originalController) ||
+          ref.read(activeConversationIdProvider) != originalConversationId) {
+        return;
+      }
+      String? replacementUserMessageId;
       // Keep the complete old transcript durable while the replacement is
       // in flight. The request sees only the prefix before the edited turn;
       // on success the manager replaces the old tail, while an error or stop
       // appends the failed attempt after the untouched transcript.
-      await _onMessageSend(
-        newText,
-        newAttachments,
-        historyForRequestPrefix: List<ChatMessage>.from(_history.take(index)),
-      );
+      StreamResult? result;
+      try {
+        result = await _onMessageSend(
+          newText,
+          newAttachments,
+          historyForRequestPrefix: List<ChatMessage>.from(_history.take(index)),
+          onUserMessageCreated: (id) => replacementUserMessageId = id,
+        );
+      } catch (_) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+          beforeMessageId: replacementUserMessageId,
+        );
+        rethrow;
+      }
+      if (result == null ||
+          result.cancelled ||
+          result.assistantMessage == null ||
+          result.assistantMessage!.isError) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+          beforeMessageId: replacementUserMessageId,
+        );
+      } else {
+        await _discardReplacedSuffixCaches(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+        );
+      }
     } finally {
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();
@@ -160,14 +280,54 @@ extension _ChatPageEditingExt on _ChatPageState {
       if (index == -1 || index == 0 || index >= _history.length) return;
       final historyBeforeAttempt = List<ChatMessage>.from(_history);
       final historyForSuccess = historyBeforeAttempt.sublist(0, index);
-      final userMsg = _history[index - 1];
-      await _startStreaming(
-        userMsg.content,
-        historyOverride: historyBeforeAttempt,
-        requestHistoryOverride: historyForSuccess,
-        historyOnSuccess: historyForSuccess,
-        replaceHistoryOnError: true,
+      final originalController = _controller;
+      final originalConversationId = ref.read(activeConversationIdProvider);
+      final detachedSuffix = await _detachVisibleSuffix(
+        messageId,
+        controller: originalController,
       );
+      if (!mounted ||
+          !identical(_controller, originalController) ||
+          ref.read(activeConversationIdProvider) != originalConversationId) {
+        return;
+      }
+      final userMsg = _history[index - 1];
+      StreamResult? result;
+      try {
+        result = await _startStreaming(
+          userMsg.content,
+          historyOverride: historyBeforeAttempt,
+          requestHistoryOverride: historyForSuccess,
+          historyOnSuccess: historyForSuccess,
+          // Keep the prior transcript intact if the retry errors or is
+          // cancelled. The replacement prefix is committed only on success.
+          replaceHistoryOnError: false,
+        );
+      } catch (_) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+        );
+        rethrow;
+      }
+      if (result == null ||
+          result.cancelled ||
+          result.assistantMessage == null ||
+          result.assistantMessage!.isError) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+          beforeMessageId: result?.assistantMessage?.id,
+        );
+      } else {
+        await _discardReplacedSuffixCaches(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+        );
+      }
     } finally {
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();

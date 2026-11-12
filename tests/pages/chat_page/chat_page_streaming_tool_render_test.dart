@@ -24,6 +24,7 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/tool_call.dart'
     show ToolCallData, ToolCallStatus, ToolDefinition;
 import 'package:stroom/pages/chat_page.dart';
+import 'package:stroom/pages/chat/widgets/message_action_row.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -38,6 +39,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 /// test can drive the segment providers manually and inspect the
 /// textStream-phase rendering (the exact phase where the bug occurred).
 class _HangingStreamManager extends ChatStreamManager {
+  final pending = <Completer<StreamResult>>[];
+
   _HangingStreamManager() : super(null);
 
   @override
@@ -57,16 +60,33 @@ class _HangingStreamManager extends ChatStreamManager {
     Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) {
-    return Completer<StreamResult>().future;
+    final completer = Completer<StreamResult>();
+    pending.add(completer);
+    return completer.future;
   }
 }
 
-Widget _buildTestApp(_HangingStreamManager manager) {
+Widget _buildTestApp(
+  _HangingStreamManager manager, {
+  List<ChatMessage> history = const [],
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
       chatStreamManagerProvider.overrideWith((ref) => manager),
-      conversationsProvider.overrideWith((ref) => ConversationsNotifier(ref)),
+      conversationsProvider.overrideWith((ref) {
+        final notifier = ConversationsNotifier(ref);
+        notifier.state = [
+          Conversation(
+            id: 'test-conv',
+            title: 'Test Conversation',
+            createdAt: DateTime(2026, 1, 1),
+            updatedAt: DateTime(2026, 1, 1),
+            messages: history,
+          ),
+        ];
+        return notifier;
+      }),
       activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
@@ -125,6 +145,160 @@ void main() {
   });
 
   group('textStream phase: think → tool call without text', () {
+    testWidgets('shows the assistant gray bubble before the first token',
+        (tester) async {
+      final manager = _HangingStreamManager();
+      await tester.pumpWidget(_buildTestApp(manager));
+      for (int i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      await _sendMessage(tester, 'Hello');
+
+      final spinner = find.byType(CircularProgressIndicator);
+      expect(spinner, findsOneWidget);
+      final bubbleContainers = find.ancestor(
+        of: spinner,
+        matching: find.byType(Container),
+      );
+      expect(
+        bubbleContainers.evaluate().any((element) {
+          final decoration = (element.widget as Container).decoration;
+          return decoration is BoxDecoration &&
+              decoration.color == Colors.grey[100];
+        }),
+        isTrue,
+        reason: 'the initial assistant placeholder should use the same gray '
+            'surface as a completed assistant bubble',
+      );
+
+      await _flushPendingTimers(tester);
+    });
+
+    testWidgets('edit resend restores the old tail after a failed attempt',
+        (tester) async {
+      final manager = _HangingStreamManager();
+      final history = [
+        ChatMessage(role: 'user', content: 'Original question', id: 'u-old'),
+        ChatMessage(role: 'assistant', content: 'Old answer', id: 'a-old'),
+        ChatMessage(role: 'user', content: 'Later question', id: 'u-tail'),
+        ChatMessage(role: 'assistant', content: 'Later answer', id: 'a-tail'),
+      ];
+      await tester.pumpWidget(_buildTestApp(manager, history: history));
+      for (int i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      final actionRow = find.ancestor(
+        of: find.text('Original question'),
+        matching: find.byType(MessageActionRow),
+      );
+      await tester.tap(
+        find.descendant(
+          of: actionRow,
+          matching: find.byIcon(Icons.edit_outlined),
+        ),
+      );
+      await tester.pump();
+      await _sendMessage(tester, 'Edited question');
+
+      expect(find.text('Later question'), findsNothing);
+      expect(find.text('Later answer'), findsNothing);
+      expect(manager.pending, hasLength(1));
+
+      final chat = tester.widget<Chat>(find.byType(Chat));
+      final attemptUser = chat.chatController.messages
+          .whereType<TextMessage>()
+          .lastWhere((item) => item.text == 'Edited question');
+      final failed = ChatMessage(
+        role: 'assistant',
+        content: 'Replacement failed',
+        id: 'a-failed-edit',
+        isError: true,
+      );
+      manager.pending.single.complete(
+        StreamResult(
+          history: [
+            ...history,
+            ChatMessage(
+              role: 'user',
+              content: 'Edited question',
+              id: attemptUser.id,
+            ),
+            failed,
+          ],
+          assistantMessage: failed,
+          fullReply: failed.content,
+        ),
+      );
+      for (int i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('Later question'), findsOneWidget);
+      expect(find.text('Later answer'), findsOneWidget);
+      await _flushPendingTimers(tester);
+    });
+
+    testWidgets('retry restores the old tail after the attempt is stopped',
+        (tester) async {
+      final manager = _HangingStreamManager();
+      final history = [
+        ChatMessage(role: 'user', content: 'Question', id: 'u-retry'),
+        ChatMessage(role: 'assistant', content: 'Old answer', id: 'a-retry'),
+        ChatMessage(role: 'user', content: 'Later question', id: 'u-tail'),
+        ChatMessage(role: 'assistant', content: 'Later answer', id: 'a-tail'),
+      ];
+      await tester.pumpWidget(_buildTestApp(manager, history: history));
+      for (int i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      final actionRow = find.ancestor(
+        of: find.text('Old answer'),
+        matching: find.byType(MessageActionRow),
+      );
+      await tester.tap(
+        find.descendant(
+          of: actionRow,
+          matching: find.byIcon(Icons.refresh),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('确定'));
+      for (int i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('Old answer'), findsNothing);
+      expect(find.text('Later question'), findsNothing);
+      expect(find.text('Later answer'), findsNothing);
+      expect(manager.pending, hasLength(1));
+
+      final stopped = ChatMessage(
+        role: 'assistant',
+        content: 'Retry stopped',
+        id: 'a-stopped-retry',
+        isError: true,
+      );
+      manager.pending.single.complete(
+        StreamResult(
+          history: [...history, stopped],
+          assistantMessage: stopped,
+          fullReply: stopped.content,
+          cancelled: true,
+        ),
+      );
+      for (int i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('Old answer'), findsOneWidget);
+      expect(find.text('Later question'), findsOneWidget);
+      expect(find.text('Later answer'), findsOneWidget);
+      await _flushPendingTimers(tester);
+    });
+
     testWidgets(
         'shows the tool call card and a single reasoning button (no '
         'phantom "思考完成" pile, no hidden tool call)', (tester) async {
