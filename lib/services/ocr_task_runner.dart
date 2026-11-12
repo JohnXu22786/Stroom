@@ -350,7 +350,7 @@ class OcrTaskRunner {
         if (task != null) {
           final safeError = taskSpecificFailure == null
               ? error is OcrRequestTooLargeException
-                  ? error.toString()
+                  ? error.localizedMessage(notifier.localizations)
                   : OcrDiagnosticSnapshot.safeTaskError(
                       error,
                       excludedValues: [config.apiKey],
@@ -515,7 +515,7 @@ class OcrTaskRunner {
             imageIndex: imageIndex,
             status: OcrPageOutcomeStatus.failed,
             error: error is OcrRequestTooLargeException
-                ? error.toString()
+                ? error.localizedMessage(notifier.localizations)
                 : OcrDiagnosticSnapshot.safeTaskError(
                     error,
                     excludedValues: [config.apiKey],

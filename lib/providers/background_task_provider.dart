@@ -21,6 +21,7 @@ import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/ocr_diagnostics.dart';
 import '../utils/ocr_page_failure_summary.dart';
+import '../utils/ocr_request_size_failure_summary.dart';
 import 'locale_provider.dart';
 import 'task_provider.dart';
 
@@ -521,6 +522,21 @@ String? _localizeStoredBackgroundError(
 ) {
   if (error == null) return null;
   if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
+  final requestSizeSummary =
+      OcrRequestSizeFailureSummary.localize(error, strings);
+  if (requestSizeSummary != null) return requestSizeSummary;
+  for (final locale in AppLocalizations.supportedLocales) {
+    final source = lookupAppLocalizations(locale);
+    final prefix = source.bgTaskOcrError('');
+    if (!error.startsWith(prefix)) continue;
+    final requestSizeDetail = OcrRequestSizeFailureSummary.localize(
+      error.substring(prefix.length),
+      strings,
+    );
+    if (requestSizeDetail != null) {
+      return strings.bgTaskOcrError(requestSizeDetail);
+    }
+  }
   final hiddenDetailsPrefixes = {
     for (final locale in AppLocalizations.supportedLocales)
       lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
@@ -682,6 +698,9 @@ String? _localizeStoredOcrPageFailureSummary(
   String error,
   AppLocalizations strings,
 ) {
+  final requestSizeSummary =
+      OcrRequestSizeFailureSummary.localize(error, strings);
+  if (requestSizeSummary != null) return requestSizeSummary;
   return OcrPageFailureSummary.localize(error, strings);
 }
 
@@ -2855,6 +2874,41 @@ bool _legacyOcrHasSafeRedactedInstruction(
       r'(?:هذا|هذه)\s+(?:الإيصال|الفاتورة|الصورة|المستند|الوثيقة)|'
       r'(?:الإيصال|الفاتورة|الصورة|المستند|الوثيقة))'
       r'[。.!！?؟]?\s*\[redacted\]\s*$',
+    ),
+    RegExp(
+      r'^\s*(?:(?:por favor)\s+)?'
+      r'(?:leia|extraia|reconheça|traduza|verifique|resuma|analise|descreva|processe)\s+'
+      r'(?:(?:o|a|este|esta)\s+)?'
+      r'(?:total|valor|data|nome|texto|conte[uú]do|recibo|nota fiscal|imagem|foto|documento|p[aá]gina)'
+      r'(?:\s+(?:(?:do|da|de|deste|desta)\s+)?(?:recibo|nota fiscal|imagem|foto|documento|p[aá]gina))?'
+      r'[.!?]?\s*\[redacted\]\s*$',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^\s*(?:(?:veuillez)\s+)?'
+      r'(?:lisez|lire|extrayez|extraire|reconnaissez|reconnaître|traduisez|traduire|vérifiez|vérifier|résumez|résumer|analysez|analyser|décrivez|décrire|traitez|traiter)\s+'
+      r'(?:(?:le|la|les|ce|cette|cet|du|de la|de l[’]|des)\s+)?'
+      r'(?:total|montant|date|nom|texte|contenu|reçu|ticket|facture|image|photo|document|page)'
+      r'(?:\s+(?:(?:de|du|de la|des|de ce|de cette)\s+)?(?:reçu|ticket|facture|image|photo|document|page))?'
+      r'[.!?]?\s*\[redacted\]\s*$',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^\s*(?:lies|lese|extrahiere|extrahieren|erkenne|erkennen|übersetze|übersetzen|prüfe|prüfen|fasse|analysiere|beschreibe|verarbeite)\s+'
+      r'(?:(?:den|die|das|dieses|diesen|dieser|der|des)\s+)?'
+      r'(?:gesamtbetrag|betrag|datum|namen?|text|inhalt|beleg|quittung|rechnung|bild|foto|dokument|seite)'
+      r'(?:\s+(?:(?:dieses|diesen|dieser|des|der|vom)\s+)?(?:belegs?|quittung|rechnung|bild|foto|dokument|seite))?'
+      r'[.!?]?\s*\[redacted\]\s*$',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^\s*(?:(?:por favor)\s+)?'
+      r'(?:lee|leer|extrae|reconoce|traduce|verifica|resume|analiza|describe|procesa)\s+'
+      r'(?:(?:el|la|los|las|este|esta)\s+)?'
+      r'(?:total|importe|fecha|nombre|texto|contenido|recibo|factura|imagen|foto|documento|p[aá]gina)'
+      r'(?:\s+(?:(?:de|del|de este|de esta|de el|de la)\s+)?(?:recibo|factura|imagen|foto|documento|p[aá]gina))?'
+      r'[.!?]?\s*\[redacted\]\s*$',
+      caseSensitive: false,
     ),
   ].any((pattern) => pattern.hasMatch(text));
   final bareRedactedAction = RegExp(

@@ -2706,6 +2706,13 @@
   "bgTaskCancelled": "Cancelado",
   "bgTaskAsrError": "Error en la transcripción de voz: {details}",
   "bgTaskAsrSaveError": "Error al guardar la transcripción de voz: {details}",
+  "bgTaskOcrRequestSizeExceeded": "El JSON de la solicitud OCR ocupa {encodedBytes} bytes y supera el límite configurado de {budgetBytes} bytes.",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "Error de OCR: {details}",
   "bgTaskOcrSaveError": "Error al guardar los resultados de OCR: {details}",
   "bgTaskOcrIncompleteError": "El resultado del OCR está incompleto: {details}",

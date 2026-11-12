@@ -9290,6 +9290,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR 请求 JSON 大小为 $encodedBytes 字节，超过配置的 $budgetBytes 字节上限。';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR识别失败：$details';
   }

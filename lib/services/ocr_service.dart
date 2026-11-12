@@ -136,13 +136,12 @@ class OcrRequestTooLargeException implements Exception {
     required this.budgetBytes,
   });
 
+  String localizedMessage(AppLocalizations localizations) =>
+      localizations.bgTaskOcrRequestSizeExceeded(encodedBytes, budgetBytes);
+
   @override
-  String toString() =>
-      'OCR 请求的 JSON 大小为 ' +
-      encodedBytes.toString() +
-      ' 字节，超过 ' +
-      budgetBytes.toString() +
-      ' 字节配置值；请调整 OCR 供应商/模型请求大小设置或图片画质';
+  String toString() => 'OCR request JSON size is $encodedBytes bytes, '
+      'exceeding the configured limit of $budgetBytes bytes.';
 }
 
 class OcrService {

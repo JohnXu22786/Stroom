@@ -5340,6 +5340,13 @@
       }
     }
   },
+  "bgTaskOcrRequestSizeExceeded": "Die OCR-Anfrage ist {encodedBytes} Byte groß und überschreitet das konfigurierte Limit von {budgetBytes} Byte.",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "OCR fehlgeschlagen: {details}",
   "@bgTaskOcrError": {
     "placeholders": {

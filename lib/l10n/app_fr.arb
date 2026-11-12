@@ -5342,6 +5342,13 @@
       }
     }
   },
+  "bgTaskOcrRequestSizeExceeded": "La taille JSON de la requête OCR est de {encodedBytes} octets, au-dessus de la limite configurée de {budgetBytes} octets.",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "Échec de l’OCR : {details}",
   "@bgTaskOcrError": {
     "placeholders": {

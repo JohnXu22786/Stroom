@@ -447,15 +447,14 @@ void _writeStreamInfo(BytesOutput out, int totalSamples, int sampleRate) {
       : totalSamples;
   out.writeUint16BE(minBlockSize);
   out.writeUint16BE(maxBlockSize);
-  // Minimum frame size (24 bits) - approximate
-  out.writeByte(0x00);
-  out.writeByte(0x01);
-  out.writeByte(0x00);
-  // Maximum frame size (24 bits) - generous estimate
-  final maxFrame = _flacBlockSize * 2 + 64;
-  out.writeByte((maxFrame >> 16) & 0xFF);
-  out.writeByte((maxFrame >> 8) & 0xFF);
-  out.writeByte(maxFrame & 0xFF);
+  // Frame sizes are unknown until the frames are encoded. FLAC represents
+  // unknown minimum and maximum frame sizes with zero.
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
 
   // Sample rate (20 bits) | channels-1 (3 bits) | bps-1 (5 bits) | total samples (36 bits)
   final sr = sampleRate;
