@@ -2654,7 +2654,7 @@ def verify_fixtures(
         raise EvaluationError(
             "cannot read fixture manifest: JSON nesting exceeds parser limit"
         ) from error
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, ValueError) as error:
         raise EvaluationError(f"cannot read fixture manifest: {error}") from error
     if not isinstance(manifest, dict):
         raise EvaluationError("fixture manifest must be an object")
@@ -2744,7 +2744,7 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise EvaluationError(
             f"cannot read {path}: JSON nesting exceeds parser limit"
         ) from error
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, ValueError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
         raise EvaluationError(f"{path} must contain a JSON object")
