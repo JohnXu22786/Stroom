@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../l10n/app_localizations.dart';
 import 'ocr_page_failure_summary.dart';
+import 'ocr_request_size_failure_summary.dart';
 
 /// Creates small OCR diagnostic maps suitable for task persistence and display.
 class OcrDiagnosticSnapshot {
@@ -649,7 +650,9 @@ class OcrDiagnosticSnapshot {
           RegExp(
             r'^OCR 请求的 JSON 大小为 \d+ 字节，超过 \d+ 字节上限$',
           ).hasMatch(candidate) ||
-          OcrPageFailureSummary.isKnownLocalizedSummary(candidate)) {
+          OcrPageFailureSummary.isKnownLocalizedSummary(candidate) ||
+          OcrRequestSizeFailureSummary.isKnownLocalizedSummary(candidate) ||
+          _isKnownLocalizedOcrRequestSizeTaskErrorSummary(candidate)) {
         return true;
       }
 
@@ -703,6 +706,20 @@ class OcrDiagnosticSnapshot {
       if (finishReason == 'unknown' ||
           _safeReason(finishReason, excludedValues: excludedValues) ==
               finishReason) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isKnownLocalizedOcrRequestSizeTaskErrorSummary(String value) {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      final prefix = strings.bgTaskOcrError('');
+      if (value.startsWith(prefix) &&
+          OcrRequestSizeFailureSummary.isKnownLocalizedSummary(
+            value.substring(prefix.length),
+          )) {
         return true;
       }
     }
