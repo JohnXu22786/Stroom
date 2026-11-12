@@ -7086,5 +7086,8 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "Der gespeicherte Temperaturwert liegt außerhalb von 0–2. Passe den Regler an oder deaktiviere die Option vor dem Speichern.",
+  "ocrSamplingTopPOutOfRange": "Der gespeicherte top-P-Wert liegt außerhalb von 0–1. Passe den Regler an oder deaktiviere die Option vor dem Speichern.",
+  "ocrSamplingSliderRepairRequired": "Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern."
 }

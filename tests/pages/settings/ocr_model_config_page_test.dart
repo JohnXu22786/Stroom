@@ -90,8 +90,14 @@ void main() {
         await _scrollTo(tester, find.text('温度'));
         expect(
           find.text(
-            'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.',
+            '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。',
           ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('保存'));
+        await tester.pump();
+        expect(
+          find.text('保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。'),
           findsOneWidget,
         );
         final slider = find.byType(Slider).first;
@@ -124,7 +130,7 @@ void main() {
         await _scrollTo(tester, find.text('Top P'));
         expect(
           find.text(
-            'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.',
+            '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。',
           ),
           findsOneWidget,
         );

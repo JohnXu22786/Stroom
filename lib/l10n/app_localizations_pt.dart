@@ -12092,6 +12092,18 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'O tamanho máximo de envio deve ser um número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'A temperatura salva está fora do intervalo de 0–2. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'O valor top-P salvo está fora do intervalo de 0–1. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -22026,6 +22038,11 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'O JSON da solicitação de OCR tem $encodedBytes bytes e excede o limite configurado de $budgetBytes bytes.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'Falha no OCR: $details';
   }
@@ -22789,6 +22806,100 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get appLogCopyDone => 'Todo o conteúdo do registro foi copiado';
+
+  @override
+  String get appLogSettings => 'Configurações do registro';
+
+  @override
+  String get appLogSettingsTitle => 'Configurações do registro do aplicativo';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count arquivos · $size usados';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Manter registros por';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# dias',
+      one: '# dia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Nível mínimo de detalhes';
+
+  @override
+  String get appLogStorageLimit =>
+      'Limite máximo de armazenamento de registros';
+
+  @override
+  String get appLogUnlimited => 'Ilimitado';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Registros antigos e os que excederem o limite de armazenamento serão removidos automaticamente. O arquivo da hora atual será mantido.';
+
+  @override
+  String get appLogSettingsSaved => 'Configurações do registro salvas';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Não foi possível salvar as configurações do registro: $error';
+  }
+
+  @override
+  String get appLogSave => 'Salvar';
+
+  @override
+  String get appLogLevelDebug => 'Depuração · mais detalhes';
+
+  @override
+  String get appLogLevelInfo => 'Informações';
+
+  @override
+  String get appLogLevelWarning => 'Aviso';
+
+  @override
+  String get appLogLevelError => 'Erro';
+
+  @override
+  String get appLogFilter => 'Filtrar entradas do registro';
+
+  @override
+  String get appLogSearch => 'Palavra-chave';
+
+  @override
+  String get appLogSource => 'Origem';
+
+  @override
+  String get appLogLevel => 'Nível';
+
+  @override
+  String get appLogAnyLevel => 'Qualquer nível';
+
+  @override
+  String get appLogFromTime => 'De';
+
+  @override
+  String get appLogUntilTime => 'Até';
+
+  @override
+  String get appLogClearFilters => 'Limpar filtros';
+
+  @override
+  String get appLogNoMatches => 'Nenhuma entrada corresponde a estes filtros';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible de $total linhas';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Tarefa em segundo plano';
@@ -24083,4 +24194,16 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   @override
   String get providerMaxUploadSizePositive =>
       'O tamanho máximo de envio deve ser um número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'A temperatura salva está fora do intervalo de 0–2. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'O valor top-P salvo está fora do intervalo de 0–1. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.';
 }

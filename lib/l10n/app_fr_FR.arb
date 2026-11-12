@@ -7086,5 +7086,8 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "La température enregistrée est hors de la plage 0–2. Réglez le curseur ou désactivez l’option avant d’enregistrer.",
+  "ocrSamplingTopPOutOfRange": "La valeur top-P enregistrée est hors de la plage 0–1. Réglez le curseur ou désactivez l’option avant d’enregistrer.",
+  "ocrSamplingSliderRepairRequired": "Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer."
 }

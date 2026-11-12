@@ -12127,6 +12127,18 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'El tamaño máximo de carga debe ser un número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
 }
 
 /// The translations for Spanish Castilian, as used in Spain (`es_ES`).
@@ -22095,6 +22107,11 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'El JSON de la solicitud OCR ocupa $encodedBytes bytes y supera el límite configurado de $budgetBytes bytes.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'Error de OCR: $details';
   }
@@ -22860,6 +22877,99 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get appLogCopyDone => 'Copié todo el contenido del registro.';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Tarea en segundo plano';
@@ -24153,4 +24263,16 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   @override
   String get providerMaxUploadSizePositive =>
       'El tamaño máximo de carga debe ser un número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
 }

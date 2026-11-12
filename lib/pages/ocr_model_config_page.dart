@@ -312,9 +312,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if ((_enableTemperature && _temperatureNeedsRepair) ||
         (_enableTopP && _topPNeedsRepair)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Adjust each out-of-range sampling slider or turn it off before saving.',
+            AppLocalizations.of(context)!.ocrSamplingSliderRepairRequired,
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -689,7 +689,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.',
+                  AppLocalizations.of(context)!
+                      .ocrSamplingTemperatureOutOfRange,
                   style: TextStyle(color: cs.error),
                 ),
               ),
@@ -713,7 +714,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.',
+                  AppLocalizations.of(context)!.ocrSamplingTopPOutOfRange,
                   style: TextStyle(color: cs.error),
                 ),
               ),

@@ -7086,5 +7086,8 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.",
+  "ocrSamplingTopPOutOfRange": "Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.",
+  "ocrSamplingSliderRepairRequired": "Adjust each out-of-range sampling slider or turn it off before saving."
 }

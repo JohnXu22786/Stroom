@@ -7070,5 +7070,11 @@
   "languageNameGerman": "German",
   "languageNameArabic": "Arabic",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Delete empty folder “{name}”? {count, plural, one{Its 1 nested folder will also be deleted.} other{Its {count} nested folders will also be deleted.}}",
-  "providerMaxUploadSizePositive": "Maximum upload size must be a positive number."
+  "providerMaxUploadSizePositive": "Maximum upload size must be a positive number.",
+  "ocrSamplingTemperatureOutOfRange": "Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "Adjust each out-of-range sampling slider or turn it off before saving.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }
