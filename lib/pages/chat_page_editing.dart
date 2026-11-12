@@ -18,7 +18,7 @@ extension _ChatPageEditingExt on _ChatPageState {
     if (index < 0) return const <Message>[];
     final suffix = messages.sublist(index);
     for (final message in suffix.reversed) {
-      await controller.removeMessage(message);
+      await controller.removeMessage(message, animated: false);
     }
     if (mounted) setState(() {});
     return suffix;
