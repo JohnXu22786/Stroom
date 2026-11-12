@@ -27,6 +27,28 @@ String _requestSizeBudgetMibText(int bytes) {
   return '$sign$whole.$fraction';
 }
 
+double _storedSliderValue(
+    Object? value, double fallback, double min, double max) {
+  if (value is! num) return fallback;
+  final number = value.toDouble();
+  if (!number.isFinite) return fallback;
+  return number.clamp(min, max).toDouble();
+}
+
+bool _isInvalidStoredSliderValue(Object? value, double min, double max) {
+  if (value == null) return false;
+  if (value is! num) return true;
+  final number = value.toDouble();
+  return !number.isFinite || number < min || number > max;
+}
+
+bool _storedSliderValueChanged(
+    Object? stored, double current, double fallback) {
+  if (stored == null) return current != fallback;
+  if (stored is! num) return true;
+  return stored.toDouble() != current;
+}
+
 /// OCR 模型配置编辑页面
 /// 包含基本设置、OCR 参数（temperature/topP/maxTokens）
 /// 和自定义参数；所有参数均为可选，未开启/未填写则不发送。
@@ -59,6 +81,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   // Slider values
   double _temperature = 0.0;
   double _topP = 1.0;
+  bool _temperatureNeedsRepair = false;
+  bool _topPNeedsRepair = false;
 
   // Toggle flags
   bool _enableTemperature = false;
@@ -98,11 +122,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (_modelIdController.text != m.modelId) return true;
 
     // OCR params
-    if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0) !=
-        _temperature) {
+    if (!_temperatureNeedsRepair &&
+        _storedSliderValueChanged(
+          m.typeConfig['temperature'],
+          _temperature,
+          0.0,
+        )) {
       return true;
     }
-    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
+    if (!_topPNeedsRepair &&
+        _storedSliderValueChanged(m.typeConfig['topP'], _topP, 1.0)) {
       return true;
     }
     if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
@@ -144,8 +173,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _modelIdController.addListener(_handleControllerChanged);
 
     // Initialize OCR-specific params from typeConfig
-    _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
-    _topP = (m?.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
+    final temperature = m?.typeConfig['temperature'];
+    _temperatureNeedsRepair = _isInvalidStoredSliderValue(
+      temperature,
+      0.0,
+      2.0,
+    );
+    _temperature = _storedSliderValue(temperature, 0.0, 0.0, 2.0);
+    final topP = m?.typeConfig['topP'];
+    _topPNeedsRepair = _isInvalidStoredSliderValue(topP, 0.0, 1.0);
+    _topP = _storedSliderValue(topP, 1.0, 0.0, 1.0);
 
     // Read enable flags from typeConfig
     _enableTemperature = m?.typeConfig['enableTemperature'] as bool? ?? false;
@@ -266,6 +303,19 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppLocalizations.of(context)!.modelIdRequired),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if ((_enableTemperature && _temperatureNeedsRepair) ||
+        (_enableTopP && _topPNeedsRepair)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.ocrSamplingSliderRepairRequired,
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -628,10 +678,22 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               max: 2.0,
               divisions: 40,
               enabled: _enableTemperature,
-              onChanged: (v) => setState(() => _temperature = v),
+              onChanged: (v) => setState(() {
+                _temperature = v;
+                _temperatureNeedsRepair = false;
+              }),
               onToggle: (v) => setState(() => _enableTemperature = v),
               description: AppLocalizations.of(context)!.modelTemperatureHelp,
             ),
+            if (_temperatureNeedsRepair)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  AppLocalizations.of(context)!
+                      .ocrSamplingTemperatureOutOfRange,
+                  style: TextStyle(color: cs.error),
+                ),
+              ),
 
             // Top P
             LlmToggleSlider(
@@ -641,10 +703,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               max: 1.0,
               divisions: 20,
               enabled: _enableTopP,
-              onChanged: (v) => setState(() => _topP = v),
+              onChanged: (v) => setState(() {
+                _topP = v;
+                _topPNeedsRepair = false;
+              }),
               onToggle: (v) => setState(() => _enableTopP = v),
               description: AppLocalizations.of(context)!.llmTopPHelp,
             ),
+            if (_topPNeedsRepair)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  AppLocalizations.of(context)!.ocrSamplingTopPOutOfRange,
+                  style: TextStyle(color: cs.error),
+                ),
+              ),
 
             // Max Tokens
             LlmToggleTextField(

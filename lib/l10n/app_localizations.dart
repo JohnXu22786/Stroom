@@ -19616,6 +19616,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Maximum upload size must be a positive number.'**
   String get providerMaxUploadSizePositive;
+
+  /// Explains how to repair an invalid stored OCR temperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.'**
+  String get ocrSamplingTemperatureOutOfRange;
+
+  /// Explains how to repair an invalid stored OCR top-P value.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.'**
+  String get ocrSamplingTopPOutOfRange;
+
+  /// Explains why an invalid enabled OCR sampling setting must be repaired before saving.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust each out-of-range sampling slider or turn it off before saving.'**
+  String get ocrSamplingSliderRepairRequired;
 }
 
 class _AppLocalizationsDelegate

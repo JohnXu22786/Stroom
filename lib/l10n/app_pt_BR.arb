@@ -7086,5 +7086,11 @@
     }
   },
   "appLogUnlimited": "Ilimitado",
-  "appLogUntilTime": "Até"
+  "appLogUntilTime": "Até",
+  "ocrSamplingTemperatureOutOfRange": "A temperatura salva está fora do intervalo de 0–2. Ajuste o controle deslizante ou desative a opção antes de salvar.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "O valor top-P salvo está fora do intervalo de 0–1. Ajuste o controle deslizante ou desative a opção antes de salvar.",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

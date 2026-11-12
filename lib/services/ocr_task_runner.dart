@@ -489,6 +489,11 @@ class OcrTaskRunner {
           } else {
             _incompleteDiagnosticService ??= service;
           }
+          final safeFinishReason = OcrDiagnosticSnapshot.safeFinishReason(
+                result.finishReason,
+                excludedValues: [config.apiKey],
+              ) ??
+              'unknown';
           outcomes[imageIndex] = OcrPageOutcome(
             imageIndex: imageIndex,
             status: result.isComplete
@@ -498,7 +503,7 @@ class OcrTaskRunner {
             error: result.isComplete
                 ? null
                 : notifier.localizations.bgTaskOcrResultIncomplete(
-                    result.finishReason ?? 'unknown',
+                    safeFinishReason,
                   ),
           );
         } catch (error) {

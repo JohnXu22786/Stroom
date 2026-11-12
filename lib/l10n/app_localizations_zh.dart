@@ -11301,6 +11301,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
