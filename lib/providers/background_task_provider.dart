@@ -3927,6 +3927,27 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   yield* valuesFrom(retryData);
 }
 
+const _knownSkippedOcrTaskFields = <String>{
+  'id',
+  'type',
+  'title',
+  'status',
+  'result',
+  'resultIsComplete',
+  'resultFolder',
+  'partialSaveRequested',
+  'resultSavedAsPartial',
+  'error',
+  'hasOcrErrorLocalizationCredentialCollision',
+  'createdAt',
+  'completedAt',
+  'statusChangedAt',
+  'steps',
+  'downloadedFilePath',
+  'retryData',
+  'ocrPageOutcomes',
+};
+
 dynamic _sanitizeSkippedOcrCredentialFields(
   dynamic value,
   Iterable<String> credentialValues,
@@ -6202,7 +6223,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             for (final entry in _skippedTaskEntries)
               if (entry is Map && entry['type'] == BackgroundTaskType.ocr.name)
                 _sanitizeSkippedOcrCredentialFields(
-                  entry,
+                  {
+                    for (final field in entry.entries)
+                      if (field.key is String &&
+                          _knownSkippedOcrTaskFields.contains(field.key))
+                        field.key: field.value,
+                  },
                   _credentialValuesFromOcrRetryData(entry),
                 )
               else
