@@ -8,7 +8,9 @@ import binascii
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 import struct
 import sys
 import unicodedata
@@ -2710,11 +2712,21 @@ def verify_fixtures(
 
 def _read_fixture_png(image_path: Path, fixture_id: str) -> bytes:
     try:
-        if image_path.stat().st_size > MAX_PNG_ENCODED_BYTES:
+        image_stat = image_path.stat()
+        if not stat.S_ISREG(image_stat.st_mode):
+            raise EvaluationError(f"{fixture_id}: fixture image must be a regular file")
+        if image_stat.st_size > MAX_PNG_ENCODED_BYTES:
             raise EvaluationError(
                 f"{fixture_id}: PNG exceeds the maximum encoded fixture size"
             )
-        with image_path.open("rb") as image_file:
+        descriptor = os.open(
+            image_path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+        )
+        with os.fdopen(descriptor, "rb") as image_file:
+            if not stat.S_ISREG(os.fstat(image_file.fileno()).st_mode):
+                raise EvaluationError(
+                    f"{fixture_id}: fixture image must be a regular file"
+                )
             image_bytes = image_file.read(MAX_PNG_ENCODED_BYTES + 1)
     except OSError as error:
         raise EvaluationError(f"{fixture_id}: cannot read fixture image") from error
