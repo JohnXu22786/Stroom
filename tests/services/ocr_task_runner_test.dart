@@ -465,9 +465,16 @@ void main() {
     const apiKey = 'provider-secret-echoed-as-finish-reason';
     final credentialAdapter = _OutOfOrderAdapter();
     final emittedSnapshots = <String>[];
+    final incompleteOutcomePublished = Completer<void>();
     notifier.addListener((tasks) {
       if (tasks.isNotEmpty) {
         emittedSnapshots.add(jsonEncode(tasks.single.toMap()));
+        if (!incompleteOutcomePublished.isCompleted &&
+            tasks.single.ocrPageOutcomes.any(
+              (outcome) => outcome.status == OcrPageOutcomeStatus.incomplete,
+            )) {
+          incompleteOutcomePublished.complete();
+        }
       }
     }, fireImmediately: false);
     final credentialRunner = OcrTaskRunner(
@@ -500,7 +507,9 @@ void main() {
       text: 'partial text',
       finishReason: apiKey,
     );
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await incompleteOutcomePublished.future.timeout(
+      const Duration(seconds: 2),
+    );
 
     expect(
       emittedSnapshots.any((snapshot) => snapshot.contains(apiKey)),
