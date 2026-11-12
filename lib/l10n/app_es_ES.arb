@@ -7088,6 +7088,9 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
   "ocrSamplingTopPOutOfRange": "El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.",
-  "ocrSamplingSliderRepairRequired": "Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar."
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

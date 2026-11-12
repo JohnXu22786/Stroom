@@ -7072,6 +7072,9 @@
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "确定要删除空文件夹 “{name}” 吗？其下的 {count} 个子文件夹也将被删除。",
   "providerMaxUploadSizePositive": "最大上传大小必须是正数。",
   "ocrSamplingTemperatureOutOfRange": "已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
   "ocrSamplingTopPOutOfRange": "已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。",
-  "ocrSamplingSliderRepairRequired": "保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。"
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

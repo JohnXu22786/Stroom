@@ -7088,6 +7088,9 @@
     }
   },
   "ocrSamplingTemperatureOutOfRange": "La température enregistrée est hors de la plage 0–2. Réglez le curseur ou désactivez l’option avant d’enregistrer.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
   "ocrSamplingTopPOutOfRange": "La valeur top-P enregistrée est hors de la plage 0–1. Réglez le curseur ou désactivez l’option avant d’enregistrer.",
-  "ocrSamplingSliderRepairRequired": "Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer."
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }
