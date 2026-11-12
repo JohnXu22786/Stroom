@@ -26499,9 +26499,8 @@ void main() {
             images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
           ),
         );
-        final cacheReference =
-            ((retryData['images'] as List).single as Map)['storageRef']
-                as String;
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
         const providerDiagnostic = 'unclassified provider response detail';
         final unknownCacheReference = 'ocr_retry_cache/${'a' * 64}.bin';
         final providerError = '$providerDiagnostic $unknownCacheReference';
