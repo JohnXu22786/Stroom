@@ -391,10 +391,8 @@ void main() {
       ];
 
       for (final flac in outputs) {
-        final minFrameSize =
-            (flac[12] << 16) | (flac[13] << 8) | flac[14];
-        final maxFrameSize =
-            (flac[15] << 16) | (flac[16] << 8) | flac[17];
+        final minFrameSize = (flac[12] << 16) | (flac[13] << 8) | flac[14];
+        final maxFrameSize = (flac[15] << 16) | (flac[16] << 8) | flac[17];
 
         expect(minFrameSize, 0);
         expect(maxFrameSize, 0);
