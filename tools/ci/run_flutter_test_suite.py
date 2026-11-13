@@ -119,6 +119,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/folder_operation_rollback_test.dart",
         "utils/folder_path_utils_test.dart",
         "utils/folder_path_console_names_test.dart",
+        "utils/storage_file_publication_test.dart",
         "utils/tts_audio_saver_test.dart",
         "utils/*manifest*_test.dart",
         "utils/natural_sort_test.dart",

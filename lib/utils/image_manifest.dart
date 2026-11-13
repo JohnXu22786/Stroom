@@ -427,6 +427,7 @@ class ImageManifest {
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
+  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
