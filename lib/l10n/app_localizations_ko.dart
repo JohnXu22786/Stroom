@@ -1443,7 +1443,41 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationTemporary => '임시 대화';
 
   @override
+  String get conversationSetTemporary => '임시 대화로 설정';
+
+  @override
   String get conversationCloseTemporary => '임시 대화 닫기';
+
+  @override
+  String get conversationKeep => '대화 유지';
+
+  @override
+  String get conversationTemporaryStatus => '임시';
+
+  @override
+  String get conversationTemporaryWarning => '곧 만료';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '이 대화는 1시간 후 삭제됩니다. 메시지를 보내면 타이머가 다시 시작됩니다. 임시 모드를 끄면 대화가 보존됩니다.';
+
+  @override
+  String get conversationEnableTemporary => '임시 모드 사용';
+
+  @override
+  String get chatLoadingConversation => '대화 불러오는 중…';
+
+  @override
+  String get chatEmptyConversation => '메시지를 보내 대화를 시작하세요.';
+
+  @override
+  String get chatNoActiveConversation => '대화를 시작하려면 대화를 선택하거나 새로 만드세요.';
+
+  @override
+  String get chatConversationLoadError => '대화를 불러오지 못했습니다.';
+
+  @override
+  String get chatRetryLoadConversation => '다시 시도';
 
   @override
   String get taskListTitle => '작업 목록';
@@ -13066,7 +13100,41 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get conversationTemporary => '임시 대화';
 
   @override
+  String get conversationSetTemporary => '임시 대화로 설정';
+
+  @override
   String get conversationCloseTemporary => '임시 대화 닫기';
+
+  @override
+  String get conversationKeep => '대화 유지';
+
+  @override
+  String get conversationTemporaryStatus => '임시';
+
+  @override
+  String get conversationTemporaryWarning => '곧 만료';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '이 대화는 1시간 후 삭제됩니다. 메시지를 보내면 타이머가 다시 시작됩니다. 임시 모드를 끄면 대화가 보존됩니다.';
+
+  @override
+  String get conversationEnableTemporary => '임시 모드 사용';
+
+  @override
+  String get chatLoadingConversation => '대화 불러오는 중…';
+
+  @override
+  String get chatEmptyConversation => '메시지를 보내 대화를 시작하세요.';
+
+  @override
+  String get chatNoActiveConversation => '대화를 시작하려면 대화를 선택하거나 새로 만드세요.';
+
+  @override
+  String get chatConversationLoadError => '대화를 불러오지 못했습니다.';
+
+  @override
+  String get chatRetryLoadConversation => '다시 시도';
 
   @override
   String get taskListTitle => '작업 목록';

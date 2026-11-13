@@ -11,7 +11,9 @@ import 'package:flutter/foundation.dart'
         visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:tray_manager/legacy.dart';
-import 'package:window_manager/legacy.dart';
+
+import 'window_manager_legacy_stub.dart'
+    if (dart.library.io) 'package:window_manager/legacy.dart' as window_api;
 
 import 'app_log_service.dart';
 import 'background_service.dart' as background_service;
@@ -56,6 +58,10 @@ class _LegacyDesktopTrayAdapter implements DesktopTrayAdapter {
 
 /// Operations the desktop service needs from the legacy window API.
 /// Keeping this boundary injectable lets tests avoid native FFI calls.
+abstract interface class DesktopWindowListener {
+  void onWindowClose();
+}
+
 @visibleForTesting
 abstract interface class DesktopWindowManagerAdapter {
   Future<void> ensureInitialized();
@@ -65,41 +71,59 @@ abstract interface class DesktopWindowManagerAdapter {
   Future<void> show();
   Future<void> focus();
   Future<void> destroy();
-  void addListener(WindowListener listener);
-  void removeListener(WindowListener listener);
+  void addListener(DesktopWindowListener listener);
+  void removeListener(DesktopWindowListener listener);
 }
 
 class _LegacyDesktopWindowManagerAdapter
     implements DesktopWindowManagerAdapter {
+  final _listeners = <DesktopWindowListener, _WindowManagerListenerBridge>{};
   @override
-  Future<void> ensureInitialized() => windowManager.ensureInitialized();
+  Future<void> ensureInitialized() =>
+      window_api.windowManager.ensureInitialized();
 
   @override
   Future<void> setPreventClose(bool isPreventClose) =>
-      windowManager.setPreventClose(isPreventClose);
+      window_api.windowManager.setPreventClose(isPreventClose);
 
   @override
-  Future<void> close() => windowManager.close();
+  Future<void> close() => window_api.windowManager.close();
 
   @override
-  Future<void> hide() => windowManager.hide();
+  Future<void> hide() => window_api.windowManager.hide();
 
   @override
-  Future<void> show() => windowManager.show();
+  Future<void> show() => window_api.windowManager.show();
 
   @override
-  Future<void> focus() => windowManager.focus();
+  Future<void> focus() => window_api.windowManager.focus();
 
   @override
-  Future<void> destroy() => windowManager.destroy();
+  Future<void> destroy() => window_api.windowManager.destroy();
 
   @override
-  void addListener(WindowListener listener) =>
-      windowManager.addListener(listener);
+  void addListener(DesktopWindowListener listener) {
+    final bridge = _listeners.putIfAbsent(
+      listener,
+      () => _WindowManagerListenerBridge(listener),
+    );
+    window_api.windowManager.addListener(bridge);
+  }
 
   @override
-  void removeListener(WindowListener listener) =>
-      windowManager.removeListener(listener);
+  void removeListener(DesktopWindowListener listener) {
+    final bridge = _listeners.remove(listener);
+    if (bridge != null) window_api.windowManager.removeListener(bridge);
+  }
+}
+
+class _WindowManagerListenerBridge extends window_api.WindowListener {
+  _WindowManagerListenerBridge(this.listener);
+
+  final DesktopWindowListener listener;
+
+  @override
+  void onWindowClose() => listener.onWindowClose();
 }
 
 // ====================================================================
@@ -126,7 +150,7 @@ class _LegacyDesktopWindowManagerAdapter
 // ====================================================================
 
 /// 桌面端窗口管理 + 系统托盘驻留服务（单例）。
-class DesktopAppService extends WindowListener with TrayListener {
+class DesktopAppService with TrayListener implements DesktopWindowListener {
   DesktopAppService._();
 
   /// The shared instance.

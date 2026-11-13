@@ -1502,7 +1502,44 @@ class AppLocalizationsDe extends AppLocalizations {
   String get conversationTemporary => 'Temporäres Gespräch';
 
   @override
+  String get conversationSetTemporary => 'Als temporäres Gespräch festlegen';
+
+  @override
   String get conversationCloseTemporary => 'Temporäres Gespräch schließen';
+
+  @override
+  String get conversationKeep => 'Gespräch behalten';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporär';
+
+  @override
+  String get conversationTemporaryWarning => 'Läuft bald ab';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Dieses Gespräch wird nach einer Stunde gelöscht. Jede Nachricht startet den Timer neu. Schalte den temporären Modus aus, um das Gespräch zu behalten.';
+
+  @override
+  String get conversationEnableTemporary => 'Temporären Modus aktivieren';
+
+  @override
+  String get chatLoadingConversation => 'Gespräch wird geladen…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Sende eine Nachricht, um das Gespräch zu beginnen.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Wähle ein Gespräch aus oder erstelle eines, um zu chatten.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Dieses Gespräch konnte nicht geladen werden.';
+
+  @override
+  String get chatRetryLoadConversation => 'Erneut versuchen';
 
   @override
   String get taskListTitle => 'Aufgabenliste';
@@ -13607,7 +13644,44 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get conversationTemporary => 'Temporäres Gespräch';
 
   @override
+  String get conversationSetTemporary => 'Als temporäres Gespräch festlegen';
+
+  @override
   String get conversationCloseTemporary => 'Temporäres Gespräch schließen';
+
+  @override
+  String get conversationKeep => 'Gespräch behalten';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporär';
+
+  @override
+  String get conversationTemporaryWarning => 'Läuft bald ab';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Dieses Gespräch wird nach einer Stunde gelöscht. Jede Nachricht startet den Timer neu. Schalte den temporären Modus aus, um das Gespräch zu behalten.';
+
+  @override
+  String get conversationEnableTemporary => 'Temporären Modus aktivieren';
+
+  @override
+  String get chatLoadingConversation => 'Gespräch wird geladen…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Sende eine Nachricht, um das Gespräch zu beginnen.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Wähle ein Gespräch aus oder erstelle eines, um zu chatten.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Dieses Gespräch konnte nicht geladen werden.';
+
+  @override
+  String get chatRetryLoadConversation => 'Erneut versuchen';
 
   @override
   String get taskListTitle => 'Aufgabenliste';

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/conversation_provider.dart';
 import '../services/attachment_storage.dart';
 import '../widgets/temporary_countdown_capsule.dart';
+import '../widgets/temporary_conversation_dialog.dart';
 import 'conversations_shared.dart';
 
 class ConversationsPage extends ConsumerStatefulWidget {
@@ -499,7 +500,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     size: 18,
                     color: cs.onSurfaceVariant,
                   ),
-                  onSelected: (value) {
+                  onSelected: (value) async {
                     switch (value) {
                       case 'rename':
                         _renameConversation(conv.id, conv.title);
@@ -510,9 +511,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                             .autoRenameConversation(conv.id);
                         break;
                       case 'toggle_temporary':
-                        ref
-                            .read(conversationsProvider.notifier)
-                            .toggleTemporary(conv.id);
+                        if (conv.isTemporary ||
+                            await showTemporaryConversationEnableDialog(
+                              context,
+                            )) {
+                          if (!mounted) return;
+                          ref
+                              .read(conversationsProvider.notifier)
+                              .toggleTemporary(conv.id);
+                        }
                         break;
                       case 'pin':
                         ref
@@ -540,10 +547,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                       value: 'toggle_temporary',
                       child: Text(
                         conv.isTemporary
-                            ? AppLocalizations.of(context)!
-                                .conversationCloseTemporary
+                            ? AppLocalizations.of(context)!.conversationKeep
                             : AppLocalizations.of(context)!
-                                .conversationTemporary,
+                                .conversationSetTemporary,
                         style: TextStyle(color: cs.onSurface),
                       ),
                     ),

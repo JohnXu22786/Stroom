@@ -14,7 +14,6 @@ import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
-import 'package:window_manager/legacy.dart' show WindowListener;
 
 class _NoopDesktopTrayAdapter implements DesktopTrayAdapter {
   _NoopDesktopTrayAdapter({this.failSetIcon = false});
@@ -57,7 +56,7 @@ class _RecordingDesktopWindowManagerAdapter
 
   final bool failRollbackClear;
   final calls = <MethodCall>[];
-  final listeners = <WindowListener>[];
+  final listeners = <DesktopWindowListener>[];
 
   void _record(String method, [Object? arguments]) {
     calls.add(MethodCall(method, arguments));
@@ -91,13 +90,13 @@ class _RecordingDesktopWindowManagerAdapter
   Future<void> destroy() async => _record('destroy');
 
   @override
-  void addListener(WindowListener listener) {
+  void addListener(DesktopWindowListener listener) {
     listeners.add(listener);
     _record('addListener');
   }
 
   @override
-  void removeListener(WindowListener listener) {
+  void removeListener(DesktopWindowListener listener) {
     listeners.remove(listener);
     _record('removeListener');
   }

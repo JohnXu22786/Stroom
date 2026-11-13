@@ -1508,7 +1508,45 @@ class AppLocalizationsEs extends AppLocalizations {
   String get conversationTemporary => 'conversación temporal';
 
   @override
+  String get conversationSetTemporary =>
+      'Establecer como conversación temporal';
+
+  @override
   String get conversationCloseTemporary => 'Cerrar conversación temporal';
+
+  @override
+  String get conversationKeep => 'Conservar conversación';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporal';
+
+  @override
+  String get conversationTemporaryWarning => 'Caduca pronto';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Esta conversación se eliminará después de una hora. Cada mensaje reinicia el temporizador. Desactiva el modo temporal para conservarla.';
+
+  @override
+  String get conversationEnableTemporary => 'Activar modo temporal';
+
+  @override
+  String get chatLoadingConversation => 'Cargando conversación…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envía un mensaje para iniciar la conversación.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Elige o crea una conversación para empezar a chatear.';
+
+  @override
+  String get chatConversationLoadError =>
+      'No se pudo cargar esta conversación.';
+
+  @override
+  String get chatRetryLoadConversation => 'Reintentar';
 
   @override
   String get taskListTitle => 'lista de tareas';
@@ -13644,7 +13682,45 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get conversationTemporary => 'conversación temporal';
 
   @override
+  String get conversationSetTemporary =>
+      'Establecer como conversación temporal';
+
+  @override
   String get conversationCloseTemporary => 'Cerrar conversación temporal';
+
+  @override
+  String get conversationKeep => 'Conservar conversación';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporal';
+
+  @override
+  String get conversationTemporaryWarning => 'Caduca pronto';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Esta conversación se eliminará después de una hora. Cada mensaje reinicia el temporizador. Desactiva el modo temporal para conservarla.';
+
+  @override
+  String get conversationEnableTemporary => 'Activar modo temporal';
+
+  @override
+  String get chatLoadingConversation => 'Cargando conversación…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envía un mensaje para iniciar la conversación.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Elige o crea una conversación para empezar a chatear.';
+
+  @override
+  String get chatConversationLoadError =>
+      'No se pudo cargar esta conversación.';
+
+  @override
+  String get chatRetryLoadConversation => 'Reintentar';
 
   @override
   String get taskListTitle => 'lista de tareas';

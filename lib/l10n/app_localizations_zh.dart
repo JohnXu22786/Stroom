@@ -1392,7 +1392,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get conversationKeep => '保留对话';
+
+  @override
+  String get conversationTemporaryStatus => '临时';
+
+  @override
+  String get conversationTemporaryWarning => '即将过期';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。';
+
+  @override
+  String get conversationEnableTemporary => '开启临时模式';
+
+  @override
+  String get chatLoadingConversation => '正在加载对话…';
+
+  @override
+  String get chatEmptyConversation => '发送消息以开始对话。';
+
+  @override
+  String get chatNoActiveConversation => '请选择或新建对话以开始聊天。';
+
+  @override
+  String get chatConversationLoadError => '无法加载此对话。';
+
+  @override
+  String get chatRetryLoadConversation => '重试';
 
   @override
   String get taskListTitle => '任务列表';
@@ -12702,7 +12736,41 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get conversationKeep => '保留对话';
+
+  @override
+  String get conversationTemporaryStatus => '临时';
+
+  @override
+  String get conversationTemporaryWarning => '即将过期';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。';
+
+  @override
+  String get conversationEnableTemporary => '开启临时模式';
+
+  @override
+  String get chatLoadingConversation => '正在加载对话…';
+
+  @override
+  String get chatEmptyConversation => '发送消息以开始对话。';
+
+  @override
+  String get chatNoActiveConversation => '请选择或新建对话以开始聊天。';
+
+  @override
+  String get chatConversationLoadError => '无法加载此对话。';
+
+  @override
+  String get chatRetryLoadConversation => '重试';
 
   @override
   String get taskListTitle => '任务列表';

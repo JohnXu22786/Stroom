@@ -8,6 +8,8 @@ Widget _app({
   bool isRunning = false,
   bool isUnread = false,
   bool isFailed = false,
+  bool isTemporary = false,
+  VoidCallback? onTemporaryToggle,
   Brightness brightness = Brightness.light,
 }) {
   return MaterialApp(
@@ -19,7 +21,11 @@ Widget _app({
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: Scaffold(
       body: TopicItem(
-        topic: Conversation(id: 'topic', title: 'Topic'),
+        topic: Conversation(
+          id: 'topic',
+          title: 'Topic',
+          isTemporary: isTemporary,
+        ),
         selectionMode: false,
         isSelected: false,
         isActive: false,
@@ -32,12 +38,38 @@ Widget _app({
         onRename: () {},
         onAutoRename: () {},
         onSelectionToggle: () {},
+        onTemporaryToggle: onTemporaryToggle ?? () {},
       ),
     ),
   );
 }
 
 void main() {
+  testWidgets('topic menu toggles temporary status in either direction', (
+    tester,
+  ) async {
+    var toggles = 0;
+    await tester.pumpWidget(_app(onTemporaryToggle: () => toggles++));
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('Set as temporary conversation'), findsOneWidget);
+    await tester.tap(find.text('Set as temporary conversation'));
+    await tester.pumpAndSettle();
+    expect(toggles, 0);
+    await tester.tap(find.text('Enable temporary mode').last);
+    await tester.pumpAndSettle();
+    expect(toggles, 1);
+
+    await tester.pumpWidget(
+      _app(isTemporary: true, onTemporaryToggle: () => toggles++),
+    );
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep conversation'), findsOneWidget);
+    await tester.tap(find.text('Keep conversation'));
+    expect(toggles, 2);
+  });
+
   testWidgets('inactive conversation icon tile is borderless', (tester) async {
     await tester.pumpWidget(_app());
 
