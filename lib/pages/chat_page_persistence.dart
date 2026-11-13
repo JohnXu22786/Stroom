@@ -259,22 +259,23 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     }
   }
 
-  Future<void> _onMessageSend(
+  Future<StreamResult?> _onMessageSend(
     String text,
     List<Attachment> attachments, {
     List<ChatMessage>? historyForRequestPrefix,
+    void Function(String messageId)? onUserMessageCreated,
   }) async {
     // Guard: only block sending if THIS conversation is streaming,
     // not if another conversation happens to be streaming elsewhere.
     String? convId = ref.read(activeConversationIdProvider);
     if (convId != null &&
         ref.read(streamingConversationsProvider).contains(convId)) {
-      return;
+      return null;
     }
     // Synchronous guard: prevent double-send from rapid Enter / button taps
     // during the async gap between the guard above and the synchronous
     // _streams insertion inside manager.startStreaming.
-    if (convId != null && _pendingSendConvIds.contains(convId)) return;
+    if (convId != null && _pendingSendConvIds.contains(convId)) return null;
     try {
       await AppLogService.info(
         'ChatPage',
@@ -287,11 +288,11 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         convId = ref.read(activeConversationIdProvider);
         await AppLogService.info('ChatPage', '新对话创建完成: $convId');
       }
-      if (convId == null) return;
+      if (convId == null) return null;
       // 登记在 convId 解析**之后**（含新建对话路径）：否则无活跃对话
       // 时两次极速回车都不会被 pending 拦截，第二条消息已入库却在
       // _startStreaming 的流式守卫处被静默丢弃（孤儿消息）。
-      if (_pendingSendConvIds.contains(convId)) return;
+      if (_pendingSendConvIds.contains(convId)) return null;
       _pendingSendConvIds.add(convId);
 
       // 附件归属当前对话：图片压缩磁盘缓存按（对话, 哈希）隔离存储，
@@ -306,7 +307,9 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       }
 
       await _ensureHistoryLoaded(convId);
-      if (!mounted || ref.read(activeConversationIdProvider) != convId) return;
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+        return null;
+      }
 
       // Save the current enabled tools to the conversation before sending.
       // This ensures the tool preferences are persisted even if the user
@@ -335,6 +338,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           createdAt: DateTime.now(),
         ),
       );
+      onUserMessageCreated?.call(userMsgId);
 
       // Persist the user message before starting the background stream. If the
       // page is disposed during generation, the next page instance can load
@@ -352,7 +356,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         capturedIsTemporary: conversationWasTemporary,
       );
 
-      await _startStreaming(
+      final result = await _startStreaming(
         text,
         capturedConvId: convId,
         historyOverride: historyForStream,
@@ -373,6 +377,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           '[STREAM-SEND] _onMessageSend: after sync, _history.length=${_history.length}',
         );
       } catch (_) {}
+      return result;
     } finally {
       if (convId != null) _pendingSendConvIds.remove(convId);
     }

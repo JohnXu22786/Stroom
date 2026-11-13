@@ -794,6 +794,32 @@ class ChatStreamManager {
     }
   }
 
+  /// Releases a stream whose result future failed before normal finalization.
+  ///
+  /// The message ID guard prevents an older failed attempt from clearing a
+  /// replacement stream for the same conversation.
+  void recoverUnexpectedStreamFailure(String convId, String streamingMsgId) {
+    final state = _streams[convId];
+    if (state != null && state.streamingMsgId != streamingMsgId) return;
+    final providerMsgId = _ref?.read(streamingMsgIdProvider(convId));
+    if (providerMsgId != null && providerMsgId != streamingMsgId) return;
+
+    if (state != null) {
+      state.persistTimer?.cancel();
+      state.persistTimer = null;
+      state.cancelByUser();
+      _streams.remove(convId);
+      state.resultCompleter = null;
+    }
+    _clearProvidersFor(convId);
+    final activeConversations = <String>{
+      ..._ref?.read(streamingConversationsProvider) ?? const {},
+    };
+    activeConversations.remove(convId);
+    _setProvider(streamingConversationsProvider, activeConversations);
+    _adapter.cancelService(convId);
+  }
+
   /// 释放资源。
   void dispose() {
     for (final s in _streams.values) {
