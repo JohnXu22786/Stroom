@@ -18,6 +18,7 @@ import '../utils/sort_config.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
+import '../utils/tts_audio_saver.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -161,11 +162,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           size: bytes.length,
           folder: _currentFolder,
         );
-        await FileManifest.withStorageFileSaveLock(record.storageFileName,
-            () async {
-          await FileManifest.writeFile(record.storageFileName, bytes);
-          await FileManifest.addRecord(record);
-        });
+        await FileManifest.withStorageFileSaveLock(
+          record.storageFileName,
+          () => writeTtsAudioAndPublish(record, bytes, null),
+        );
         count++;
       }
 

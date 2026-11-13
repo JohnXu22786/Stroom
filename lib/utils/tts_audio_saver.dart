@@ -31,15 +31,25 @@ Future<AudioRecord> writeTtsAudioAndPublish(
   final delete = deleteFile ?? FileManifest.deleteFile;
   final read = readFile ?? FileManifest.readFile;
   final exists = fileExists ?? FileManifest.fileExists;
+  final previousContents = <String, Uint8List>{};
+  final previousAudioExists = await exists(record.storageFileName);
+  if (previousAudioExists) {
+    final previousAudio = await read(record.storageFileName);
+    if (previousAudio == null) {
+      throw StateError('Could not read existing TTS audio file');
+    }
+    previousContents[record.storageFileName] = previousAudio;
+  }
   final previousTextExists =
       textData != null && await exists(record.textStoragePath);
-  final previousText =
-      previousTextExists ? await read(record.textStoragePath) : null;
-  if (previousTextExists && previousText == null) {
-    throw StateError('Could not read existing TTS text sidecar');
+  if (previousTextExists) {
+    final previousText = await read(record.textStoragePath);
+    if (previousText == null) {
+      throw StateError('Could not read existing TTS text sidecar');
+    }
+    previousContents[record.textStoragePath] = previousText;
   }
   final writtenNames = <String>[];
-  var textWriteCompleted = false;
 
   try {
     writtenNames.add(record.storageFileName);
@@ -47,7 +57,6 @@ Future<AudioRecord> writeTtsAudioAndPublish(
     if (textData != null) {
       writtenNames.add(record.textStoragePath);
       await write(record.textStoragePath, textData);
-      textWriteCompleted = true;
     }
     await publish(record);
     return record;
@@ -59,9 +68,11 @@ Future<AudioRecord> writeTtsAudioAndPublish(
     try {
       records = await load();
     } catch (_) {
-      if (textData != null && previousTextExists) {
+      for (final name in writtenNames) {
+        final previous = previousContents[name];
+        if (previous == null) continue;
         try {
-          await write(record.textStoragePath, previousText!);
+          await write(name, previous);
         } catch (_) {
           // Keep the original write/publication failure as the reported error.
         }
@@ -75,13 +86,10 @@ Future<AudioRecord> writeTtsAudioAndPublish(
             name == candidate.storageFileName ||
             (name == record.textStoragePath && candidate.hash == record.hash),
       );
-      if (name == record.textStoragePath && isReferenced) {
+      final previous = previousContents[name];
+      if (previous != null) {
         try {
-          if (previousTextExists) {
-            await write(name, previousText!);
-          } else if (!textWriteCompleted) {
-            await delete(name);
-          }
+          await write(name, previous);
         } catch (_) {
           // Keep the original write/publication failure as the reported error.
         }

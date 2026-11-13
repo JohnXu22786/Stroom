@@ -437,22 +437,25 @@ class VideoManifest {
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
+  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
+  static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
 
   /// Derived from the configured [thumbnailExtension] in [_ops].
   static String get _thumbExtension => _ops.thumbnailExtension;
 
+  static String thumbnailFileName(String hash) =>
+      '${hash}_thumb$_thumbExtension';
+
   static Future<Uint8List?> readThumbnail(String hash) async {
-    final thumbPath = '${hash}_thumb$_thumbExtension';
-    return readFile(thumbPath);
+    return readFile(thumbnailFileName(hash));
   }
 
   static Future<void> writeThumbnail(String hash, Uint8List bytes) async {
-    final thumbPath = '${hash}_thumb$_thumbExtension';
-    await withSaveLock(hash, () => writeFile(thumbPath, bytes));
+    await withSaveLock(hash, () => writeFile(thumbnailFileName(hash), bytes));
   }
 
   // Folder management

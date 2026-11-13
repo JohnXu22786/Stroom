@@ -19,6 +19,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/system_pick_utils.dart';
+import '../utils/storage_file_publication.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -295,29 +296,41 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         usedInBatch.add(displayName);
 
         final destinationFolder = _currentFolder;
-        await ImageManifest.withFilePublicationLock(hash, destinationFolder,
-            () async {
-          await ImageManifest.writeFile(storageFileName, bytes);
-          final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
-            bytes,
-          );
-          if (thumbnailBytes != null) {
-            await ImageManifest.writeFile(
-              imageThumbFileName(hash),
-              thumbnailBytes,
+        await ImageManifest.withFilePublicationLock(
+          hash,
+          destinationFolder,
+          () async {
+            await publishStorageFiles<void, ImageRecord>(
+              publish: (writeFile) async {
+                await writeFile(storageFileName, bytes);
+                final thumbnailBytes =
+                    await ImageThumbnailLoader.generateThumbnail(bytes);
+                if (thumbnailBytes != null) {
+                  await writeFile(imageThumbFileName(hash), thumbnailBytes);
+                }
+                await ImageManifest.addRecord(
+                  ImageRecord(
+                    name: displayName,
+                    hash: hash,
+                    format: format,
+                    createdAt: DateTime.now(),
+                    size: bytes.length,
+                    folder: destinationFolder,
+                  ),
+                );
+              },
+              loadRecords: ImageManifest.loadRecordsStrict,
+              isReferenced: (record, fileName) =>
+                  record.hash == hash &&
+                  (fileName == record.storageFileName ||
+                      fileName == imageThumbFileName(record.hash)),
+              writeFile: ImageManifest.writeFile,
+              readFile: ImageManifest.readFile,
+              fileExists: ImageManifest.fileExists,
+              deleteFile: ImageManifest.deleteFile,
             );
-          }
-          await ImageManifest.addRecord(
-            ImageRecord(
-              name: displayName,
-              hash: hash,
-              format: format,
-              createdAt: DateTime.now(),
-              size: bytes.length,
-              folder: destinationFolder,
-            ),
-          );
-        });
+          },
+        );
         count++;
       }
 
