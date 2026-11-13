@@ -84,6 +84,20 @@ void main() {
     expect(saved.single['name'], 'unsaved flow');
   });
 
+  test('failed flow restore does not overwrite persisted data', () async {
+    final taskFlowsDir = Directory('${tempDir.path}/task_flows');
+    await taskFlowsDir.create();
+    final persistenceFile = File('${taskFlowsDir.path}/flows.json');
+    const malformedContents = '[{"id":';
+    await persistenceFile.writeAsString(malformedContents);
+
+    final notifier = TaskFlowNotifier();
+    addTearDown(notifier.dispose);
+    await notifier.restoreFromPersistence();
+
+    expect(await persistenceFile.readAsString(), malformedContents);
+  });
+
   test('execution persistence reports failure and retries the latest state',
       () async {
     final obstruction = File('${tempDir.path}/task_flows');
