@@ -99,6 +99,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 预压缩/文件编码就地修改——直接引用会把大体积 base64 写回
   /// 对话状态，撑爆持久化。
   void _restoreDraftAttachments(List<Attachment> attachments) {
+    _pendingAttachmentDraftGeneration++;
     final copies = attachments
         .map((a) => Attachment.fromMap(a.toMap(includeBase64Data: true)))
         .toList();
@@ -180,6 +181,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// attachments when entering edit mode. For image attachments, loads the
   /// bytes from storage so the preview chip can display the thumbnail.
   void _loadEditingAttachments(List<Attachment>? attachments) {
+    _pendingAttachmentDraftGeneration++;
     // 新的编辑会话：无论目标消息有没有附件，都先重置本会话状态——
     // 1) 清空上一会话遗留的 pending 附件：切换编辑目标到无附件消息
     //    时若不清理，陈旧附件芯片仍显示且可移除，其移除会误删仍被
@@ -293,6 +295,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 消息删除时由 _deleteMessage 的 isReferencedElsewhere 检查清理；
   /// 编辑提交后未被引用的孤儿文件由删除整个对话时的附件清理兜底。
   void _clearPendingAttachments() {
+    _pendingAttachmentDraftGeneration++;
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
     // 编辑会话结束（提交或取消）：不再有"待重发时清理"的附件。

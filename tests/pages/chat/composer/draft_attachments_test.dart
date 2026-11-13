@@ -1,3 +1,6 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -29,6 +32,24 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
   Future<String> getTemporaryPath() async => root;
 }
 
+class _BlockingPathProviderPlatform extends PathProviderPlatform {
+  _BlockingPathProviderPlatform(this.root);
+
+  final String root;
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<String> getApplicationDocumentsPath() async {
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return root;
+  }
+
+  @override
+  Future<String> getTemporaryPath() async => root;
+}
+
 void _dummyOnStop() {}
 void _dummyOnToolsChanged(Set<String> tools) {}
 void _dummyOnModelSelected(int index) {}
@@ -53,9 +74,13 @@ ProviderContainer _buildContainer() {
 
 Widget _composer({
   required ProviderContainer container,
+  Key? key,
   String? conversationId = 'conv-1',
   String initialDraftText = '',
   List<Attachment> initialDraftAttachments = const [],
+  String? editingMessageId,
+  String? editingMessageText,
+  List<Attachment>? editingMessageAttachments,
   required void Function(String, List<Attachment>) onSend,
 }) {
   return UncontrolledProviderScope(
@@ -71,9 +96,13 @@ Widget _composer({
       ],
       home: Scaffold(
         body: ChatComposerWidget(
+          key: key,
           conversationId: conversationId,
           initialDraftText: initialDraftText,
           initialDraftAttachments: initialDraftAttachments,
+          editingMessageId: editingMessageId,
+          editingMessageText: editingMessageText,
+          editingMessageAttachments: editingMessageAttachments,
           onSend: onSend,
           onStop: _dummyOnStop,
           onEnabledToolsChanged: _dummyOnToolsChanged,
@@ -133,22 +162,213 @@ void main() {
   });
 
   group('对话附件草稿', () {
-    testWidgets('恢复：initialDraftAttachments 进入 pending，发送时载荷直接可用',
-        (tester) async {
+    testWidgets(
+      'conversation and edit draft switches discard in-flight imports',
+      (tester) async {
+        final container = _buildContainer();
+        final key = GlobalKey<ChatComposerWidgetState>();
+        final pathProvider = _BlockingPathProviderPlatform(tmpRoot.path);
+        PathProviderPlatform.instance = pathProvider;
+        final attB = readyImage(id: 'att-b', hash: 'hash-b')
+          ..conversationId = 'conv-2';
+
+        await tester.pumpWidget(
+          _composer(
+            container: container,
+            key: key,
+            conversationId: 'conv-1',
+            onSend: (text, atts) {},
+          ),
+        );
+
+        late Future<void> pendingImport;
+        await tester.runAsync(() async {
+          pendingImport = key.currentState!.addPendingAttachmentForTesting(
+            'old-chat.txt',
+            Uint8List.fromList([1, 2, 3]),
+          );
+          await pathProvider.started.future;
+        });
+
+        await tester.pumpWidget(
+          _composer(
+            container: container,
+            key: key,
+            conversationId: 'conv-2',
+            initialDraftAttachments: [attB],
+            onSend: (text, atts) {},
+          ),
+        );
+        await tester.pump();
+
+        pathProvider.release.complete();
+        await tester.runAsync(() => pendingImport);
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('pending_att_att-b')), findsOneWidget);
+        expect(
+          find.text('old-chat.txt'),
+          findsNothing,
+          reason:
+              'late completion from conv-1 must not enter conv-2 pending draft',
+        );
+        final conv2 = container
+            .read(conversationsProvider)
+            .firstWhere((conversation) => conversation.id == 'conv-2');
+        expect(
+          conv2.draftAttachments,
+          isEmpty,
+          reason: 'a stale attachment import must not be saved into conv-2',
+        );
+
+        final attachmentFiles = Directory('${tmpRoot.path}/attachments');
+        expect(
+          attachmentFiles.existsSync()
+              ? attachmentFiles.listSync()
+              : <FileSystemEntity>[],
+          isEmpty,
+          reason:
+              'the stale import file should be deleted after it is rejected',
+        );
+
+        final editPathProvider = _BlockingPathProviderPlatform(tmpRoot.path);
+        PathProviderPlatform.instance = editPathProvider;
+        late Future<void> pendingEditImport;
+        await tester.runAsync(() async {
+          pendingEditImport = key.currentState!.addPendingAttachmentForTesting(
+            'late-edit.txt',
+            Uint8List.fromList([4, 5, 6]),
+          );
+          await editPathProvider.started.future;
+        });
+
+        final originalEditAttachment = readyImage(
+          id: 'edit-att',
+          hash: 'hash-edit',
+        )..conversationId = 'conv-2';
+        await tester.pumpWidget(
+          _composer(
+            container: container,
+            key: key,
+            conversationId: 'conv-2',
+            editingMessageId: 'edit-message',
+            editingMessageText: 'edited text',
+            editingMessageAttachments: [originalEditAttachment],
+            onSend: (text, atts) {},
+          ),
+        );
+        await tester.pump();
+
+        editPathProvider.release.complete();
+        await tester.runAsync(() => pendingEditImport);
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('pending_att_edit-att')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('late-edit.txt'),
+          findsNothing,
+          reason: 'late completion must not enter a replacement edit session',
+        );
+        expect(
+          attachmentFiles.existsSync()
+              ? attachmentFiles.listSync()
+              : <FileSystemEntity>[],
+          isEmpty,
+          reason: 'the stale edit-session import file should be deleted',
+        );
+      },
+    );
+
+    testWidgets('picker results stay with the draft where picking began', (
+      tester,
+    ) async {
+      final container = _buildContainer();
+      final key = GlobalKey<ChatComposerWidgetState>();
+      final attB = readyImage(id: 'att-b', hash: 'hash-b')
+        ..conversationId = 'conv-2';
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          conversationId: 'conv-1',
+          onSend: (text, atts) {},
+        ),
+      );
+
+      final selectedBytes = Completer<Uint8List>();
+      final pendingImport =
+          key.currentState!.addPendingAttachmentAfterPickerForTesting(
+        'picked-in-conv-1.txt',
+        selectedBytes.future,
+      );
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          conversationId: 'conv-2',
+          initialDraftAttachments: [attB],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+
+      selectedBytes.complete(Uint8List.fromList([7, 8, 9]));
+      await tester.runAsync(() => pendingImport);
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('pending_att_att-b')), findsOneWidget);
+      expect(
+        find.text('picked-in-conv-1.txt'),
+        findsNothing,
+        reason:
+            'a picker result must not enter the conversation selected later',
+      );
+      final conv2 = container
+          .read(conversationsProvider)
+          .firstWhere((conversation) => conversation.id == 'conv-2');
+      expect(
+        conv2.draftAttachments,
+        isEmpty,
+        reason: 'a stale picker result must not be persisted to conv-2',
+      );
+
+      final attachmentFiles = Directory('${tmpRoot.path}/attachments');
+      expect(
+        attachmentFiles.existsSync()
+            ? attachmentFiles.listSync()
+            : <FileSystemEntity>[],
+        isEmpty,
+        reason: 'the stale picker result file should be deleted',
+      );
+    });
+
+    testWidgets('恢复：initialDraftAttachments 进入 pending，发送时载荷直接可用', (
+      tester,
+    ) async {
       final container = _buildContainer();
       final att = readyImage();
       List<Attachment>? sent;
 
-      await tester.pumpWidget(_composer(
-        container: container,
-        initialDraftAttachments: [att],
-        onSend: (text, atts) => sent = atts,
-      ));
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: [att],
+          onSend: (text, atts) => sent = atts,
+        ),
+      );
       await tester.pump();
 
       // 恢复的附件芯片可见
-      expect(find.byKey(const ValueKey('pending_att_ready-1')), findsOneWidget,
-          reason: '恢复的附件草稿必须显示为待发芯片');
+      expect(
+        find.byKey(const ValueKey('pending_att_ready-1')),
+        findsOneWidget,
+        reason: '恢复的附件草稿必须显示为待发芯片',
+      );
 
       // 发送：载荷（压缩 base64）原样带出，无需重新读取/压缩
       await tester.enterText(find.byType(TextField), '带着图发');
@@ -160,21 +380,27 @@ void main() {
 
       expect(sent, hasLength(1));
       expect(sent![0].id, 'ready-1');
-      expect(sent![0].base64Data, att.base64Data,
-          reason: '恢复的压缩 base64 必须直接可用（发送零等待）');
+      expect(
+        sent![0].base64Data,
+        att.base64Data,
+        reason: '恢复的压缩 base64 必须直接可用（发送零等待）',
+      );
     });
 
-    testWidgets('保存：打字触发防抖保存，草稿快照写入 provider（压缩图带 base64，大图不带）',
-        (tester) async {
+    testWidgets('保存：打字触发防抖保存，草稿快照写入 provider（压缩图带 base64，大图不带）', (
+      tester,
+    ) async {
       final container = _buildContainer();
       final ready = readyImage();
       final raw = rawImage();
 
-      await tester.pumpWidget(_composer(
-        container: container,
-        initialDraftAttachments: [ready, raw],
-        onSend: (text, atts) {},
-      ));
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: [ready, raw],
+          onSend: (text, atts) {},
+        ),
+      );
       await tester.pump();
 
       // 输入文字 → 防抖 800ms 后保存（文字 + 附件快照）
@@ -190,15 +416,22 @@ void main() {
       expect(conv.draftText, '草稿文字');
       expect(conv.draftAttachments, hasLength(2));
 
-      final byId = {
-        for (final a in conv.draftAttachments) a.id: a,
-      };
-      expect(byId['ready-1']!.base64Data, ready.base64Data,
-          reason: '压缩完成的图片必须携带 base64 随草稿持久化');
-      expect(byId['raw-1']!.base64Data, isNull,
-          reason: '未压缩完的原始大 base64 不得塞进草稿 JSON（体积）');
-      expect(byId['raw-1']!.storagePath, raw.storagePath,
-          reason: '文件引用必须保留，恢复时重新读取');
+      final byId = {for (final a in conv.draftAttachments) a.id: a};
+      expect(
+        byId['ready-1']!.base64Data,
+        ready.base64Data,
+        reason: '压缩完成的图片必须携带 base64 随草稿持久化',
+      );
+      expect(
+        byId['raw-1']!.base64Data,
+        isNull,
+        reason: '未压缩完的原始大 base64 不得塞进草稿 JSON（体积）',
+      );
+      expect(
+        byId['raw-1']!.storagePath,
+        raw.storagePath,
+        reason: '文件引用必须保留，恢复时重新读取',
+      );
       // 快照是深拷贝：后续修改 pending 不污染已保存的草稿
       expect(identical(byId['ready-1'], ready), isFalse);
     });
@@ -210,12 +443,14 @@ void main() {
       attB.conversationId = 'conv-2';
 
       // 对话1：输入文字 + 附件草稿
-      await tester.pumpWidget(_composer(
-        container: container,
-        conversationId: 'conv-1',
-        initialDraftAttachments: [attA],
-        onSend: (text, atts) {},
-      ));
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          conversationId: 'conv-1',
+          initialDraftAttachments: [attA],
+          onSend: (text, atts) {},
+        ),
+      );
       await tester.pump();
       await tester.enterText(find.byType(TextField), '对话1的草稿');
       await tester.pump(const Duration(milliseconds: 900));
@@ -224,12 +459,14 @@ void main() {
       await tester.pump();
 
       // 切换到对话2（带自己的附件草稿）
-      await tester.pumpWidget(_composer(
-        container: container,
-        conversationId: 'conv-2',
-        initialDraftAttachments: [attB],
-        onSend: (text, atts) {},
-      ));
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          conversationId: 'conv-2',
+          initialDraftAttachments: [attB],
+          onSend: (text, atts) {},
+        ),
+      );
       await tester.pump();
 
       // 对话1：文字 + 附件快照已保存
@@ -241,8 +478,11 @@ void main() {
 
       // 对话2：附件草稿恢复为 B（A 的芯片不残留）
       expect(find.byKey(const ValueKey('pending_att_att-b')), findsOneWidget);
-      expect(find.byKey(const ValueKey('pending_att_att-a')), findsNothing,
-          reason: '切换对话后不得残留上一对话的附件草稿');
+      expect(
+        find.byKey(const ValueKey('pending_att_att-a')),
+        findsNothing,
+        reason: '切换对话后不得残留上一对话的附件草稿',
+      );
 
       // 帧后保存旧对话草稿 + notifier 防抖持久化计时器排空
       await tester.pump(const Duration(milliseconds: 600));
@@ -253,8 +493,9 @@ void main() {
       final container = _buildContainer();
       // 真实文件落盘（恢复时 readFile 能读到，才会触发 base64 编码）
       final bytes = Uint8List.fromList(List.generate(256, (i) => i % 251));
-      final storagePath = await tester
-          .runAsync(() => AttachmentStorage.saveFile('doc.pdf', bytes));
+      final storagePath = await tester.runAsync(
+        () => AttachmentStorage.saveFile('doc.pdf', bytes),
+      );
 
       final fileAtt = Attachment(
         id: 'file-1',
@@ -273,25 +514,31 @@ void main() {
       conv.draftAttachments = [fileAtt];
 
       // chat_page 直接传 conv.draftAttachments（不拷贝）
-      await tester.pumpWidget(_composer(
-        container: container,
-        initialDraftAttachments: conv.draftAttachments,
-        onSend: (text, atts) {},
-      ));
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: conv.draftAttachments,
+          onSend: (text, atts) {},
+        ),
+      );
       await tester.pump();
       // 让恢复路径的 readFile + base64 编码异步完成
       for (var i = 0; i < 4; i++) {
         await tester.pump();
         await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 50)));
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
       }
 
       final stored = container
           .read(conversationsProvider)
           .firstWhere((c) => c.id == 'conv-1');
-      expect(stored.draftAttachments[0].base64Data, isNull,
-          reason: '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
-              '否则对话 JSON 会被撑爆（持久化静默失败）');
+      expect(
+        stored.draftAttachments[0].base64Data,
+        isNull,
+        reason: '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
+            '否则对话 JSON 会被撑爆（持久化静默失败）',
+      );
     });
   });
 }
