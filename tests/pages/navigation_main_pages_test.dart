@@ -36,22 +36,22 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
           return notifier;
         }),
     ],
-    child: TickerMode(
-      enabled: false,
-      child: MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        home: Navigator(
-          key: _navigatorKey,
-          onGenerateRoute: (settings) {
-            return MaterialPageRoute(
-              builder: (_) => const HomePage(),
-              settings: settings,
-            );
-          },
-        ),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
+    child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      home: Navigator(
+        key: _navigatorKey,
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(
+            builder: (_) => TickerMode(
+              enabled: false,
+              child: const HomePage(),
+            ),
+            settings: settings,
+          );
+        },
       ),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
     ),
   );
   if (screenSize != null) {
