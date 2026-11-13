@@ -373,7 +373,9 @@ class DownloadManager {
       final savedSegments = saved?['completedSegments'];
       if (savedSegments is List) {
         completedSegments.addAll(
-          savedSegments.whereType<int>().where((index) => index >= 0 && index < total),
+          savedSegments
+              .whereType<int>()
+              .where((index) => index >= 0 && index < total),
         );
         debugPrint(
           '[DownloadManager] Restored progress: ${completedSegments.length}/$total',
