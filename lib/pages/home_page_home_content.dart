@@ -87,6 +87,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
   Animation<double> _position = const AlwaysStoppedAnimation(0);
   double _overflow = 0;
   double _textWidth = 0;
+  double _textHeight = 0;
   double _measuredWidth = 0;
   TextDirection? _measuredDirection;
   TextScaler? _measuredScaler;
@@ -144,6 +145,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       );
       final nextOverflow = measurement.overflow;
       _textWidth = measurement.textWidth;
+      _textHeight = measurement.textHeight;
       if (nextOverflow != _overflow) {
         _overflow = nextOverflow;
         _controller.stop();
@@ -179,7 +181,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
     }
   }
 
-  ({double overflow, double textWidth}) _measureText(
+  ({double overflow, double textWidth, double textHeight}) _measureText(
     double width,
     TextDirection direction,
     TextScaler scaler,
@@ -187,7 +189,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
     Locale? locale,
   ) {
     if (width <= 0 || widget.maxLines == null) {
-      return (overflow: 0, textWidth: 0);
+      return (overflow: 0, textWidth: 0, textHeight: 0);
     }
     final text = TextSpan(text: widget.text, style: textStyle);
     final constrainedPainter = TextPainter(
@@ -200,7 +202,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
     )..layout(maxWidth: width);
     if (!constrainedPainter.didExceedMaxLines) {
-      return (overflow: 0, textWidth: 0);
+      return (overflow: 0, textWidth: 0, textHeight: 0);
     }
 
     final naturalPainter = TextPainter(
@@ -215,6 +217,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
     return (
       overflow: (textWidth - width).clamp(0.0, double.infinity).toDouble(),
       textWidth: textWidth,
+      textHeight: naturalPainter.height,
     );
   }
 
@@ -257,44 +260,34 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
         final isMoving = _overflow > 0 && !reduceMotion && tickerEnabled;
         if (!isMoving) return _buildOriginalText();
 
-        final alignment = widget.centerInViewport
-            ? Alignment.center
-            : AlignmentDirectional.centerStart;
         return Semantics(
           label: widget.text,
           child: SizedBox(
             width: width,
             child: ClipRect(
-              child: OverflowBox(
-                alignment: alignment,
-                minWidth: _textWidth,
-                maxWidth: _textWidth,
+              child: SizedBox(
+                height: _textHeight,
                 child: AnimatedBuilder(
                   animation: _controller,
                   builder: (context, _) {
                     final position = _position.value;
-                    final textOffset = widget.centerInViewport
-                        ? (direction == TextDirection.ltr
-                            ? _overflow * (0.5 - position)
-                            : _overflow * (position - 0.5))
-                        : (direction == TextDirection.ltr
-                            ? -_overflow * position
-                            : _overflow * position);
-                    return Transform.translate(
-                      offset: Offset(textOffset, 0),
-                      child: ExcludeSemantics(
-                        child: SizedBox(
-                          width: _textWidth,
-                          child: Text(
-                            widget.text,
-                            style: widget.style,
-                            textAlign: widget.marqueeTextAlign ??
-                                widget.textAlign ??
-                                TextAlign.start,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.visible,
-                          ),
+                    final textOffset = direction == TextDirection.ltr
+                        ? -_overflow * position
+                        : -_overflow * (1 - position);
+                    return ExcludeSemantics(
+                      child: CustomPaint(
+                        size: Size(width, _textHeight),
+                        painter: _HomeOverflowTextPainter(
+                          text: widget.text,
+                          style: textStyle,
+                          textDirection: direction,
+                          textScaler: scaler,
+                          locale: locale,
+                          textAlign: widget.marqueeTextAlign ??
+                              widget.textAlign ??
+                              TextAlign.start,
+                          textWidth: _textWidth,
+                          textOffset: textOffset,
                         ),
                       ),
                     );
@@ -307,6 +300,52 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       },
     );
   }
+}
+
+class _HomeOverflowTextPainter extends CustomPainter {
+  _HomeOverflowTextPainter({
+    required this.text,
+    required this.style,
+    required this.textDirection,
+    required this.textScaler,
+    required this.locale,
+    required this.textAlign,
+    required this.textWidth,
+    required this.textOffset,
+  });
+
+  final String text;
+  final TextStyle style;
+  final TextDirection textDirection;
+  final TextScaler textScaler;
+  final Locale? locale;
+  final TextAlign textAlign;
+  final double textWidth;
+  final double textOffset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: textDirection,
+      textScaler: textScaler,
+      locale: locale,
+      textAlign: textAlign,
+      maxLines: 1,
+    )..layout(maxWidth: textWidth);
+    painter.paint(canvas, Offset(textOffset, 0));
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomeOverflowTextPainter oldDelegate) =>
+      text != oldDelegate.text ||
+      style != oldDelegate.style ||
+      textDirection != oldDelegate.textDirection ||
+      textScaler != oldDelegate.textScaler ||
+      locale != oldDelegate.locale ||
+      textAlign != oldDelegate.textAlign ||
+      textWidth != oldDelegate.textWidth ||
+      textOffset != oldDelegate.textOffset;
 }
 
 /// Aggregated task counts for the home status card.
