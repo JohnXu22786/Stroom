@@ -1,7 +1,32 @@
-/// Refreshes persisted import state after a batch fails partway through.
+/// Imports [items], refreshing persisted state if an item fails after success.
 ///
-/// The callback is best-effort so a refresh error does not replace the
-/// original import failure shown to the user.
+/// [importItem] returns whether the item was imported; skipped items return
+/// false. Refresh is best-effort so its failure does not replace the original
+/// import error.
+Future<int> importBatchWithPartialRefresh<T>({
+  required Iterable<T> items,
+  required Future<bool> Function(T item) importItem,
+  required Future<void> Function() refresh,
+}) async {
+  var importedCount = 0;
+  try {
+    for (final item in items) {
+      if (await importItem(item)) importedCount++;
+    }
+  } catch (_) {
+    if (importedCount > 0) {
+      try {
+        await refresh();
+      } catch (_) {
+        // Preserve the import error; the next page load reads persisted state.
+      }
+    }
+    rethrow;
+  }
+  return importedCount;
+}
+
+/// Refreshes persisted import state after a batch operation fails later.
 Future<void> refreshAfterPartialImport(
   int importedCount,
   Future<void> Function() refresh,
@@ -10,6 +35,6 @@ Future<void> refreshAfterPartialImport(
   try {
     await refresh();
   } catch (_) {
-    // Preserve the import error; the next page load will read persisted state.
+    // Preserve the original error; the next page load reads persisted state.
   }
 }

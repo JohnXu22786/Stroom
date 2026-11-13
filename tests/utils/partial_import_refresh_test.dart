@@ -2,31 +2,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/partial_import_refresh.dart';
 
 void main() {
-  test('refreshes persisted state after a later item fails', () async {
-    var importedCount = 0;
-    var refreshCount = 0;
+  test('refreshes persisted state when a later item fails', () async {
+    final storedItems = <String>[];
+    var providerItems = <String>[];
 
-    try {
-      for (var item = 0; item < 2; item++) {
-        if (item == 1) throw StateError('later item failed');
-        importedCount++;
-      }
-    } catch (_) {
-      await refreshAfterPartialImport(importedCount, () async {
-        refreshCount++;
-      });
-    }
+    await expectLater(
+      importBatchWithPartialRefresh(
+        items: ['first', 'second'],
+        importItem: (item) async {
+          if (item == 'second') throw StateError('later item failed');
+          storedItems.add(item);
+          return true;
+        },
+        refresh: () async {
+          providerItems = List.of(storedItems);
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
 
-    expect(importedCount, 1);
-    expect(refreshCount, 1);
+    expect(providerItems, ['first']);
   });
 
   test('does not refresh when no item was imported', () async {
     var refreshCount = 0;
 
-    await refreshAfterPartialImport(0, () async {
-      refreshCount++;
-    });
+    await importBatchWithPartialRefresh<String>(
+      items: const [],
+      importItem: (_) async => true,
+      refresh: () async => refreshCount++,
+    );
 
     expect(refreshCount, 0);
   });

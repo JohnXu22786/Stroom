@@ -136,39 +136,46 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       final records = ref.read(audioRecordsProvider);
       final usedInBatch = <String>{};
-      for (final file in files) {
-        final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
+      count = await importBatchWithPartialRefresh(
+        items: files,
+        importItem: (file) async {
+          final bytes = await file.readAsBytes();
+          if (bytes.isEmpty) return false;
 
-        final hash = computeAudioHash(bytes);
-        final rawName = sanitizeFileName(file.name);
-        final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
-        final detectedFormat = detectAudioFormat(bytes);
-        // 规范化格式：aac → m4a（与 UI 显示保持一致）
-        final format = detectedFormat != 'pcm'
-            ? normalizeAudioFormat(detectedFormat)
-            : (ext.isNotEmpty ? ext : 'wav');
-        final displayName = _uniqueAudioName(
-          p.basenameWithoutExtension(rawName),
-          records,
-          usedInBatch,
-        );
-        usedInBatch.add(displayName);
+          final hash = computeAudioHash(bytes);
+          final rawName = sanitizeFileName(file.name);
+          final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
+          final detectedFormat = detectAudioFormat(bytes);
+          // 规范化格式：aac → m4a（与 UI 显示保持一致）
+          final format = detectedFormat != 'pcm'
+              ? normalizeAudioFormat(detectedFormat)
+              : (ext.isNotEmpty ? ext : 'wav');
+          final displayName = _uniqueAudioName(
+            p.basenameWithoutExtension(rawName),
+            records,
+            usedInBatch,
+          );
+          usedInBatch.add(displayName);
 
-        final record = AudioRecord(
-          name: displayName,
-          hash: hash,
-          format: format,
-          createdAt: DateTime.now(),
-          size: bytes.length,
-          folder: _currentFolder,
-        );
-        await FileManifest.withStorageFileSaveLock(
-          record.storageFileName,
-          () => writeTtsAudioAndPublish(record, bytes, null),
-        );
-        count++;
-      }
+          final record = AudioRecord(
+            name: displayName,
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: _currentFolder,
+          );
+          await FileManifest.withStorageFileSaveLock(
+            record.storageFileName,
+            () => writeTtsAudioAndPublish(record, bytes, null),
+          );
+          return true;
+        },
+        refresh: () async {
+          await ref.read(audioRecordsProvider.notifier).loadRecords();
+          await ref.read(folderListProvider.notifier).loadFolders();
+        },
+      );
 
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();

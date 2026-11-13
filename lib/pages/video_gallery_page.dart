@@ -310,87 +310,94 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       final records = ref.read(videoRecordsProvider);
       final usedInBatch = <String>{};
-      for (final pickedFile in pickedFiles) {
-        final bytes = await pickedFile.readAsBytes();
-        if (bytes.isEmpty) continue;
+      count = await importBatchWithPartialRefresh(
+        items: pickedFiles,
+        importItem: (pickedFile) async {
+          final bytes = await pickedFile.readAsBytes();
+          if (bytes.isEmpty) return false;
 
-        final hash = computeVideoHash(bytes);
-        final rawName = sanitizeFileName(pickedFile.name);
-        final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
-        final format = ext.isNotEmpty ? ext : 'mp4';
-        final storageFileName = '$hash.$format';
+          final hash = computeVideoHash(bytes);
+          final rawName = sanitizeFileName(pickedFile.name);
+          final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
+          final format = ext.isNotEmpty ? ext : 'mp4';
+          final storageFileName = '$hash.$format';
 
-        final displayName = _uniqueVideoName(
-          p.basenameWithoutExtension(rawName),
-          records,
-          usedInBatch,
-        );
-        usedInBatch.add(displayName);
-
-        int videoDurationMs = 0;
-        final destinationFolder = _currentFolder;
-        await VideoManifest.withFilePublicationLock(hash, destinationFolder,
-            () async {
-          await publishStorageFiles<void, VideoRecord>(
-            publish: (writeFile) async {
-              final videoPath = await writeFile(storageFileName, bytes) ?? '';
-              // Try to obtain video duration and thumbnail from the file
-              if (kIsWeb || videoPath.isEmpty) {
-                // Web 没有真实文件路径（writeFile 返回虚拟 key），
-                // 直接从字节生成缩略图。
-                try {
-                  final thumbBytes = await _generateThumbnailFromBytes(bytes);
-                  if (thumbBytes != null) {
-                    await writeFile(
-                      VideoManifest.thumbnailFileName(hash),
-                      thumbBytes,
-                    );
-                  }
-                } catch (_) {}
-              } else {
-                try {
-                  videoDurationMs = await _probeVideoDuration(videoPath);
-                } catch (_) {
-                  // 时长探测失败不影响缩略图生成（下面继续尝试）
-                }
-                try {
-                  final thumbBytes =
-                      await _generateThumbnailFromPath(videoPath);
-                  if (thumbBytes != null) {
-                    await writeFile(
-                      VideoManifest.thumbnailFileName(hash),
-                      thumbBytes,
-                    );
-                  }
-                } catch (_) {
-                  // Thumbnail detection failed
-                }
-              }
-              await VideoManifest.addRecord(
-                VideoRecord(
-                  name: displayName,
-                  hash: hash,
-                  format: format,
-                  createdAt: DateTime.now(),
-                  size: bytes.length,
-                  folder: destinationFolder,
-                  duration: videoDurationMs,
-                ),
-              );
-            },
-            loadRecords: VideoManifest.loadRecordsStrict,
-            isReferenced: (record, fileName) =>
-                record.hash == hash &&
-                (fileName == record.storageFileName ||
-                    fileName == VideoManifest.thumbnailFileName(record.hash)),
-            writeFile: VideoManifest.writeFile,
-            readFile: VideoManifest.readFile,
-            fileExists: VideoManifest.fileExists,
-            deleteFile: VideoManifest.deleteFile,
+          final displayName = _uniqueVideoName(
+            p.basenameWithoutExtension(rawName),
+            records,
+            usedInBatch,
           );
-        });
-        count++;
-      }
+          usedInBatch.add(displayName);
+
+          int videoDurationMs = 0;
+          final destinationFolder = _currentFolder;
+          await VideoManifest.withFilePublicationLock(hash, destinationFolder,
+              () async {
+            await publishStorageFiles<void, VideoRecord>(
+              publish: (writeFile) async {
+                final videoPath = await writeFile(storageFileName, bytes) ?? '';
+                // Try to obtain video duration and thumbnail from the file
+                if (kIsWeb || videoPath.isEmpty) {
+                  // Web 没有真实文件路径（writeFile 返回虚拟 key），
+                  // 直接从字节生成缩略图。
+                  try {
+                    final thumbBytes = await _generateThumbnailFromBytes(bytes);
+                    if (thumbBytes != null) {
+                      await writeFile(
+                        VideoManifest.thumbnailFileName(hash),
+                        thumbBytes,
+                      );
+                    }
+                  } catch (_) {}
+                } else {
+                  try {
+                    videoDurationMs = await _probeVideoDuration(videoPath);
+                  } catch (_) {
+                    // 时长探测失败不影响缩略图生成（下面继续尝试）
+                  }
+                  try {
+                    final thumbBytes =
+                        await _generateThumbnailFromPath(videoPath);
+                    if (thumbBytes != null) {
+                      await writeFile(
+                        VideoManifest.thumbnailFileName(hash),
+                        thumbBytes,
+                      );
+                    }
+                  } catch (_) {
+                    // Thumbnail detection failed
+                  }
+                }
+                await VideoManifest.addRecord(
+                  VideoRecord(
+                    name: displayName,
+                    hash: hash,
+                    format: format,
+                    createdAt: DateTime.now(),
+                    size: bytes.length,
+                    folder: destinationFolder,
+                    duration: videoDurationMs,
+                  ),
+                );
+              },
+              loadRecords: VideoManifest.loadRecordsStrict,
+              isReferenced: (record, fileName) =>
+                  record.hash == hash &&
+                  (fileName == record.storageFileName ||
+                      fileName == VideoManifest.thumbnailFileName(record.hash)),
+              writeFile: VideoManifest.writeFile,
+              readFile: VideoManifest.readFile,
+              fileExists: VideoManifest.fileExists,
+              deleteFile: VideoManifest.deleteFile,
+            );
+          });
+          return true;
+        },
+        refresh: () async {
+          await ref.read(videoRecordsProvider.notifier).loadRecords();
+          await ref.read(videoFolderListProvider.notifier).loadFolders();
+        },
+      );
 
       // Close loading indicator
       if (mounted) {
