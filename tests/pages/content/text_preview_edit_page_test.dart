@@ -438,8 +438,8 @@ void main() {
       final savedRecord = (await TextManifest.loadRecords()).singleWhere(
         (record) => record.id == externalFile.id,
       );
-      expect(await TextManifest.readText(savedRecord.storagePath),
-          editedContent);
+      expect(
+          await TextManifest.readText(savedRecord.storagePath), editedContent);
       expect(savedRecord.hash,
           computeTextHash(Uint8List.fromList(utf8.encode(editedContent))));
     });
