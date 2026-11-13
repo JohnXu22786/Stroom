@@ -151,8 +151,9 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
 
     final shouldAnimate = _overflow > 0 && allowMotion;
     if (shouldAnimate && !_isAnimating) {
-      final travelMilliseconds =
-          math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
+      final travelMilliseconds = math
+          .max(1, (_overflow / widget.speed * 1000).round())
+          .toInt();
       _controller.duration = Duration(
         milliseconds: travelMilliseconds * 2 + 4000,
       );
@@ -262,11 +263,11 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
                   final position = _position.value;
                   final textOffset = widget.centerInViewport
                       ? (direction == TextDirection.ltr
-                          ? _overflow * (0.5 - position)
-                          : _overflow * (position - 0.5))
+                            ? _overflow * (0.5 - position)
+                            : _overflow * (position - 0.5))
                       : (direction == TextDirection.ltr
-                          ? -_overflow * position
-                          : _overflow * position);
+                            ? -_overflow * position
+                            : _overflow * position);
                   return Align(
                     alignment: alignment,
                     child: Transform.translate(
@@ -275,7 +276,8 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
                         child: Text(
                           widget.text,
                           style: widget.style,
-                          textAlign: widget.marqueeTextAlign ??
+                          textAlign:
+                              widget.marqueeTextAlign ??
                               widget.textAlign ??
                               TextAlign.start,
                           maxLines: 1,
@@ -308,52 +310,52 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
 /// CPU-bound extraction pipelines.
 final homeStatusCountsProvider =
     Provider<({int inProgress, int completed, int failed})>((ref) {
-  final bgTasks = ref.watch(backgroundTasksProvider);
-  final catcatchTasks = ref.watch(catcatchTasksProvider);
-  final synthesisTasks = ref.watch(taskListProvider);
-  final flowExecutions = ref.watch(taskFlowExecutionsProvider);
+      final bgTasks = ref.watch(backgroundTasksProvider);
+      final catcatchTasks = ref.watch(catcatchTasksProvider);
+      final synthesisTasks = ref.watch(taskListProvider);
+      final flowExecutions = ref.watch(taskFlowExecutionsProvider);
 
-  final flowSubTaskIds = <String>{
-    for (final e in flowExecutions)
-      for (final st in e.subTasks) st.subTaskId,
-  };
+      final flowSubTaskIds = <String>{
+        for (final e in flowExecutions)
+          for (final st in e.subTasks) st.subTaskId,
+      };
 
-  int inProgress = 0, completed = 0, failed = 0;
+      int inProgress = 0, completed = 0, failed = 0;
 
-  void addStatus(String statusName) {
-    if (statusName == 'running' ||
-        statusName == 'paused' ||
-        statusName == 'waiting') {
-      inProgress++;
-    } else if (statusName == 'completed') {
-      completed++;
-    } else if (statusName == 'failed') {
-      failed++;
-    }
-  }
+      void addStatus(String statusName) {
+        if (statusName == 'running' ||
+            statusName == 'paused' ||
+            statusName == 'waiting') {
+          inProgress++;
+        } else if (statusName == 'completed') {
+          completed++;
+        } else if (statusName == 'failed') {
+          failed++;
+        }
+      }
 
-  void addTaskIfStandalone(String id, String statusName) {
-    if (flowSubTaskIds.contains(id)) return;
-    addStatus(statusName);
-  }
+      void addTaskIfStandalone(String id, String statusName) {
+        if (flowSubTaskIds.contains(id)) return;
+        addStatus(statusName);
+      }
 
-  for (final t in bgTasks) {
-    addTaskIfStandalone(t.id, t.status.name);
-  }
-  for (final t in catcatchTasks) {
-    addTaskIfStandalone(t.id, t.status.name);
-  }
-  for (final t in synthesisTasks) {
-    addTaskIfStandalone(t.id, t.status.name);
-  }
-  // Each flow execution is exactly one card in the unified task list —
-  // count it once, matching what the user sees there.
-  for (final e in flowExecutions) {
-    addStatus(e.status.name);
-  }
+      for (final t in bgTasks) {
+        addTaskIfStandalone(t.id, t.status.name);
+      }
+      for (final t in catcatchTasks) {
+        addTaskIfStandalone(t.id, t.status.name);
+      }
+      for (final t in synthesisTasks) {
+        addTaskIfStandalone(t.id, t.status.name);
+      }
+      // Each flow execution is exactly one card in the unified task list —
+      // count it once, matching what the user sees there.
+      for (final e in flowExecutions) {
+        addStatus(e.status.name);
+      }
 
-  return (inProgress: inProgress, completed: completed, failed: failed);
-});
+      return (inProgress: inProgress, completed: completed, failed: failed);
+    });
 
 extension _HomePageHomeContentExt on _HomePageState {
   /// 构建模块化首页内容
@@ -666,8 +668,8 @@ extension _HomePageHomeContentExt on _HomePageState {
                       overflow: TextOverflow.clip,
                       text: taskFlows.isEmpty
                           ? AppLocalizations.of(context)!.homeTaskFlowEmpty
-                              : AppLocalizations.of(context)!
-                                  .homeTaskFlowManage(taskFlows.length),
+                          : AppLocalizations.of(context)!
+                                .homeTaskFlowManage(taskFlows.length),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onSurfaceVariant,
