@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -141,6 +141,23 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final List<Attachment> _pendingAttachments = [];
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
+  int _pendingAttachmentDraftGeneration = 0;
+
+  @visibleForTesting
+  Future<void> addPendingAttachmentForTesting(
+    String fileName,
+    Uint8List bytes,
+  ) =>
+      _addPendingAttachment(fileName, bytes);
+
+  @visibleForTesting
+  Future<void> addPendingAttachmentAfterPickerForTesting(
+    String fileName,
+    Future<Uint8List> selectedBytes,
+  ) async {
+    final origin = _capturePendingAttachmentOrigin();
+    await _addPendingAttachment(fileName, await selectedBytes, origin: origin);
+  }
 
   // ── Edit data-loss warning state ──
   /// Whether the warning pill is currently shown in the edit capsule's
