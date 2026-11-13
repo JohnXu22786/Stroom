@@ -25,6 +25,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/thumbnail_utils.dart';
 import '../utils/storage_file_publication.dart';
+import '../utils/partial_import_refresh.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -268,6 +269,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   Future<void> _importFromGallery() async {
     if (_isImporting) return;
     _isImporting = true;
+    var count = 0;
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
     // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
@@ -308,7 +310,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       final records = ref.read(videoRecordsProvider);
       final usedInBatch = <String>{};
-      var count = 0;
       for (final pickedFile in pickedFiles) {
         final bytes = await pickedFile.readAsBytes();
         if (bytes.isEmpty) continue;
@@ -413,6 +414,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       _isImporting = false;
     } catch (e) {
       _isImporting = false;
+      if (mounted) {
+        await refreshAfterPartialImport(count, () async {
+          await ref.read(videoRecordsProvider.notifier).loadRecords();
+          await ref.read(videoFolderListProvider.notifier).loadFolders();
+        });
+      }
       if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();

@@ -20,6 +20,7 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/storage_file_publication.dart';
+import '../utils/partial_import_refresh.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -226,6 +227,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   Future<void> _importFromGallery() async {
     if (_isImporting) return;
     _isImporting = true;
+    var count = 0;
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
     // 相册选择器抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
@@ -266,7 +268,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       final usedInBatch = <String>{};
-      var count = 0;
       for (final pickedFile in pickedFiles) {
         final bytes = await pickedFile.readAsBytes();
         if (bytes.isEmpty) continue;
@@ -356,6 +357,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       _isImporting = false;
     } catch (e) {
       _isImporting = false;
+      if (mounted) {
+        await refreshAfterPartialImport(count, () async {
+          await ref.read(imageRecordsProvider.notifier).loadRecords();
+          await ref.read(imageFolderListProvider.notifier).loadFolders();
+        });
+      }
       if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
