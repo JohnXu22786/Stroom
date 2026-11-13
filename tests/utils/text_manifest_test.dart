@@ -241,6 +241,24 @@ void main() {
   });
 
   group('TextManifest hash-locked content changes', () {
+    test('removes new content when manifest registration fails', () async {
+      const content = 'unregistered external text';
+      final record = _textRecordWithContent('external-save-failure', content);
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecord(record, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readFilePath(record.storageFileName), isNull);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
     test(
       'cleans up converted content when a format rename update fails',
       () async {

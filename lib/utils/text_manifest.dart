@@ -402,7 +402,12 @@ class TextManifest {
   static Future<String> saveTextRecord(TextRecord record, String text) =>
       withSaveLock(record.hash, () async {
         final filePath = await writeText(record.storagePath, text);
-        await addRecord(record);
+        try {
+          await addRecord(record);
+        } catch (_) {
+          await deleteFileIfUnreferenced(record.hash, record.storagePath);
+          rethrow;
+        }
         return filePath;
       });
 

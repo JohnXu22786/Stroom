@@ -17,11 +17,13 @@ import '../widgets/markdown_extensions.dart';
 class TextPreviewEditPage extends StatefulWidget {
   final TextRecord file;
   final String? initialContent;
+  final bool registerRecordOnSave;
 
   const TextPreviewEditPage({
     super.key,
     required this.file,
     this.initialContent,
+    this.registerRecordOnSave = false,
   });
 
   @override
@@ -306,7 +308,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
 
       // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
       // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateTextRecord(updatedRecord, newContent);
+      if (widget.registerRecordOnSave) {
+        await TextManifest.saveTextRecord(updatedRecord, newContent);
+      } else {
+        await TextManifest.updateTextRecord(updatedRecord, newContent);
+      }
 
       // Recheck all persisted references under the old hash lock. The same
       // record ID may have been repointed to the old content by a stale save.
