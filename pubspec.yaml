@@ -97,6 +97,7 @@ dependencies:
   flutter_math_fork: ^0.7.4
   markdown: ^7.3.1
   protobuf: ^6.1.0
+  web: ^1.1.2
 
 dev_dependencies:
   flutter_test:
