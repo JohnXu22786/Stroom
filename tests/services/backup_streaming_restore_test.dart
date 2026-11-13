@@ -164,6 +164,68 @@ void main() {
     },
   );
 
+  test(
+    'restoreBackup keeps selected data unchanged when a later binary entry write fails',
+    () async {
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final originalFile = Uint8List.fromList(utf8.encode('existing image'));
+      await writeBackupFile('pictures', 'existing.jpg', originalFile);
+      await ManifestDatabase.insertImageRecord({
+        'id': 'existing',
+        'name': 'existing',
+        'hash': 'existing',
+        'format': 'jpg',
+        'created_at': DateTime(2026).millisecondsSinceEpoch,
+        'size': originalFile.length,
+        'folder': '',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('darkMode', true);
+
+      final archive = buildV2Archive(
+        files: {
+          'pictures/first.jpg': Uint8List.fromList([1]),
+          'pictures/later.jpg': Uint8List.fromList([2]),
+        },
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+      final zipPath = await writeArchive(archive, 'write_failure.zip');
+
+      BackupService.beforeRestoreBinaryPublishForTesting = (entryIndex) {
+        if (entryIndex == 1) {
+          throw StateError('injected restore publish failure');
+        }
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await readBackupFile('pictures', 'existing.jpg'), originalFile);
+      expect(await readBackupFile('pictures', 'first.jpg'), isNull);
+      expect(await readBackupFile('pictures', 'later.jpg'), isNull);
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records, hasLength(1));
+      expect(records.single['id'], 'existing');
+      expect(prefs.getBool('darkMode'), isTrue);
+    },
+  );
+
   // ==================================================================
   // deflate 压缩条目（旧备份默认压缩格式）
   // ==================================================================
@@ -1757,6 +1819,29 @@ void main() {
       if (await File(videoPath).exists()) {
         await File(videoPath).delete();
       }
+
+      // A stale manifest record can refer to a file that was already absent.
+      // A failed restore must keep that absent-file state when rolling back.
+      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+        throw StateError('injected production restore publish failure');
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+      await expectLater(
+        BackupService.restoreBackup(zipPath, skipMissingCategories: true),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        await File(videoPath).exists(),
+        isFalse,
+        reason: 'rollback must preserve the previously absent media file',
+      );
+      final recordsAfterRollback = await ManifestDatabase.getAllVideoRecords();
+      expect(recordsAfterRollback, hasLength(1));
+      expect(recordsAfterRollback.single['id'], 'prod_big');
+
       await BackupService.restoreBackup(zipPath, skipMissingCategories: true);
 
       final restoredFile = File(videoPath);
