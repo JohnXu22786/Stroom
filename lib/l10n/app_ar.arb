@@ -415,6 +415,7 @@
   "actionRename": "إعادة تسمية",
   "conversationAutoRename": "تسمية تلقائية",
   "conversationTemporary": "محادثة مؤقتة",
+  "conversationSetTemporary": "تعيين كمحادثة مؤقتة",
   "conversationCloseTemporary": "إغلاق المحادثة المؤقتة",
   "conversationKeep": "الاحتفاظ بالمحادثة",
   "conversationTemporaryStatus": "مؤقتة",

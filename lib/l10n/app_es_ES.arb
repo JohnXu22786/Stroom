@@ -403,6 +403,7 @@
   "actionRename": "Rebautizar",
   "conversationAutoRename": "Nombre automático",
   "conversationTemporary": "conversación temporal",
+  "conversationSetTemporary": "Establecer como conversación temporal",
   "conversationCloseTemporary": "Cerrar conversación temporal",
   "conversationKeep": "Conservar conversación",
   "conversationTemporaryStatus": "Temporal",

@@ -1429,6 +1429,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationTemporary => '一時的な会話';
 
   @override
+  String get conversationSetTemporary => '一時的な会話に設定';
+
+  @override
   String get conversationCloseTemporary => '一時的な会話を閉じる';
 
   @override
@@ -12981,6 +12984,9 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get conversationTemporary => '一時的な会話';
+
+  @override
+  String get conversationSetTemporary => '一時的な会話に設定';
 
   @override
   String get conversationCloseTemporary => '一時的な会話を閉じる';

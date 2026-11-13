@@ -1443,6 +1443,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationTemporary => '임시 대화';
 
   @override
+  String get conversationSetTemporary => '임시 대화로 설정';
+
+  @override
   String get conversationCloseTemporary => '임시 대화 닫기';
 
   @override
@@ -12985,6 +12988,9 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get conversationTemporary => '임시 대화';
+
+  @override
+  String get conversationSetTemporary => '임시 대화로 설정';
 
   @override
   String get conversationCloseTemporary => '임시 대화 닫기';

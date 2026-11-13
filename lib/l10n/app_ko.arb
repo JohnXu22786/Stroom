@@ -418,6 +418,7 @@
   "actionRename": "이름 변경",
   "conversationAutoRename": "자동 이름 지정",
   "conversationTemporary": "임시 대화",
+  "conversationSetTemporary": "임시 대화로 설정",
   "conversationCloseTemporary": "임시 대화 닫기",
   "conversationKeep": "대화 유지",
   "conversationTemporaryStatus": "임시",

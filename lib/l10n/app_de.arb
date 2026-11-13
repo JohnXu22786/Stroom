@@ -413,6 +413,7 @@
   "actionRename": "Umbenennen",
   "conversationAutoRename": "Automatisch benennen",
   "conversationTemporary": "Temporäres Gespräch",
+  "conversationSetTemporary": "Als temporäres Gespräch festlegen",
   "conversationCloseTemporary": "Temporäres Gespräch schließen",
   "conversationKeep": "Gespräch behalten",
   "conversationTemporaryStatus": "Temporär",

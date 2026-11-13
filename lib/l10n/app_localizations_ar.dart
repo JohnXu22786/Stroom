@@ -1514,6 +1514,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get conversationTemporary => 'محادثة مؤقتة';
 
   @override
+  String get conversationSetTemporary => 'تعيين كمحادثة مؤقتة';
+
+  @override
   String get conversationCloseTemporary => 'إغلاق المحادثة المؤقتة';
 
   @override
@@ -13489,6 +13492,9 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get conversationTemporary => 'محادثة مؤقتة';
+
+  @override
+  String get conversationSetTemporary => 'تعيين كمحادثة مؤقتة';
 
   @override
   String get conversationCloseTemporary => 'إغلاق المحادثة المؤقتة';

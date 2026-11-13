@@ -2539,6 +2539,9 @@ abstract class AppLocalizations {
   /// **'Temporary conversation'**
   String get conversationTemporary;
 
+  /// Text used to enable temporary mode from a conversation menu.
+  String get conversationSetTemporary;
+
   /// No description provided for @conversationCloseTemporary.
   ///
   /// In en, this message translates to:

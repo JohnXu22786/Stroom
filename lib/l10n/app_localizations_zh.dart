@@ -1392,6 +1392,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
 
   @override
@@ -12628,6 +12631,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get conversationTemporary => '临时对话';
+
+  @override
+  String get conversationSetTemporary => '设为临时对话';
 
   @override
   String get conversationCloseTemporary => '关闭临时对话';

@@ -415,6 +415,7 @@
   "actionRename": "Renomear",
   "conversationAutoRename": "Nome automático",
   "conversationTemporary": "Conversa temporária",
+  "conversationSetTemporary": "Definir como conversa temporária",
   "conversationCloseTemporary": "Fechar conversa temporária",
   "conversationKeep": "Manter conversa",
   "conversationTemporaryStatus": "Temporária",

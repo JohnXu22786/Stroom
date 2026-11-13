@@ -1483,6 +1483,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationTemporary => 'Temporary conversation';
 
   @override
+  String get conversationSetTemporary => 'Set as temporary conversation';
+
+  @override
   String get conversationCloseTemporary => 'Close temporary conversation';
 
   @override
@@ -13346,6 +13349,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get conversationTemporary => 'Temporary conversation';
+
+  @override
+  String get conversationSetTemporary => 'Set as temporary conversation';
 
   @override
   String get conversationCloseTemporary => 'Close temporary conversation';

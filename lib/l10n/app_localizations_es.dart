@@ -1508,6 +1508,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get conversationTemporary => 'conversación temporal';
 
   @override
+  String get conversationSetTemporary =>
+      'Establecer como conversación temporal';
+
+  @override
   String get conversationCloseTemporary => 'Cerrar conversación temporal';
 
   @override
@@ -13567,6 +13571,10 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get conversationTemporary => 'conversación temporal';
+
+  @override
+  String get conversationSetTemporary =>
+      'Establecer como conversación temporal';
 
   @override
   String get conversationCloseTemporary => 'Cerrar conversación temporal';

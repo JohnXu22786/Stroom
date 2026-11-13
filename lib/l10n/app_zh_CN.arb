@@ -415,6 +415,7 @@
   "actionRename": "重命名",
   "conversationAutoRename": "自动命名",
   "conversationTemporary": "临时对话",
+  "conversationSetTemporary": "设为临时对话",
   "conversationCloseTemporary": "关闭临时对话",
   "conversationKeep": "保留对话",
   "conversationTemporaryStatus": "临时",

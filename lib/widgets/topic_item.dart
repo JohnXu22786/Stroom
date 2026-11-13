@@ -267,7 +267,7 @@ class TopicItem extends StatelessWidget {
                                   ? AppLocalizations.of(context)!
                                       .conversationKeep
                                   : AppLocalizations.of(context)!
-                                      .conversationTemporary,
+                                      .conversationSetTemporary,
                             ),
                           ),
                         const PopupMenuDivider(),

@@ -549,7 +549,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                         conv.isTemporary
                             ? AppLocalizations.of(context)!.conversationKeep
                             : AppLocalizations.of(context)!
-                                .conversationTemporary,
+                                .conversationSetTemporary,
                         style: TextStyle(color: cs.onSurface),
                       ),
                     ),

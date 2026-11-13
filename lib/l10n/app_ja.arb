@@ -403,6 +403,7 @@
   "actionRename": "名前の変更",
   "conversationAutoRename": "自動名前付け",
   "conversationTemporary": "一時的な会話",
+  "conversationSetTemporary": "一時的な会話に設定",
   "conversationCloseTemporary": "一時的な会話を閉じる",
   "conversationKeep": "会話を保持",
   "conversationTemporaryStatus": "一時",

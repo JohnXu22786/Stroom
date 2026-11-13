@@ -1499,6 +1499,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get conversationTemporary => 'Conversa temporária';
 
   @override
+  String get conversationSetTemporary => 'Definir como conversa temporária';
+
+  @override
   String get conversationCloseTemporary => 'Fechar conversa temporária';
 
   @override
@@ -13522,6 +13525,9 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get conversationTemporary => 'Conversa temporária';
+
+  @override
+  String get conversationSetTemporary => 'Definir como conversa temporária';
 
   @override
   String get conversationCloseTemporary => 'Fechar conversa temporária';
