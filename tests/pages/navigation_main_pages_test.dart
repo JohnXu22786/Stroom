@@ -71,6 +71,7 @@ Future<void> _simulateBackButton(WidgetTester tester) async {
 Future<void> _pumpPageAnimations(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump();
 }
 
 /// Find a bottom NavigationBar destination by its label. Scoped to the
