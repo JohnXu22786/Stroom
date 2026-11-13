@@ -86,6 +86,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
   );
   Animation<double> _position = const AlwaysStoppedAnimation(0);
   double _overflow = 0;
+  double _textWidth = 0;
   double _measuredWidth = 0;
   TextDirection? _measuredDirection;
   TextScaler? _measuredScaler;
@@ -134,13 +135,15 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       _measuredScaler = scaler;
       _measuredStyle = textStyle;
       _measuredLocale = locale;
-      final nextOverflow = _measureOverflow(
+      final measurement = _measureText(
         width,
         direction,
         scaler,
         textStyle,
         locale,
       );
+      final nextOverflow = measurement.overflow;
+      _textWidth = measurement.textWidth;
       if (nextOverflow != _overflow) {
         _overflow = nextOverflow;
         _controller.stop();
@@ -176,14 +179,16 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
     }
   }
 
-  double _measureOverflow(
+  ({double overflow, double textWidth}) _measureText(
     double width,
     TextDirection direction,
     TextScaler scaler,
     TextStyle textStyle,
     Locale? locale,
   ) {
-    if (width <= 0 || widget.maxLines == null) return 0;
+    if (width <= 0 || widget.maxLines == null) {
+      return (overflow: 0, textWidth: 0);
+    }
     final text = TextSpan(text: widget.text, style: textStyle);
     final constrainedPainter = TextPainter(
       text: text,
@@ -194,7 +199,9 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       maxLines: widget.maxLines,
       ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
     )..layout(maxWidth: width);
-    if (!constrainedPainter.didExceedMaxLines) return 0;
+    if (!constrainedPainter.didExceedMaxLines) {
+      return (overflow: 0, textWidth: 0);
+    }
 
     final naturalPainter = TextPainter(
       text: text,
@@ -204,9 +211,11 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       textAlign: widget.textAlign ?? TextAlign.start,
       maxLines: widget.maxLines,
     )..layout();
-    return (naturalPainter.width - width)
-        .clamp(0.0, double.infinity)
-        .toDouble();
+    final textWidth = naturalPainter.width;
+    return (
+      overflow: (textWidth - width).clamp(0.0, double.infinity).toDouble(),
+      textWidth: textWidth,
+    );
   }
 
   Widget _buildOriginalText() => Text(
@@ -256,36 +265,41 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
           child: SizedBox(
             width: width,
             child: ClipRect(
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) {
-                  final position = _position.value;
-                  final textOffset = widget.centerInViewport
-                      ? (direction == TextDirection.ltr
-                          ? _overflow * (0.5 - position)
-                          : _overflow * (position - 0.5))
-                      : (direction == TextDirection.ltr
-                          ? -_overflow * position
-                          : _overflow * position);
-                  return Align(
-                    alignment: alignment,
-                    child: Transform.translate(
+              child: OverflowBox(
+                alignment: alignment,
+                minWidth: _textWidth,
+                maxWidth: _textWidth,
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) {
+                    final position = _position.value;
+                    final textOffset = widget.centerInViewport
+                        ? (direction == TextDirection.ltr
+                            ? _overflow * (0.5 - position)
+                            : _overflow * (position - 0.5))
+                        : (direction == TextDirection.ltr
+                            ? -_overflow * position
+                            : _overflow * position);
+                    return Transform.translate(
                       offset: Offset(textOffset, 0),
                       child: ExcludeSemantics(
-                        child: Text(
-                          widget.text,
-                          style: widget.style,
-                          textAlign: widget.marqueeTextAlign ??
-                              widget.textAlign ??
-                              TextAlign.start,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.visible,
+                        child: SizedBox(
+                          width: _textWidth,
+                          child: Text(
+                            widget.text,
+                            style: widget.style,
+                            textAlign: widget.marqueeTextAlign ??
+                                widget.textAlign ??
+                                TextAlign.start,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),
