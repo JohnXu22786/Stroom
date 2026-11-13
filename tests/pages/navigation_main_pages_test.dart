@@ -70,8 +70,9 @@ Future<void> _simulateBackButton(WidgetTester tester) async {
 /// intentionally continuous overflow marquee to stop ticking.
 Future<void> _pumpPageAnimations(WidgetTester tester) async {
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 500));
-  await tester.pump();
+  for (var frame = 0; frame < 10; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 /// Find a bottom NavigationBar destination by its label. Scoped to the
