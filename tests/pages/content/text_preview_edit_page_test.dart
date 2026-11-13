@@ -16,7 +16,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
 /// 构建测试应用，将 TextPreviewEditPage 放置在一个可以弹出返回的路径中
-Widget _buildTestApp(TextRecord file, String content) {
+Widget _buildTestApp(TextRecord file, String content,
+    {bool registerRecordOnSave = false}) {
   return ProviderScope(
     child: MaterialApp(
       locale: const Locale('zh', 'CN'),
@@ -25,8 +26,11 @@ Widget _buildTestApp(TextRecord file, String content) {
       initialRoute: '/',
       routes: {
         '/': (_) => const _PlaceholderPage(),
-        '/edit': (_) =>
-            TextPreviewEditPage(file: file, initialContent: content),
+        '/edit': (_) => TextPreviewEditPage(
+              file: file,
+              initialContent: content,
+              registerRecordOnSave: registerRecordOnSave,
+            ),
       },
     ),
   );
@@ -118,9 +122,14 @@ void main() {
 
     /// 进入编辑模式（含初始化 widget）
     Future<void> enterEditMode(WidgetTester tester,
-        {TextRecord? file, String? content}) async {
-      await tester
-          .pumpWidget(_buildTestApp(file ?? testFile, content ?? testContent));
+        {TextRecord? file,
+        String? content,
+        bool registerRecordOnSave = false}) async {
+      await tester.pumpWidget(_buildTestApp(
+        file ?? testFile,
+        content ?? testContent,
+        registerRecordOnSave: registerRecordOnSave,
+      ));
       await navigateToEditor(tester);
       // Tap the edit icon button
       await tester.tap(find.byIcon(Icons.edit));
@@ -398,6 +407,42 @@ void main() {
     });
 
     // ==================== Save ====================
+
+    testWidgets('saving an external text file registers its edited record',
+        (tester) async {
+      const initialContent = 'task output';
+      final initialBytes = Uint8List.fromList(utf8.encode(initialContent));
+      final externalFile = TextRecord(
+        id: 'txt_external_task_output',
+        name: 'task_output',
+        hash: computeTextHash(initialBytes),
+        format: 'txt',
+        createdAt: DateTime.utc(2025),
+        size: initialBytes.length,
+        textLength: initialContent.length,
+      );
+      await enterEditMode(
+        tester,
+        file: externalFile,
+        content: initialContent,
+        registerRecordOnSave: true,
+      );
+
+      const editedContent = 'edited task output';
+      tester.widget<TextField>(find.byType(TextField)).controller?.text =
+          editedContent;
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+        (record) => record.id == externalFile.id,
+      );
+      expect(
+          await TextManifest.readText(savedRecord.storagePath), editedContent);
+      expect(savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(editedContent))));
+    });
 
     testWidgets('save writes new content under new hash filename',
         (tester) async {

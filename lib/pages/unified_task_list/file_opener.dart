@@ -189,6 +189,7 @@ Future<void> _openTextFile(String filePath, BuildContext context) async {
         builder: (_) => TextPreviewEditPage(
           file: record,
           initialContent: content,
+          registerRecordOnSave: true,
         ),
       ),
     );
