@@ -1,12 +1,53 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stroom/catcatch/config/default_rules.dart';
+import 'package:stroom/catcatch/engine/download_manager_shared.dart';
 import 'package:stroom/catcatch/engine/download_manager.dart';
+import 'package:stroom/services/storage_service.dart';
 
 void main() {
+  test('confines progress files for traversal task IDs', () async {
+    const taskId = '../../catcatch_progress_escape_test';
+    final appDir = await AppStorage.directory;
+    final expectedOutsideFile = File(
+      p.join(appDir, 'catcatch_progress_escape_test_dl_progress.json'),
+    )..writeAsStringSync('keep');
+    try {
+      await saveSegmentProgress(taskId, {'completed': 3});
+
+      final savedPath = await progressPath(taskId);
+      final progressDir = p.join(appDir, 'catcatch', '.progress');
+      expect(p.isWithin(progressDir, savedPath), isTrue);
+      expect(
+        p.basename(await progressPath('legacy.task')),
+        'legacy.task_dl_progress.json',
+      );
+      expect(p.basename(await progressPath('旧任务')), '旧任务_dl_progress.json');
+      expect(
+        p.basename(await progressPath('a/b')),
+        isNot(p.basename(await progressPath('a%2Fb'))),
+      );
+      final firstWindowsUnsafe =
+          p.basename(await progressPath('\u0000/')).toLowerCase();
+      final secondWindowsUnsafe =
+          p.basename(await progressPath('h/')).toLowerCase();
+      expect(firstWindowsUnsafe, isNot(secondWindowsUnsafe));
+      expect(await expectedOutsideFile.readAsString(), 'keep');
+      expect(jsonDecode(await File(savedPath).readAsString()), {
+        'completed': 3,
+      });
+    } finally {
+      if (await expectedOutsideFile.exists()) {
+        await expectedOutsideFile.delete();
+      }
+    }
+  });
+
   test(
     'propagates a failed response stream instead of returning a temp path',
     () async {
