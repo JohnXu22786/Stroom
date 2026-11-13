@@ -143,7 +143,7 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>>
 
   /// Restore persisted flows on startup.
   Future<void> restoreFromPersistence() async {
-    await restore();
+    if (!await restore()) return;
     if (state.isNotEmpty) {
       state = [...state]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     }
