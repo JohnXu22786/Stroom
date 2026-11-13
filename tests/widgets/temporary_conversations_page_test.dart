@@ -76,9 +76,9 @@ void main() {
     // 打开 target-1 的更多菜单（取第一个 more_vert）。
     await tester.tap(find.byIcon(Icons.more_vert).first);
     await tester.pumpAndSettle();
-    expect(find.text('临时对话'), findsOneWidget);
+    expect(find.text('设为临时对话'), findsOneWidget);
 
-    await tester.tap(find.text('临时对话'));
+    await tester.tap(find.text('设为临时对话'));
     await tester.pumpAndSettle();
     expect(find.textContaining('一小时后删除'), findsOneWidget);
     await tester.tap(find.text('开启临时模式').last);

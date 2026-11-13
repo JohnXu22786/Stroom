@@ -52,8 +52,8 @@ void main() {
     await tester.pumpWidget(_app(onTemporaryToggle: () => toggles++));
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
-    expect(find.text('Temporary conversation'), findsOneWidget);
-    await tester.tap(find.text('Temporary conversation'));
+    expect(find.text('Set as temporary conversation'), findsOneWidget);
+    await tester.tap(find.text('Set as temporary conversation'));
     await tester.pumpAndSettle();
     expect(toggles, 0);
     await tester.tap(find.text('Enable temporary mode').last);
