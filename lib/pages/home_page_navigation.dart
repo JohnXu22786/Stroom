@@ -201,8 +201,7 @@ extension _HomePageNavigationExt on _HomePageState {
     switch (page) {
       case AppPage.home:
         return TickerMode(
-          enabled:
-              ref.read(selectedPageProvider) == AppPage.home &&
+          enabled: ref.read(selectedPageProvider) == AppPage.home &&
               TickerMode.of(context),
           child: _buildHomeContent(),
         );
