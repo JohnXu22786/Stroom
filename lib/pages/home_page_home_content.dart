@@ -94,6 +94,9 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
   TextStyle? _measuredStyle;
   Locale? _measuredLocale;
   bool _isAnimating = false;
+  Timer? _startTimer;
+  bool _hasStarted = false;
+  bool _motionAllowed = false;
 
   @override
   void didUpdateWidget(covariant _HomeOverflowMarquee oldWidget) {
@@ -112,9 +115,12 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       _measuredScaler = null;
       _measuredStyle = null;
       _measuredLocale = null;
+      _startTimer?.cancel();
+      _startTimer = null;
       _controller.stop();
       _controller.value = 0;
       _isAnimating = false;
+      _hasStarted = false;
     }
   }
 
@@ -148,37 +154,63 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
       _textHeight = measurement.textHeight;
       if (nextOverflow != _overflow) {
         _overflow = nextOverflow;
+        _startTimer?.cancel();
+        _startTimer = null;
         _controller.stop();
         _controller.value = 0;
         _isAnimating = false;
+        _hasStarted = false;
       }
     }
 
     final shouldAnimate = _overflow > 0 && allowMotion;
-    if (shouldAnimate && !_isAnimating) {
-      final travelMilliseconds =
-          math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
-      _controller.duration = Duration(
-        milliseconds: travelMilliseconds * 2 + 4000,
-      );
-      _position = TweenSequence<double>([
-        TweenSequenceItem(tween: ConstantTween(0), weight: 2000),
-        TweenSequenceItem(
-          tween: Tween(begin: 0, end: 1),
-          weight: travelMilliseconds.toDouble(),
-        ),
-        TweenSequenceItem(tween: ConstantTween(1), weight: 2000),
-        TweenSequenceItem(
-          tween: Tween(begin: 1, end: 0),
-          weight: travelMilliseconds.toDouble(),
-        ),
-      ]).animate(_controller);
-      _controller.repeat();
-      _isAnimating = true;
-    } else if (!shouldAnimate && _isAnimating) {
+    _motionAllowed = shouldAnimate;
+    if (shouldAnimate && !_isAnimating && _startTimer == null) {
+      if (_hasStarted) {
+        _startAnimation();
+      } else {
+        // Each overflowing label is measured in the same home-page layout
+        // frame, so these timers release the marquees together after the
+        // shared one-second still period.
+        _startTimer = Timer(const Duration(seconds: 1), () {
+          _startTimer = null;
+          if (mounted && _motionAllowed && _overflow > 0) {
+            _startAnimation();
+          }
+        });
+      }
+    } else if (!shouldAnimate) {
+      _startTimer?.cancel();
+      _startTimer = null;
+    }
+    if (!shouldAnimate && _isAnimating) {
       _controller.stop();
       _isAnimating = false;
     }
+  }
+
+  void _startAnimation() {
+    if (_isAnimating || _overflow <= 0 || !_motionAllowed) return;
+    final travelMilliseconds =
+        math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
+    _controller.duration = Duration(
+      milliseconds: travelMilliseconds * 2 + 4000,
+    );
+    _position = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween(0), weight: 2000),
+      TweenSequenceItem(
+        tween: Tween(begin: 0, end: 1),
+        weight: travelMilliseconds.toDouble(),
+      ),
+      TweenSequenceItem(tween: ConstantTween(1), weight: 2000),
+      TweenSequenceItem(
+        tween: Tween(begin: 1, end: 0),
+        weight: travelMilliseconds.toDouble(),
+      ),
+    ]).animate(_controller);
+    _controller.repeat();
+    _isAnimating = true;
+    _hasStarted = true;
   }
 
   ({double overflow, double textWidth, double textHeight}) _measureText(
@@ -232,6 +264,7 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
 
   @override
   void dispose() {
+    _startTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }

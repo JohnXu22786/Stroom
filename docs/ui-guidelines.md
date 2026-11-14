@@ -42,7 +42,7 @@ The app does not define a complete custom global `textTheme`; read the nearest t
 
 ### Constrained localized labels
 
-For a localized label in a constrained, single-line slot, keep the existing text widget, size, wrapping, and alignment when the full label fits. Add a bidirectional marquee only when that existing layout actually truncates the label; preserve the original alignment while it moves and expose the complete text as one semantic label. Use 24 logical px/s by default and pause for 2 seconds at each endpoint. Honor reduced-motion settings and stop or pause motion while the containing view is hidden. Do not shrink text for individual translations. Leave naturally wrapping text unchanged instead of forcing it into a marquee.
+For a localized label in a constrained, single-line slot, keep the existing text widget, size, wrapping, and alignment when the full label fits. Add a bidirectional marquee only when that existing layout actually truncates the label; preserve the original alignment while it moves and expose the complete text as one semantic label. When the page opens, hold all overflowing labels still for 1 second, then start them together. Use 24 logical px/s by default and pause for 2 seconds at each endpoint; the initial delay is separate from endpoint pauses. Honor reduced-motion settings and stop or pause motion while the containing view is hidden. Do not shrink text for individual translations. Leave naturally wrapping text unchanged instead of forcing it into a marquee.
 
 The homepage module cards are the approved implementation of this pattern. This guidance describes the behavior for future constrained labels; it does not expand the current implementation beyond the home screen.
 
