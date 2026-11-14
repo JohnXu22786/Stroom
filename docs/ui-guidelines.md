@@ -79,6 +79,17 @@ The shared menu style is in [`lib/widgets/stroom_menu_style.dart`](../lib/widget
 
 Use a popup for a short set of contextual actions or a compact selection. Use a dialog when the user must decide or enter focused information before continuing. Use a bottom sheet for a larger contextual picker or content that benefits from a tall, scrollable surface. Use a snackbar for brief, non-blocking confirmation; persistent or actionable warnings need a more visible banner/inline state. Tooltips explain controls without replacing visible labels.
 
+#### Responsive modal bottom-origin panels
+
+Apply this Stroom convention to every component whose compact-screen presentation originates as a modal bottom sheet. At `shortestSide < 600 dp`, keep the panel anchored to the bottom, including in phone landscape. At `shortestSide >= 600 dp`, present that bottom-origin flow as a centered surface. A component already designed as a centered dialog stays centered at every size and is outside this conversion rule. These are Stroom conventions, not universal Material requirements.
+
+- On wider viewports, cap the centered surface at `640 dp` and leave at least `24 dp` of side gutter (`width <= availableWidth - 48 dp`). A narrow phone sheet may use the full available width.
+- Bound sheet and centered-surface height to `min(80% of the available viewport, 640 dp)`. Keep long content scrollable within that bound and respect system safe areas.
+- Use a `28 dp` corner radius and `16 dp` content inset. Use theme-aware `surfaceContainerHigh` or `surface` roles, with a clear title and close or cancel action.
+- Preserve the panel's expected selection, cancel, outside-tap, and back behavior, and expose selected state semantically.
+
+The merged [emoji picker](../lib/pages/assistant/assistant_shared.dart) illustrates a bottom-origin flow adapting to a centered presentation on larger screens. It is an example, not the source of the dimensions above.
+
 - Keep overlays anchored to the action or selection they belong to and inside the visible viewport, including short windows and keyboard-open states.
 - Preserve expected outside-tap, back, escape, and selection dismissal behavior. Don't dismiss a destructive confirmation merely because a child control was tapped.
 - Destructive actions use `error` semantics and are separated from routine actions when both share a menu. State the consequence in a confirmation dialog when the action is hard to reverse.
