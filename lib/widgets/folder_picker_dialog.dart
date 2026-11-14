@@ -392,8 +392,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Center(
                         child: Text(
-                          AppLocalizations.of(context)!
-                              .folderPickerNoFolders,
+                          AppLocalizations.of(context)!.folderPickerNoFolders,
                           textAlign: TextAlign.center,
                           style: Theme.of(context)
                               .textTheme
@@ -415,8 +414,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                               folder,
                               // 显示文件夹基名（不含父路径）
                               _isInSubFolder
-                                  ? folder.substring(
-                                      folder.lastIndexOf('/') + 1)
+                                  ? folder
+                                      .substring(folder.lastIndexOf('/') + 1)
                                   : folder,
                               Icons.folder_outlined,
                             ),
