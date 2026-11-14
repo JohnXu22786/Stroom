@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' show max;
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
@@ -17,6 +18,11 @@ import 'apkg_result.dart';
 /// We open it as a secondary SQLite database, read all records, and merge
 /// them into the primary database.
 class AnkiApkgImporter {
+  static const _maxPackageSizeBytes = 128 * 1024 * 1024;
+  static const _maxCollectionSizeBytes = 128 * 1024 * 1024;
+  static const _maxExpandedArchiveSizeBytes = 256 * 1024 * 1024;
+  static const _maxArchiveEntries = 10000;
+
   /// Import an .apkg file into the database at [targetDbPath].
   /// Returns imported counts; callers localize the user-facing summary.
   static Future<AnkiApkgImportSummary> import(
@@ -36,19 +42,38 @@ class AnkiApkgImporter {
     if (!sourceExists) {
       throw AnkiApkgException.fileNotFound(apkgPath);
     }
-    late final List<int> bytes;
     try {
-      bytes = readPackageBytes?.call(file) ?? file.readAsBytesSync();
+      if (file.lengthSync() > _maxPackageSizeBytes) {
+        throw AnkiApkgException.invalidArchive(apkgPath);
+      }
     } on FileSystemException {
       throw AnkiApkgException.localFileFailure(apkgPath);
+    } catch (error) {
+      if (error is AnkiApkgException) rethrow;
+      throw AnkiApkgException.unexpectedError(apkgPath);
+    }
+    late final List<int> bytes;
+    try {
+      bytes = readPackageBytes?.call(file) ??
+          await readPackageStreamWithLimit(file.openRead());
+    } on FileSystemException {
+      throw AnkiApkgException.localFileFailure(apkgPath);
+    } on FormatException {
+      throw AnkiApkgException.invalidArchive(apkgPath);
+    } on AnkiApkgException {
+      rethrow;
     } catch (_) {
       throw AnkiApkgException.unexpectedError(apkgPath);
     }
     late final Archive archive;
     try {
+      if (bytes.length > _maxPackageSizeBytes) {
+        throw const FormatException('ZIP package exceeds the size limit');
+      }
       if (!_hasEndOfCentralDirectory(bytes)) {
         throw const FormatException('ZIP end record is missing');
       }
+      _validateArchiveLimits(bytes);
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (_) {
       throw AnkiApkgException.invalidArchive(apkgPath);
@@ -667,6 +692,46 @@ class AnkiApkgImporter {
       return true;
     }
     return left == right;
+  }
+
+  static void _validateArchiveLimits(List<int> bytes) {
+    final directory = ZipDirectory();
+    var entryCount = 0;
+    var expandedSize = 0;
+    for (final header in directory.headers(
+      InputMemoryStream(bytes),
+    )) {
+      entryCount++;
+      if (entryCount > _maxArchiveEntries) {
+        throw const FormatException('ZIP contains too many entries');
+      }
+      final size = header.file?.uncompressedSize ?? header.uncompressedSize;
+      if (size < 0 || size > _maxExpandedArchiveSizeBytes - expandedSize) {
+        throw const FormatException('ZIP expanded data exceeds the size limit');
+      }
+      expandedSize += size;
+      if (header.filename == 'collection.anki2' &&
+          size > _maxCollectionSizeBytes) {
+        throw const FormatException('Anki collection exceeds the size limit');
+      }
+    }
+  }
+
+  /// Collects package bytes from [stream] without exceeding [maxSizeBytes].
+  static Future<List<int>> readPackageStreamWithLimit(
+    Stream<List<int>> stream, {
+    int maxSizeBytes = _maxPackageSizeBytes,
+  }) async {
+    final builder = BytesBuilder(copy: false);
+    var totalSize = 0;
+    await for (final chunk in stream) {
+      if (chunk.length > maxSizeBytes - totalSize) {
+        throw const FormatException('ZIP package exceeds the size limit');
+      }
+      totalSize += chunk.length;
+      builder.add(chunk);
+    }
+    return builder.takeBytes();
   }
 
   static bool _hasEndOfCentralDirectory(List<int> bytes) {
