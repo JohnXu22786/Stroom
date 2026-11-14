@@ -152,13 +152,8 @@ void main() {
     }
   });
 
-  group('EmojiPicker adaptive width', () {
-    /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
-    Finder findEmojiGrid() {
-      return find.byWidgetPredicate(
-        (w) => w is GridView && w.padding == const EdgeInsets.only(top: 4),
-      );
-    }
+  group('EmojiPicker responsive panel', () {
+    Finder findEmojiGrid() => find.byType(GridView);
 
     testWidgets(
       'emoji picker panel opens from the square and stays centered on wide screen',
@@ -195,8 +190,7 @@ void main() {
         final gridFinder = findEmojiGrid();
         expect(gridFinder, findsOneWidget);
 
-        // The picker is wrapped in Center + FittedBox, so on a wide screen
-        // the emoji grid should be centered within the panel content.
+        // On wide screens the picker remains a compact centered dialog.
         expect(find.text('编辑助手'), findsOneWidget);
         expect(find.text('保存'), findsOneWidget);
 
@@ -218,11 +212,10 @@ void main() {
       },
     );
 
-    testWidgets('picking an emoji in the panel updates the square', (
+    testWidgets('phone picker uses a bounded bottom sheet with full grid', (
       tester,
     ) async {
-      // Use medium screen size
-      await tester.binding.setSurfaceSize(const Size(400, 800));
+      await tester.binding.setSurfaceSize(const Size(360, 740));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
@@ -240,6 +233,28 @@ void main() {
 
       // The current emoji '😊' should be shown in the square
       // Tap the square to open the picker panel
+      await tester.tap(find.byType(EmojiAvatarButton));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.text('选择表情'), findsOneWidget);
+      expect(find.byTooltip('取消'), findsOneWidget);
+      final sheet = tester.getRect(find.byType(BottomSheet));
+      expect(sheet.bottom, lessThanOrEqualTo(740));
+      expect(sheet.height, lessThanOrEqualTo(620));
+      expect(findEmojiGrid(), findsOneWidget);
+
+      // Tapping the close action cancels without changing the avatar.
+      await tester.tap(find.byTooltip('取消'));
+      await tester.pumpAndSettle();
+      expect(findEmojiGrid(), findsNothing);
+      expect(
+        tester
+            .widget<EmojiAvatarButton>(find.byType(EmojiAvatarButton))
+            .selectedEmoji,
+        '😊',
+      );
+
       await tester.tap(find.byType(EmojiAvatarButton));
       await tester.pumpAndSettle();
 
@@ -271,6 +286,36 @@ void main() {
         find.byType(EmojiAvatarButton),
       );
       expect(square.selectedEmoji, '😀');
+    });
+
+    testWidgets('phone picker dismisses on back and outside tap', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 740));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(EmojiAvatarButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(findEmojiGrid(), findsNothing);
+
+      await tester.tap(find.byType(EmojiAvatarButton));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
+      expect(findEmojiGrid(), findsNothing);
     });
 
     testWidgets('edit dialog system prompt field fills the remaining height', (
