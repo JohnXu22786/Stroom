@@ -358,8 +358,8 @@ void main() {
       expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.text('选择表情'), findsOneWidget);
       final sheet = tester.getRect(find.byType(BottomSheet));
-      final viewHeight = tester.view.physicalSize.height /
-          tester.view.devicePixelRatio;
+      final viewHeight =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
       expect(sheet.top, greaterThanOrEqualTo(0));
       expect(sheet.bottom, lessThanOrEqualTo(viewHeight));
       expect(sheet.height, lessThanOrEqualTo(360));
