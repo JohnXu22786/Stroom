@@ -6,6 +6,8 @@ import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// A direct entry to the records created by one launch.
 class TaskFlowRunPage extends ConsumerWidget {
   final List<String> executionIds;
@@ -19,15 +21,20 @@ class TaskFlowRunPage extends ConsumerWidget {
         .watch(taskFlowExecutionsProvider)
         .where((execution) => executionIds.contains(execution.id))
         .toList();
-    final finished =
-        executions.where((execution) => execution.isTerminal).length;
+    final finished = executions
+        .where((execution) => execution.isTerminal)
+        .length;
     final batchId = executions
         .map((execution) => execution.batchId)
         .whereType<String>()
         .firstOrNull;
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.taskFlowUiRunTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.taskFlowUiRunTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           if (restoreStatus == FlowExecutionRestoreStatus.ready &&
               batchId != null &&
@@ -45,7 +52,11 @@ class TaskFlowRunPage extends ConsumerWidget {
                     ).showSnackBar(SnackBar(content: Text(error.toString())));
                 }
               },
-              child: Text(AppLocalizations.of(context)!.taskFlowUiCancelBatch),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.taskFlowUiCancelBatch,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),
@@ -58,38 +69,38 @@ class TaskFlowRunPage extends ConsumerWidget {
               ),
             )
           : executions.isEmpty
-              ? Center(
-                  child: Text(
-                    AppLocalizations.of(context)!.taskFlowUiRecordsCleared,
-                  ),
-                )
-              : LayoutBuilder(
-                  builder: (context, constraints) => ListView(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          AppLocalizations.of(context)!.taskFlowUiRunSummary(
-                                finished,
-                                executionIds.length,
-                              ) +
-                              (executions.length < executionIds.length
-                                  ? AppLocalizations.of(context)!
-                                      .taskFlowUiClearedRecordCount(
+          ? Center(
+              child: Text(
+                AppLocalizations.of(context)!.taskFlowUiRecordsCleared,
+              ),
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      AppLocalizations.of(context)!.taskFlowUiRunSummary(
+                            finished,
+                            executionIds.length,
+                          ) +
+                          (executions.length < executionIds.length
+                              ? AppLocalizations.of(context)!
+                                    .taskFlowUiClearedRecordCount(
                                       executionIds.length - executions.length,
                                     )
-                                  : ''),
-                        ),
-                      ),
-                      for (final execution in executions)
-                        TaskFlowCard(
-                          key: ValueKey(execution.id),
-                          execution: execution,
-                          taskListViewportHeight: constraints.maxHeight,
-                        ),
-                    ],
+                              : ''),
+                    ),
                   ),
-                ),
+                  for (final execution in executions)
+                    TaskFlowCard(
+                      key: ValueKey(execution.id),
+                      execution: execution,
+                      taskListViewportHeight: constraints.maxHeight,
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }

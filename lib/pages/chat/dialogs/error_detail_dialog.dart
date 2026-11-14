@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+
 import '../utils/format_chat_error.dart';
 import '../../../utils/ocr_diagnostics.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 /// Represents a selectable data section within the detail dialog.
 class _DataSection {
@@ -83,9 +86,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       },
       child: Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Container(
@@ -104,8 +105,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                   child: sections.isEmpty
                       ? _buildEmptyState()
                       : _selectedSectionId != null
-                          ? _buildDetailView(sections, isDark)
-                          : _buildListView(sections, isDark),
+                      ? _buildDetailView(sections, isDark)
+                      : _buildListView(sections, isDark),
                 ),
                 // Close button
                 Padding(
@@ -114,7 +115,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text(AppLocalizations.of(context)!.actionClose),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.actionClose,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ),
@@ -141,8 +146,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
         children: [
           if (_selectedSectionId != null)
             IconButton(
-              icon: Icon(Icons.arrow_back,
-                  size: 18, color: Theme.of(context).colorScheme.primary),
+              icon: Icon(
+                Icons.arrow_back,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               onPressed: () {
                 setState(() {
                   _selectedSectionId = null;
@@ -171,9 +179,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.close,
-                size: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            icon: Icon(
+              Icons.close,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             onPressed: () => Navigator.pop(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -201,12 +211,14 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (widget.isOcrDiagnostics) {
       final credentialValues =
           OcrDiagnosticSnapshot.credentialValuesFromRequest(req);
-      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
+      final safeRequest =
+          OcrDiagnosticSnapshot.sanitizeRequest(
             req,
             excludedValues: credentialValues,
           ) ??
           {};
-      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      final safeResponse =
+          OcrDiagnosticSnapshot.sanitizeResponse(
             resp,
             excludedValues: credentialValues,
           ) ??
@@ -244,69 +256,83 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
 
     // 1. Request URL
     if (req.containsKey('url') && req['url'] != null) {
-      sections.add(_DataSection(
-        id: 'request_url',
-        label: l10n.chatErrorDetailRequestUrl,
-        icon: Icons.link,
-        value: req['url'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_url',
+          label: l10n.chatErrorDetailRequestUrl,
+          icon: Icons.link,
+          value: req['url'],
+        ),
+      );
     }
 
     // 2. Request Headers
     if (req.containsKey('headers') && req['headers'] != null) {
-      sections.add(_DataSection(
-        id: 'request_headers',
-        label: l10n.chatErrorDetailRequestHeaders,
-        icon: Icons.code,
-        value: req['headers'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_headers',
+          label: l10n.chatErrorDetailRequestHeaders,
+          icon: Icons.code,
+          value: req['headers'],
+        ),
+      );
     }
 
     // 3. Request Body
     if (req.containsKey('body') && req['body'] != null) {
-      sections.add(_DataSection(
-        id: 'request_body',
-        label: l10n.chatErrorDetailRequestBody,
-        icon: Icons.code,
-        value: req['body'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_body',
+          label: l10n.chatErrorDetailRequestBody,
+          icon: Icons.code,
+          value: req['body'],
+        ),
+      );
     }
 
     // 4. Status Code
     if (resp.containsKey('statusCode') && resp['statusCode'] != null) {
-      sections.add(_DataSection(
-        id: 'status_code',
-        label: l10n.chatErrorDetailStatusCode,
-        icon: Icons.info_outline,
-        value: resp['statusCode'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'status_code',
+          label: l10n.chatErrorDetailStatusCode,
+          icon: Icons.info_outline,
+          value: resp['statusCode'],
+        ),
+      );
     }
 
     // 5. Response Headers
     if (resp.containsKey('headers') && resp['headers'] != null) {
-      sections.add(_DataSection(
-        id: 'response_headers',
-        label: l10n.chatErrorDetailResponseHeaders,
-        icon: Icons.code,
-        value: resp['headers'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_headers',
+          label: l10n.chatErrorDetailResponseHeaders,
+          icon: Icons.code,
+          value: resp['headers'],
+        ),
+      );
     }
 
     // 6. Response Body — check both 'data' (HTTP success) and 'error' (network error)
     if (resp.containsKey('data') && resp['data'] != null) {
-      sections.add(_DataSection(
-        id: 'response_body',
-        label: l10n.chatErrorDetailResponseBody,
-        icon: Icons.code,
-        value: resp['data'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_body',
+          label: l10n.chatErrorDetailResponseBody,
+          icon: Icons.code,
+          value: resp['data'],
+        ),
+      );
     } else if (resp.containsKey('error') && resp['error'] != null) {
-      sections.add(_DataSection(
-        id: 'response_body',
-        label: l10n.chatErrorDetailResponseBody,
-        icon: Icons.code,
-        value: resp['error'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_body',
+          label: l10n.chatErrorDetailResponseBody,
+          icon: Icons.code,
+          value: resp['error'],
+        ),
+      );
     }
 
     return sections;
@@ -346,8 +372,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               section.label,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
-            trailing:
-                Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+            trailing: Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: cs.onSurfaceVariant,
+            ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             onTap: () {
               setState(() {

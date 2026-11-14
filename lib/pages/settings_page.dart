@@ -25,6 +25,8 @@ import 'browser_cookies_page.dart';
 import 'log_viewer_page.dart';
 import 'theme_display_settings_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 part 'settings_page_theme_task.dart';
 part 'settings_page_provider_system.dart';
 part 'settings_page_context_management.dart';
@@ -52,7 +54,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final strings = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.settingsPageTitle),
+        title: ConstrainedText(
+          strings.settingsPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(

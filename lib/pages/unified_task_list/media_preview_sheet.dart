@@ -13,6 +13,8 @@ import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 const _audioPreviewExtensions = {
   'oga',
   'mp3',
@@ -96,28 +98,28 @@ class MediaPreviewSheet extends ConsumerStatefulWidget {
 
 class _MediaPreviewError {
   const _MediaPreviewError.unsupportedFormat()
-      : kind = _MediaPreviewErrorKind.unsupportedFormat,
-        detail = null;
+    : kind = _MediaPreviewErrorKind.unsupportedFormat,
+      detail = null;
 
   const _MediaPreviewError.loadFailed(String error)
-      : kind = _MediaPreviewErrorKind.loadFailed,
-        detail = error;
+    : kind = _MediaPreviewErrorKind.loadFailed,
+      detail = error;
 
   const _MediaPreviewError.playbackFailed(String error)
-      : kind = _MediaPreviewErrorKind.playbackFailed,
-        detail = error;
+    : kind = _MediaPreviewErrorKind.playbackFailed,
+      detail = error;
 
   final _MediaPreviewErrorKind kind;
   final String? detail;
 
   String localizedMessage(AppLocalizations strings) => switch (kind) {
-        _MediaPreviewErrorKind.unsupportedFormat =>
-          strings.unifiedTaskFormatUnsupported,
-        _MediaPreviewErrorKind.loadFailed =>
-          strings.unifiedTaskLoadFailed(detail!),
-        _MediaPreviewErrorKind.playbackFailed =>
-          strings.unifiedTaskPlaybackFailed(detail!),
-      };
+    _MediaPreviewErrorKind.unsupportedFormat =>
+      strings.unifiedTaskFormatUnsupported,
+    _MediaPreviewErrorKind.loadFailed => strings.unifiedTaskLoadFailed(detail!),
+    _MediaPreviewErrorKind.playbackFailed => strings.unifiedTaskPlaybackFailed(
+      detail!,
+    ),
+  };
 }
 
 enum _MediaPreviewErrorKind { unsupportedFormat, loadFailed, playbackFailed }
@@ -403,7 +405,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
+            child: ConstrainedText(
               widget.taskTitle,
               style: Theme.of(context).textTheme.titleMedium,
               maxLines: 1,
@@ -474,23 +476,23 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
               Text(
                 _formatSize(widget.resource.size),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
             const SizedBox(height: 20),
             Slider(
               value: _audioDuration.inMilliseconds > 0
                   ? (_audioPosition.inMilliseconds /
-                          _audioDuration.inMilliseconds)
-                      .clamp(0.0, 1.0)
-                      .toDouble()
+                            _audioDuration.inMilliseconds)
+                        .clamp(0.0, 1.0)
+                        .toDouble()
                   : 0.0,
               onChanged: _audioDuration > Duration.zero
                   ? (value) {
                       final position = Duration(
-                        milliseconds:
-                            (value * _audioDuration.inMilliseconds).round(),
+                        milliseconds: (value * _audioDuration.inMilliseconds)
+                            .round(),
                       );
                       _seekAudio(position);
                     }

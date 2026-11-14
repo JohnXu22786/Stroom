@@ -3,7 +3,10 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart'
     show CustomParam, ReasoningParam, findEffortParam;
+
 import 'setting_panels_shared.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // Model Panel
@@ -80,8 +83,11 @@ void showModelPanel({
                           color: Colors.teal.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.smart_toy_outlined,
-                            size: 18, color: Colors.teal),
+                        child: const Icon(
+                          Icons.smart_toy_outlined,
+                          size: 18,
+                          color: Colors.teal,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -121,9 +127,10 @@ void showModelPanel({
                           return AnimatedBuilder(
                             animation: animation,
                             builder: (context, child) {
-                              final elevation = Tween<double>(begin: 0, end: 4)
-                                  .animate(animation)
-                                  .value;
+                              final elevation = Tween<double>(
+                                begin: 0,
+                                end: 4,
+                              ).animate(animation).value;
                               return Material(
                                 elevation: elevation,
                                 color: Colors.transparent,
@@ -144,16 +151,18 @@ void showModelPanel({
                               elevation: 0,
                               color: isSelected
                                   ? cs.primaryContainer
-                                  : cs.surfaceContainerHighest
-                                      .withValues(alpha: 0.3),
+                                  : cs.surfaceContainerHighest.withValues(
+                                      alpha: 0.3,
+                                    ),
                               child: ListTile(
                                 dense: true,
                                 // 与工具面板的开关行一致：M3 ListTile 默认
                                 // contentPadding 为 start 16 / end 24，改为
                                 // 对称 16，使拖动手柄/勾选图标与文字到边缘
                                 // 的距离一致。
-                                contentPadding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
                                 leading: ReorderableDragStartListener(
                                   index: i,
                                   child: Icon(
@@ -173,8 +182,11 @@ void showModelPanel({
                                   ),
                                 ),
                                 trailing: isSelected
-                                    ? Icon(Icons.check,
-                                        size: 18, color: cs.primary)
+                                    ? Icon(
+                                        Icons.check,
+                                        size: 18,
+                                        color: cs.primary,
+                                      )
                                     : null,
                                 onTap: () {
                                   setState(() => localSelectedIndex = i);
@@ -247,8 +259,11 @@ void showToolsPanel({
                           color: cs.tertiary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(Icons.build_outlined,
-                            size: 18, color: cs.tertiary),
+                        child: Icon(
+                          Icons.build_outlined,
+                          size: 18,
+                          color: cs.tertiary,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -281,13 +296,15 @@ void showToolsPanel({
                         itemCount: tools.length,
                         itemBuilder: (context, index) {
                           final tool = tools[index];
-                          final isEnabled =
-                              localEnabledTools.contains(tool.name);
+                          final isEnabled = localEnabledTools.contains(
+                            tool.name,
+                          );
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Material(
-                              color: cs.surfaceContainerHighest
-                                  .withValues(alpha: 0.3),
+                              color: cs.surfaceContainerHighest.withValues(
+                                alpha: 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                               child: SwitchListTile(
                                 dense: true,
@@ -295,8 +312,9 @@ void showToolsPanel({
                                 // start 16 / end 24，导致开关比文字更远离
                                 // 边缘。改为对称 16，与推理/自定义参数面板
                                 // 的开关行（horizontal 16）保持一致。
-                                contentPadding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
                                 value: isEnabled,
                                 onChanged: (enabled) {
                                   setState(() {
@@ -318,7 +336,7 @@ void showToolsPanel({
                                   ),
                                 ),
                                 subtitle: tool.description.isNotEmpty
-                                    ? Text(
+                                    ? ConstrainedText(
                                         tool.description,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -376,7 +394,7 @@ void showReasoningPanel({
   required ValueChanged<bool> onReasoningToggle,
   required ValueChanged<bool> onReasoningEffortToggle,
   required void Function(String paramName, String value)
-      onReasoningParamChanged,
+  onReasoningParamChanged,
 }) {
   var localEnabled = reasoningEnabled;
   var localEffortEnabled = reasoningEffortEnabled;
@@ -388,8 +406,9 @@ void showReasoningPanel({
 
   // The global reasoning switch controls the configured reasoning toggle,
   // so it is available only when that toggle has a complete configuration.
-  final hasReasoningToggle =
-      reasoningParams.any((p) => p.isReasoningToggle && p.isFilledToggle);
+  final hasReasoningToggle = reasoningParams.any(
+    (p) => p.isReasoningToggle && p.isFilledToggle,
+  );
   // Other controls still use their own usable parameter configuration.
   final hasParams = reasoningParams.any((p) => p.isUsable);
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
@@ -436,8 +455,11 @@ void showReasoningPanel({
                           color: Colors.purple.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.psychology_outlined,
-                            size: 18, color: Colors.purple),
+                        child: const Icon(
+                          Icons.psychology_outlined,
+                          size: 18,
+                          color: Colors.purple,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -459,12 +481,15 @@ void showReasoningPanel({
                           // ── Section 1: Reasoning toggle ──
                           Container(
                             decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest
-                                  .withValues(alpha: 0.5),
+                              color: cs.surfaceContainerHighest.withValues(
+                                alpha: 0.5,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 4),
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
                             child: Row(
                               children: [
                                 Expanded(
@@ -499,8 +524,9 @@ void showReasoningPanel({
                                     .chatReasoningNotConfigured,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
                               ),
                             ),
@@ -512,12 +538,15 @@ void showReasoningPanel({
                           const SizedBox(height: 12),
                           Container(
                             decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest
-                                  .withValues(alpha: 0.5),
+                              color: cs.surfaceContainerHighest.withValues(
+                                alpha: 0.5,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 4),
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
                             child: Row(
                               children: [
                                 Expanded(
@@ -537,7 +566,8 @@ void showReasoningPanel({
                                   onChanged: effortUsable
                                       ? (value) {
                                           setState(
-                                              () => localEffortEnabled = value);
+                                            () => localEffortEnabled = value,
+                                          );
                                           onReasoningEffortToggle(value);
                                         }
                                       : null,
@@ -553,8 +583,9 @@ void showReasoningPanel({
                                     .chatReasoningEffortNotConfigured,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
                               ),
                             ),
@@ -571,8 +602,9 @@ void showReasoningPanel({
                                     .chatParameterNoOptions,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
                               ),
                             )
@@ -587,9 +619,9 @@ void showReasoningPanel({
                               children: effortParam.options.map((option) {
                                 final currentValue =
                                     localSelections[effortParam.paramName] ??
-                                        (effortParam.options.isNotEmpty
-                                            ? effortParam.options.first
-                                            : '');
+                                    (effortParam.options.isNotEmpty
+                                        ? effortParam.options.first
+                                        : '');
                                 final isSelected = currentValue == option;
                                 return _OptionChip(
                                   label: option,
@@ -600,7 +632,9 @@ void showReasoningPanel({
                                           option;
                                     });
                                     onReasoningParamChanged(
-                                        effortParam.paramName, option);
+                                      effortParam.paramName,
+                                      option,
+                                    );
                                   },
                                 );
                               }).toList(),
@@ -621,8 +655,9 @@ void showReasoningPanel({
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: cs.onSurfaceVariant
-                                        .withValues(alpha: 0.6),
+                                    color: cs.onSurfaceVariant.withValues(
+                                      alpha: 0.6,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -653,18 +688,20 @@ void showCustomReasoningParamsPanel({
   required Map<String, String> reasoningParamSelections,
   required List<ReasoningParam> reasoningParams,
   required void Function(String paramName, String value)
-      onReasoningParamChanged,
+  onReasoningParamChanged,
   required void Function(ReasoningParam param, bool enabled)
-      onCustomParamToggle,
+  onCustomParamToggle,
   List<CustomParam> configuredCustomParams = const [],
   Map<String, String> configuredCustomParamSelections = const {},
   void Function(String paramName, String value)? onConfiguredCustomParamChanged,
   void Function(CustomParam param, bool enabled)? onConfiguredCustomParamToggle,
 }) {
-  var localReasoningSelections =
-      Map<String, String>.from(reasoningParamSelections);
-  var localConfiguredSelections =
-      Map<String, String>.from(configuredCustomParamSelections);
+  var localReasoningSelections = Map<String, String>.from(
+    reasoningParamSelections,
+  );
+  var localConfiguredSelections = Map<String, String>.from(
+    configuredCustomParamSelections,
+  );
   var localReasoningEnabled = reasoningEnabled;
 
   // Non-toggle, non-effort params shown with switch + options.
@@ -684,15 +721,15 @@ void showCustomReasoningParamsPanel({
       paramName: param.paramName,
       options: param.type == 'json'
           ? param.defaultValue.trim().isNotEmpty
-              ? [param.defaultValue]
-              : const []
+                ? [param.defaultValue]
+                : const []
           : param.optionOrder.isNotEmpty
-              ? param.optionOrder
-              : param.options.isNotEmpty
-                  ? param.options
-                  : param.defaultValue.trim().isNotEmpty
-                      ? [param.defaultValue]
-                      : const [],
+          ? param.optionOrder
+          : param.options.isNotEmpty
+          ? param.options
+          : param.defaultValue.trim().isNotEmpty
+          ? [param.defaultValue]
+          : const [],
       type: param.type,
     );
     configuredByRow[row] = param;
@@ -738,8 +775,11 @@ void showCustomReasoningParamsPanel({
                           color: Colors.blue.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.tune,
-                            size: 18, color: Colors.blue),
+                        child: const Icon(
+                          Icons.tune,
+                          size: 18,
+                          color: Colors.blue,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -780,7 +820,8 @@ void showCustomReasoningParamsPanel({
                           final selections = configuredParam != null
                               ? localConfiguredSelections
                               : localReasoningSelections;
-                          final currentValue = selections[param.paramName] ??
+                          final currentValue =
+                              selections[param.paramName] ??
                               (param.options.isNotEmpty
                                   ? param.options.first
                                   : '');
@@ -797,7 +838,9 @@ void showCustomReasoningParamsPanel({
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 4),
+                                    horizontal: 16,
+                                    vertical: 4,
+                                  ),
                                   child: Row(
                                     children: [
                                       Expanded(
@@ -831,7 +874,8 @@ void showCustomReasoningParamsPanel({
                                           // 不依赖参数对象上可变的 enabled 标记。
                                           // boolean 类型参数：开 = 'true'，
                                           // 关 = 'false'（无选项也提供开关）。
-                                          value: (selections[param.paramName]
+                                          value:
+                                              (selections[param.paramName]
                                                       ?.isNotEmpty ??
                                                   false) &&
                                               canEdit,
@@ -841,7 +885,8 @@ void showCustomReasoningParamsPanel({
                                                   setState(() {
                                                     if (value) {
                                                       if (param
-                                                          .options.isNotEmpty) {
+                                                          .options
+                                                          .isNotEmpty) {
                                                         final selected =
                                                             selections[param
                                                                 .paramName];
@@ -849,17 +894,21 @@ void showCustomReasoningParamsPanel({
                                                                 null &&
                                                             !param.options
                                                                 .contains(
-                                                                    selected)) {
+                                                                  selected,
+                                                                )) {
                                                           selections[param
                                                                   .paramName] =
-                                                              param.options
+                                                              param
+                                                                  .options
                                                                   .first;
                                                         } else {
-                                                          selections.putIfAbsent(
-                                                              param.paramName,
-                                                              () => param
-                                                                  .options
-                                                                  .first);
+                                                          selections
+                                                              .putIfAbsent(
+                                                                param.paramName,
+                                                                () => param
+                                                                    .options
+                                                                    .first,
+                                                              );
                                                         }
                                                       } else if (param.type ==
                                                           'boolean') {
@@ -873,7 +922,8 @@ void showCustomReasoningParamsPanel({
                                                       }
                                                     } else {
                                                       selections.remove(
-                                                          param.paramName);
+                                                        param.paramName,
+                                                      );
                                                     }
                                                   });
                                                   // Sync the selected-value map
@@ -882,11 +932,15 @@ void showCustomReasoningParamsPanel({
                                                   // switch state.
                                                   if (configuredParam != null) {
                                                     onConfiguredCustomParamToggle
-                                                        ?.call(configuredParam,
-                                                            value);
+                                                        ?.call(
+                                                          configuredParam,
+                                                          value,
+                                                        );
                                                   } else {
                                                     onCustomParamToggle(
-                                                        param, value);
+                                                      param,
+                                                      value,
+                                                    );
                                                   }
                                                 }
                                               : null,
@@ -919,7 +973,9 @@ void showCustomReasoningParamsPanel({
                                                 ?.call(param.paramName, option);
                                           } else {
                                             onReasoningParamChanged(
-                                                param.paramName, option);
+                                              param.paramName,
+                                              option,
+                                            );
                                           }
                                         },
                                       );

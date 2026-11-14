@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/natural_sort.dart';
 
+import 'constrained_text.dart';
+
 /// 文件夹选择器对话框
 ///
 /// 单击选中文件夹，双击进入查看子文件夹；支持在子文件夹内
@@ -291,16 +293,15 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                 if (widget.fileNameController != null) ...[
                   Text(
                     AppLocalizations.of(context)!.folderPickerFileName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
+                    style: Theme.of(context).textTheme.labelMedium
                         ?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: widget.fileNameController,
                     decoration: InputDecoration(
-                      hintText: widget.fileNameHintText ??
+                      hintText:
+                          widget.fileNameHintText ??
                           AppLocalizations.of(context)!
                               .folderPickerFileNameHint,
                       border: OutlineInputBorder(
@@ -327,17 +328,16 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                           icon: const Icon(Icons.arrow_back, size: 20),
                           onPressed: _navigateBack,
                           visualDensity: VisualDensity.compact,
-                          tooltip:
-                              AppLocalizations.of(context)!.folderPickerBack,
+                          tooltip: AppLocalizations.of(context)!
+                              .folderPickerBack,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!
                                 .folderPickerPath(_currentPath),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            maxLines: 1,
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: cs.onSurfaceVariant),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -384,7 +384,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                     _isInSubFolder
                         ? AppLocalizations.of(context)!.folderPickerSubfolders
                         : AppLocalizations.of(context)!
-                            .folderPickerExistingFolders,
+                              .folderPickerExistingFolders,
                   ),
                   const SizedBox(height: 4),
                   ConstrainedBox(
@@ -421,8 +421,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         Icons.create_new_folder_outlined,
                         size: 18,
                       ),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.folderPickerCreateNew,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     )
                   else
@@ -489,14 +491,22 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             // 创建进行中禁用：避免在途创建时直接关闭对话框，
             // 导致文件夹已创建但调用方收到「取消」
             onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-            child: Text(AppLocalizations.of(context)!.folderPickerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.folderPickerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             // 创建进行中禁用：避免在途创建时弹出旧选择
             onPressed: _isCreating
                 ? null
                 : () => Navigator.of(context).pop(_selectedFolder),
-            child: Text(AppLocalizations.of(context)!.folderPickerConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.folderPickerConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -507,9 +517,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   Widget _sectionLabel(BuildContext context, String text) {
     return Text(
       text,
-      style: Theme.of(context)
-          .textTheme
-          .labelMedium
+      style: Theme.of(context).textTheme.labelMedium
           ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
@@ -534,7 +542,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             setState(() => _selectedFolder = folder);
 
             // 再检测是否构成双击（在超时内再次点击同一文件夹）
-            final isDoubleTap = _lastTappedFolder == folder &&
+            final isDoubleTap =
+                _lastTappedFolder == folder &&
                 _doubleTapTimer != null &&
                 _doubleTapTimer!.isActive;
 
@@ -563,16 +572,18 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                 Icon(
                   icon,
                   size: 20,
-                  color:
-                      isSelected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                  color: isSelected
+                      ? cs.onPrimaryContainer
+                      : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     displayName,
                     style: TextStyle(
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
                     ),
                   ),

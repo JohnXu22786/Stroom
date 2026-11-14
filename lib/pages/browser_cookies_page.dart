@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/browser_cookie_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// Management page for browser cookies and persisted browsing data.
 ///
 /// Allows users to:
@@ -60,17 +62,29 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.browserCookiesConfirmClear),
+        title: ConstrainedText(
+          l10n.browserCookiesConfirmClear,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.browserCookiesConfirmClearAll),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.browserCookiesCancel),
+            child: ConstrainedText(
+              l10n.browserCookiesCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(l10n.browserCookiesClear),
+            child: ConstrainedText(
+              l10n.browserCookiesClear,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -106,17 +120,29 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.browserCookiesConfirmClear),
+        title: ConstrainedText(
+          l10n.browserCookiesConfirmClear,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.browserCookiesClearDomainConfirm(domain)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.browserCookiesCancel),
+            child: ConstrainedText(
+              l10n.browserCookiesCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(l10n.browserCookiesClear),
+            child: ConstrainedText(
+              l10n.browserCookiesClear,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -147,7 +173,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.browserCookiesPageTitle),
+        title: ConstrainedText(
+          l10n.browserCookiesPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: RefreshIndicator(
@@ -205,8 +235,8 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
         child: _buildActionTile(
           leading: const Icon(Icons.delete_sweep, color: Colors.red),
           title: AppLocalizations.of(context)!.browserCookiesClearAllTitle,
-          subtitle:
-              AppLocalizations.of(context)!.browserCookiesClearAllDescription,
+          subtitle: AppLocalizations.of(context)!
+              .browserCookiesClearAllDescription,
           onTap: _isClearing ? null : _clearAllCookies,
           trailing: _isClearing
               ? const SizedBox(
@@ -290,8 +320,10 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
           padding: const EdgeInsets.only(bottom: 8, left: 4),
           child: Text(
             AppLocalizations.of(context)!.browserCookiesStoredCount(
-              _cookiesByDomain.values
-                  .fold<int>(0, (sum, list) => sum + list.length),
+              _cookiesByDomain.values.fold<int>(
+                0,
+                (sum, list) => sum + list.length,
+              ),
             ),
             style: TextStyle(
               fontSize: 16,
@@ -307,8 +339,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     );
   }
 
-  Widget _buildDomainCard(String domain, List<Map<String, dynamic>> cookies,
-      ColorScheme colorScheme) {
+  Widget _buildDomainCard(
+    String domain,
+    List<Map<String, dynamic>> cookies,
+    ColorScheme colorScheme,
+  ) {
     final totalCookies = cookies.length;
 
     return Card(
@@ -355,7 +390,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
+                          ConstrainedText(
                             _maskValue(
                               cookie['value'] as String? ?? '',
                               AppLocalizations.of(context)!
@@ -378,8 +413,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                           cookie['path'] as String? ?? '',
                           style: TextStyle(
                             fontSize: 11,
-                            color: colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.6),
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ),
@@ -409,7 +445,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Future<void> _deleteSingleCookie(
-      String domain, Map<String, dynamic> cookie) async {
+    String domain,
+    Map<String, dynamic> cookie,
+  ) async {
     final l10n = AppLocalizations.of(context)!;
     final name = cookie['name'] as String? ?? '';
     _cookieLoadGeneration++;

@@ -125,7 +125,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               .providerOptionIndexLabel((rowIndex + 1).toString()),
           hintText: editable
               ? AppLocalizations.of(context)!
-                  .providerOptionExampleHint('low, medium, high')
+                    .providerOptionExampleHint('low, medium, high')
               : AppLocalizations.of(context)!.providerToggleRequiredHint,
           border: const OutlineInputBorder(),
           isDense: true,
@@ -274,14 +274,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Center(
         child: TextButton.icon(
-          icon: Icon(
-            Icons.add,
-            size: 16,
-            color: null,
-          ),
-          label: Text(
+          icon: Icon(Icons.add, size: 16, color: null),
+          label: ConstrainedText(
             AppLocalizations.of(context)!.providerAddReasoningParam,
             style: Theme.of(context).textTheme.labelLarge,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addReasoningParam,
         ),
@@ -299,9 +297,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         child: Center(
           child: TextButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.providerAddReasoningToggle,
               style: Theme.of(context).textTheme.labelLarge,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             onPressed: () {
               setState(() {
@@ -367,7 +367,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 isDense: true,
                 errorText: isDuplicate
                     ? AppLocalizations.of(context)!
-                        .providerParamAlreadyExists(toggle.paramName.trim())
+                          .providerParamAlreadyExists(toggle.paramName.trim())
                     : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
@@ -459,14 +459,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: TextButton.icon(
-          icon: Icon(
-            Icons.add,
-            size: 16,
-            color: null,
-          ),
-          label: Text(
+          icon: Icon(Icons.add, size: 16, color: null),
+          label: ConstrainedText(
             AppLocalizations.of(context)!.providerAddReasoningEffort,
             style: Theme.of(context).textTheme.labelLarge,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addEffortReasoningParam,
         ),
@@ -526,7 +524,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 isDense: true,
                 errorText: isDuplicate
                     ? AppLocalizations.of(context)!
-                        .providerParamAlreadyExists(effort.paramName.trim())
+                          .providerParamAlreadyExists(effort.paramName.trim())
                     : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
@@ -548,22 +546,24 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else if (effort.type == 'json')
               TextFormField(
-                initialValue:
-                    effort.options.isNotEmpty ? effort.options.first : '',
+                initialValue: effort.options.isNotEmpty
+                    ? effort.options.first
+                    : '',
                 readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.providerJsonValueLabel,
-                  hintText:
-                      AppLocalizations.of(context)!.providerOptionExampleHint(
-                    '{"thinking": {"budget": 1024}}',
-                  ),
+                  labelText: AppLocalizations.of(context)!
+                      .providerJsonValueLabel,
+                  hintText: AppLocalizations.of(context)!
+                      .providerOptionExampleHint(
+                        '{"thinking": {"budget": 1024}}',
+                      ),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
-                  errorText: _jsonValueError(
-                    effort.options.isNotEmpty ? effort.options.first : '',
-                  )
+                  errorText:
+                      _jsonValueError(
+                        effort.options.isNotEmpty ? effort.options.first : '',
+                      )
                       ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
@@ -594,20 +594,17 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   from,
                   to,
                 ),
-                itemBuilder: (context, j, value) => _buildOptionRow(
-                  j,
-                  value,
-                  effort,
-                  cs,
-                  editable: true,
-                ),
+                itemBuilder: (context, j, value) =>
+                    _buildOptionRow(j, value, effort, cs, editable: true),
               ),
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.providerAddOption,
                   style: Theme.of(context).textTheme.labelLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () =>
                     _addOptionToParam(_reasoningParams.indexOf(effort)),
@@ -636,13 +633,17 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ? param.type
               : 'string',
           isDense: true,
+          isExpanded: true,
           items: ParamType.values
               .map(
                 (t) => DropdownMenuItem(
                   value: t.value,
-                  child: Text(
-                      localizedParamTypeLabel(AppLocalizations.of(context)!, t),
-                      style: const TextStyle(fontSize: 12)),
+                  child: ConstrainedText(
+                    localizedParamTypeLabel(AppLocalizations.of(context)!, t),
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               )
               .toList(),
@@ -687,14 +688,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       isDense: true,
                       hintText: AppLocalizations.of(
                         context,
-                      )!
-                          .providerParamNameHint(
-                              'thinking.type, budget_tokens'),
+                      )!.providerParamNameHint('thinking.type, budget_tokens'),
                       errorText: isDuplicate
                           ? AppLocalizations.of(context)!
-                              .providerParamAlreadyExists(
-                              param.paramName.trim(),
-                            )
+                                .providerParamAlreadyExists(
+                                  param.paramName.trim(),
+                                )
                           : null,
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
@@ -742,21 +741,23 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else if (param.type == 'json')
               TextFormField(
-                initialValue:
-                    param.options.isNotEmpty ? param.options.first : '',
+                initialValue: param.options.isNotEmpty
+                    ? param.options.first
+                    : '',
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.providerJsonValueLabel,
-                  hintText:
-                      AppLocalizations.of(context)!.providerOptionExampleHint(
-                    '{"thinking": {"budget": 1024}}',
-                  ),
+                  labelText: AppLocalizations.of(context)!
+                      .providerJsonValueLabel,
+                  hintText: AppLocalizations.of(context)!
+                      .providerOptionExampleHint(
+                        '{"thinking": {"budget": 1024}}',
+                      ),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
-                  errorText: _jsonValueError(
-                    param.options.isNotEmpty ? param.options.first : '',
-                  )
+                  errorText:
+                      _jsonValueError(
+                        param.options.isNotEmpty ? param.options.first : '',
+                      )
                       ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
@@ -790,9 +791,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.providerAddOption,
                   style: Theme.of(context).textTheme.labelLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () => _addOptionToParam(actualIndex),
               ),

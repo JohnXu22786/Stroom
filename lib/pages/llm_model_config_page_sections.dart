@@ -133,17 +133,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       const SizedBox(height: 8),
       Center(
         child: TextButton.icon(
-          icon: Icon(
-            Icons.add,
-            size: 16,
-            color: null,
-          ),
-          label: Text(
+          icon: Icon(Icons.add, size: 16, color: null),
+          label: ConstrainedText(
             AppLocalizations.of(context)!.llmAddReasoningParam,
-            style: TextStyle(
-              fontSize: 13,
-              color: null,
-            ),
+            style: TextStyle(fontSize: 13, color: null),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addReasoningParam,
         ),
@@ -196,6 +191,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                   child: DropdownButtonFormField<String>(
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
+                    isExpanded: true,
                     initialValue: _endpointType,
                     decoration: InputDecoration(
                       labelText: AppLocalizations.of(context)!
@@ -206,14 +202,18 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                     items: [
                       DropdownMenuItem(
                         value: 'openai',
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.llmEndpointOpenAi,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       DropdownMenuItem(
                         value: 'anthropic',
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.llmEndpointAnthropic,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -326,7 +326,11 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
           const Spacer(),
           TextButton.icon(
             icon: const Icon(Icons.add, size: 18),
-            label: Text(AppLocalizations.of(context)!.assistantAddParameter),
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.assistantAddParameter,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             onPressed: _addCustomParam,
           ),
         ],
@@ -352,7 +356,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         ...List.generate(_customParams.length, (i) {
           final param = _customParams[i];
           final name = param.paramName.trim();
-          final isDuplicate = name.isNotEmpty &&
+          final isDuplicate =
+              name.isNotEmpty &&
               (_customParams.indexWhere((p) => p.paramName.trim() == name) !=
                       i ||
                   // 与推理参数重名（含继承自供应商的）同样拦截：
@@ -380,14 +385,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             isDense: true,
                             errorText: hasInvalidName
                                 ? AppLocalizations.of(context)!
-                                    .assistantParameterNameInvalid
+                                      .assistantParameterNameInvalid
                                 : isDuplicate
-                                    ? AppLocalizations.of(
-                                        context,
-                                      )!
-                                        .modelParamDuplicate(
-                                            param.paramName.trim())
-                                    : null,
+                                ? AppLocalizations.of(
+                                    context,
+                                  )!.modelParamDuplicate(param.paramName.trim())
+                                : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
                           onChanged: (v) {
@@ -411,14 +414,19 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             borderRadius: StroomMenuStyle.borderRadius,
                             value: param.type,
                             isDense: true,
+                            isExpanded: true,
                             items: ParamType.values
                                 .map(
                                   (t) => DropdownMenuItem(
                                     value: t.value,
-                                    child: Text(
+                                    child: ConstrainedText(
                                       localizedParamTypeLabel(
-                                          AppLocalizations.of(context)!, t),
+                                        AppLocalizations.of(context)!,
+                                        t,
+                                      ),
                                       style: const TextStyle(fontSize: 13),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 )
@@ -464,8 +472,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             size: 20,
                           ),
                           onPressed: () => _removeCustomParam(i),
-                          tooltip:
-                              AppLocalizations.of(context)!.modelParamDelete,
+                          tooltip: AppLocalizations.of(context)!
+                              .modelParamDelete,
                         ),
                     ],
                   ),
@@ -494,8 +502,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                               labelText: AppLocalizations.of(context)!
                                   .modelParamDefaultValue,
                               hintText: localizedParamTypeDefaultValueHint(
-                                  AppLocalizations.of(context)!,
-                                  param.paramType),
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
                               border: const OutlineInputBorder(),
                               errorBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
@@ -522,15 +531,16 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.fullscreen, size: 20),
-                          tooltip:
-                              AppLocalizations.of(context)!.chatFullscreenEdit,
+                          tooltip: AppLocalizations.of(context)!
+                              .chatFullscreenEdit,
                           onPressed: () {
                             showJsonValueEditorDialog(
                               context,
                               initialValue: param.defaultValue,
                               hintText: localizedParamTypeDefaultValueHint(
-                                  AppLocalizations.of(context)!,
-                                  param.paramType),
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
                               type: param.type,
                               onSave: (result) {
                                 param.defaultValue = result;

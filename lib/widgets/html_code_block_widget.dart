@@ -6,6 +6,8 @@ import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
 
 import 'code_block_source_widget.dart';
 
+import 'constrained_text.dart';
+
 /// Widget shown for ```html fenced code blocks inside a chat message.
 ///
 /// The default preview is a compact CARD (not the raw code): it shows an
@@ -153,7 +155,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
+                child: ConstrainedText(
                   widget.language,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -172,7 +174,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
             // no (non-empty) title.
             if (title.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(
+              ConstrainedText(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -255,7 +257,12 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
+      label: ConstrainedText(
+        label,
+        style: const TextStyle(fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         minimumSize: Size.zero,

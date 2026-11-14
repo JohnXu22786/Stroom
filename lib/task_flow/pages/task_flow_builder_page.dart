@@ -37,11 +37,13 @@ import '../widgets/flow_block_card.dart';
 import 'task_flow_run_page.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 @visibleForTesting
 String taskFlowLaunchErrorMessage(Object error, AppLocalizations strings) =>
     error is FlowLaunchModelUnavailableException
-        ? strings.taskFlowUiModelUnavailable
-        : error.toString();
+    ? strings.taskFlowUiModelUnavailable
+    : error.toString();
 
 /// Unified page for editing AND launching a task flow.
 ///
@@ -82,10 +84,10 @@ class _CatCatchInputEntry {
   final TextEditingController secondController;
 
   _CatCatchInputEntry()
-      : urlController = TextEditingController(),
-        hourController = TextEditingController(),
-        minuteController = TextEditingController(),
-        secondController = TextEditingController();
+    : urlController = TextEditingController(),
+      hourController = TextEditingController(),
+      minuteController = TextEditingController(),
+      secondController = TextEditingController();
 
   void dispose() {
     urlController.dispose();
@@ -155,7 +157,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref.read(taskFlowListProvider).firstWhere(
+      final flow = ref
+          .read(taskFlowListProvider)
+          .firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );
@@ -290,18 +294,28 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.taskFlowUiDiscardTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.taskFlowUiDiscardTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.taskFlowUiDiscardBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.taskFlowUiContinueEditing,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.taskFlowUiDiscard,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -384,10 +398,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
+          title: ConstrainedText(
             _isEditing
                 ? AppLocalizations.of(context)!.taskFlowUiEditTitle
                 : AppLocalizations.of(context)!.taskFlowUiCreateTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           centerTitle: true,
           actions: [
@@ -399,7 +415,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             TextButton.icon(
               onPressed: _isSaving ? null : _saveFlow,
               icon: const Icon(Icons.save, size: 18),
-              label: Text(AppLocalizations.of(context)!.taskFlowUiSave),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.taskFlowUiSave,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -499,9 +519,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             ),
             maxLines: 2,
             minLines: 1,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -604,8 +623,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
 
     final notifier = ref.read(taskFlowListProvider.notifier);
-    final current =
-        _editingFlowId == null ? null : notifier.getFlow(_editingFlowId!);
+    final current = _editingFlowId == null
+        ? null
+        : notifier.getFlow(_editingFlowId!);
     final flow = TaskFlowDefinition(
       id: _editingFlowId,
       name: name,
@@ -671,7 +691,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (flowName.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(AppLocalizations.of(context)!.taskFlowUiTitle),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.taskFlowUiTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           centerTitle: true,
         ),
         body: Center(
@@ -685,7 +709,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiBack),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiBack,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -695,7 +723,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(flowName),
+        title: ConstrainedText(
+          flowName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           Padding(
@@ -762,9 +794,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             const SizedBox(height: 4),
             Text(
               _descController.text.trim(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ],
@@ -788,11 +819,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   bool get _isFileRunInput => const {
-        IOType.image,
-        IOType.audio,
-        IOType.video,
-        IOType.file,
-      }.contains(_runInputType);
+    IOType.image,
+    IOType.audio,
+    IOType.video,
+    IOType.file,
+  }.contains(_runInputType);
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
@@ -852,10 +883,15 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed:
-                      !_isStarting && _canStartFlow() ? _startFlow : null,
+                  onPressed: !_isStarting && _canStartFlow()
+                      ? _startFlow
+                      : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
-                  label: Text(AppLocalizations.of(context)!.taskFlowUiStart),
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiStart,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ),
@@ -885,8 +921,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               child: Text(
                 AppLocalizations.of(context)!.taskFlowUiNoInput,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                    ),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
               ),
             ),
           ),
@@ -898,7 +934,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             onPressed: () =>
                 setState(() => _catcatchInputs.add(_CatCatchInputEntry())),
             icon: const Icon(Icons.add_link, size: 18),
-            label: Text(AppLocalizations.of(context)!.taskFlowUiAddResource),
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.taskFlowUiAddResource,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
             ),
@@ -959,8 +999,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         _catcatchInputs.removeAt(index);
                       });
                     },
-                    tooltip:
-                        AppLocalizations.of(context)!.taskFlowUiDeleteInput,
+                    tooltip: AppLocalizations.of(context)!
+                        .taskFlowUiDeleteInput,
                     padding: EdgeInsets.zero,
                   ),
                 ),
@@ -1047,9 +1087,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   const SizedBox(width: 4),
                   Text(
                     AppLocalizations.of(context)!.taskFlowUiPreview,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   Text(
                     preview,
@@ -1133,20 +1172,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               isImage
                   ? Icons.image_outlined
                   : isAudio
-                      ? Icons.audiotrack
-                      : isFile
-                          ? Icons.insert_drive_file_outlined
-                          : Icons.videocam_outlined,
+                  ? Icons.audiotrack
+                  : isFile
+                  ? Icons.insert_drive_file_outlined
+                  : Icons.videocam_outlined,
               size: 16,
             ),
-            label: Text(
+            label: ConstrainedText(
               isImage
                   ? AppLocalizations.of(context)!.taskFlowUiSelectImages
                   : isAudio
-                      ? AppLocalizations.of(context)!.taskFlowUiSelectAudio
-                      : isFile
-                          ? AppLocalizations.of(context)!.taskFlowUiSelectFiles
-                          : AppLocalizations.of(context)!.taskFlowUiSelectVideo,
+                  ? AppLocalizations.of(context)!.taskFlowUiSelectAudio
+                  : isFile
+                  ? AppLocalizations.of(context)!.taskFlowUiSelectFiles
+                  : AppLocalizations.of(context)!.taskFlowUiSelectVideo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -1164,16 +1205,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     isImage
                         ? Icons.image
                         : isAudio
-                            ? Icons.audiotrack
-                            : isFile
-                                ? Icons.insert_drive_file
-                                : Icons.videocam,
+                        ? Icons.audiotrack
+                        : isFile
+                        ? Icons.insert_drive_file
+                        : Icons.videocam,
                     size: 16,
                     color: cs.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: ConstrainedText(
                       _inputDisplayNames[_mediaInputs[i]] ??
                           _fileName(_mediaInputs[i]),
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -1208,8 +1249,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                                       content: Text(
                                         AppLocalizations.of(context)!
                                             .taskFlowUiCleanupError(
-                                          error.toString(),
-                                        ),
+                                              error.toString(),
+                                            ),
                                       ),
                                     ),
                                   );
@@ -1341,10 +1382,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
+        title: ConstrainedText(
           def == null
               ? localizedBlockTypeName(block.typeKey, strings)
               : localizedBlockTypeLabel(def, strings),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -1365,11 +1408,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   def == null
                       ? '-'
                       : (block.followsDownstreamOutput
-                          ? strings.taskFlowOutputVideoAudioDownstream
-                          : localizedIoTypeDisplayLabel(
-                              block.outputTypeLabel,
-                              strings,
-                            )),
+                            ? strings.taskFlowOutputVideoAudioDownstream
+                            : localizedIoTypeDisplayLabel(
+                                block.outputTypeLabel,
+                                strings,
+                              )),
                 ),
                 style: TextStyle(fontSize: 14, color: cs.onSurface),
               ),
@@ -1381,8 +1424,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 ),
                 const SizedBox(height: 4),
                 ...block.params.entries.map((e) {
-                  final paramDef =
-                      def?.params.where((p) => p.key == e.key).firstOrNull;
+                  final paramDef = def?.params
+                      .where((p) => p.key == e.key)
+                      .firstOrNull;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
@@ -1390,10 +1434,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       children: [
                         Text(
                           '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: cs.primary,
-                                  ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: cs.primary),
                         ),
                         Expanded(
                           // Friendly display — raw ids (assistant uuids,
@@ -1406,12 +1448,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               strings: strings,
                               params: block.params,
                             ),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                         ),
                       ],
@@ -1425,7 +1463,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.taskFlowUiClose),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.taskFlowUiClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1554,8 +1596,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     // Images can be compressed by the chat pipeline; other documents use its
     // ordinary attachment limit. Check both before accumulating file bytes.
     Never tooLarge(int limit) => throw FormatException(
-          strings.taskFlowUiFileTooLarge(limit ~/ (1024 * 1024), file.name),
-        );
+      strings.taskFlowUiFileTooLarge(limit ~/ (1024 * 1024), file.name),
+    );
     bool isImage(List<int> header) =>
         flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==
         IOType.image;
@@ -1748,8 +1790,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         ? null
         : _blocks.where((item) => item.id == error.blockId).firstOrNull;
     final definition = block?.getDefinition();
-    final blockLabel =
-        definition == null ? '' : localizedBlockTypeLabel(definition, strings);
+    final blockLabel = definition == null
+        ? ''
+        : localizedBlockTypeLabel(definition, strings);
 
     switch (message) {
       case '任务流没有步骤，请先添加功能块':
@@ -1777,8 +1820,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (error.inputIndex != null) {
       final inputNumber = (error.inputIndex! + 1).toString();
       final separator = message.indexOf('：');
-      final detail =
-          separator < 0 ? message : message.substring(separator + 1).trim();
+      final detail = separator < 0
+          ? message
+          : message.substring(separator + 1).trim();
       if (detail == '文件不存在、为空或无法读取，请重新选择文件') {
         return strings.taskFlowValidationInputFileUnavailable(inputNumber);
       }
@@ -1806,8 +1850,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       if (detail == '文本附件不是有效的 UTF-8 编码，请转换后重试') {
         return strings.taskFlowValidationTextEncodingFailed(inputNumber);
       }
-      final typeMismatch =
-          RegExp(r'^文件实际类型为(.+)，需要(.+)，请重新选择文件$').firstMatch(detail);
+      final typeMismatch = RegExp(r'^文件实际类型为(.+)，需要(.+)，请重新选择文件$')
+          .firstMatch(detail);
       if (typeMismatch != null) {
         return strings.taskFlowValidationFileTypeMismatch(
           inputNumber,
@@ -1823,8 +1867,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           imageMime.group(1)!,
         );
       }
-      final audioMime =
-          RegExp(r'^助手对话不支持 (.+) 音频附件，请转换为 MP3、WAV 或 M4A$').firstMatch(detail);
+      final audioMime = RegExp(r'^助手对话不支持 (.+) 音频附件，请转换为 MP3、WAV 或 M4A$')
+          .firstMatch(detail);
       if (audioMime != null) {
         return strings.taskFlowValidationAudioMimeUnsupported(
           inputNumber,
@@ -1931,9 +1975,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return path != null && execNotifier.referencesInputStoragePath(path);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(taskFlowLaunchErrorMessage(
-                error, AppLocalizations.of(context)!))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              taskFlowLaunchErrorMessage(error, AppLocalizations.of(context)!),
+            ),
+          ),
+        );
       }
       return;
     } finally {
@@ -1953,7 +2001,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             inputs.length == 1
                 ? AppLocalizations.of(context)!.taskFlowUiQueuedOne
                 : AppLocalizations.of(context)!
-                    .taskFlowUiQueuedMany(inputs.length),
+                      .taskFlowUiQueuedMany(inputs.length),
           ),
           duration: const Duration(seconds: 2),
         ),

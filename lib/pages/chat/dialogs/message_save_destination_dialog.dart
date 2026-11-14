@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 enum MessageSaveDestination { appFiles, device }
 
 Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
@@ -9,7 +11,11 @@ Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
   return showDialog<MessageSaveDestination>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text(AppLocalizations.of(context)!.chatSaveMessage),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.chatSaveMessage,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       icon: const Icon(Icons.save_outlined),
       semanticLabel: AppLocalizations.of(context)!.chatChooseSaveLocation,
       content: Column(
@@ -20,7 +26,11 @@ Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
           const SizedBox(height: 12),
           FilledButton.icon(
             icon: const Icon(Icons.folder_outlined, size: 18),
-            label: Text(AppLocalizations.of(context)!.chatSaveAppFile),
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.chatSaveAppFile,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             onPressed: () =>
                 Navigator.of(ctx).pop(MessageSaveDestination.appFiles),
           ),
@@ -36,7 +46,11 @@ Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: Text(AppLocalizations.of(context)!.actionCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.actionCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),

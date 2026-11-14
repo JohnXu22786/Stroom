@@ -19,6 +19,8 @@ import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
 import 'task_utils.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// Card for a task flow execution in the unified task list.
 ///
 /// Watches the execution provider DIRECTLY (not via parent prop) so
@@ -46,7 +48,8 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   void initState() {
     super.initState();
     // A restored failed run has no status transition for ref.listen to catch.
-    final initialStatus = ref
+    final initialStatus =
+        ref
             .read(taskFlowExecutionsProvider)
             .where((execution) => execution.id == widget.execution.id)
             .firstOrNull
@@ -149,7 +152,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                               ),
                             ),
                             Flexible(
-                              child: Text(
+                              child: ConstrainedText(
                                 execution.flowName,
                                 style: TextStyle(
                                   fontSize: 14,
@@ -235,40 +238,40 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   Widget _flowStatusIcon(TaskFlowExecution execution, ColorScheme cs) {
     return switch (execution.status) {
       FlowExecutionStatus.running => SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary),
-        ),
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary),
+      ),
       FlowExecutionStatus.completed => const Icon(
-          Icons.check_circle,
-          size: 20,
-          color: Colors.green,
-        ),
+        Icons.check_circle,
+        size: 20,
+        color: Colors.green,
+      ),
       FlowExecutionStatus.failed => Icon(
-          Icons.error,
-          size: 20,
-          color: cs.error,
-        ),
+        Icons.error,
+        size: 20,
+        color: cs.error,
+      ),
       FlowExecutionStatus.paused => const Icon(
-          Icons.pause_circle,
-          size: 20,
-          color: Colors.orange,
-        ),
+        Icons.pause_circle,
+        size: 20,
+        color: Colors.orange,
+      ),
       FlowExecutionStatus.cancelled => Icon(
-          Icons.cancel_outlined,
-          size: 20,
-          color: cs.onSurfaceVariant,
-        ),
+        Icons.cancel_outlined,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
       FlowExecutionStatus.interrupted => const Icon(
-          Icons.warning_amber,
-          size: 20,
-          color: Colors.orange,
-        ),
+        Icons.warning_amber,
+        size: 20,
+        color: Colors.orange,
+      ),
       FlowExecutionStatus.waiting => Icon(
-          Icons.hourglass_empty,
-          size: 20,
-          color: cs.onSurfaceVariant,
-        ),
+        Icons.hourglass_empty,
+        size: 20,
+        color: cs.onSurfaceVariant,
+      ),
     };
   }
 
@@ -313,11 +316,13 @@ class _ExpandedContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
-    final restoreReady = ref.watch(taskFlowExecutionRestoreStatusProvider) ==
+    final restoreReady =
+        ref.watch(taskFlowExecutionRestoreStatusProvider) ==
         FlowExecutionRestoreStatus.ready;
     final executions = ref.watch(taskFlowExecutionsProvider);
     final execution = executions.where((e) => e.id == executionId).firstOrNull;
-    final hasBatchWork = execution != null &&
+    final hasBatchWork =
+        execution != null &&
         hasUnfinishedFlowBatchMember(execution, executions);
 
     final catcatchTasks = ref.watch(catcatchTasksProvider);
@@ -353,7 +358,11 @@ class _ExpandedContent extends ConsumerWidget {
                           .pauseExecution(executionId),
                     ),
                     icon: const Icon(Icons.pause, size: 18),
-                    label: Text(strings.taskFlowCardPause),
+                    label: ConstrainedText(
+                      strings.taskFlowCardPause,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 if (restoreReady && (execution?.canResume ?? false))
                   TextButton.icon(
@@ -364,10 +373,12 @@ class _ExpandedContent extends ConsumerWidget {
                           .resumeExecution(executionId),
                     ),
                     icon: const Icon(Icons.play_arrow, size: 18),
-                    label: Text(
+                    label: ConstrainedText(
                       executionStatus == FlowExecutionStatus.paused
                           ? strings.taskFlowCardResume
                           : strings.taskFlowCardResumeInterrupted,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 if (restoreReady &&
@@ -384,7 +395,11 @@ class _ExpandedContent extends ConsumerWidget {
                           .cancelExecution(executionId),
                     ),
                     icon: const Icon(Icons.stop, size: 18),
-                    label: Text(strings.taskFlowCardCancelFlow),
+                    label: ConstrainedText(
+                      strings.taskFlowCardCancelFlow,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 if (restoreReady &&
                     [
@@ -395,9 +410,11 @@ class _ExpandedContent extends ConsumerWidget {
                   TextButton.icon(
                     onPressed: () => _confirmRetry(context, ref),
                     icon: Icon(Icons.refresh, size: 18, color: cs.primary),
-                    label: Text(
+                    label: ConstrainedText(
                       strings.taskFlowCardRetry,
                       style: TextStyle(fontSize: 13, color: cs.primary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -413,7 +430,11 @@ class _ExpandedContent extends ConsumerWidget {
                           .cancelBatch(execution.batchId!),
                     ),
                     icon: const Icon(Icons.stop, size: 18),
-                    label: Text(strings.taskFlowCardCancelBatch),
+                    label: ConstrainedText(
+                      strings.taskFlowCardCancelBatch,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 TextButton.icon(
                   onPressed: restoreReady
@@ -424,12 +445,14 @@ class _ExpandedContent extends ConsumerWidget {
                     size: 18,
                     color: Theme.of(context).colorScheme.error,
                   ),
-                  label: Text(
+                  label: ConstrainedText(
                     strings.taskFlowCardDelete,
                     style: TextStyle(
                       fontSize: 13,
                       color: Theme.of(context).colorScheme.error,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -467,7 +490,11 @@ class _ExpandedContent extends ConsumerWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.taskFlowCardRetryFlow),
+        title: ConstrainedText(
+          strings.taskFlowCardRetryFlow,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           execution.snapshot == null
               ? strings.taskFlowCardNoSnapshot
@@ -476,7 +503,11 @@ class _ExpandedContent extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.taskFlowCardCancel),
+            child: ConstrainedText(
+              strings.taskFlowCardCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (execution.snapshot != null)
             TextButton(
@@ -484,7 +515,11 @@ class _ExpandedContent extends ConsumerWidget {
                 Navigator.pop(ctx);
                 _retry(context, ref, execution, useLatest: true);
               },
-              child: Text(strings.taskFlowCardRunLatest),
+              child: ConstrainedText(
+                strings.taskFlowCardRunLatest,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           FilledButton(
             onPressed: () {
@@ -496,10 +531,12 @@ class _ExpandedContent extends ConsumerWidget {
                 useLatest: execution.snapshot == null,
               );
             },
-            child: Text(
+            child: ConstrainedText(
               execution.snapshot == null
                   ? strings.taskFlowCardRetry
                   : strings.taskFlowCardRetryOriginal,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -561,7 +598,8 @@ class _ExpandedContent extends ConsumerWidget {
         .where((e) => e.id == execId)
         .firstOrNull;
     final isRunning = execution != null && !execution.isTerminal;
-    final cancelsBatch = execution != null &&
+    final cancelsBatch =
+        execution != null &&
         hasUnfinishedFlowBatchMember(
           execution,
           ref.read(taskFlowExecutionsProvider),
@@ -572,20 +610,28 @@ class _ExpandedContent extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.taskFlowCardDeleteRecord),
+        title: ConstrainedText(
+          strings.taskFlowCardDeleteRecord,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           cancelsBatch
               ? strings.taskFlowCardDeleteBatchConfirm
               : isRunning
-                  ? strings.taskFlowCardDeleteRunningConfirm
-                  : execution != null && execution.subTasks.isNotEmpty
-                      ? strings.taskFlowCardDeleteRecordConfirm
-                      : strings.taskFlowCardDeleteConfirm,
+              ? strings.taskFlowCardDeleteRunningConfirm
+              : execution != null && execution.subTasks.isNotEmpty
+              ? strings.taskFlowCardDeleteRecordConfirm
+              : strings.taskFlowCardDeleteConfirm,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.taskFlowCardCancel),
+            child: ConstrainedText(
+              strings.taskFlowCardCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () async {
@@ -628,8 +674,9 @@ class _ExpandedContent extends ConsumerWidget {
                   )) {
                     continue;
                   }
-                  final latest =
-                      snapshot.where((e) => e.id == execId).firstOrNull;
+                  final latest = snapshot
+                      .where((e) => e.id == execId)
+                      .firstOrNull;
                   if (latest != null && !latest.isTerminal) {
                     throw StateError(strings.taskFlowCardStillRunning);
                   }
@@ -666,9 +713,11 @@ class _ExpandedContent extends ConsumerWidget {
                 }
               }
             },
-            child: Text(
+            child: ConstrainedText(
               strings.taskFlowCardConfirm,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -816,41 +865,41 @@ class _ExpandedContent extends ConsumerWidget {
   Widget _statusIcon(FlowStepOutcome outcome, ColorScheme cs) =>
       switch (outcome) {
         FlowStepOutcome.running => SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-          ),
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+        ),
         FlowStepOutcome.succeeded => const Icon(
-            Icons.check_circle,
-            size: 16,
-            color: Colors.green,
-          ),
+          Icons.check_circle,
+          size: 16,
+          color: Colors.green,
+        ),
         FlowStepOutcome.failed => Icon(Icons.error, size: 16, color: cs.error),
         FlowStepOutcome.paused => const Icon(
-            Icons.pause_circle,
-            size: 16,
-            color: Colors.orange,
-          ),
+          Icons.pause_circle,
+          size: 16,
+          color: Colors.orange,
+        ),
         FlowStepOutcome.skipped => Icon(
-            Icons.skip_next,
-            size: 16,
-            color: cs.onSurfaceVariant,
-          ),
+          Icons.skip_next,
+          size: 16,
+          color: cs.onSurfaceVariant,
+        ),
         FlowStepOutcome.cancelled => Icon(
-            Icons.cancel_outlined,
-            size: 16,
-            color: cs.onSurfaceVariant,
-          ),
+          Icons.cancel_outlined,
+          size: 16,
+          color: cs.onSurfaceVariant,
+        ),
         FlowStepOutcome.interrupted => const Icon(
-            Icons.warning_amber,
-            size: 16,
-            color: Colors.orange,
-          ),
+          Icons.warning_amber,
+          size: 16,
+          color: Colors.orange,
+        ),
         FlowStepOutcome.pending => Icon(
-            Icons.hourglass_empty,
-            size: 16,
-            color: cs.onSurfaceVariant,
-          ),
+          Icons.hourglass_empty,
+          size: 16,
+          color: cs.onSurfaceVariant,
+        ),
       };
 }
 

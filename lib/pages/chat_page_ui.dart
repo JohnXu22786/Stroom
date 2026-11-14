@@ -337,8 +337,9 @@ extension _ChatPageUiExt on _ChatPageState {
       _settleAtBottomAndFinish();
       return;
     }
-    final box = _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
-        as RenderBox?;
+    final box =
+        _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
+            as RenderBox?;
     if (box == null || !box.attached) {
       // Target message not laid out yet. First land at the bottom; while
       // maxScrollExtent is still moving (the sliver estimates it from the
@@ -385,7 +386,8 @@ extension _ChatPageUiExt on _ChatPageState {
       _finishAtBottom();
       return;
     }
-    final targetTop = box.localToGlobal(Offset.zero).dy -
+    final targetTop =
+        box.localToGlobal(Offset.zero).dy -
         viewportBox.localToGlobal(Offset.zero).dy +
         pos.pixels;
     // Measure the tail from the LAST message's render box (when it is
@@ -397,7 +399,7 @@ extension _ChatPageUiExt on _ChatPageState {
     final lastBox = lastMessageId == null
         ? null
         : _messageKeys[lastMessageId]?.currentContext?.findRenderObject()
-            as RenderBox?;
+              as RenderBox?;
     if (lastBox == null || !lastBox.attached) {
       // Tail not measurable (e.g. the last message is a streaming
       // placeholder without a key) — assume it does not fit and show the
@@ -408,7 +410,8 @@ extension _ChatPageUiExt on _ChatPageState {
       _finishInitialScrollAdjustment();
       return;
     }
-    final tailBottom = lastBox.localToGlobal(Offset.zero).dy -
+    final tailBottom =
+        lastBox.localToGlobal(Offset.zero).dy -
         viewportBox.localToGlobal(Offset.zero).dy +
         pos.pixels +
         lastBox.size.height;
@@ -507,8 +510,8 @@ extension _ChatPageUiExt on _ChatPageState {
         .watch(conversationsProvider)
         .where((c) => c.id == convId)
         .firstOrNull;
-    final modelContext =
-        (_adapter.modelConfig?.typeConfig['context'] as num?)?.toInt();
+    final modelContext = (_adapter.modelConfig?.typeConfig['context'] as num?)
+        ?.toInt();
     final inputTokens = conv?.lastInputTokens;
     final cost = conv?.totalCost ?? 0;
     final cs = Theme.of(context).colorScheme;
@@ -575,9 +578,9 @@ extension _ChatPageUiExt on _ChatPageState {
                     child: Text(
                       (_showCompactionSummary
                           ? AppLocalizations.of(context)!
-                              .chatCompactionCollapsed
+                                .chatCompactionCollapsed
                           : AppLocalizations.of(context)!
-                              .chatCompactionExpanded),
+                                .chatCompactionExpanded),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onTertiaryContainer,
@@ -624,10 +627,12 @@ extension _ChatPageUiExt on _ChatPageState {
   Widget _buildTopBar({required String title, Conversation? conversation}) {
     final cs = Theme.of(context).colorScheme;
     final isTemporary = conversation?.isTemporary ?? false;
-    final temporaryExpiresAt =
-        isTemporary ? conversation!.temporaryExpiresAt : null;
-    final titleText = Text(
+    final temporaryExpiresAt = isTemporary
+        ? conversation!.temporaryExpiresAt
+        : null;
+    final titleText = ConstrainedText(
       title,
+      maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: 16,
@@ -660,10 +665,7 @@ extension _ChatPageUiExt on _ChatPageState {
               scrollProgress,
             ),
             border: Border(
-              bottom: BorderSide(
-                color: cs.outlineVariant,
-                width: 0.5,
-              ),
+              bottom: BorderSide(color: cs.outlineVariant, width: 0.5),
             ),
           ),
           child: child,
@@ -742,8 +744,9 @@ extension _ChatPageUiExt on _ChatPageState {
           IconButton(
             icon: Icon(
               _isSearching ? Icons.search_off : Icons.search,
-              color:
-                  _isSearching ? Theme.of(context).colorScheme.primary : null,
+              color: _isSearching
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
             tooltip: AppLocalizations.of(context)!.chatSearchMessages,
             onPressed: () => setState(() {
@@ -764,7 +767,11 @@ extension _ChatPageUiExt on _ChatPageState {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationRename),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -778,12 +785,20 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () =>
                 _saveConversationTitle(dialogContext, conversation, controller),
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -809,9 +824,8 @@ extension _ChatPageUiExt on _ChatPageState {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: Theme.of(
-        context,
-      ).colorScheme.errorContainer.withValues(alpha: 0.3),
+      color: Theme.of(context).colorScheme.errorContainer
+          .withValues(alpha: 0.3),
       child: Row(
         children: [
           Icon(
@@ -836,12 +850,14 @@ extension _ChatPageUiExt on _ChatPageState {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.appSettings,
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.error,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -874,17 +890,18 @@ extension _ChatPageUiExt on _ChatPageState {
         final copyText = !isCurrentStream
             ? message.text
             : manager.isStreamingFor(liveConvId!)
-                ? manager.fullReplyFor(liveConvId!)
-                : _chatSegments[message.id]
-                        ?.whereType<TextSegment>()
-                        .map((segment) => segment.text)
-                        .join() ??
-                    message.text;
+            ? manager.fullReplyFor(liveConvId!)
+            : _chatSegments[message.id]
+                      ?.whereType<TextSegment>()
+                      .map((segment) => segment.text)
+                      .join() ??
+                  message.text;
         Clipboard.setData(ClipboardData(text: copyText));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(AppLocalizations.of(context)!.chatCopied),
-              duration: Duration(seconds: 1)),
+            content: Text(AppLocalizations.of(context)!.chatCopied),
+            duration: Duration(seconds: 1),
+          ),
         );
       },
       onRetryOrEdit: () => isAi
@@ -944,8 +961,7 @@ extension _ChatPageUiExt on _ChatPageState {
   /// 首先选择保存位置；应用文件排在第一项。
   Future<MessageSaveDestination?> _askSaveDestinationDialog(
     BuildContext context,
-  ) =>
-      showMessageSaveDestinationDialog(context);
+  ) => showMessageSaveDestinationDialog(context);
 
   /// 多步工具调用且步骤之间有回话反馈时弹出的选择面板：
   /// "保存完整消息" / "保存最后的消息" / 取消。
@@ -953,18 +969,27 @@ extension _ChatPageUiExt on _ChatPageState {
     return showDialog<MessageSaveOption>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.chatSaveMarkdownTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.chatSaveMarkdownTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(AppLocalizations.of(context)!.chatSaveToolCallChoice,
-                style: TextStyle(fontSize: 13)),
+            Text(
+              AppLocalizations.of(context)!.chatSaveToolCallChoice,
+              style: TextStyle(fontSize: 13),
+            ),
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.article_outlined, size: 18),
-              label:
-                  Text(AppLocalizations.of(context)!.chatSaveCompleteMessage),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.chatSaveCompleteMessage,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.full),
             ),
             const SizedBox(height: 8),
@@ -978,7 +1003,11 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1013,8 +1042,9 @@ extension _ChatPageUiExt on _ChatPageState {
         final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.chatSavedToPath(outputPath)),
+            content: Text(
+              AppLocalizations.of(context)!.chatSavedToPath(outputPath),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1024,7 +1054,8 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
+              AppLocalizations.of(context)!.chatSaveFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1067,10 +1098,11 @@ extension _ChatPageUiExt on _ChatPageState {
           .replaceFirst(RegExp(r'\.md$', caseSensitive: false), '')
           .trim();
       if (fileName.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(AppLocalizations.of(context)!.chatFilenameRequired)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatFilenameRequired),
+          ),
+        );
         return;
       }
 
@@ -1114,7 +1146,8 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.chatSavedToAppFiles(folderPath)),
+              AppLocalizations.of(context)!.chatSavedToAppFiles(folderPath),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1124,7 +1157,8 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
+              AppLocalizations.of(context)!.chatSaveFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );

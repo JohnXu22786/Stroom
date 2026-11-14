@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:stroom/utils/file_record.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 // ====================================================================
 // Tab type identifiers
 // ====================================================================
@@ -19,10 +21,7 @@ class TabData {
   final List<FileRecord> records;
   final Set<String> allFolders;
 
-  TabData({
-    required this.records,
-    required this.allFolders,
-  });
+  TabData({required this.records, required this.allFolders});
 }
 
 // ====================================================================
@@ -108,11 +107,7 @@ class PreviewChip extends StatelessWidget {
                     color: cs.error,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.close,
-                    size: 12,
-                    color: cs.onError,
-                  ),
+                  child: Icon(Icons.close, size: 12, color: cs.onError),
                 ),
               ),
             ),
@@ -131,18 +126,18 @@ class PreviewChip extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       child: Row(
         children: [
-          Icon(Icons.insert_drive_file_outlined,
-              size: 20, color: cs.onSurfaceVariant),
+          Icon(
+            Icons.insert_drive_file_outlined,
+            size: 20,
+            color: cs.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Expanded(
-            child: Text(
+            child: ConstrainedText(
               fileName,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
             ),
           ),
         ],

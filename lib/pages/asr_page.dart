@@ -32,6 +32,8 @@ import '../widgets/folder_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
 import 'provider_config_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Helper: Pair model config with its source provider info
 // ============================================================================
@@ -96,7 +98,7 @@ class SelectedAudio {
   Uint8List bytes;
   Future<Uint8List> Function()? _loadBytes;
   Future<Uint8List> Function(CancelToken? cancelToken)?
-      _loadBytesWithCancellation;
+  _loadBytesWithCancellation;
   Uint8List? _cachedLoadedBytes;
   Future<Uint8List>? _loadingBytes;
   final bool hasCustomLoader;
@@ -113,7 +115,7 @@ class SelectedAudio {
     Uint8List? bytes,
     Future<Uint8List> Function()? loadBytes,
     Future<Uint8List> Function(CancelToken? cancelToken)?
-        loadBytesWithCancellation,
+    loadBytesWithCancellation,
     int? byteLength,
     this.resolveFormat,
     void Function()? onSourceReleased,
@@ -122,14 +124,13 @@ class SelectedAudio {
     this.audioReference,
     List<AsrChunkResult> priorChunks = const [],
     this.resetChunkCheckpoint = false,
-  })  : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
-        _loadBytes = loadBytes,
-        _loadBytesWithCancellation = loadBytesWithCancellation,
-        hasCustomLoader =
-            loadBytes != null || loadBytesWithCancellation != null,
-        _onSourceReleased = onSourceReleased,
-        byteLength = byteLength ?? bytes?.length ?? 0,
-        priorChunks = List.unmodifiable(priorChunks);
+  }) : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
+       _loadBytes = loadBytes,
+       _loadBytesWithCancellation = loadBytesWithCancellation,
+       hasCustomLoader = loadBytes != null || loadBytesWithCancellation != null,
+       _onSourceReleased = onSourceReleased,
+       byteLength = byteLength ?? bytes?.length ?? 0,
+       priorChunks = List.unmodifiable(priorChunks);
 
   Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
 
@@ -154,18 +155,19 @@ class SelectedAudio {
   }
 
   SelectedAudio copyForChunkCheckpointReset() => SelectedAudio(
-        bytes: bytes,
-        loadBytes: hasCustomLoader ? loadBytes : null,
-        loadBytesWithCancellation:
-            hasCustomLoader ? loadBytesWithCancellation : null,
-        byteLength: byteLength,
-        resolveFormat: resolveFormat,
-        onSourceReleased: releaseSource,
-        name: name,
-        format: format,
-        audioReference: audioReference,
-        resetChunkCheckpoint: true,
-      );
+    bytes: bytes,
+    loadBytes: hasCustomLoader ? loadBytes : null,
+    loadBytesWithCancellation: hasCustomLoader
+        ? loadBytesWithCancellation
+        : null,
+    byteLength: byteLength,
+    resolveFormat: resolveFormat,
+    onSourceReleased: releaseSource,
+    name: name,
+    format: format,
+    audioReference: audioReference,
+    resetChunkCheckpoint: true,
+  );
 
   Future<Uint8List> loadBytesWithCancellation(CancelToken? cancelToken) async {
     throwIfAsrAudioCanceled(cancelToken);
@@ -398,8 +400,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           if (!mounted) return;
           if (audioData is! Map) {
             _retrySourcesIncomplete = true;
-            _errorMessage =
-                AppLocalizations.of(context)!.asrLegacyRetryUnavailable;
+            _errorMessage = AppLocalizations.of(context)!
+                .asrLegacyRetryUnavailable;
             continue;
           }
           final url = audioData['url'];
@@ -412,8 +414,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           final bytesStr = audioData['bytes'];
           if (bytesStr is! String) {
             _retrySourcesIncomplete = true;
-            _errorMessage =
-                AppLocalizations.of(context)!.asrLegacyRetryUnavailable;
+            _errorMessage = AppLocalizations.of(context)!
+                .asrLegacyRetryUnavailable;
             continue;
           }
           final byteLength = await validateAsrLegacyBase64AudioByteLength(
@@ -424,8 +426,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           throwIfAsrAudioCanceled(_retryLoadCancelToken);
           if (byteLength == null) {
             _retrySourcesIncomplete = true;
-            _errorMessage =
-                AppLocalizations.of(context)!.asrLegacyRetryUnavailable;
+            _errorMessage = AppLocalizations.of(context)!
+                .asrLegacyRetryUnavailable;
             continue;
           }
           _selectedAudios.add(
@@ -532,7 +534,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.asrPageTitle),
+        title: ConstrainedText(
+          l10n.asrPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           if ((_selectedAudios.isNotEmpty || _retrySourcesIncomplete) &&
@@ -540,7 +546,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
-              label: Text(l10n.clear),
+              label: ConstrainedText(
+                l10n.clear,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),
@@ -630,9 +640,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!.configure,
                   style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -694,10 +706,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
-                    hint: Text(
+                    hint: ConstrainedText(
                       _modelSelectionRequired || _selectedModelReference != null
                           ? AppLocalizations.of(context)!.reselectModel
                           : AppLocalizations.of(context)!.selectAsrModel,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     isDense: true,
@@ -723,7 +736,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                               'configId': option.configId,
                               'modelId': option.modelId,
                             };
-                            final resetRetryState = _modelSelectionRequired ||
+                            final resetRetryState =
+                                _modelSelectionRequired ||
                                 !_sameModelReference(
                                   _selectedModelReference,
                                   newReference,
@@ -748,8 +762,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
-                        child: Text(
+                        child: ConstrainedText(
                           displayText,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -782,9 +797,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ),
             ),
             icon: const Icon(Icons.link, size: 20),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.enterPublicAudioUrl,
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -799,17 +816,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed:
-                    sourceControlsDisabled ? null : _showAudioSourceSheet,
+                onPressed: sourceControlsDisabled
+                    ? null
+                    : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.mic, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.recordingSelection,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -819,17 +839,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed:
-                    sourceControlsDisabled ? null : _showAudioSourceSheet,
+                onPressed: sourceControlsDisabled
+                    ? null
+                    : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.audio_file_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.audioFiles,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -905,10 +928,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       onPressed: _isProcessing || _retryLoading
                           ? null
                           : _getCurrentUploadMethod() == AudioUploadMethod.url
-                              ? _showUrlInputDialog
-                              : _showAudioSourceSheet,
+                          ? _showUrlInputDialog
+                          : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
-                      label: Text(AppLocalizations.of(context)!.asrReselect),
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.asrReselect,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -951,7 +978,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          ConstrainedText(
                             '${index + 1}. ${audio.name}',
                             style: TextStyle(
                               fontSize: 13,
@@ -1026,7 +1053,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 Text(
                   _retrySourcesIncomplete
                       ? (_errorMessage ??
-                          AppLocalizations.of(context)!.asrRetryIncomplete)
+                            AppLocalizations.of(context)!.asrRetryIncomplete)
                       : _errorMessage!,
                   style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
                 ),
@@ -1035,9 +1062,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
                       icon: const Icon(Icons.preview, size: 14),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.asrErrorDetails,
                         style: TextStyle(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       onPressed: () => _showErrorDetailDialog(context),
                       style: TextButton.styleFrom(
@@ -1141,7 +1170,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedAudios.isEmpty ||
+                onPressed:
+                    _selectedAudios.isEmpty ||
                         _isProcessing ||
                         _retryLoading ||
                         _retrySourcesIncomplete
@@ -1157,7 +1187,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         ),
                       )
                     : const Icon(Icons.transcribe, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _isProcessing
                       ? AppLocalizations.of(context)!.asrWorking
                       : AppLocalizations.of(context)!.asrStart,
@@ -1165,6 +1195,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1363,9 +1395,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(height: 24),
               Text(
                 AppLocalizations.of(context)!.chooseAudioSource,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
+                style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
@@ -1374,8 +1404,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ChoiceCard(
                     icon: Icons.library_music_outlined,
                     title: AppLocalizations.of(context)!.inAppRecordings,
-                    subtitle:
-                        AppLocalizations.of(context)!.chooseGeneratedRecordings,
+                    subtitle: AppLocalizations.of(context)!
+                        .chooseGeneratedRecordings,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -1386,8 +1416,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ChoiceCard(
                     icon: Icons.audio_file_outlined,
                     title: AppLocalizations.of(context)!.systemAudioFiles,
-                    subtitle:
-                        AppLocalizations.of(context)!.chooseDeviceAudioFiles,
+                    subtitle: AppLocalizations.of(context)!
+                        .chooseDeviceAudioFiles,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -1665,8 +1695,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       _selectedAudios.map(
         (audio) => AsrTaskAudio(
           bytes: audio.bytes,
-          loadBytesWithCancellation:
-              audio.hasCustomLoader ? audio.loadBytesWithCancellation : null,
+          loadBytesWithCancellation: audio.hasCustomLoader
+              ? audio.loadBytesWithCancellation
+              : null,
           byteLength: audio.byteLength,
           resolveFormat: audio.resolveFormat == null
               ? null
@@ -1929,7 +1960,11 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.asrEnterAudioUrl),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.asrEnterAudioUrl,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1955,11 +1990,19 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.cancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.cancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: _submit,
-          child: Text(AppLocalizations.of(context)!.add),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.add,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

@@ -21,10 +21,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerAudioChunkingHint,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
       _buildResponsiveSettingsRow(
@@ -51,9 +49,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
                 _buildAsrSelectedDropdownText(
                   context,
                   AppLocalizations.of(context)!.providerChunkSmart,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
+                  style: Theme.of(context).textTheme.labelLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 _buildAsrSelectedDropdownText(
@@ -68,33 +64,39 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               items: [
                 DropdownMenuItem(
                   value: 'none',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerChunkNone,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'silence',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerChunkSmart,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
+                    style: Theme.of(context).textTheme.labelLarge
                         ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'fixedDuration',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerChunkFixedDuration,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'fixedSize',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerChunkFixedSize,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -131,10 +133,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerCompressionHint,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
       _buildResponsiveSettingsRow(
@@ -170,23 +170,29 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               items: [
                 DropdownMenuItem(
                   value: 'none',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerCompressionNone,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'adpcm',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerCompressionAdpcm,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'flac',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerCompressionFlac,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -202,10 +208,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
         _compression == 'adpcm'
             ? AppLocalizations.of(context)!.providerCompressionAdpcmDescription
             : _compression == 'flac'
-                ? AppLocalizations.of(context)!
-                    .providerCompressionFlacDescription
-                : AppLocalizations.of(context)!
-                    .providerCompressionWavDescription,
+            ? AppLocalizations.of(context)!.providerCompressionFlacDescription
+            : AppLocalizations.of(context)!.providerCompressionWavDescription,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),

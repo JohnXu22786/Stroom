@@ -23,6 +23,8 @@ import 'audio_player_shared.dart';
 import 'audio_separation_shared.dart';
 import 'tts_create_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// 音频播放器页面
 /// 跨平台：Web 用 HTML5 AudioElement，Native 用 just_audio
 class AudioPlayerPage extends ConsumerStatefulWidget {
@@ -165,9 +167,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               const SizedBox(height: 24),
               Text(
                 _l10n.audioPlayerSourceTextSource,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -245,10 +246,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(result.first.value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(_l10n.audioPlayerSelectTextFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l10n.audioPlayerSelectTextFailure(e.toString())),
+          ),
+        );
       }
     }
   }
@@ -266,10 +268,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(
-              SnackBar(content: Text(_l10n.audioPlayerCannotReadTextFile)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_l10n.audioPlayerCannotReadTextFile)),
+          );
         }
         return;
       }
@@ -277,10 +278,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(bytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(_l10n.audioPlayerUploadTextFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l10n.audioPlayerUploadTextFailure(e.toString())),
+          ),
+        );
       }
     }
   }
@@ -289,10 +291,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Future<void> _applySourceTextContent(Uint8List bytes) async {
     if (bytes.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-            SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)),
+        );
       }
       return;
     }
@@ -306,10 +307,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     if (textContent.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-            SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)),
+        );
       }
       return;
     }
@@ -318,10 +318,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _saveSourceText(textContent);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(_l10n.audioPlayerSaveTextFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l10n.audioPlayerSaveTextFailure(e.toString())),
+          ),
+        );
       }
       return;
     }
@@ -334,9 +335,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(wasEmpty
-            ? _l10n.audioPlayerSourceTextUploaded
-            : _l10n.audioPlayerSourceTextUpdated),
+        content: Text(
+          wasEmpty
+              ? _l10n.audioPlayerSourceTextUploaded
+              : _l10n.audioPlayerSourceTextUpdated,
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -411,9 +414,12 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     } catch (e) {
       if (mounted) {
         _disposePlayer();
-        final ext =
-            path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
-        final diag = '文件: ${path.basename(widget.filePath)} | '
+        final ext = path
+            .extension(widget.filePath)
+            .replaceAll('.', '')
+            .toLowerCase();
+        final diag =
+            '文件: ${path.basename(widget.filePath)} | '
             '扩展名: $ext | '
             '源错: $e';
         debugPrint('AudioPlayerPage 错误: $diag');
@@ -427,8 +433,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   }
 
   Future<void> _loadAudio() async {
-    final extension =
-        path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
+    final extension = path
+        .extension(widget.filePath)
+        .replaceAll('.', '')
+        .toLowerCase();
 
     if (!kIsWeb) {
       // Native: read into memory, validate/convert format, play from temp
@@ -502,8 +510,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     // 获取支持流式输出的模型
     final entriesState = ref.read(providerEntriesProvider);
-    final ttsEntry =
-        entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
+    final ttsEntry = entriesState.entries
+        .where((e) => e.name == 'TTS供应商')
+        .firstOrNull;
     if (ttsEntry == null) {
       _showSnackBar(_l10n.audioPlayerConfigureTtsProvider);
       return;
@@ -544,7 +553,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(_l10n.audioPlayerSelectStreamingModel),
+        title: ConstrainedText(
+          _l10n.audioPlayerSelectStreamingModel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -570,7 +583,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(_l10n.cancel),
+            child: ConstrainedText(
+              _l10n.cancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -579,7 +596,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   void _startStreamingPlayback(String text, StreamModelOption opt) {
     // 使用 TTSStateNotifier 的 startStreaming 方法
-    ref.read(ttsStateProvider.notifier).startStreaming(
+    ref
+        .read(ttsStateProvider.notifier)
+        .startStreaming(
           text,
           providerConfig: opt.configItem,
           modelConfig: opt.model,
@@ -600,7 +619,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(fileName, overflow: TextOverflow.ellipsis),
+        title: ConstrainedText(
+          fileName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: _buildBody(),
@@ -679,9 +702,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
+                                    color: Theme.of(context).colorScheme.primary
                                         .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -691,9 +712,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.upload_file,
                                         size: 14,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -701,9 +722,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ],
@@ -725,9 +746,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
+                                    color: Theme.of(context).colorScheme.primary
                                         .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -737,9 +756,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.edit,
                                         size: 14,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -747,9 +766,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ],
@@ -925,7 +944,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             const SizedBox(width: 12),
             // 文件名
             Expanded(
-              child: Text(
+              child: ConstrainedText(
                 widget.displayName ?? path.basename(widget.filePath),
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
@@ -982,7 +1001,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   widget.displayName ?? path.basename(widget.filePath),
                   style: const TextStyle(
                     fontSize: 16,
@@ -1082,7 +1101,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(_l10n.audioPlayerPlaybackSpeed),
+          title: ConstrainedText(
+            _l10n.audioPlayerPlaybackSpeed,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: 260,
             height: 80,
@@ -1116,7 +1139,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(_l10n.audioPlayerClose),
+              child: ConstrainedText(
+                _l10n.audioPlayerClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

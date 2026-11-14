@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:stroom/utils/file_picker_utils.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
 
+import 'constrained_text.dart';
+
 /// A reusable widget that displays source code with line numbers and a
 /// toolbar of copy / save / wrap buttons, providing a consistent "code
 /// display area" UI form that matches what [HtmlCodeBlockWidget] uses.
@@ -291,8 +293,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     final isDark = cs.brightness == Brightness.dark;
 
     final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
-    final textColor =
-        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+    final textColor = isDark
+        ? const Color(0xfff8f8f2)
+        : const Color(0xff000000);
     final borderColor = cs.outlineVariant;
 
     const lineHeight = 13.0 * 1.5; // fontSize * height
@@ -312,8 +315,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     const verticalPadding = 40.0 + 12.0;
     const maxVisibleLines = 15;
     final lineCount = widget.code.isEmpty ? 0 : widget.code.split('\n').length;
-    final contentHeight =
-        lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
+    final contentHeight = lineCount > 0
+        ? lineCount * lineHeight + verticalPadding
+        : 40.0;
     final maxAllowedHeight = maxVisibleLines * lineHeight + verticalPadding;
     final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
     final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax).toDouble();
@@ -583,7 +587,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
         color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
+      child: ConstrainedText(
         widget.language,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -668,7 +672,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
             height: heights[i],
             child: Align(
               alignment: Alignment.topRight,
-              child: Text(
+              child: ConstrainedText(
                 '${i + 1}',
                 textAlign: TextAlign.right,
                 style: lineNumStyle,
@@ -717,12 +721,12 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
                 // the numbers below them.
                 final codeAreaWidth = wrap
                     ? (constraints.maxWidth -
-                            lineNumWidth -
-                            8.0 -
-                            1.0 -
-                            _selectableCursorWidth)
-                        .clamp(1.0, double.infinity)
-                        .toDouble()
+                              lineNumWidth -
+                              8.0 -
+                              1.0 -
+                              _selectableCursorWidth)
+                          .clamp(1.0, double.infinity)
+                          .toDouble()
                     : double.infinity;
                 final visualHeights = _measureLineHeights(
                   lines,

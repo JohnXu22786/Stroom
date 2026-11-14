@@ -5,6 +5,8 @@ import '../l10n/app_localizations.dart';
 import '../models/chat_message.dart';
 import '../providers/conversation_provider.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Data classes for search results
 // ============================================================================
@@ -148,7 +150,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.messageSearchTitle),
+        title: ConstrainedText(
+          localizations.messageSearchTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -198,8 +204,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
             child: _query.isEmpty
                 ? _buildInitialState(cs)
                 : _results.isEmpty
-                    ? _buildEmptyState(cs)
-                    : _buildResultsList(cs),
+                ? _buildEmptyState(cs)
+                : _buildResultsList(cs),
           ),
         ],
       ),
@@ -294,7 +300,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                     child: Icon(Icons.push_pin, size: 14, color: cs.primary),
                   ),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -353,7 +359,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     final queryLen = match.matchEnd - match.matchStart;
 
     if (relativeStart < 0 || relativeStart + queryLen > snippet.length) {
-      return Text(
+      return ConstrainedText(
         snippet,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,

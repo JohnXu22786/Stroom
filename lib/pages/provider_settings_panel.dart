@@ -12,6 +12,8 @@ import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 part 'provider_settings_panel_custom_params.dart';
 part 'provider_settings_panel_reasoning.dart';
 part 'provider_settings_panel_save.dart';
@@ -41,7 +43,7 @@ Widget _buildAsrSelectedDropdownText(
 }) {
   return Align(
     alignment: AlignmentDirectional.centerStart,
-    child: Text(
+    child: ConstrainedText(
       label,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -165,8 +167,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   void _showMaxFileSizeError() {
     setState(() {
-      _maxFileSizeError =
-          AppLocalizations.of(context)!.providerMaxUploadSizePositive;
+      _maxFileSizeError = AppLocalizations.of(context)!
+          .providerMaxUploadSizePositive;
     });
   }
 
@@ -221,9 +223,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _ocrRequestSizeBudgetController = TextEditingController(
       text: _isOcrType && ocrRequestBudget is num
           ? (ocrRequestBudget / (1024 * 1024)).toString().replaceFirst(
-                RegExp(r'\.0$'),
-                '',
-              )
+              RegExp(r'\.0$'),
+              '',
+            )
           : '',
     );
     // Initialize JSON validation for existing params
@@ -247,11 +249,17 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       );
       final savedPreprocessing =
           c.typeConfig['preprocessing'] as String? ?? 'none';
-      _preprocessing =
-          savedPreprocessing == 'resampleMono' ? savedPreprocessing : 'none';
+      _preprocessing = savedPreprocessing == 'resampleMono'
+          ? savedPreprocessing
+          : 'none';
       final savedChunking = c.typeConfig['chunking'] as String? ?? 'silence';
-      _chunking = const {'none', 'silence', 'fixedDuration', 'fixedSize'}
-              .contains(savedChunking)
+      _chunking =
+          const {
+            'none',
+            'silence',
+            'fixedDuration',
+            'fixedSize',
+          }.contains(savedChunking)
           ? savedChunking
           : 'silence';
       // Only codecs with valid standalone output are supported
@@ -263,8 +271,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           : 'none';
       final savedFallbackMethod =
           c.typeConfig['fallbackMethod'] as String? ?? 'all';
-      _fallbackMethod = const {'none', 'specific', 'generic', 'all'}
-              .contains(savedFallbackMethod)
+      _fallbackMethod =
+          const {
+            'none',
+            'specific',
+            'generic',
+            'all',
+          }.contains(savedFallbackMethod)
           ? savedFallbackMethod
           : 'all';
     } else {
@@ -325,10 +338,20 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                   horizontal: MediaQuery.sizeOf(context).width < 800 ? 8 : 24,
                 ),
                 tabs: [
-                  Tab(text: AppLocalizations.of(context)!.providerBasicInfoTab),
                   Tab(
-                    text: AppLocalizations.of(context)!
-                        .providerParameterSettingsTab,
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.providerBasicInfoTab,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Tab(
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!
+                          .providerParameterSettingsTab,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -347,7 +370,11 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.batchDlgCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     FilledButton(
@@ -356,8 +383,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           Navigator.pop(context, _buildConfig());
                         }
                       },
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.mermaidSaveButton,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

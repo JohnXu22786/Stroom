@@ -82,10 +82,11 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     final data = await AttachmentStorage.readFile(att.storagePath);
     if (data == null || data.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(AppLocalizations.of(context)!.chatCannotLoadFile)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatCannotLoadFile),
+          ),
+        );
       }
       return;
     }
@@ -148,8 +149,9 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
                   const Icon(Icons.description_outlined, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: ConstrainedText(
                       att.fileName,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 16,

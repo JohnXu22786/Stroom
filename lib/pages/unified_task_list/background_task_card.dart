@@ -17,6 +17,8 @@ import 'task_utils.dart';
 import 'file_opener.dart';
 import '../../widgets/running_elapsed_label.dart';
 
+import '../../widgets/constrained_text.dart';
+
 String _localizedBackgroundStepLabel(String label, AppLocalizations strings) =>
     switch (label) {
       '连接服务器' => strings.bgStepConnectServer,
@@ -43,13 +45,13 @@ String _localizedBackgroundTaskTitle(
 
   final (prefix, localize) = switch (task.type) {
     BackgroundTaskType.ocr => (
-        '文字识别_',
-        strings.backgroundTaskGeneratedOcrTitle,
-      ),
+      '文字识别_',
+      strings.backgroundTaskGeneratedOcrTitle,
+    ),
     BackgroundTaskType.audioSeparation => (
-        '音频分离_',
-        strings.backgroundTaskGeneratedAudioSeparationTitle,
-      ),
+      '音频分离_',
+      strings.backgroundTaskGeneratedAudioSeparationTitle,
+    ),
     _ => (null, null),
   };
   if (prefix == null || localize == null || !task.title.startsWith(prefix)) {
@@ -161,7 +163,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
+                              child: ConstrainedText(
                                 _localizedBackgroundTaskTitle(
                                   widget.task,
                                   strings,
@@ -339,9 +341,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       TextButton.icon(
                         onPressed: () => _showErrorDetailDialog(context, task),
                         icon: const Icon(Icons.preview, size: 14),
-                        label: Text(
+                        label: ConstrainedText(
                           strings.unifiedTaskViewErrorDetails,
                           style: TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.red,
@@ -415,7 +419,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                   _ocrPageOutcomeLabel(outcome.status, strings),
                   style: TextStyle(
                     fontSize: 12,
-                    color: outcome.status == OcrPageOutcomeStatus.failed ||
+                    color:
+                        outcome.status == OcrPageOutcomeStatus.failed ||
                             outcome.status == OcrPageOutcomeStatus.incomplete
                         ? Colors.red
                         : cs.onSurfaceVariant,
@@ -552,12 +557,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             color: step.completed
                                 ? Colors.green.shade700
                                 : step.skipped
-                                    ? Colors.orange.shade700
-                                    : step.running
-                                        ? colorScheme.primary
-                                        : step.failed
-                                            ? Colors.red.shade700
-                                            : colorScheme.onSurface,
+                                ? Colors.orange.shade700
+                                : step.running
+                                ? colorScheme.primary
+                                : step.failed
+                                ? Colors.red.shade700
+                                : colorScheme.onSurface,
                           ),
                         ),
                         // Show step error detail directly (no folding)
@@ -654,8 +659,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             label: task.resultIsComplete
                 ? strings.unifiedTaskRetrySave
                 : task.partialSaveRequested
-                    ? strings.unifiedTaskRetryPartialSave
-                    : strings.unifiedTaskSavePartialResult,
+                ? strings.unifiedTaskRetryPartialSave
+                : strings.unifiedTaskSavePartialResult,
             color: Colors.blue,
             onPressed: () => _retryOcrSave(task, ref),
           ),
@@ -684,9 +689,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
               ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
             },
             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-            label: Text(
+            label: ConstrainedText(
               strings.unifiedTaskDelete,
               style: TextStyle(fontSize: 13, color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -763,7 +770,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       child: TextButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 13)),
+        label: ConstrainedText(
+          label,
+          style: const TextStyle(fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         style: TextButton.styleFrom(
           foregroundColor: color,
           padding: const EdgeInsets.symmetric(horizontal: 8),

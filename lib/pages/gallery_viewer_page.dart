@@ -13,6 +13,8 @@ import '../utils/image_thumbnail_loader.dart';
 import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// Full-screen gallery viewer with paging support.
 class GalleryViewerPage extends StatefulWidget {
   final List<ImageRecord> images;
@@ -483,7 +485,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
             bottom: 52,
             left: 16,
             right: 16,
-            child: Text(
+            child: ConstrainedText(
               _currentFileName,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 14),

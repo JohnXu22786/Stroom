@@ -16,6 +16,8 @@ import '../anki/apkg/apkg_result.dart';
 import '../anki/apkg/apkg_importer.dart';
 import '../utils/system_pick_utils.dart';
 
+import '../widgets/constrained_text.dart';
+
 class BackupRestorePage extends ConsumerStatefulWidget {
   const BackupRestorePage({super.key});
 
@@ -44,16 +46,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _browserCookies = true;
 
   BackupSelection get _selection => BackupSelection(
-        chatRecordsAndAttachments: _chatRecordsAndAttachments,
-        settings: _settings,
-        pictures: _pictures,
-        audio: _audio,
-        videos: _videos,
-        texts: _texts,
-        tasks: _tasks,
-        ankiData: _ankiData,
-        browserCookies: _browserCookies,
-      );
+    chatRecordsAndAttachments: _chatRecordsAndAttachments,
+    settings: _settings,
+    pictures: _pictures,
+    audio: _audio,
+    videos: _videos,
+    texts: _texts,
+    tasks: _tasks,
+    ankiData: _ankiData,
+    browserCookies: _browserCookies,
+  );
 
   bool get _hasSelection {
     return _chatRecordsAndAttachments ||
@@ -93,8 +95,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         builder: (ctx) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(
+            title: ConstrainedText(
               AppLocalizations.of(ctx)!.backupRestoreExportingBackup,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             content: Row(
               children: [
@@ -214,7 +218,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(_strings.backupRestoreConfirmRestore),
+        title: ConstrainedText(
+          _strings.backupRestoreConfirmRestore,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,11 +290,19 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.backupRestoreCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.backupRestoreCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(_strings.backupRestoreConfirmRestoreButton),
+            child: ConstrainedText(
+              _strings.backupRestoreConfirmRestoreButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -312,7 +328,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           final message = skippedCategories.isEmpty
               ? _strings.backupRestoreRestoredMessage
               : '${_skippedCategoriesMessage(skippedCategories)}\n\n'
-                  '${_strings.backupRestoreOtherSelectedRestored}';
+                    '${_strings.backupRestoreOtherSelectedRestored}';
           await _showRestartPrompt(message: message);
         }
       }
@@ -362,7 +378,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       TargetPlatform.macOS,
       TargetPlatform.windows,
     };
-    final browserWebsiteDataUnsupported = selection.browserCookies &&
+    final browserWebsiteDataUnsupported =
+        selection.browserCookies &&
         (kIsWeb ||
             !browserWebsiteDataClearPlatforms.contains(defaultTargetPlatform));
 
@@ -386,7 +403,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         builder: (ctx) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(_strings.backupRestoreClearingData),
+            title: ConstrainedText(
+              _strings.backupRestoreClearingData,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Row(
               children: [
                 SizedBox(
@@ -484,11 +505,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_strings.backupRestoreExportFailed(
-              e is AnkiApkgException
-                  ? e.localizedMessage(_strings)
-                  : _strings.backupRestoreApkgOperationFailed,
-            )),
+            content: Text(
+              _strings.backupRestoreExportFailed(
+                e is AnkiApkgException
+                    ? e.localizedMessage(_strings)
+                    : _strings.backupRestoreApkgOperationFailed,
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -532,11 +555,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_strings.backupRestoreImportFailed(
-              e is AnkiApkgException
-                  ? e.localizedMessage(_strings)
-                  : _strings.backupRestoreApkgUnexpectedError(path),
-            )),
+            content: Text(
+              _strings.backupRestoreImportFailed(
+                e is AnkiApkgException
+                    ? e.localizedMessage(_strings)
+                    : _strings.backupRestoreApkgUnexpectedError(path),
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -577,14 +602,22 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 Navigator.of(dialogContext).pop();
                 _exitApp();
               },
-              child: Text(_strings.backupRestoreExitApp),
+              child: ConstrainedText(
+                _strings.backupRestoreExitApp,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 restartApp();
               },
-              child: Text(_strings.backupRestoreRestartNow),
+              child: ConstrainedText(
+                _strings.backupRestoreRestartNow,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -597,16 +630,22 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
+        title: ConstrainedText(
           categories.every((category) => category == '内置浏览器网站存储')
               ? _strings.backupRestoreSkippedTitle
               : _strings.backupRestoreNothingRestoredTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: Text(_skippedCategoriesMessage(categories)),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(_strings.backupRestoreGotIt),
+            child: ConstrainedText(
+              _strings.backupRestoreGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -614,8 +653,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   String _skippedCategoriesMessage(List<String> categories) {
-    final skippedCategories =
-        categories.where((category) => category != '内置浏览器网站存储').toList();
+    final skippedCategories = categories
+        .where((category) => category != '内置浏览器网站存储')
+        .toList();
     final displayCategories = _localizedCategoryLabels(skippedCategories);
     var message = skippedCategories.isEmpty
         ? ''
@@ -677,7 +717,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_strings.backupRestorePageTitle)),
+      appBar: AppBar(
+        title: ConstrainedText(
+          _strings.backupRestorePageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -731,10 +777,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                                   ),
                                 )
                               : const Icon(Icons.file_upload_outlined),
-                          label: Text(
+                          label: ConstrainedText(
                             _isAnkiExporting
                                 ? _strings.backupRestoreExportingApkg
                                 : _strings.backupRestoreExportApkg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
@@ -751,10 +799,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                                   ),
                                 )
                               : const Icon(Icons.file_download_outlined),
-                          label: Text(
+                          label: ConstrainedText(
                             _isAnkiImporting
                                 ? _strings.backupRestoreImportingApkg
                                 : _strings.backupRestoreImportApkg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
@@ -785,10 +835,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.backup),
-                      label: Text(
+                      label: ConstrainedText(
                         _isExporting
                             ? _strings.backupRestoreExporting
                             : _strings.backupRestoreExportBackup,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -803,10 +855,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.restore),
-                      label: Text(
+                      label: ConstrainedText(
                         _isImporting
                             ? _strings.backupRestoreRestoring
                             : _strings.backupRestoreChooseBackup,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -860,10 +914,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.delete_forever_outlined),
-                      label: Text(
+                      label: ConstrainedText(
                         _isClearing
                             ? _strings.backupRestoreClearing
                             : _strings.backupRestoreClearSelected,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
@@ -1030,12 +1086,20 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(_strings.backupRestoreGotIt),
+            child: ConstrainedText(
+              _strings.backupRestoreGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1111,7 +1175,11 @@ class _ClearSelectedDataConfirmationDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.backupRestoreConfirmClear),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.backupRestoreConfirmClear,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1190,18 +1258,24 @@ class _ClearSelectedDataConfirmationDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: Text(AppLocalizations.of(context)!.backupRestoreCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.backupRestoreCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: _secondsRemaining == 0
               ? () => Navigator.of(context).pop(true)
               : null,
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
-          child: Text(
+          child: ConstrainedText(
             _secondsRemaining == 0
                 ? AppLocalizations.of(context)!.backupRestoreClearSelected
                 : AppLocalizations.of(context)!
-                    .backupRestoreConfirmClearCountdown(_secondsRemaining),
+                      .backupRestoreConfirmClearCountdown(_secondsRemaining),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

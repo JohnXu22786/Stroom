@@ -70,7 +70,7 @@ extension _SettingsPageAboutExt on _SettingsPageState {
               title: AppLocalizations.of(context)!.aboutCheckUpdates,
               subtitle: updateState.updateAvailable
                   ? AppLocalizations.of(context)!
-                      .aboutNewVersionFound(updateState.latestVersion!)
+                        .aboutNewVersionFound(updateState.latestVersion!)
                   : null,
               trailing: updateState.updateAvailable
                   ? Container(
@@ -93,12 +93,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
             _buildListTile(
               leading: Icon(
                 Icons.science,
-                color:
-                    updateState.acceptPreRelease ? Colors.orange : Colors.grey,
+                color: updateState.acceptPreRelease
+                    ? Colors.orange
+                    : Colors.grey,
               ),
               title: AppLocalizations.of(context)!.aboutPreviewUpdates,
-              subtitle:
-                  AppLocalizations.of(context)!.aboutPreviewUpdatesDescription,
+              subtitle: AppLocalizations.of(context)!
+                  .aboutPreviewUpdatesDescription,
               trailing: Switch(
                 value: updateState.acceptPreRelease,
                 onChanged: (value) {
@@ -195,8 +196,9 @@ extension _SettingsPageAboutExt on _SettingsPageState {
     final strings = AppLocalizations.of(context)!;
     const networkPrefix = '网络错误: ';
     if (error.startsWith(networkPrefix)) {
-      return strings
-          .aboutUpdateNetworkError(error.substring(networkPrefix.length));
+      return strings.aboutUpdateNetworkError(
+        error.substring(networkPrefix.length),
+      );
     }
 
     final httpStatus = RegExp(r'^检查更新失败: HTTP (\d+)$').firstMatch(error);
@@ -258,14 +260,16 @@ extension _SettingsPageAboutExt on _SettingsPageState {
             ],
           ),
           content: SingleChildScrollView(
-            child: Text(
-              AppLocalizations.of(context)!.aboutPrivacyContent,
-            ),
+            child: Text(AppLocalizations.of(context)!.aboutPrivacyContent),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(AppLocalizations.of(context)!.aboutClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.aboutClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         );

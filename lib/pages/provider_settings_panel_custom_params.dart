@@ -106,9 +106,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
         const SizedBox(height: 4),
         TextButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: Text(
+          label: ConstrainedText(
             AppLocalizations.of(context)!.providerAddOption,
             style: const TextStyle(fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: () {
             setState(() {
@@ -173,7 +175,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
             ),
             TextButton.icon(
               icon: const Icon(Icons.add, size: 18),
-              label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.providerAddCustomParam,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: _addCustomParam,
             ),
           ],
@@ -188,7 +194,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
             const Spacer(),
             TextButton.icon(
               icon: const Icon(Icons.add, size: 18),
-              label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.providerAddCustomParam,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: _addCustomParam,
             ),
           ],
@@ -208,7 +218,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
         ...List.generate(_customParams.length, (i) {
           final param = _customParams[i];
           final name = param.paramName.trim();
-          final isDuplicate = name.isNotEmpty &&
+          final isDuplicate =
+              name.isNotEmpty &&
               (_customParams.indexWhere((p) => p.paramName.trim() == name) !=
                   i);
           final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
@@ -232,11 +243,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             isDense: true,
                             errorText: hasInvalidName
                                 ? AppLocalizations.of(context)!
-                                    .providerParamNameInvalid(name)
+                                      .providerParamNameInvalid(name)
                                 : isDuplicate
-                                    ? AppLocalizations.of(context)!
-                                        .providerParamAlreadyExists(name)
-                                    : null,
+                                ? AppLocalizations.of(context)!
+                                      .providerParamAlreadyExists(name)
+                                : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
                           onChanged: (v) {
@@ -259,14 +270,19 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             borderRadius: StroomMenuStyle.borderRadius,
                             value: param.type,
                             isDense: true,
+                            isExpanded: true,
                             items: ParamType.values
                                 .map(
                                   (t) => DropdownMenuItem(
                                     value: t.value,
-                                    child: Text(
+                                    child: ConstrainedText(
                                       localizedParamTypeLabel(
-                                          AppLocalizations.of(context)!, t),
+                                        AppLocalizations.of(context)!,
+                                        t,
+                                      ),
                                       style: const TextStyle(fontSize: 13),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 )
@@ -328,8 +344,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               labelText: AppLocalizations.of(context)!
                                   .providerParamDefaultValueLabel,
                               hintText: localizedParamTypeDefaultValueHint(
-                                  AppLocalizations.of(context)!,
-                                  param.paramType),
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
                               border: const OutlineInputBorder(),
                               errorBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
@@ -355,15 +372,16 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.fullscreen, size: 20),
-                          tooltip:
-                              AppLocalizations.of(context)!.chatFullscreenEdit,
+                          tooltip: AppLocalizations.of(context)!
+                              .chatFullscreenEdit,
                           onPressed: () {
                             showJsonValueEditorDialog(
                               context,
                               initialValue: param.defaultValue,
                               hintText: localizedParamTypeDefaultValueHint(
-                                  AppLocalizations.of(context)!,
-                                  param.paramType),
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
                               type: param.type,
                               onSave: (result) {
                                 param.defaultValue = result;

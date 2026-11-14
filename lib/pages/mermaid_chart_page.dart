@@ -10,6 +10,8 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Editor Mode
 // ============================================================================
@@ -123,8 +125,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   void initState() {
     super.initState();
-    _editorMode =
-        widget.initialShowPreview ? EditorMode.split : EditorMode.edit;
+    _editorMode = widget.initialShowPreview
+        ? EditorMode.split
+        : EditorMode.edit;
   }
 
   @override
@@ -254,10 +257,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     final currentCode = _codeController.text;
     final snippetWithUniqueDiagramEntityId =
         MermaidTemplates.assignUniqueDiagramEntityId(
-      currentCode,
-      snippet,
-      _selectedTypeId,
-    );
+          currentCode,
+          snippet,
+          _selectedTypeId,
+        );
     final snippetWithUniqueFlowchartSubgraphId = _selectedTypeId == 'flowchart'
         ? MermaidTemplates.assignUniqueFlowchartSubgraphId(
             currentCode,
@@ -272,9 +275,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         : snippetWithUniqueFlowchartSubgraphId;
     final snippetWithUniqueRequirementId =
         MermaidTemplates.assignUniqueRequirementId(
-      currentCode,
-      snippetWithUniqueFlowchartNodeIds,
-    );
+          currentCode,
+          snippetWithUniqueFlowchartNodeIds,
+        );
     final insertionPoint = currentCode.lastIndexOf('\n');
     if (insertionPoint >= 0) {
       final codeToPreserve = currentCode.endsWith('\n')
@@ -436,11 +439,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
-      final saveName =
-          existingRecord == null ? '$baseName-$typeLabel' : baseName;
+      final saveName = existingRecord == null
+          ? '$baseName-$typeLabel'
+          : baseName;
       widget.testOnlyBeforeChartFolderNameLock?.call();
-      final finalName =
-          await MermaidFolderNameLock.withLock(selectedFolder, () async {
+      final finalName = await MermaidFolderNameLock.withLock(selectedFolder, () async {
         // Name selection and record publication must stay together so a
         // concurrent Mermaid save sees the newly published name.
         final records = await TextManifest.loadRecordsUncached();
@@ -603,7 +606,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
     final scaffold = Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.mermaidEditorTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.mermaidEditorTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           // Three-state editor mode selector (popup menu)
           IconButton(
@@ -621,8 +628,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           else
             IconButton(
               icon: const Icon(Icons.save, size: 20),
-              tooltip:
-                  AppLocalizations.of(context)!.mermaidEditorSaveToTextStorage,
+              tooltip: AppLocalizations.of(context)!
+                  .mermaidEditorSaveToTextStorage,
               onPressed: _isSaveFlowActive ? null : _saveChart,
             ),
         ],
@@ -649,7 +656,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                       ),
                       child: FilterChip(
                         selected: isSelected,
-                        label: Text(
+                        label: ConstrainedText(
                           type.label,
                           style: TextStyle(
                             fontSize: 12,
@@ -657,6 +664,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                 ? FontWeight.w600
                                 : FontWeight.normal,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         avatar: Icon(type.icon, size: 16),
                         onSelected: _isSaving
@@ -689,9 +698,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                         vertical: 6,
                       ),
                       child: ActionChip(
-                        label: Text(
+                        label: ConstrainedText(
                           label,
                           style: const TextStyle(fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onPressed: _isSaving
                             ? null
@@ -703,10 +714,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                       index >= 2) {
                                     final currentSnippet =
                                         MermaidTemplates.getSnippets(
-                                      'requirement',
-                                      code: _codeController.text,
-                                      strings: l10n,
-                                    )
+                                              'requirement',
+                                              code: _codeController.text,
+                                              strings: l10n,
+                                            )
                                             .firstWhere(
                                               (item) => item.$1 == label,
                                               orElse: () => (label, ''),
@@ -718,18 +729,18 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                   } else {
                                     final snippetToInsert =
                                         _selectedTypeId == 'gitGraph' &&
-                                                index == 3
-                                            ? MermaidTemplates.getSnippets(
+                                            index == 3
+                                        ? MermaidTemplates.getSnippets(
                                                 'gitGraph',
                                                 code: _codeController.text,
                                                 strings: l10n,
                                               )
-                                                .firstWhere(
-                                                  (item) => item.$1 == label,
-                                                  orElse: () => (label, ''),
-                                                )
-                                                .$2
-                                            : snippet;
+                                              .firstWhere(
+                                                (item) => item.$1 == label,
+                                                orElse: () => (label, ''),
+                                              )
+                                              .$2
+                                        : snippet;
                                     if (snippetToInsert.isNotEmpty) {
                                       _insertSnippet(snippetToInsert);
                                     }
@@ -760,18 +771,28 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(AppLocalizations.of(dialogContext)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(dialogContext)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(dialogContext)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(AppLocalizations.of(dialogContext)!.cancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(dialogContext)!.cancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(dialogContext)!.textPreviewDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -821,8 +842,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         }
 
         // Vertical layout for narrow split mode, edit mode, or preview mode
-        final editorHeight =
-            isSplitMode ? availableHeight * _splitEditorHeightRatio : 0.0;
+        final editorHeight = isSplitMode
+            ? availableHeight * _splitEditorHeightRatio
+            : 0.0;
 
         return Stack(
           children: [

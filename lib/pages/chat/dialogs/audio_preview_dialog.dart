@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 /// Audio preview dialog — plays an audio file using [just_audio].
 /// Shows the file name with play/pause controls.
 class AudioPreviewDialog extends StatefulWidget {
@@ -42,24 +44,30 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
       _duration = player.duration ?? Duration.zero;
       _isInitialized = true;
 
-      _subscriptions.add(player.positionStream.listen((pos) {
-        if (mounted) setState(() => _position = pos);
-      }));
+      _subscriptions.add(
+        player.positionStream.listen((pos) {
+          if (mounted) setState(() => _position = pos);
+        }),
+      );
 
-      _subscriptions.add(player.playerStateStream.listen((state) {
-        if (mounted) {
-          setState(() {
-            _isPlaying = state.playing;
-          });
-        }
-      }));
+      _subscriptions.add(
+        player.playerStateStream.listen((state) {
+          if (mounted) {
+            setState(() {
+              _isPlaying = state.playing;
+            });
+          }
+        }),
+      );
 
-      _subscriptions.add(player.processingStateStream.listen((state) {
-        if (state == ProcessingState.completed && mounted) {
-          setState(() => _isPlaying = false);
-          player.seek(Duration.zero);
-        }
-      }));
+      _subscriptions.add(
+        player.processingStateStream.listen((state) {
+          if (state == ProcessingState.completed && mounted) {
+            setState(() => _isPlaying = false);
+            player.seek(Duration.zero);
+          }
+        }),
+      );
 
       if (mounted) setState(() {});
     } catch (e) {
@@ -120,7 +128,7 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
+            ConstrainedText(
               widget.fileName,
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -139,7 +147,8 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
                     : 0.0,
                 onChanged: (v) {
                   final pos = Duration(
-                      milliseconds: (v * _duration.inMilliseconds).round());
+                    milliseconds: (v * _duration.inMilliseconds).round(),
+                  );
                   _player?.seek(pos);
                 },
               ),
@@ -190,7 +199,11 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text(AppLocalizations.of(context)!.chatAudioPreviewClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.chatAudioPreviewClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

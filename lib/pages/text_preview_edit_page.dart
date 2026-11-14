@@ -6,8 +6,11 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
+
 import '../l10n/app_localizations.dart';
 import '../widgets/markdown_extensions.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 文本预览/编辑页面 - 查看和编辑文本内容
 ///
@@ -164,18 +167,31 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     final shouldDiscard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.textPreviewDiscardEditsTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
-            AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
+          AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.textPreviewCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewDiscard,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -220,7 +236,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.textPreviewFontSize),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.textPreviewFontSize,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: 260,
             height: 100,
@@ -262,12 +282,19 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                 setState(() => _fontSize = temp);
                 _persistFontSize();
               },
-              child:
-                  Text(AppLocalizations.of(context)!.textPreviewRestoreDefault),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.textPreviewRestoreDefault,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(AppLocalizations.of(context)!.textPreviewClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.textPreviewClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -326,8 +353,9 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .textPreviewSaveFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.textPreviewSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -449,19 +477,31 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(
-                AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewDiscardEditsTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(
-                AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
+              AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.textPreviewCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.textPreviewCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.textPreviewDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -478,7 +518,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: _buildAppBarActions(),
         ),
         body: _isEditMode
@@ -497,33 +541,33 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                 ),
               )
             : _currentFile.format == 'md'
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: MarkdownWidget(
-                      data: _contentController.text,
-                      markdownGenerator: markdownGenerator,
-                      config: buildMarkdownConfig(
-                        isDark: Theme.of(context).brightness == Brightness.dark,
-                      ),
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                    ),
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    // 用 SelectionArea 而不是 SelectableText：SelectableText 在
-                    // 桌面平台注册全方向的 TapAndPanGestureRecognizer（接受触摸
-                    // 指针），快速拖动时会在手势竞技场中胜过外层滚动视图，导致
-                    // 在文本上/末尾空行（空白区域）拖动时变成文本选择而不是
-                    // 滚动。SelectionArea 对触摸指针只注册水平拖拽识别器，垂直
-                    // 拖动交给外层滚动视图；鼠标拖动仍可选中文本。
-                    child: SelectionArea(
-                      child: Text(
-                        _contentController.text,
-                        style: TextStyle(fontSize: _fontSize, height: 1.5),
-                      ),
-                    ),
+            ? SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: MarkdownWidget(
+                  data: _contentController.text,
+                  markdownGenerator: markdownGenerator,
+                  config: buildMarkdownConfig(
+                    isDark: Theme.of(context).brightness == Brightness.dark,
                   ),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                // 用 SelectionArea 而不是 SelectableText：SelectableText 在
+                // 桌面平台注册全方向的 TapAndPanGestureRecognizer（接受触摸
+                // 指针），快速拖动时会在手势竞技场中胜过外层滚动视图，导致
+                // 在文本上/末尾空行（空白区域）拖动时变成文本选择而不是
+                // 滚动。SelectionArea 对触摸指针只注册水平拖拽识别器，垂直
+                // 拖动交给外层滚动视图；鼠标拖动仍可选中文本。
+                child: SelectionArea(
+                  child: Text(
+                    _contentController.text,
+                    style: TextStyle(fontSize: _fontSize, height: 1.5),
+                  ),
+                ),
+              ),
       ),
     );
   }

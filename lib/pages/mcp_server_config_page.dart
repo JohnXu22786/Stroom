@@ -6,6 +6,8 @@ import '../models/mcp.dart';
 import '../providers/provider_config.dart';
 import 'mcp_server_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 Future<bool?> showMcpServerConfigDialog({
   required BuildContext context,
   required String entryId,
@@ -93,8 +95,9 @@ class _McpServerConfigDialogState
       return;
     }
     final config = entry.configs[widget.configIndex];
-    final mcpConfig =
-        config.models.isNotEmpty ? config.models[0].typeConfig : null;
+    final mcpConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : null;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
       typeConfig: mcpConfig,
@@ -263,7 +266,8 @@ class _McpServerConfigDialogState
       return;
     }
 
-    final changed = _nameController.text != _originalName ||
+    final changed =
+        _nameController.text != _originalName ||
         _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
@@ -354,10 +358,10 @@ class _McpServerConfigDialogState
     final argsStr = _argsController.text.trim();
     final args = argsStr.isNotEmpty
         ? argsStr
-            .split(',')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList()
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
         : <String>[];
 
     final apiKey = _apiKeyController.text.trim();
@@ -470,7 +474,8 @@ class _McpServerConfigDialogState
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
-    final existingConfig = _isExistingConfig &&
+    final existingConfig =
+        _isExistingConfig &&
             widget.configIndex >= 0 &&
             widget.configIndex < configs.length
         ? configs[widget.configIndex]
@@ -519,8 +524,9 @@ class _McpServerConfigDialogState
       _commandController.text = _transportType == McpTransportType.stdio
           ? _commandController.text.trim()
           : '';
-      _argsController.text =
-          _transportType == McpTransportType.stdio ? args.join(', ') : '';
+      _argsController.text = _transportType == McpTransportType.stdio
+          ? args.join(', ')
+          : '';
       _urlController.text = _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '';
@@ -536,8 +542,8 @@ class _McpServerConfigDialogState
     final cs = Theme.of(context).colorScheme;
     final title = _isExistingConfig
         ? (_nameController.text.isNotEmpty
-            ? _nameController.text
-            : AppLocalizations.of(context)!.mcpEditServerTitle)
+              ? _nameController.text
+              : AppLocalizations.of(context)!.mcpEditServerTitle)
         : AppLocalizations.of(context)!.mcpCreateServerTitle;
 
     return PopScope(
@@ -547,19 +553,31 @@ class _McpServerConfigDialogState
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.mcpUnsavedChangesTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.mcpUnsavedChangesTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(
               AppLocalizations.of(context)!.mcpUnsavedChangesConfirm,
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -579,7 +597,14 @@ class _McpServerConfigDialogState
           width: 560,
           height: MediaQuery.sizeOf(context).height * 0.85,
           child: Scaffold(
-            appBar: AppBar(title: Text(title), actions: _buildAppBarActions()),
+            appBar: AppBar(
+              title: ConstrainedText(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              actions: _buildAppBarActions(),
+            ),
             body: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -632,8 +657,8 @@ class _McpServerConfigDialogState
                       controller: _commandController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText:
-                            AppLocalizations.of(context)!.mcpCommandExample,
+                        hintText: AppLocalizations.of(context)!
+                            .mcpCommandExample,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.terminal, color: Colors.orange),
                       ),
@@ -656,8 +681,8 @@ class _McpServerConfigDialogState
                       controller: _argsController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText:
-                            AppLocalizations.of(context)!.mcpArgumentsHint,
+                        hintText: AppLocalizations.of(context)!
+                            .mcpArgumentsHint,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.list, color: Colors.purple),
                       ),
@@ -680,8 +705,8 @@ class _McpServerConfigDialogState
                       controller: _urlController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText:
-                            AppLocalizations.of(context)!.mcpSseUrlExample,
+                        hintText: AppLocalizations.of(context)!
+                            .mcpSseUrlExample,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.link, color: Colors.blue),
                       ),
@@ -726,8 +751,8 @@ class _McpServerConfigDialogState
                         onPressed: _isSaving
                             ? null
                             : () => setState(
-                                  () => _obscureApiKey = !_obscureApiKey,
-                                ),
+                                () => _obscureApiKey = !_obscureApiKey,
+                              ),
                       ),
                     ),
                     obscureText: _obscureApiKey,
@@ -754,8 +779,8 @@ class _McpServerConfigDialogState
                     controller: _descriptionController,
                     enabled: !_isSaving,
                     decoration: InputDecoration(
-                      hintText:
-                          AppLocalizations.of(context)!.mcpDescriptionHint,
+                      hintText: AppLocalizations.of(context)!
+                          .mcpDescriptionHint,
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.description, color: Colors.teal),
                     ),
@@ -787,9 +812,9 @@ class _McpServerConfigDialogState
                           child: Text(
                             _transportType == McpTransportType.stdio
                                 ? AppLocalizations.of(context)!
-                                    .mcpStdioDescription
+                                      .mcpStdioDescription
                                 : AppLocalizations.of(context)!
-                                    .mcpSseDescription,
+                                      .mcpSseDescription,
                             style: TextStyle(
                               fontSize: 12,
                               color: cs.onSurfaceVariant,
@@ -906,16 +931,22 @@ class _McpServerConfigDialogState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save, size: 20),
-          label: Text(
+          label: ConstrainedText(
             _isSaving
                 ? AppLocalizations.of(context)!.mcpSaving
                 : AppLocalizations.of(context)!.mermaidSaveButton,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         TextButton.icon(
           onPressed: _isSaving ? null : _discardChanges,
           icon: const Icon(Icons.close, size: 20),
-          label: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.taskFlowUiDiscard,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ];
     }
@@ -923,7 +954,11 @@ class _McpServerConfigDialogState
       if (_isExistingConfig)
         TextButton.icon(
           icon: const Icon(Icons.edit, size: 20),
-          label: Text(AppLocalizations.of(context)!.imagePreviewEdit),
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.imagePreviewEdit,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           onPressed: _enterEditMode,
         ),
     ];

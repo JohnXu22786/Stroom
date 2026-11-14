@@ -7,6 +7,8 @@ import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../providers/provider_config.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// 简洁模型配置编辑页面（适用于 OCR、ASR 等不需要 TTS 特有字段的类型）
 /// 包含：模型名称（可选）、模型ID（必填）、自定义参数（可选）
 class SimpleModelConfigPage extends StatefulWidget {
@@ -146,17 +148,25 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-            ? widget.model!.name
-            : AppLocalizations.of(context)!.modelEditTitle)
+              ? widget.model!.name
+              : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
-            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.mermaidSaveButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -209,8 +219,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
               const Spacer(),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.assistantAddParameter,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: _addCustomParam,
               ),
@@ -232,7 +244,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
             ...List.generate(_customParams.length, (i) {
               final param = _customParams[i];
               final name = param.paramName.trim();
-              final isDuplicate = name.isNotEmpty &&
+              final isDuplicate =
+                  name.isNotEmpty &&
                   _customParams.indexWhere((p) => p.paramName.trim() == name) !=
                       i;
               return Card(
@@ -253,7 +266,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                                 isDense: true,
                                 errorText: isDuplicate
                                     ? AppLocalizations.of(context)!
-                                        .modelParamExists
+                                          .modelParamExists
                                     : null,
                                 errorStyle: const TextStyle(fontSize: 11),
                               ),
@@ -278,14 +291,19 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                                 borderRadius: StroomMenuStyle.borderRadius,
                                 value: param.type,
                                 isDense: true,
+                                isExpanded: true,
                                 items: ParamType.values
                                     .map(
                                       (t) => DropdownMenuItem(
                                         value: t.value,
-                                        child: Text(
+                                        child: ConstrainedText(
                                           localizedParamTypeLabel(
-                                              AppLocalizations.of(context)!, t),
+                                            AppLocalizations.of(context)!,
+                                            t,
+                                          ),
                                           style: const TextStyle(fontSize: 13),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     )
@@ -306,8 +324,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                               size: 20,
                             ),
                             onPressed: () => _removeCustomParam(i),
-                            tooltip:
-                                AppLocalizations.of(context)!.modelParamDelete,
+                            tooltip: AppLocalizations.of(context)!
+                                .modelParamDelete,
                           ),
                         ],
                       ),
@@ -318,7 +336,9 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                           labelText: AppLocalizations.of(context)!
                               .modelParamDefaultValue,
                           hintText: localizedParamTypeDefaultValueHint(
-                              AppLocalizations.of(context)!, param.paramType),
+                            AppLocalizations.of(context)!,
+                            param.paramType,
+                          ),
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),

@@ -10,6 +10,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/notification_provider.dart';
 import '../services/notification_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// A page that detects current system environment, checks notification
 /// permission status, and provides a switch to enable/disable task completion
 /// notifications. The switch is only enabled when the system permission is
@@ -248,7 +250,11 @@ class _NotificationSettingsPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_strings.notificationSettingsPageTitle),
+        title: ConstrainedText(
+          _strings.notificationSettingsPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -435,7 +441,11 @@ class _NotificationSettingsPageState
                   child: OutlinedButton.icon(
                     onPressed: _isCheckingPermission ? null : _checkPermission,
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: Text(_strings.notificationSettingsCheckAgain),
+                    label: ConstrainedText(
+                      _strings.notificationSettingsCheckAgain,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 // Go to system settings button (only when permanently denied)
@@ -457,8 +467,9 @@ class _NotificationSettingsPageState
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.tonalIcon(
-                      onPressed:
-                          _isCheckingPermission ? null : _requestPermission,
+                      onPressed: _isCheckingPermission
+                          ? null
+                          : _requestPermission,
                       icon: const Icon(Icons.notifications, size: 18),
                       label: Text(
                         _strings.notificationSettingsRequestPermission,

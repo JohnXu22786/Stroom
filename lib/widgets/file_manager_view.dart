@@ -19,6 +19,8 @@ import 'file_manager_config.dart';
 import 'file_manager_utils.dart';
 import 'folder_picker_dialog.dart';
 
+import 'constrained_text.dart';
+
 export 'file_manager_config.dart';
 
 /// 单行文本：可用宽度不足时从「开头」省略（保留末尾），
@@ -133,7 +135,7 @@ class _FrontEllipsisText extends StatelessWidget {
   }
 
   Widget _buildText(String value, TextAlign align) {
-    return Text(
+    return ConstrainedText(
       value,
       style: style,
       maxLines: 1,
@@ -164,25 +166,25 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   /// 仅在重命名对话框显示了格式下拉框时被调用；为 null 时格式变更
   /// 会被忽略（回退到 [onRenameFile] 的纯改名路径）。
   final Future<void> Function(String id, String newName, String format)?
-      onRenameFileWithFormat;
+  onRenameFileWithFormat;
   final Future<void> Function(String id, String targetFolder) onMoveFile;
   final Future<void> Function(String id, String selectedFolder) onCopyFile;
   final Future<void> Function(String id) onDeleteFile;
   final Future<void> Function(List<String> ids) onDeleteFiles;
   final Future<void> Function(List<String> names) onDeleteFolders;
   final Future<void> Function(List<String> ids, String targetFolder)
-      onMoveFiles;
+  onMoveFiles;
   final Future<void> Function(List<String> names, String targetFolder)
-      onMoveFolders;
+  onMoveFolders;
   final Future<void> Function(String id) onExportFile;
 
   /// 批量导出文件/文件夹。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
   /// 返回非 null 的目录会被传递给后续导出，避免混合选择时弹出两次目录选择。
   final Future<String?> Function(List<String> ids, String targetDirectory)?
-      onExportFiles;
+  onExportFiles;
   final Future<String?> Function(List<String> names, String targetDirectory)?
-      onExportFolders;
+  onExportFolders;
 
   /// Builds the exported logical path when it differs from the stored record
   /// name, such as audio whose actual format is detected from its bytes.
@@ -591,14 +593,14 @@ class _FileManagerViewState<T extends FileRecord>
                   folderPath.isEmpty
                       ? Icons.home_outlined
                       : folderPath == _currentFolder
-                          ? Icons.check
-                          : Icons.folder_outlined,
+                      ? Icons.check
+                      : Icons.folder_outlined,
                   size: 18,
                   color: Colors.grey[600],
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     folderPath.isEmpty
                         ? AppLocalizations.of(context)!.fileManagerRoot
                         : widget.manifestBridge.getFolderBaseName(folderPath),
@@ -619,7 +621,7 @@ class _FileManagerViewState<T extends FileRecord>
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
-            child: Text(
+            child: ConstrainedText(
               widget.manifestBridge.getFolderBaseName(_currentFolder),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -640,17 +642,18 @@ class _FileManagerViewState<T extends FileRecord>
       SortField.size => strings.fileManagerSortFieldSize,
     };
     final sortOrderLabel = switch (widget.sortConfig.field) {
-      SortField.createdAt ||
-      SortField.modifiedAt =>
+      SortField.createdAt || SortField.modifiedAt =>
         widget.sortConfig.order == SortOrder.descending
             ? strings.fileManagerSortDateNewest
             : strings.fileManagerSortDateOldest,
-      SortField.name => widget.sortConfig.order == SortOrder.descending
-          ? strings.fileManagerSortNameDescending
-          : strings.fileManagerSortNameAscending,
-      SortField.size => widget.sortConfig.order == SortOrder.descending
-          ? strings.fileManagerSortSizeLargest
-          : strings.fileManagerSortSizeSmallest,
+      SortField.name =>
+        widget.sortConfig.order == SortOrder.descending
+            ? strings.fileManagerSortNameDescending
+            : strings.fileManagerSortNameAscending,
+      SortField.size =>
+        widget.sortConfig.order == SortOrder.descending
+            ? strings.fileManagerSortSizeLargest
+            : strings.fileManagerSortSizeSmallest,
     };
     return AppBar(
       primary: false,
@@ -667,8 +670,8 @@ class _FileManagerViewState<T extends FileRecord>
                   .fileManagerSelectedItems(_selectedIds.length),
             )
           : _currentFolder.isNotEmpty
-              ? _buildFolderBreadcrumbTitle()
-              : Text(widget.config.title),
+          ? _buildFolderBreadcrumbTitle()
+          : Text(widget.config.title),
       centerTitle: true,
       leading: _selectionMode
           ? IconButton(
@@ -677,18 +680,18 @@ class _FileManagerViewState<T extends FileRecord>
               onPressed: _exitSelectionMode,
             )
           : (_currentFolder.isNotEmpty
-              ? IconButton(
-                  key: const Key('fm_back_btn'),
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    _setCurrentFolder(
-                      widget.manifestBridge.getParentFolderPath(
-                        _currentFolder,
-                      ),
-                    );
-                  },
-                )
-              : null),
+                ? IconButton(
+                    key: const Key('fm_back_btn'),
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      _setCurrentFolder(
+                        widget.manifestBridge.getParentFolderPath(
+                          _currentFolder,
+                        ),
+                      );
+                    },
+                  )
+                : null),
       actions: [
         if (_selectionMode) ...[
           IconButton(
@@ -700,7 +703,8 @@ class _FileManagerViewState<T extends FileRecord>
               // 以「当前可见项是否全部选中」为切换依据：
               // 选择模式支持跨文件夹导航，用总数比较会被其他文件夹
               // 的旧选择干扰，导致取消全选时误清全部选择
-              final allVisibleSelected = allVisible.isNotEmpty &&
+              final allVisibleSelected =
+                  allVisible.isNotEmpty &&
                   allVisible.every(_selectedIds.contains);
               if (allVisibleSelected) {
                 setState(() => _selectedIds.removeAll(allVisible));
@@ -715,8 +719,9 @@ class _FileManagerViewState<T extends FileRecord>
               key: const Key('fm_batch_rename_history'),
               tooltip: AppLocalizations.of(context)!.fileManagerRenameUndo,
               icon: const Icon(Icons.history),
-              onPressed:
-                  _batchRenameActive ? null : () => _applyBatchRenamePlan(null),
+              onPressed: _batchRenameActive
+                  ? null
+                  : () => _applyBatchRenamePlan(null),
             ),
           // Extra app bar actions (e.g. task list button)
           if (widget.config.extraAppBarActions != null)
@@ -818,8 +823,9 @@ class _FileManagerViewState<T extends FileRecord>
       return widget.sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 
-    final currentFiles =
-        isInFolder ? (grouped[_currentFolder] ?? []) : (grouped[''] ?? []);
+    final currentFiles = isInFolder
+        ? (grouped[_currentFolder] ?? [])
+        : (grouped[''] ?? []);
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
@@ -924,8 +930,9 @@ class _FileManagerViewState<T extends FileRecord>
       return widget.sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 
-    final currentFiles =
-        isInFolder ? (grouped[_currentFolder] ?? []) : (grouped[''] ?? []);
+    final currentFiles = isInFolder
+        ? (grouped[_currentFolder] ?? [])
+        : (grouped[''] ?? []);
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
@@ -1011,7 +1018,7 @@ class _FileManagerViewState<T extends FileRecord>
                 const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
+                  child: ConstrainedText(
                     widget.manifestBridge.getFolderBaseName(folderName),
                     style: const TextStyle(
                       fontSize: 11,
@@ -1128,7 +1135,7 @@ class _FileManagerViewState<T extends FileRecord>
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
+                        child: ConstrainedText(
                           '${file.name}.${file.format}',
                           style: const TextStyle(fontSize: 10),
                           maxLines: 1,
@@ -1237,7 +1244,7 @@ class _FileManagerViewState<T extends FileRecord>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         widget.manifestBridge.getFolderBaseName(folderName),
                         style: const TextStyle(
                           fontWeight: FontWeight.w500,
@@ -1441,10 +1448,8 @@ class _FileManagerViewState<T extends FileRecord>
                 decoration: BoxDecoration(
                   color: hasThumbnailBuilder
                       ? null
-                      : Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.1),
+                      : Theme.of(context).colorScheme.primary
+                            .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 clipBehavior: hasThumbnailBuilder ? Clip.antiAlias : Clip.none,
@@ -1460,7 +1465,7 @@ class _FileManagerViewState<T extends FileRecord>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ConstrainedText(
                       '${file.name}.${file.format}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
@@ -1653,7 +1658,8 @@ class _FileManagerViewState<T extends FileRecord>
     // 与创建页一致，仅限那几种格式之间切换。页面未提供
     // onRenameFileWithFormat 时不显示（否则格式变更会被静默丢弃）
     final formatOptions = widget.config.renameFormatOptions;
-    final showFormatDropdown = formatOptions != null &&
+    final showFormatDropdown =
+        formatOptions != null &&
         formatOptions.contains(format) &&
         widget.onRenameFileWithFormat != null;
 
@@ -1855,8 +1861,10 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_file_dialog'),
-        title: Text(
+        title: ConstrainedText(
           AppLocalizations.of(context)!.fileManagerDeleteConfirmTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: Text(
           AppLocalizations.of(context)!.fileManagerDeleteFileConfirm,
@@ -1865,14 +1873,20 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_delete_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             key: const Key('fm_delete_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.fileManagerDelete,
               style: TextStyle(color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -1945,7 +1959,8 @@ class _FileManagerViewState<T extends FileRecord>
     for (final name in folderNames) {
       final base = widget.manifestBridge.getFolderBaseName(name);
       final newPath = targetFolder.isEmpty ? base : '$targetFolder/$base';
-      final invalid = newPath == name ||
+      final invalid =
+          newPath == name ||
           targetFolder == name ||
           targetFolder.startsWith('$name/') ||
           liveFolders.any((f) => f == newPath || f.startsWith('$newPath/')) ||
@@ -1957,7 +1972,7 @@ class _FileManagerViewState<T extends FileRecord>
               content: Text(
                 newPath == name
                     ? AppLocalizations.of(context)!
-                        .fileManagerFolderAlreadyThere
+                          .fileManagerFolderAlreadyThere
                     : AppLocalizations.of(context)!.fileManagerFolderConflict,
               ),
               duration: const Duration(seconds: 3),
@@ -1976,7 +1991,11 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_selected_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerBatchDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerBatchDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!
               .fileManagerDeleteSelectedConfirm(_selectedIds.length),
@@ -1985,14 +2004,20 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_batch_delete_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             key: const Key('fm_batch_delete_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.fileManagerDelete,
               style: TextStyle(color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -2155,8 +2180,9 @@ class _FileManagerViewState<T extends FileRecord>
         widget.manifestBridge.getAllDescendantFolderPaths(name, widget.folders),
       );
     }
-    final targetFolders =
-        widget.folders.where((f) => !excluded.contains(f)).toSet();
+    final targetFolders = widget.folders
+        .where((f) => !excluded.contains(f))
+        .toSet();
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
@@ -2277,8 +2303,9 @@ class _FileManagerViewState<T extends FileRecord>
         widget.manifestBridge.getAllDescendantFolderPaths(name, widget.folders),
       );
     }
-    final targetFolders =
-        widget.folders.where((f) => !excluded.contains(f)).toSet();
+    final targetFolders = widget.folders
+        .where((f) => !excluded.contains(f))
+        .toSet();
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
@@ -2361,8 +2388,9 @@ class _FileManagerViewState<T extends FileRecord>
         fileIds.add(id);
       }
     }
-    final selectedFiles =
-        widget.sortedRecords.where((r) => fileIds.contains(r.id)).toList();
+    final selectedFiles = widget.sortedRecords
+        .where((r) => fileIds.contains(r.id))
+        .toList();
 
     final plan = await showBatchRenameDialog<T>(
       context: context,
@@ -2456,7 +2484,11 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_create_folder_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerCreateFolder),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerCreateFolder,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           key: const Key('fm_create_folder_input'),
           controller: _folderNameController,
@@ -2469,7 +2501,11 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_create_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           ElevatedButton(
             key: const Key('fm_create_folder_confirm_btn'),
@@ -2478,7 +2514,11 @@ class _FileManagerViewState<T extends FileRecord>
               // 避免按钮无响应让用户困惑（含空名称）
               Navigator.pop(ctx, _folderNameController.text.trim());
             },
-            child: Text(AppLocalizations.of(context)!.fileManagerCreate),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCreate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2501,8 +2541,9 @@ class _FileManagerViewState<T extends FileRecord>
         return;
       }
       // Prepend the current folder path to create subfolder hierarchy
-      final fullPath =
-          _currentFolder.isEmpty ? result : '$_currentFolder/$result';
+      final fullPath = _currentFolder.isEmpty
+          ? result
+          : '$_currentFolder/$result';
       // 重名检查：与内嵌文件夹选择面板行为保持一致
       if (widget.folders.contains(fullPath)) {
         if (mounted) {
@@ -2560,7 +2601,11 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_rename_folder_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerRenameFolderTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerRenameFolderTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           key: const Key('fm_rename_folder_input'),
           controller: _renameController,
@@ -2574,7 +2619,11 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_rename_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           ElevatedButton(
             key: const Key('fm_rename_folder_confirm_btn'),
@@ -2583,7 +2632,11 @@ class _FileManagerViewState<T extends FileRecord>
               // 避免按钮无响应让用户困惑（含空名称）
               Navigator.pop(ctx, _renameController.text.trim());
             },
-            child: Text(AppLocalizations.of(context)!.fileManagerRename),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerRename,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2655,8 +2708,9 @@ class _FileManagerViewState<T extends FileRecord>
       widget.folders,
     );
     final excluded = {folderName, ...descendants};
-    final targetFolders =
-        widget.folders.where((f) => !excluded.contains(f)).toSet();
+    final targetFolders = widget.folders
+        .where((f) => !excluded.contains(f))
+        .toSet();
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
@@ -2685,8 +2739,9 @@ class _FileManagerViewState<T extends FileRecord>
     // 目标位于自身/子树内（如内嵌面板中新建了同名文件夹），
     // 或目标位置已存在同名文件夹（会静默合并），均拒绝执行
     final base = widget.manifestBridge.getFolderBaseName(folderName);
-    final prospectivePath =
-        selectedFolder.isEmpty ? base : '$selectedFolder/$base';
+    final prospectivePath = selectedFolder.isEmpty
+        ? base
+        : '$selectedFolder/$base';
     if (selectedFolder == folderName ||
         selectedFolder.startsWith('$folderName/') ||
         liveFolders.any(
@@ -2733,8 +2788,9 @@ class _FileManagerViewState<T extends FileRecord>
       widget.folders,
     );
     final excluded = {folderName, ...descendants};
-    final targetFolders =
-        widget.folders.where((f) => !excluded.contains(f)).toSet();
+    final targetFolders = widget.folders
+        .where((f) => !excluded.contains(f))
+        .toSet();
 
     final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
@@ -2763,8 +2819,9 @@ class _FileManagerViewState<T extends FileRecord>
     // 目标位于自身/子树内（如内嵌面板中新建了同名文件夹），
     // 或目标位置已存在同名文件夹（会造成重复复制），均拒绝执行
     final base = widget.manifestBridge.getFolderBaseName(folderName);
-    final prospectivePath =
-        selectedFolder.isEmpty ? base : '$selectedFolder/$base';
+    final prospectivePath = selectedFolder.isEmpty
+        ? base
+        : '$selectedFolder/$base';
     if (selectedFolder == folderName ||
         selectedFolder.startsWith('$folderName/') ||
         liveFolders.any(
@@ -2802,48 +2859,60 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<void> _deleteFolder(String folderName) async {
-    final directCount =
-        widget.sortedRecords.where((r) => r.folder == folderName).length;
+    final directCount = widget.sortedRecords
+        .where((r) => r.folder == folderName)
+        .length;
     final descendants = widget.manifestBridge.getAllDescendantFolderPaths(
       folderName,
       widget.folders,
     );
     int subFileCount = 0;
     for (final desc in descendants) {
-      subFileCount +=
-          widget.sortedRecords.where((r) => r.folder == desc).length;
+      subFileCount += widget.sortedRecords
+          .where((r) => r.folder == desc)
+          .length;
     }
     final fileCount = directCount + subFileCount;
     final message = fileCount > 0
         ? AppLocalizations.of(context)!
-            .fileManagerDeleteFolderConfirm(fileCount, folderName)
+              .fileManagerDeleteFolderConfirm(fileCount, folderName)
         : descendants.isNotEmpty
-            ? AppLocalizations.of(context)!
-                .fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+        ? AppLocalizations.of(context)!
+              .fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
                 descendants.length,
                 folderName,
               )
-            : AppLocalizations.of(context)!
-                .fileManagerDeleteEmptyFolderConfirm(folderName);
+        : AppLocalizations.of(context)!
+              .fileManagerDeleteEmptyFolderConfirm(folderName);
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_folder_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerDeleteFolderTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerDeleteFolderTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(message),
         actions: [
           TextButton(
             key: const Key('fm_delete_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             key: const Key('fm_delete_folder_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.fileManagerDelete,
               style: TextStyle(color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -2986,7 +3055,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       key: const Key('fm_rename_file_dialog'),
-      title: Text(AppLocalizations.of(context)!.fileManagerRenameFileTitle),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.fileManagerRenameFileTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3005,6 +3078,7 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                 dropdownColor: StroomMenuStyle.surface(context),
                 borderRadius: StroomMenuStyle.borderRadius,
                 key: const Key('fm_rename_file_format_dropdown'),
+                isExpanded: true,
                 initialValue: _selectedFormat,
                 decoration: InputDecoration(
                   labelText: AppLocalizations.of(context)!.fileManagerFormat,
@@ -3015,7 +3089,16 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                   ),
                 ),
                 items: widget.formatOptions
-                    .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                    .map(
+                      (f) => DropdownMenuItem(
+                        value: f,
+                        child: ConstrainedText(
+                          f,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -3031,7 +3114,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
         TextButton(
           key: const Key('fm_rename_cancel_btn'),
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.fileManagerCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         ElevatedButton(
           key: const Key('fm_rename_confirm_btn'),
@@ -3043,7 +3130,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
               _selectedFormat,
             ));
           },
-          child: Text(AppLocalizations.of(context)!.fileManagerRename),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.fileManagerRename,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

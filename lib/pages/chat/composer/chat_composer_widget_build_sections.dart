@@ -78,8 +78,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     );
     final bool noToolsEnabled = visibleEnabledTools.isEmpty;
     final Color toolColor = noToolsEnabled ? Colors.grey : toolAccentColor;
-    final int? toolBadgeCount =
-        noToolsEnabled ? null : visibleEnabledTools.length;
+    final int? toolBadgeCount = noToolsEnabled
+        ? null
+        : visibleEnabledTools.length;
 
     // ═══════════════════════════════════════════════════════════
     // Custom params chip reflects both configured CustomParam values and
@@ -91,21 +92,21 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     ) {
       final selected = customParamValues != null
           ? customParamValues.containsKey(param.paramName)
-              ? param.type == 'json'
-                  ? param.defaultValue
-                  : customParamValues[param.paramName] ?? ''
-              : ''
-          : param.type == 'json'
-              ? param.defaultValue
-              : param.options.isNotEmpty
-                  ? param.options.first
-                  : param.optionOrder.isEmpty &&
-                          param.defaultValue.trim().isNotEmpty
+                ? param.type == 'json'
                       ? param.defaultValue
-                      : param.type == 'boolean'
-                          ? 'true'
-                          : '';
-      final isSelectable = param.options.isNotEmpty ||
+                      : customParamValues[param.paramName] ?? ''
+                : ''
+          : param.type == 'json'
+          ? param.defaultValue
+          : param.options.isNotEmpty
+          ? param.options.first
+          : param.optionOrder.isEmpty && param.defaultValue.trim().isNotEmpty
+          ? param.defaultValue
+          : param.type == 'boolean'
+          ? 'true'
+          : '';
+      final isSelectable =
+          param.options.isNotEmpty ||
           param.optionOrder.isNotEmpty ||
           param.type == 'boolean' ||
           (param.optionOrder.isEmpty && param.defaultValue.trim().isNotEmpty);
@@ -126,7 +127,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     final hasActiveReasoningCustomParams = activeReasoningCustomParamsCount > 0;
     final hasActiveReasoningToggle =
         reasoningEnabled && hasUsableReasoningToggle;
-    final reasoningColor = (hasActiveReasoningToggle ||
+    final reasoningColor =
+        (hasActiveReasoningToggle ||
             hasActiveEffort ||
             hasActiveReasoningCustomParams)
         ? Colors.purple
@@ -134,10 +136,12 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     final activeCustomParamsCount =
         activeConfiguredCustomParamsCount + activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;
-    final Color customParamsColor =
-        hasActiveCustomParams ? toolAccentColor : Colors.grey;
-    final int? customParamsBadgeCountOrNull =
-        hasActiveCustomParams ? activeCustomParamsCount : null;
+    final Color customParamsColor = hasActiveCustomParams
+        ? toolAccentColor
+        : Colors.grey;
+    final int? customParamsBadgeCountOrNull = hasActiveCustomParams
+        ? activeCustomParamsCount
+        : null;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -157,7 +161,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxTagWidth),
                 child: ModelNameChip(
-                  displayName: (widget.modelNames.isNotEmpty &&
+                  displayName:
+                      (widget.modelNames.isNotEmpty &&
                           widget.selectedModelIndex >= 0 &&
                           widget.selectedModelIndex < widget.modelNames.length)
                       ? widget.modelNames[widget.selectedModelIndex]
@@ -316,7 +321,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     ),
                     const SizedBox(width: 6),
                     Flexible(
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.chatEditWarning,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

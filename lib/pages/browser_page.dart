@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -15,6 +16,8 @@ import '../catcatch/engine/webview_sniffer.dart'
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
 import '../services/userscript_http.dart';
+
+import '../widgets/constrained_text.dart';
 
 const _scriptsKey = 'browser_user_scripts';
 const _ambiguousMainFrameErrorTimeout = Duration(seconds: 5);
@@ -63,7 +66,8 @@ Future<bool> navigateBrowserPageAfterCookiePreparation({
   try {
     if (!await prepareCookies()) {
       debugPrint(
-          '[BrowserPage] native cookie cleanup failed; skipping navigation');
+        '[BrowserPage] native cookie cleanup failed; skipping navigation',
+      );
       return false;
     }
   } catch (e) {
@@ -121,14 +125,16 @@ class BrowserCookieStorePreparation {
     if (inFlightPreparation != null) return inFlightPreparation;
 
     late final Future<bool> preparation;
-    preparation = Future<bool>.sync(_prepareCookies).then((prepared) {
-      if (prepared) _prepared = true;
-      return prepared;
-    }).whenComplete(() {
-      if (identical(_inFlightPreparation, preparation)) {
-        _inFlightPreparation = null;
-      }
-    });
+    preparation = Future<bool>.sync(_prepareCookies)
+        .then((prepared) {
+          if (prepared) _prepared = true;
+          return prepared;
+        })
+        .whenComplete(() {
+          if (identical(_inFlightPreparation, preparation)) {
+            _inFlightPreparation = null;
+          }
+        });
     _inFlightPreparation = preparation;
     return preparation;
   }
@@ -185,8 +191,8 @@ class UserScript {
     List<String>? matches,
     this.enabled = true,
     this.origin = 'manual',
-  })  : id = id ?? const Uuid().v4(),
-        code = matches == null ? code : _migrateLegacyMatches(code, matches);
+  }) : id = id ?? const Uuid().v4(),
+       code = matches == null ? code : _migrateLegacyMatches(code, matches);
 
   String? get version => _userscriptMetadataValue(code, 'version');
 
@@ -199,12 +205,12 @@ class UserScript {
   bool shouldRunAt(String url) => enabled && code.isNotEmpty && matchesUrl(url);
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'name': name,
-        'code': code,
-        'enabled': enabled,
-        'origin': origin,
-      };
+    'id': id,
+    'name': name,
+    'code': code,
+    'enabled': enabled,
+    'origin': origin,
+  };
 
   factory UserScript.fromMap(Map<String, dynamic> map) {
     final legacyMatches = map['matches'];
@@ -331,7 +337,8 @@ class UserScript {
       return false;
     }
 
-    final urlPathAndQuery = '${urlUri.path.isEmpty ? '/' : urlUri.path}'
+    final urlPathAndQuery =
+        '${urlUri.path.isEmpty ? '/' : urlUri.path}'
         '${urlUri.hasQuery ? '?${urlUri.query}' : ''}';
     // The path is matched case-sensitively (Chrome semantics).
     return RegExp(globToRegex(pathPat, host: false)).hasMatch(urlPathAndQuery);
@@ -358,8 +365,9 @@ String? _userscriptMetadataValue(String code, String key) {
   final end = code.indexOf('// ==/UserScript==', start);
   if (end < 0) return null;
   final header = code.substring(start, end);
-  final linePattern =
-      RegExp('^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*\$');
+  final linePattern = RegExp(
+    '^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*\$',
+  );
   for (final line in header.split('\n')) {
     final value = linePattern.firstMatch(line.trim())?.group(1)?.trim();
     if (value != null && value.isNotEmpty) return value;
@@ -373,8 +381,9 @@ String? _userscriptMetadataName(String code) {
   final end = code.indexOf('// ==/UserScript==', start);
   if (end < 0) return null;
   final header = code.substring(start, end);
-  final nameLine =
-      RegExp(r'^//[ \t]*@name(?::[A-Za-z0-9-]+)?(?:[ \t]+(.*?))?[ \t]*$');
+  final nameLine = RegExp(
+    r'^//[ \t]*@name(?::[A-Za-z0-9-]+)?(?:[ \t]+(.*?))?[ \t]*$',
+  );
   for (final line in header.split('\n')) {
     final match = nameLine.firstMatch(line.trim());
     final name = match?.group(1)?.trim();
@@ -713,7 +722,9 @@ class _BrowserPageState extends State<BrowserPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          _scriptsKey, jsonEncode(_scripts.map((s) => s.toMap()).toList()));
+        _scriptsKey,
+        jsonEncode(_scripts.map((s) => s.toMap()).toList()),
+      );
     } catch (e) {
       debugPrint('_saveScripts failed: $e');
     }
@@ -738,7 +749,8 @@ class _BrowserPageState extends State<BrowserPage> {
     if (!_scriptInjectionsInFlight.add(injectionKey)) return;
     final errorSource = 'stroom-userscript-${script.id}.js';
     String? evaluatedCode;
-    final monitor = '''
+    final monitor =
+        '''
 (function() {
   var errorScriptId = ${jsonEncode(script.id)};
   var errorSource = ${jsonEncode(errorSource)};
@@ -839,9 +851,7 @@ class _BrowserPageState extends State<BrowserPage> {
   Future<void> _injectCatCatchHook(String url) async {
     if (_webViewController == null) return;
     try {
-      await _webViewController!.evaluateJavascript(
-        source: JsHookScript.script,
-      );
+      await _webViewController!.evaluateJavascript(source: JsHookScript.script);
       // Only record the injection if this page is still current — a slow
       // injection for a previous page must not mark the current one as done.
       if (url == _currentUrl) {
@@ -979,8 +989,9 @@ class _BrowserPageState extends State<BrowserPage> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.browserNavigationFailed),
+            content: Text(
+              AppLocalizations.of(context)!.browserNavigationFailed,
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -996,8 +1007,10 @@ class _BrowserPageState extends State<BrowserPage> {
         ? MediaQuery.sizeOf(context)
         : _panelAreaSize;
     return Offset(
-      _panelOffset.dx
-          .clamp(0.0, max(0.0, size.width - DraggableFloatingPanel.panelWidth)),
+      _panelOffset.dx.clamp(
+        0.0,
+        max(0.0, size.width - DraggableFloatingPanel.panelWidth),
+      ),
       _panelOffset.dy.clamp(0.0, max(0.0, size.height - 48)),
     );
   }
@@ -1026,10 +1039,13 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor:
-                colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            fillColor: colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.5,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
             suffixIcon: IconButton(
               icon: const Icon(Icons.arrow_forward, size: 18),
               onPressed: () => _goToUrl(_urlController.text),
@@ -1041,13 +1057,18 @@ class _BrowserPageState extends State<BrowserPage> {
         actions: [
           if (widget.recoveryMode)
             TextButton.icon(
-              onPressed: _recoveryCanContinue &&
+              onPressed:
+                  _recoveryCanContinue &&
                       _detectedUrls.isNotEmpty &&
                       !_recoveryContinuationInProgress
                   ? _continueRecovery
                   : null,
               icon: const Icon(Icons.play_arrow),
-              label: Text(l10n.browserRecoveryContinue),
+              label: ConstrainedText(
+                l10n.browserRecoveryContinue,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           IconButton(
             icon: const Icon(Icons.extension, size: 20),
@@ -1065,7 +1086,7 @@ class _BrowserPageState extends State<BrowserPage> {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
+                    child: ConstrainedText(
                       l10n.catcatchWebViewRecoveryGuidance,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -1096,8 +1117,9 @@ class _BrowserPageState extends State<BrowserPage> {
                         // after the native cookie store is prepared for the selected
                         // retention mode.
                         initialUrlRequest: null,
-                        initialSettings:
-                            _buildSettings(isDesktopMode: _isDesktopMode),
+                        initialSettings: _buildSettings(
+                          isDesktopMode: _isDesktopMode,
+                        ),
                         onWebViewCreated: (controller) async {
                           _webViewController = controller;
 
@@ -1117,7 +1139,8 @@ class _BrowserPageState extends State<BrowserPage> {
                             );
                           } catch (e) {
                             debugPrint(
-                                '[BrowserPage] JS handler bridge unavailable: $e');
+                              '[BrowserPage] JS handler bridge unavailable: $e',
+                            );
                           }
 
                           try {
@@ -1131,7 +1154,8 @@ class _BrowserPageState extends State<BrowserPage> {
                             );
                           } catch (e) {
                             debugPrint(
-                                '[BrowserPage] User-script error bridge unavailable: $e');
+                              '[BrowserPage] User-script error bridge unavailable: $e',
+                            );
                           }
 
                           // Clear stale native cookies when retention is disabled,
@@ -1145,7 +1169,8 @@ class _BrowserPageState extends State<BrowserPage> {
                                 if (!mounted) return;
                                 await controller.loadUrl(
                                   urlRequest: URLRequest(
-                                      url: WebUri(widget.initialUrl)),
+                                    url: WebUri(widget.initialUrl),
+                                  ),
                                 );
                               },
                             );
@@ -1292,13 +1317,16 @@ class _BrowserPageState extends State<BrowserPage> {
                       setState(() {
                         _panelOffset = Offset(
                           (current.dx + delta.dx).clamp(
+                            0.0,
+                            max(
                               0.0,
-                              max(
-                                  0.0,
-                                  size.width -
-                                      DraggableFloatingPanel.panelWidth)),
-                          (current.dy + delta.dy)
-                              .clamp(0.0, max(0.0, size.height - 48)),
+                              size.width - DraggableFloatingPanel.panelWidth,
+                            ),
+                          ),
+                          (current.dy + delta.dy).clamp(
+                            0.0,
+                            max(0.0, size.height - 48),
+                          ),
                         );
                       });
                     },
@@ -1477,16 +1505,28 @@ Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(l10n.browserDeleteScriptTitle),
+      title: ConstrainedText(
+        l10n.browserDeleteScriptTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Text(l10n.browserDeleteScriptConfirmation),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: Text(l10n.browserCancel),
+          child: ConstrainedText(
+            l10n.browserCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          child: Text(l10n.browserScriptDelete),
+          child: ConstrainedText(
+            l10n.browserScriptDelete,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),
@@ -1529,12 +1569,20 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
         child: Column(
           children: [
             AppBar(
-              title: Text(l10n.browserUserScripts),
+              title: ConstrainedText(
+                l10n.browserUserScripts,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               automaticallyImplyLeading: false,
               actions: [
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(l10n.browserAdd),
+                  label: ConstrainedText(
+                    l10n.browserAdd,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   onPressed: _addScript,
                 ),
               ],
@@ -1543,9 +1591,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
               child: ValueListenableBuilder<Set<String>>(
                 valueListenable: widget.runtimeErrors,
                 builder: (context, runtimeErrors, _) => _scripts.isEmpty
-                    ? Center(
-                        child: Text(l10n.browserNoScripts),
-                      )
+                    ? Center(child: Text(l10n.browserNoScripts))
                     : ListView.builder(
                         itemCount: _scripts.length,
                         itemBuilder: (ctx, i) {
@@ -1564,17 +1610,21 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                             l10n.browserScriptMatchCount(s.matches.length),
                           ];
                           return ListTile(
-                            title: Text(s.name.isNotEmpty
-                                ? s.name
-                                : l10n.browserUnnamedScript),
-                            subtitle: Text(
+                            title: Text(
+                              s.name.isNotEmpty
+                                  ? s.name
+                                  : l10n.browserUnnamedScript,
+                            ),
+                            subtitle: ConstrainedText(
                               details.join(' · '),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: runtimeErrors.contains(s.id)
                                   ? TextStyle(
-                                      color:
-                                          Theme.of(context).colorScheme.error)
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                    )
                                   : null,
                             ),
                             trailing: Row(
@@ -1583,19 +1633,23 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                                 Switch(
                                   value: s.enabled,
                                   onChanged: (enabled) {
-                                    setState(() => _scripts[i] = UserScript(
-                                          id: s.id,
-                                          name: s.name,
-                                          code: s.code,
-                                          enabled: enabled,
-                                          origin: s.origin,
-                                        ));
+                                    setState(
+                                      () => _scripts[i] = UserScript(
+                                        id: s.id,
+                                        name: s.name,
+                                        code: s.code,
+                                        enabled: enabled,
+                                        origin: s.origin,
+                                      ),
+                                    );
                                     _notifyChanged();
                                   },
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline,
-                                      color: Colors.red),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                  ),
                                   tooltip: l10n.browserScriptDelete,
                                   onPressed: () => _confirmDeleteScript(i),
                                 ),
@@ -1618,11 +1672,19 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
     showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.browserAddScriptMethod),
+        title: ConstrainedText(
+          l10n.browserAddScriptMethod,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(l10n.browserCancel),
+            child: ConstrainedText(
+              l10n.browserCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
         content: Column(
@@ -1653,16 +1715,28 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
     final trusted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.browserScriptTrustWarningTitle),
+        title: ConstrainedText(
+          l10n.browserScriptTrustWarningTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.browserScriptTrustWarning),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n.browserCancel),
+            child: ConstrainedText(
+              l10n.browserCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.browserContinue),
+            child: ConstrainedText(
+              l10n.browserContinue,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1679,8 +1753,9 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
 
   Future<void> _editScript(int index) async {
     final isNew = index < 0;
-    final script =
-        isNew ? UserScript(name: '', code: '', matches: []) : _scripts[index];
+    final script = isNew
+        ? UserScript(name: '', code: '', matches: [])
+        : _scripts[index];
     final updated = await showDialog<UserScript>(
       context: context,
       builder: (ctx) => _ScriptEditDialog(script: script),
@@ -1740,7 +1815,11 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(l10n.browserEditScript),
+      title: ConstrainedText(
+        l10n.browserEditScript,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -1763,8 +1842,7 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                 decoration: InputDecoration(
                   labelText: l10n.browserManualUserscriptLabel,
                   border: OutlineInputBorder(),
-                  hintText:
-                      '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
+                  hintText: '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
@@ -1775,14 +1853,19 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(l10n.browserCancel),
+          child: ConstrainedText(
+            l10n.browserCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () {
             Navigator.pop(
               context,
               UserScript(
-                name: _userscriptMetadataName(_codeCtrl.text) ??
+                name:
+                    _userscriptMetadataName(_codeCtrl.text) ??
                     (_nameCtrl.text.trim().isNotEmpty
                         ? _nameCtrl.text.trim()
                         : l10n.browserUnnamedScript),
@@ -1793,7 +1876,11 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               ),
             );
           },
-          child: Text(l10n.browserSave),
+          child: ConstrainedText(
+            l10n.browserSave,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -1853,11 +1940,15 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
       setState(
-          () => _error = l10n.browserScriptImportHttpError('${e.statusCode}'));
+        () => _error = l10n.browserScriptImportHttpError('${e.statusCode}'),
+      );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error =
-          AppLocalizations.of(context)!.browserScriptImportNetworkError);
+      setState(
+        () =>
+            _error = AppLocalizations.of(context)!
+                .browserScriptImportNetworkError,
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1869,7 +1960,11 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
     final source = _source;
     final name = source == null ? null : _displayName(source, l10n);
     return AlertDialog(
-      title: Text(l10n.browserImportFromUrl),
+      title: ConstrainedText(
+        l10n.browserImportFromUrl,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -1893,14 +1988,17 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error)),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ],
               if (source != null) ...[
                 const SizedBox(height: 12),
-                Text('${l10n.browserScriptName}: $name',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  '${l10n.browserScriptName}: $name',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
                 InputDecorator(
                   decoration: InputDecoration(
@@ -1910,9 +2008,13 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
                   child: SizedBox(
                     height: 180,
                     child: SingleChildScrollView(
-                      child: SelectableText(source,
-                          style: const TextStyle(
-                              fontSize: 12, fontFamily: 'monospace')),
+                      child: SelectableText(
+                        source,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1924,7 +2026,11 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(l10n.browserCancel),
+          child: ConstrainedText(
+            l10n.browserCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         TextButton.icon(
           onPressed: _loading ? null : _fetch,
@@ -1935,21 +2041,29 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.download),
-          label: Text(l10n.browserScriptImportFetch),
+          label: ConstrainedText(
+            l10n.browserScriptImportFetch,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: source == null
               ? null
               : () => Navigator.pop(
-                    context,
-                    UserScript(
-                      name: name!,
-                      code: source,
-                      enabled: false,
-                      origin: _urlCtrl.text.trim(),
-                    ),
+                  context,
+                  UserScript(
+                    name: name!,
+                    code: source,
+                    enabled: false,
+                    origin: _urlCtrl.text.trim(),
                   ),
-          child: Text(l10n.browserSave),
+                ),
+          child: ConstrainedText(
+            l10n.browserSave,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

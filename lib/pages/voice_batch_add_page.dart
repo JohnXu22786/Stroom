@@ -5,6 +5,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 import 'voice_batch_add_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // 批量添加音色页面
 // ============================================================================
@@ -219,7 +221,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.voiceBatchTitle),
+        title: ConstrainedText(
+          l10n.voiceBatchTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -227,9 +233,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         actions: [
           TextButton(
             onPressed: _canConfirm ? _onConfirm : null,
-            child: Text(
+            child: ConstrainedText(
               l10n.voiceBatchConfirm,
               style: TextStyle(color: _canConfirm ? null : Colors.grey),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -360,7 +368,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                       .map(
                         (opt) => DropdownMenuItem(
                           value: opt,
-                          child: Text(_separatorLabel(opt, l10n)),
+                          child: ConstrainedText(
+                            _separatorLabel(opt, l10n),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       )
                       .toList(),
@@ -457,8 +469,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                         l10n.voiceBatchSingleColumn,
                         style: TextStyle(
                           fontSize: 13,
-                          color:
-                              Theme.of(context).colorScheme.onPrimaryContainer,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
                         ),
                       ),
                     ),
@@ -558,8 +571,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   // 表头
                   TableRow(
                     decoration: BoxDecoration(
-                      color:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
                     ),
                     children: [
                       VbTableCell(l10n.voiceName, isHeader: true),
@@ -591,13 +605,13 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       LineStatus.newVoice => (l10n.voiceNew, Colors.green.shade700),
       LineStatus.duplicate => (l10n.voiceIdExists, Colors.orange.shade700),
       LineStatus.formatError => (
-          l10n.voiceFormatError(
-            line.errorMsg != null
-                ? ': ${line.errorMsg}'
-                : ': ${l10n.voiceInsufficientColumnData}',
-          ),
-          Colors.red.shade700,
+        l10n.voiceFormatError(
+          line.errorMsg != null
+              ? ': ${line.errorMsg}'
+              : ': ${l10n.voiceInsufficientColumnData}',
         ),
+        Colors.red.shade700,
+      ),
     };
 
     return Padding(

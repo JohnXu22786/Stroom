@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ====================================================================
 // Public types
 // ====================================================================
@@ -44,9 +46,11 @@ Future<SaveAction?> showImageSaveDialog(BuildContext context) {
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       backgroundColor: Colors.grey[900],
-      title: Text(
+      title: ConstrainedText(
         AppLocalizations.of(context)!.imageEditorSaveImageTitle,
         style: TextStyle(color: Colors.white),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       content: Text(
         AppLocalizations.of(context)!.imageEditorSaveImagePrompt,
@@ -55,21 +59,29 @@ Future<SaveAction?> showImageSaveDialog(BuildContext context) {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.cancel),
-          child: Text(
+          child: ConstrainedText(
             AppLocalizations.of(context)!.actionCancel,
             style: TextStyle(color: Colors.white54),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.overwrite),
-          child: Text(
+          child: ConstrainedText(
             AppLocalizations.of(context)!.imageEditorOverwrite,
             style: TextStyle(color: Colors.blue),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.saveAs),
-          child: Text(AppLocalizations.of(context)!.imageEditorSaveAs),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.imageEditorSaveAs,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),
@@ -90,9 +102,11 @@ Future<SaveAction?> showDiscardOrSaveDialog(BuildContext context) {
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       backgroundColor: Colors.grey[900],
-      title: Text(
+      title: ConstrainedText(
         AppLocalizations.of(context)!.imageEditorSavePhotoTitle,
         style: TextStyle(color: Colors.white),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       content: Text(
         AppLocalizations.of(context)!.imageEditorSavePhotoPrompt,
@@ -101,21 +115,29 @@ Future<SaveAction?> showDiscardOrSaveDialog(BuildContext context) {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.cancel),
-          child: Text(
+          child: ConstrainedText(
             AppLocalizations.of(context)!.actionCancel,
             style: TextStyle(color: Colors.white54),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.discard),
-          child: Text(
+          child: ConstrainedText(
             AppLocalizations.of(context)!.imageEditorDiscard,
             style: TextStyle(color: Colors.redAccent),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.save),
-          child: Text(AppLocalizations.of(context)!.actionSave),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.actionSave,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),

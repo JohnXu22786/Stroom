@@ -16,6 +16,8 @@ import 'unified_task_list/task_flow_card.dart';
 import 'unified_task_list/task_utils.dart';
 import 'unified_task_list/task_session_tracker.dart';
 
+import '../widgets/constrained_text.dart';
+
 // Re-export public APIs for backward compatibility
 export 'unified_task_list/media_preview_sheet.dart' show showMediaPreview;
 export 'unified_task_list/task_utils.dart'
@@ -164,7 +166,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       final catcatchIds = ref
           .read(catcatchTasksProvider)
           .where(
-              (t) => t.status.name == status.name && !nestedIds.contains(t.id))
+            (t) => t.status.name == status.name && !nestedIds.contains(t.id),
+          )
           .map((t) => t.id)
           .toList();
       final synthesisIds = ref
@@ -179,8 +182,10 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           .toList();
       final executionsNotifier = ref.read(taskFlowExecutionsProvider.notifier);
       final selectedIds = selectedExecutions.map((e) => e.id).toSet();
-      final batchIds =
-          selectedExecutions.map((e) => e.batchId).whereType<String>().toSet();
+      final batchIds = selectedExecutions
+          .map((e) => e.batchId)
+          .whereType<String>()
+          .toSet();
       if (batchIds.isNotEmpty) {
         final service = ref.read(taskFlowExecutionServiceProvider);
         while (mounted) {
@@ -220,8 +225,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         synthesisIds: synthesisIds,
         backgroundIds: backgroundIds,
       );
-      if (!await executionsNotifier
-          .removeExecutionsPersisted(selectedExecutions.map((e) => e.id))) {
+      if (!await executionsNotifier.removeExecutionsPersisted(
+        selectedExecutions.map((e) => e.id),
+      )) {
         throw const TaskFlowPersistenceException('任务流记录删除状态无法保存，请重试清除');
       }
     } catch (error) {
@@ -230,10 +236,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           SnackBar(
             content: Text(
               AppLocalizations.of(context)!.unifiedTaskListClearIncomplete(
-                _clearErrorMessage(
-                  error,
-                  AppLocalizations.of(context)!,
-                ),
+                _clearErrorMessage(error, AppLocalizations.of(context)!),
               ),
             ),
           ),
@@ -247,14 +250,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     final strings = AppLocalizations.of(context)!;
     final taskTabData = [
       _TabData(strings.unifiedTaskListTabAll, Icons.list),
-      _TabData(
-        strings.unifiedTaskListTabInProgress,
-        Icons.play_circle_outline,
-      ),
-      _TabData(
-        strings.unifiedTaskListTabCompleted,
-        Icons.check_circle_outline,
-      ),
+      _TabData(strings.unifiedTaskListTabInProgress, Icons.play_circle_outline),
+      _TabData(strings.unifiedTaskListTabCompleted, Icons.check_circle_outline),
       _TabData(strings.unifiedTaskListTabFailed, Icons.error_outline),
       _TabData(strings.unifiedTaskListTabStopped, Icons.stop_circle_outlined),
     ];
@@ -315,7 +312,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.taskListTitle),
+        title: ConstrainedText(
+          strings.taskListTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
@@ -323,7 +324,14 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             controller: _tabController,
             tabs: [
               for (final tab in taskTabData)
-                Tab(text: tab.label, icon: Icon(tab.icon, size: 18)),
+                Tab(
+                  child: ConstrainedText(
+                    tab.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  icon: Icon(tab.icon, size: 18),
+                ),
             ],
           ),
         ),
@@ -338,22 +346,34 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: Text(strings.unifiedTaskListConfirmClear),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListConfirmClear,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     content: Text(
                       strings.unifiedTaskListConfirmClearFailedMessage,
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx),
-                        child: Text(strings.unifiedTaskListCancel),
+                        child: ConstrainedText(
+                          strings.unifiedTaskListCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       TextButton(
                         onPressed: () async {
                           Navigator.pop(ctx);
                           await _clearTerminalTasks(TaskStatus.failed);
                         },
-                        child: Text(strings.unifiedTaskListConfirm,
-                            style: TextStyle(color: Colors.red)),
+                        child: ConstrainedText(
+                          strings.unifiedTaskListConfirm,
+                          style: TextStyle(color: Colors.red),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -362,14 +382,22 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: Text(strings.unifiedTaskListConfirmClear),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListConfirmClear,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     content: Text(
                       strings.unifiedTaskListConfirmClearAllMessage,
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx),
-                        child: Text(strings.unifiedTaskListCancel),
+                        child: ConstrainedText(
+                          strings.unifiedTaskListCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -406,27 +434,32 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                               // Cancellation may have changed memory before
                               // its save failed. A retry must durably write
                               // even when every run is already terminal.
-                              final snapshot =
-                                  ref.read(taskFlowExecutionsProvider);
+                              final snapshot = ref.read(
+                                taskFlowExecutionsProvider,
+                              );
                               if (snapshot.isNotEmpty) {
                                 if (!await ref
                                     .read(taskFlowExecutionsProvider.notifier)
                                     .persist()) {
                                   throw const TaskFlowPersistenceException(
-                                      '任务流取消状态无法保存，请重试清除');
+                                    '任务流取消状态无法保存，请重试清除',
+                                  );
                                 }
                               }
                               if (!mounted) return;
-                              if (identical(snapshot,
-                                  ref.read(taskFlowExecutionsProvider))) {
+                              if (identical(
+                                snapshot,
+                                ref.read(taskFlowExecutionsProvider),
+                              )) {
                                 break;
                               }
                             }
                             if (!mounted) return;
                             // Snapshot after cancellation, then keep new
                             // tasks started during the removal write intact.
-                            final executionsToClear =
-                                ref.read(taskFlowExecutionsProvider);
+                            final executionsToClear = ref.read(
+                              taskFlowExecutionsProvider,
+                            );
                             final catcatchIds = ref
                                 .read(catcatchTasksProvider)
                                 .map((t) => t.id)
@@ -439,8 +472,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                                 .read(backgroundTasksProvider)
                                 .map((t) => t.id)
                                 .toList();
-                            final executionsNotifier =
-                                ref.read(taskFlowExecutionsProvider.notifier);
+                            final executionsNotifier = ref.read(
+                              taskFlowExecutionsProvider.notifier,
+                            );
                             await removeFlowChildTasksPersisted(
                               ref,
                               executionsToClear,
@@ -450,9 +484,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                             );
                             if (!await executionsNotifier
                                 .removeExecutionsPersisted(
-                                    executionsToClear.map((e) => e.id))) {
+                                  executionsToClear.map((e) => e.id),
+                                )) {
                               throw const TaskFlowPersistenceException(
-                                  '任务流记录删除状态无法保存，请重试清除');
+                                '任务流记录删除状态无法保存，请重试清除',
+                              );
                             }
                           } catch (error) {
                             if (context.mounted) {
@@ -468,8 +504,12 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                             }
                           }
                         },
-                        child: Text(strings.unifiedTaskListConfirm,
-                            style: TextStyle(color: Colors.red)),
+                        child: ConstrainedText(
+                          strings.unifiedTaskListConfirm,
+                          style: TextStyle(color: Colors.red),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -490,8 +530,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
               PopupMenuItem(
                 value: 'clear_failed',
                 child: ListTile(
-                  leading:
-                      Icon(Icons.error_outline, size: 20, color: Colors.red),
+                  leading: Icon(
+                    Icons.error_outline,
+                    size: 20,
+                    color: Colors.red,
+                  ),
                   title: Text(
                     strings.unifiedTaskListClearFailed,
                     style: TextStyle(color: Colors.red),
@@ -503,8 +546,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
               PopupMenuItem(
                 value: 'clear_all',
                 child: ListTile(
-                  leading:
-                      Icon(Icons.delete_sweep, size: 20, color: Colors.red),
+                  leading: Icon(
+                    Icons.delete_sweep,
+                    size: 20,
+                    color: Colors.red,
+                  ),
                   title: Text(
                     strings.unifiedTaskListClearAll,
                     style: TextStyle(color: Colors.red),
@@ -542,7 +588,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
 
   /// Filter [allTasks] by the currently selected tab.
   List<UnifiedTaskItem> _filteredTasks(
-      List<UnifiedTaskItem> allTasks, int tabIndex) {
+    List<UnifiedTaskItem> allTasks,
+    int tabIndex,
+  ) {
     if (tabIndex == 0) return allTasks; // 全部 — no filter
     final targetTab = TaskTab.values[tabIndex];
     return allTasks.where((item) => _taskTab(item) == targetTab).toList();
@@ -562,10 +610,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           const SizedBox(height: 16),
           Text(
             AppLocalizations.of(context)!.taskListEmpty,
-            style: TextStyle(
-              fontSize: 18,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 18, color: colorScheme.onSurfaceVariant),
           ),
         ],
       ),

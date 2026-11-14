@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -37,6 +36,8 @@ import 'anki_page.dart';
 import '../task_flow/pages/task_flow_list_page.dart';
 import '../task_flow/providers/task_flow_provider.dart';
 import '../task_flow/providers/task_flow_execution_provider.dart';
+
+import '../widgets/constrained_text.dart';
 
 part 'home_page_navigation.dart';
 part 'home_page_home_content.dart';
@@ -182,8 +183,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ],
         ),
-        bottomNavigationBar:
-            isPortrait ? _buildBottomNavigationBar(context) : null,
+        bottomNavigationBar: isPortrait
+            ? _buildBottomNavigationBar(context)
+            : null,
       ),
     );
   }

@@ -36,7 +36,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.reasoningAddEffortValue),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.reasoningAddEffortValue,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -49,12 +53,20 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: Text(AppLocalizations.of(context)!.batchDlgConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -77,9 +89,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         child: Center(
           child: TextButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.reasoningAddToggle,
               style: TextStyle(fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             onPressed: () {
               setState(() {
@@ -129,8 +143,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
                   visualDensity: VisualDensity.compact,
-                  tooltip:
-                      AppLocalizations.of(context)!.reasoningResetParameter,
+                  tooltip: AppLocalizations.of(context)!
+                      .reasoningResetParameter,
                   onPressed: () => _resetReasoningParam(toggle),
                 ),
                 // 推理开关是固定结构（不允许删除）：用启用开关替代删除
@@ -157,7 +171,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 isDense: true,
                 errorText: isToggleDuplicate
                     ? AppLocalizations.of(context)!
-                        .modelParamDuplicate(toggle.paramName.trim())
+                          .modelParamDuplicate(toggle.paramName.trim())
                     : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
@@ -184,10 +198,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     child: TextFormField(
                       initialValue: toggle.onValue ?? '',
                       decoration: InputDecoration(
-                        labelText:
-                            AppLocalizations.of(context)!.reasoningOnValue,
-                        hintText:
-                            AppLocalizations.of(context)!.reasoningOnExample,
+                        labelText: AppLocalizations.of(context)!
+                            .reasoningOnValue,
+                        hintText: AppLocalizations.of(context)!
+                            .reasoningOnExample,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -202,10 +216,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     child: TextFormField(
                       initialValue: toggle.offValue ?? '',
                       decoration: InputDecoration(
-                        labelText:
-                            AppLocalizations.of(context)!.reasoningOffValue,
-                        hintText:
-                            AppLocalizations.of(context)!.reasoningOffExample,
+                        labelText: AppLocalizations.of(context)!
+                            .reasoningOffValue,
+                        hintText: AppLocalizations.of(context)!
+                            .reasoningOffExample,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -247,17 +261,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: TextButton.icon(
-          icon: Icon(
-            Icons.add,
-            size: 16,
-            color: null,
-          ),
-          label: Text(
+          icon: Icon(Icons.add, size: 16, color: null),
+          label: ConstrainedText(
             AppLocalizations.of(context)!.reasoningAddEffort,
-            style: TextStyle(
-              fontSize: 13,
-              color: null,
-            ),
+            style: TextStyle(fontSize: 13, color: null),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addEffortReasoningParam,
         ),
@@ -303,8 +312,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
                   visualDensity: VisualDensity.compact,
-                  tooltip:
-                      AppLocalizations.of(context)!.reasoningResetParameter,
+                  tooltip: AppLocalizations.of(context)!
+                      .reasoningResetParameter,
                   onPressed: () => _resetReasoningParam(effort),
                 ),
                 // 推理力度参数有且只有一个（不允许删除）：用启用开关
@@ -332,7 +341,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 isDense: true,
                 errorText: isDuplicate
                     ? AppLocalizations.of(context)!
-                        .modelParamDuplicate(effort.paramName.trim())
+                          .modelParamDuplicate(effort.paramName.trim())
                     : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
@@ -356,8 +365,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               )
             else if (effort.type == 'json')
               TextFormField(
-                initialValue:
-                    effort.options.isNotEmpty ? effort.options.first : '',
+                initialValue: effort.options.isNotEmpty
+                    ? effort.options.first
+                    : '',
                 readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
@@ -366,9 +376,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                       .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
-                  errorText: _jsonValueError(
-                    effort.options.isNotEmpty ? effort.options.first : '',
-                  )
+                  errorText:
+                      _jsonValueError(
+                        effort.options.isNotEmpty ? effort.options.first : '',
+                      )
                       ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
@@ -405,9 +416,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.reasoningAddValue,
                   style: TextStyle(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: _addEffortBlockWithDialog,
               ),
@@ -435,13 +448,17 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ? param.type
               : 'string',
           isDense: true,
+          isExpanded: true,
           items: ParamType.values
               .map(
                 (t) => DropdownMenuItem(
                   value: t.value,
-                  child: Text(
-                      localizedParamTypeLabel(AppLocalizations.of(context)!, t),
-                      style: const TextStyle(fontSize: 12)),
+                  child: ConstrainedText(
+                    localizedParamTypeLabel(AppLocalizations.of(context)!, t),
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               )
               .toList(),
@@ -483,16 +500,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     decoration: InputDecoration(
                       labelText: AppLocalizations.of(
                         context,
-                      )!
-                          .reasoningParameterNameSource(
-                              _paramSourceLabel(param)),
+                      )!.reasoningParameterNameSource(_paramSourceLabel(param)),
                       border: const OutlineInputBorder(),
                       isDense: true,
-                      hintText:
-                          AppLocalizations.of(context)!.reasoningNameExample,
+                      hintText: AppLocalizations.of(context)!
+                          .reasoningNameExample,
                       errorText: isDuplicate
                           ? AppLocalizations.of(context)!
-                              .modelParamDuplicate(param.paramName.trim())
+                                .modelParamDuplicate(param.paramName.trim())
                           : null,
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
@@ -529,8 +544,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               )
             else if (param.type == 'json')
               TextFormField(
-                initialValue:
-                    param.options.isNotEmpty ? param.options.first : '',
+                initialValue: param.options.isNotEmpty
+                    ? param.options.first
+                    : '',
                 maxLines: 5,
                 decoration: InputDecoration(
                   labelText: AppLocalizations.of(context)!.reasoningJsonValue,
@@ -538,9 +554,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                       .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
-                  errorText: _jsonValueError(
-                    param.options.isNotEmpty ? param.options.first : '',
-                  )
+                  errorText:
+                      _jsonValueError(
+                        param.options.isNotEmpty ? param.options.first : '',
+                      )
                       ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
@@ -580,9 +597,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.reasoningAddValue,
                   style: TextStyle(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () => _addAdditionalBlockWithDialog(param),
               ),

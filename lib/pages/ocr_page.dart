@@ -33,6 +33,8 @@ import 'ocr/ocr_instruction_dialog.dart';
 import 'ocr/ocr_shared.dart';
 import 'ocr/ocr_retry_snapshot.dart';
 import 'provider_config_page.dart';
+import '../widgets/constrained_text.dart';
+
 export 'ocr/ocr_shared.dart';
 
 // ============================================================================
@@ -103,10 +105,14 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
 /// a legacy per-model instruction.
 @visibleForTesting
 String? selectedOcrInstructionContent(
-    List<OcrInstruction> instructions, int selectionValue,
-    {AppLocalizations? strings}) {
-  final template =
-      ocrOutputTemplateForSelection(selectionValue, strings: strings);
+  List<OcrInstruction> instructions,
+  int selectionValue, {
+  AppLocalizations? strings,
+}) {
+  final template = ocrOutputTemplateForSelection(
+    selectionValue,
+    strings: strings,
+  );
   if (template != null) return template.content;
   if (selectionValue >= 0 && selectionValue < instructions.length) {
     return instructions[selectionValue].content;
@@ -116,10 +122,11 @@ String? selectedOcrInstructionContent(
 
 @visibleForTesting
 Map<String, dynamic> applySelectedOcrInstruction(
-    Map<String, dynamic> typeConfig,
-    List<OcrInstruction> instructions,
-    int selectionValue,
-    {AppLocalizations? strings}) {
+  Map<String, dynamic> typeConfig,
+  List<OcrInstruction> instructions,
+  int selectionValue, {
+  AppLocalizations? strings,
+}) {
   final selectedContent = selectedOcrInstructionContent(
     instructions,
     selectionValue,
@@ -127,8 +134,8 @@ Map<String, dynamic> applySelectedOcrInstruction(
   );
   final content =
       ocrOutputTemplateForSelection(selectionValue, strings: strings) == null
-          ? selectedContent?.trim()
-          : selectedContent;
+      ? selectedContent?.trim()
+      : selectedContent;
   if (content != null && content.isNotEmpty) {
     typeConfig['userInstruction'] = content;
   } else {
@@ -165,29 +172,32 @@ class OcrPage extends ConsumerStatefulWidget {
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testCameraPicker;
+  })?
+  testCameraPicker;
   @visibleForTesting
   final Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testGalleryPicker;
+  })?
+  testGalleryPicker;
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
-      testImagePayloadPreparer;
+  testImagePayloadPreparer;
   @visibleForTesting
   final Future<int?> Function(OcrConfig config, List<SelectedImage> images)?
-      testRequestSizePreflight;
+  testRequestSizePreflight;
   @visibleForTesting
   final OcrService Function(OcrConfig config)? testOcrServiceFactory;
   @visibleForTesting
   final Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
-      testRetryImageRestorer;
+  testRetryImageRestorer;
   @visibleForTesting
   final Future<Map<String, dynamic>?> Function({
     required String taskId,
     required OcrRetrySnapshot snapshot,
-  })? testRetrySnapshotCacher;
+  })?
+  testRetrySnapshotCacher;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -293,10 +303,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   int _instructionIdentityIndex(
     List<OcrInstruction> instructions,
     OcrInstruction selected,
-  ) =>
-      instructions.indexWhere(
-        (instruction) => identical(instruction, selected),
-      );
+  ) => instructions.indexWhere(
+    (instruction) => identical(instruction, selected),
+  );
 
   int _instructionSelectionValue(List<OcrInstruction> instructions) {
     final selected = _selectedInstruction;
@@ -451,8 +460,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     OcrRetryRestoreResult restored;
     try {
-      restored = await (widget.testRetryImageRestorer?.call(snapshot) ??
-          OcrRetryStorage.restoreImages(snapshot));
+      restored =
+          await (widget.testRetryImageRestorer?.call(snapshot) ??
+              OcrRetryStorage.restoreImages(snapshot));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -470,7 +480,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return;
     }
     if (!mounted) return;
-    final canUseRestoredImages = restored.isComplete &&
+    final canUseRestoredImages =
+        restored.isComplete &&
         !snapshot.hasInvalidImages &&
         snapshot.imageEntryCount > 0;
     setState(() {
@@ -483,8 +494,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         ),
       );
-      _batchMode =
-          _hasReusablePageResults ? OcrBatchMode.perImage : snapshot.batchMode;
+      _batchMode = _hasReusablePageResults
+          ? OcrBatchMode.perImage
+          : snapshot.batchMode;
       _perImageConcurrency = snapshot.perImageConcurrency;
       _isRetryImagesLoading = false;
       _retryImagesUnavailable = !canUseRestoredImages;
@@ -522,14 +534,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   ) async {
     try {
       await OcrRetryStorage.withCacheMaintenanceLock(() async {
-        final retryData = await (widget.testRetrySnapshotCacher?.call(
-              taskId: taskId,
-              snapshot: snapshot,
-            ) ??
-            OcrRetryStorage.cacheSnapshot(
-              taskId: taskId,
-              snapshot: snapshot,
-            ));
+        final retryData =
+            await (widget.testRetrySnapshotCacher?.call(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ) ??
+                OcrRetryStorage.cacheSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ));
         if (notifier.mounted &&
             taskGeneration != null &&
             notifier.state.any(
@@ -543,8 +556,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           );
           return;
         }
-        final referenced =
-            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup();
+        final referenced = notifier
+            .ocrCacheReferencesFromLoadedSnapshotForCleanup();
         if (referenced == null) return;
         await OcrRetryStorage.deleteUnreferenced(
           candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
@@ -596,7 +609,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.ocrPageTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.ocrPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           PopupMenuButton<bool>(
@@ -615,9 +632,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   children: [
                     Text(AppLocalizations.of(context)!.ocrImageQualityStandard),
                     Text(
-                        AppLocalizations.of(context)!
-                            .ocrImageQualityStandardHint,
-                        style: TextStyle(fontSize: 12)),
+                      AppLocalizations.of(context)!.ocrImageQualityStandardHint,
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -630,9 +647,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   children: [
                     Text(AppLocalizations.of(context)!.ocrImageQualityOriginal),
                     Text(
-                        AppLocalizations.of(context)!
-                            .ocrImageQualityOriginalHint,
-                        style: TextStyle(fontSize: 12)),
+                      AppLocalizations.of(context)!.ocrImageQualityOriginalHint,
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -657,9 +674,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 _reorderMode ? Icons.check : Icons.swap_vert,
                 size: 18,
               ),
-              label: Text(_reorderMode
-                  ? AppLocalizations.of(context)!.ocrReorderDone
-                  : AppLocalizations.of(context)!.ocrReorderAction),
+              label: ConstrainedText(
+                _reorderMode
+                    ? AppLocalizations.of(context)!.ocrReorderDone
+                    : AppLocalizations.of(context)!.ocrReorderAction,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           if ((_selectedImages.isNotEmpty || _retryImagesUnavailable) &&
               !_isProcessing &&
@@ -841,9 +862,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!.ocrConfigure,
                   style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -908,8 +931,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
                     hint: selectedIndex == null
-                        ? Text(_modelSelectionMessage(selectedIndex) ??
-                            AppLocalizations.of(context)!.ocrSelectModel)
+                        ? Text(
+                            _modelSelectionMessage(selectedIndex) ??
+                                AppLocalizations.of(context)!.ocrSelectModel,
+                          )
                         : null,
                     isDense: true,
                     isExpanded: true,
@@ -925,16 +950,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ),
                     onChanged:
                         _ocrStarting || _isProcessing || _hasReusablePageResults
-                            ? null
-                            : (idx) {
-                                if (idx == null || idx >= modelOptions.length)
-                                  return;
-                                setState(() {
-                                  _selectModelOption(modelOptions[idx], idx);
-                                  _errorMessage = null;
-                                  _clearOcrErrorDetails();
-                                });
-                              },
+                        ? null
+                        : (idx) {
+                            if (idx == null || idx >= modelOptions.length)
+                              return;
+                            setState(() {
+                              _selectModelOption(modelOptions[idx], idx);
+                              _errorMessage = null;
+                              _clearOcrErrorDetails();
+                            });
+                          },
                     items: List.generate(modelOptions.length, (i) {
                       final opt = modelOptions[i];
                       final modelName = opt.model.name.isNotEmpty
@@ -945,8 +970,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
-                        child: Text(
+                        child: ConstrainedText(
                           displayText,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -1000,8 +1026,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         : (pending ?? _instructionSelectionValue(instructions));
     final clamped =
         rawIndex == -2 || ocrOutputTemplateForSelection(rawIndex) != null
-            ? rawIndex
-            : (rawIndex >= 0 && rawIndex < instructions.length ? rawIndex : -1);
+        ? rawIndex
+        : (rawIndex >= 0 && rawIndex < instructions.length ? rawIndex : -1);
     if (pending == null &&
         _retryInstructionSnapshot == null &&
         clamped != _selectedInstructionIndex) {
@@ -1068,16 +1094,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
-                    onChanged: _ocrStarting ||
-                            _isProcessing ||
-                            _hasReusablePageResults
+                    onChanged:
+                        _ocrStarting || _isProcessing || _hasReusablePageResults
                         ? null
                         : (idx) {
                             if (idx == null) return;
                             setState(() {
                               _selectedInstructionIndex = idx;
-                              _selectedInstruction =
-                                  idx >= 0 ? instructions[idx] : null;
+                              _selectedInstruction = idx >= 0
+                                  ? instructions[idx]
+                                  : null;
                               if (idx != -2) _retryInstructionSnapshot = null;
                               // An explicit user choice wins over a pending
                               // retry restore.
@@ -1087,17 +1113,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     items: [
                       DropdownMenuItem<int>(
                         value: -1,
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.ocrDefaultImagesOnly,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (_retryInstructionSnapshot != null)
                         DropdownMenuItem<int>(
                           value: -2,
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!
                                 .ocrSavedInstructionSnapshot,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1106,8 +1134,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       ).map((template) {
                         return DropdownMenuItem<int>(
                           value: template.selectionValue,
-                          child: Text(
+                          child: ConstrainedText(
                             template.label,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -1115,8 +1144,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       ...List.generate(instructions.length, (i) {
                         return DropdownMenuItem<int>(
                           value: i,
-                          child: Text(
+                          child: ConstrainedText(
                             ocrInstructionLabel(instructions[i]),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -1140,13 +1170,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 ),
                 tooltip: AppLocalizations.of(context)!.ocrManageInstructions,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 40,
-                  minHeight: 40,
-                ),
-                onPressed: _ocrStarting ||
-                        _isProcessing ||
-                        _hasReusablePageResults
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                onPressed:
+                    _ocrStarting || _isProcessing || _hasReusablePageResults
                     ? null
                     : () {
                         showDialog<void>(
@@ -1176,9 +1202,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                                 return;
                               }
                               if (deletedIndex == _selectedInstructionIndex) {
-                                setState(
-                                  () => _selectedInstructionIndex = -1,
-                                );
+                                setState(() => _selectedInstructionIndex = -1);
                               } else if (deletedIndex <
                                   _selectedInstructionIndex) {
                                 setState(() => _selectedInstructionIndex--);
@@ -1229,25 +1253,27 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       ButtonSegment(
                         value: OcrBatchMode.joint,
                         label: Text(
-                            AppLocalizations.of(context)!.ocrMergeRecognition),
+                          AppLocalizations.of(context)!.ocrMergeRecognition,
+                        ),
                       ),
                       ButtonSegment(
                         value: OcrBatchMode.perImage,
-                        label: Text(AppLocalizations.of(context)!
-                            .ocrRecognizeEachImage),
+                        label: Text(
+                          AppLocalizations.of(context)!.ocrRecognizeEachImage,
+                        ),
                       ),
                     ],
                     selected: {_batchMode},
                     onSelectionChanged:
                         _ocrStarting || _isProcessing || _hasReusablePageResults
-                            ? null
-                            : (selection) {
-                                if (selection.isEmpty) return;
-                                setState(() {
-                                  _batchMode = selection.first;
-                                  _errorMessage = null;
-                                });
-                              },
+                        ? null
+                        : (selection) {
+                            if (selection.isEmpty) return;
+                            setState(() {
+                              _batchMode = selection.first;
+                              _errorMessage = null;
+                            });
+                          },
                   ),
                 ),
                 if (_batchMode == OcrBatchMode.perImage)
@@ -1259,18 +1285,28 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         setState(() => _perImageConcurrency = concurrency),
                     itemBuilder: (context) => [
                       PopupMenuItem(
-                          value: 1,
-                          child: Text(AppLocalizations.of(context)!
-                              .ocrConcurrencyOption(1))),
+                        value: 1,
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.ocrConcurrencyOption(1),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       PopupMenuItem(
-                          value: 2,
-                          child: Text(AppLocalizations.of(context)!
-                              .ocrConcurrencyOption(2))),
+                        value: 2,
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.ocrConcurrencyOption(2),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(AppLocalizations.of(context)!
-                          .ocrConcurrencyStatus(_perImageConcurrency)),
+                      child: Text(
+                        AppLocalizations.of(context)!
+                            .ocrConcurrencyStatus(_perImageConcurrency),
+                      ),
                     ),
                   ),
               ],
@@ -1299,20 +1335,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed:
-                        _isImageSelectionLocked ? null : _showCameraChoicePanel,
+                    onPressed: _isImageSelectionLocked
+                        ? null
+                        : _showCameraChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                    label: Text(
+                    label: ConstrainedText(
                       AppLocalizations.of(context)!.ocrTakePhoto,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -1322,20 +1361,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed:
-                        _isImageSelectionLocked ? null : _showAlbumChoicePanel,
+                    onPressed: _isImageSelectionLocked
+                        ? null
+                        : _showAlbumChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     icon: const Icon(Icons.photo_library_outlined, size: 20),
-                    label: Text(
+                    label: ConstrainedText(
                       AppLocalizations.of(context)!.ocrChooseFromAlbum,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -1398,8 +1440,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           final int rowCount = itemCount == 0
               ? 0
               : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
-          final double totalHeight =
-              rowCount > 0 ? rowCount * itemSize + (rowCount - 1) * spacing : 0;
+          final double totalHeight = rowCount > 0
+              ? rowCount * itemSize + (rowCount - 1) * spacing
+              : 0;
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -1771,9 +1814,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
                       icon: const Icon(Icons.preview, size: 14),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.ocrViewErrorDetails,
                         style: const TextStyle(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       onPressed: () => _showErrorDetailDialog(context),
                       style: TextButton.styleFrom(
@@ -1842,8 +1887,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           _errorMessage = null;
                         });
                       },
-                      child:
-                          Text(AppLocalizations.of(context)!.ocrConfirmModel),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.ocrConfirmModel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -1862,7 +1910,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty ||
+                onPressed:
+                    _selectedImages.isEmpty ||
                         _ocrStarting ||
                         _isProcessing ||
                         _isImageImportPending ||
@@ -1882,26 +1931,24 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         ),
                       )
                     : const Icon(Icons.text_snippet, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _ocrStarting
                       ? AppLocalizations.of(context)!.ocrPreparingImages
                       : _isProcessing
-                          ? _isPreparingRetryData
-                              ? AppLocalizations.of(context)!
-                                  .ocrSavingRetryImages
-                              : AppLocalizations.of(context)!.ocrRecognizing
-                          : _isRetryImagesLoading
-                              ? AppLocalizations.of(context)!
-                                  .ocrReadingRetryImages
-                              : _isImageImportPending
-                                  ? AppLocalizations.of(context)!
-                                      .ocrImportingImages
-                                  : AppLocalizations.of(context)!
-                                      .ocrStartRecognition,
+                      ? _isPreparingRetryData
+                            ? AppLocalizations.of(context)!.ocrSavingRetryImages
+                            : AppLocalizations.of(context)!.ocrRecognizing
+                      : _isRetryImagesLoading
+                      ? AppLocalizations.of(context)!.ocrReadingRetryImages
+                      : _isImageImportPending
+                      ? AppLocalizations.of(context)!.ocrImportingImages
+                      : AppLocalizations.of(context)!.ocrStartRecognition,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -2009,9 +2056,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(height: 24),
               Text(
                 AppLocalizations.of(context)!.ocrChooseImageSource,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
+                style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
@@ -2020,8 +2065,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ChoiceCard(
                     icon: Icons.collections_bookmark,
                     title: AppLocalizations.of(context)!.ocrChooseAppAlbum,
-                    subtitle:
-                        AppLocalizations.of(context)!.ocrAppAlbumDescription,
+                    subtitle: AppLocalizations.of(context)!
+                        .ocrAppAlbumDescription,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -2032,8 +2077,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ChoiceCard(
                     icon: Icons.photo_library,
                     title: AppLocalizations.of(context)!.ocrChooseSystemAlbum,
-                    subtitle:
-                        AppLocalizations.of(context)!.ocrSystemAlbumDescription,
+                    subtitle: AppLocalizations.of(context)!
+                        .ocrSystemAlbumDescription,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -2061,17 +2106,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final mode = _imageImportMode;
       _beginImageImport();
       importPending = true;
-      final file = await (widget.testCameraPicker?.call(
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ) ??
-          picker.pickImage(
-            source: ImageSource.camera,
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ));
+      final file =
+          await (widget.testCameraPicker?.call(
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ) ??
+              picker.pickImage(
+                source: ImageSource.camera,
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ));
       if (!mounted ||
           importGeneration != _imageImportGeneration ||
           file == null) {
@@ -2105,9 +2151,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         setState(_clearOcrErrorDetails);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e is FormatException
-                ? _localizedImagePreparationError(e)
-                : AppLocalizations.of(context)!.ocrTakePhotoFailed(e)),
+            content: Text(
+              e is FormatException
+                  ? _localizedImagePreparationError(e)
+                  : AppLocalizations.of(context)!.ocrTakePhotoFailed(e),
+            ),
           ),
         );
       }
@@ -2130,18 +2178,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       importPending = true;
       // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await (widget.testGalleryPicker?.call(
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ) ??
-          pickGalleryMedia(
-            GalleryMediaKind.image,
-            context: context,
-            imageQuality: mode.imageQuality,
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-          ));
+      final files =
+          await (widget.testGalleryPicker?.call(
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ) ??
+              pickGalleryMedia(
+                GalleryMediaKind.image,
+                context: context,
+                imageQuality: mode.imageQuality,
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+              ));
       if (!mounted ||
           importGeneration != _imageImportGeneration ||
           files.isEmpty) {
@@ -2189,11 +2238,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       setState(() {
         _selectedImages.addAll(newImages);
         _clearOcrErrorDetails();
-        _errorMessage = firstError ??
+        _errorMessage =
+            firstError ??
             (_retryImagesUnavailable
                 ? (_requiredRetryImageCount == null
-                    ? _retryUnavailableMessage
-                    : _retryReselectAllMessage(_requiredRetryImageCount!))
+                      ? _retryUnavailableMessage
+                      : _retryReselectAllMessage(_requiredRetryImageCount!))
                 : null);
         _lastImageImportErrorMessage = firstError;
         _updateRetryImageReselectionState();
@@ -2203,16 +2253,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             .showSnackBar(SnackBar(content: Text(firstError)));
       }
       if (firstFileFailure != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .ocrChooseImageFailed(firstFileFailure))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .ocrChooseImageFailed(firstFileFailure),
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
         setState(_clearOcrErrorDetails);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .ocrChooseImageFailed(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.ocrChooseImageFailed(e.toString()),
+            ),
+          ),
+        );
       }
     } finally {
       if (!galleryCommit.isCompleted) {
@@ -2258,16 +2317,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.ocrImagesLoaded(loadedCount)),
+              AppLocalizations.of(context)!.ocrImagesLoaded(loadedCount),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .ocrChooseImageFailed(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.ocrChooseImageFailed(e.toString()),
+            ),
+          ),
+        );
       }
     } finally {
       if (!albumCommit.isCompleted) albumCommit.complete();
@@ -2416,8 +2480,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
       if (currentIndex < 0) return;
       setState(() {
-        _selectedImages[currentIndex] =
-            _selectedImages[currentIndex].withEditedPayload(payload);
+        _selectedImages[currentIndex] = _selectedImages[currentIndex]
+            .withEditedPayload(payload);
         _clearOcrErrorDetails();
       });
     } on FormatException catch (error) {
@@ -2454,9 +2518,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         key: const Key('ocr_clear_confirmation_dialog'),
-        title: Text(imageCountUnknown
-            ? AppLocalizations.of(context)!.ocrUnknownSourceImageCount
-            : AppLocalizations.of(context)!.ocrConfirmClear),
+        title: ConstrainedText(
+          imageCountUnknown
+              ? AppLocalizations.of(context)!.ocrUnknownSourceImageCount
+              : AppLocalizations.of(context)!.ocrConfirmClear,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           imageCountUnknown
               ? AppLocalizations.of(context)!.ocrRetryUnavailableConfirmClear
@@ -2466,14 +2534,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           TextButton(
             key: const Key('ocr_cancel_clear'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(AppLocalizations.of(context)!.ocrCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.ocrCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             key: const Key('ocr_confirm_clear'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(imageCountUnknown
-                ? AppLocalizations.of(context)!.ocrConfirmResetAndReselect
-                : AppLocalizations.of(context)!.ocrConfirmClear),
+            child: ConstrainedText(
+              imageCountUnknown
+                  ? AppLocalizations.of(context)!.ocrConfirmResetAndReselect
+                  : AppLocalizations.of(context)!.ocrConfirmClear,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2498,11 +2574,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _errorMessage = imageCountUnknown
           ? _retryImageResetMessage
           : _requiredRetryImageCount == null
-              ? null
-              : _retryReselectAllMessage(_requiredRetryImageCount!);
+          ? null
+          : _retryReselectAllMessage(_requiredRetryImageCount!);
       _isRetryImageResetWarning = true;
-      _retryImageResetWarningRequiredCount =
-          imageCountUnknown ? null : _requiredRetryImageCount;
+      _retryImageResetWarningRequiredCount = imageCountUnknown
+          ? null
+          : _requiredRetryImageCount;
     });
   }
 
@@ -2515,8 +2592,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     List<SelectedImage> images,
   ) async {
     final budgetBytes = config.requestSizeBudgetBytes;
-    final imageBytesList =
-        images.map((image) => (image.bytes, image.format)).toList();
+    final imageBytesList = images
+        .map((image) => (image.bytes, image.format))
+        .toList();
     final reusablePageIndices = _retryPageOutcomes
         .where((outcome) => outcome.canReuseResult)
         .map((outcome) => outcome.imageIndex)
@@ -2542,8 +2620,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       } catch (error) {
         if (mounted) {
-          setState(() => _errorMessage =
-              AppLocalizations.of(context)!.ocrRequestCheckFailed);
+          setState(
+            () =>
+                _errorMessage = AppLocalizations.of(context)!
+                    .ocrRequestCheckFailed,
+          );
         }
         debugPrint(
           '[OCR] Request size check failed: ' + error.runtimeType.toString(),
@@ -2557,14 +2638,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final switchToPerImage = await _showRequestSizeLimitDialog(
         encodedBytes: encodedBytes,
         budgetBytes: budgetBytes,
-        canSwitchToPerImage: _batchMode == OcrBatchMode.joint &&
+        canSwitchToPerImage:
+            _batchMode == OcrBatchMode.joint &&
             images.length > 1 &&
             !_hasReusablePageResults,
       );
       if (!mounted) return null;
       if (switchToPerImage != true) {
-        setState(() => _errorMessage =
-            AppLocalizations.of(context)!.ocrCancelledAdjustAndRetry);
+        setState(
+          () =>
+              _errorMessage = AppLocalizations.of(context)!
+                  .ocrCancelledAdjustAndRetry,
+        );
         return null;
       }
       setState(() {
@@ -2584,10 +2669,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _lastRawRequest = OcrDiagnosticSnapshot.request(
       url: option.host,
       imageCount: images.length,
-      imageBytes: images.fold<int>(
-        0,
-        (sum, image) => sum + image.bytes.length,
-      ),
+      imageBytes: images.fold<int>(0, (sum, image) => sum + image.bytes.length),
       durationMs: null,
       requestId: null,
       excludedValues: excludedValues,
@@ -2610,15 +2692,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.ocrRequestSizeExceededTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.ocrRequestSizeExceededTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(AppLocalizations.of(context)!.ocrRequestSizeExceededBody(
-              ocrRequestSizeBudgetMib(budgetBytes),
-              ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes),
-            )),
+            Text(
+              AppLocalizations.of(context)!.ocrRequestSizeExceededBody(
+                ocrRequestSizeBudgetMib(budgetBytes),
+                ocrRequestSizeBudgetOverageMib(encodedBytes, budgetBytes),
+              ),
+            ),
             const SizedBox(height: 12),
             Text(AppLocalizations.of(context)!.ocrRequestSizeHelp),
           ],
@@ -2630,11 +2718,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-              child: Text(AppLocalizations.of(context)!.ocrUsePerImageMode),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.ocrUsePerImageMode,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(AppLocalizations.of(context)!.ocrGotIt),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.ocrGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2645,12 +2741,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (_ocrStarting || _isProcessing) return;
     if (_isImageImportPending) {
       setState(
-          () => _errorMessage = AppLocalizations.of(context)!.ocrWaitForImport);
+        () => _errorMessage = AppLocalizations.of(context)!.ocrWaitForImport,
+      );
       return;
     }
     if (_isRetryImagesLoading) {
-      setState(() =>
-          _errorMessage = AppLocalizations.of(context)!.ocrWaitForRetryImages);
+      setState(
+        () =>
+            _errorMessage = AppLocalizations.of(context)!.ocrWaitForRetryImages,
+      );
       return;
     }
     if (_retryImageCountMismatch) {
@@ -2676,7 +2775,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final modelIndex = _selectedModelOptionIndex(modelOptions);
     if (modelIndex == null) {
       setState(() {
-        _errorMessage = _modelSelectionMessage(modelIndex) ??
+        _errorMessage =
+            _modelSelectionMessage(modelIndex) ??
             AppLocalizations.of(context)!.ocrReselectProviderModel;
       });
       return;
@@ -2713,8 +2813,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         var retryImageCount = 0;
         try {
           if (widget.retryData != null) {
-            retryImageCount =
-                OcrRetrySnapshot.fromMap(widget.retryData!).imageEntryCount;
+            retryImageCount = OcrRetrySnapshot.fromMap(widget.retryData!)
+                .imageEntryCount;
           }
         } catch (retryDataError) {
           debugPrint(
@@ -2736,8 +2836,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             _ocrStarting = false;
             _retryImagesUnavailable = true;
             _retryImageCountUnknown = retryImageCount == 0;
-            _requiredRetryImageCount =
-                retryImageCount == 0 ? null : retryImageCount;
+            _requiredRetryImageCount = retryImageCount == 0
+                ? null
+                : retryImageCount;
             _isRetryImageReselectionPending = false;
             _errorMessage = retryImageCount == 0
                 ? _retryImageCountUnknownMessage
@@ -2792,7 +2893,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           _errorMessage = requestModelOptions.isEmpty
               ? AppLocalizations.of(context)!.ocrConfigureProviderModel
               : _modelSelectionMessage(requestModelIndex) ??
-                  AppLocalizations.of(context)!.ocrReselectProviderModel;
+                    AppLocalizations.of(context)!.ocrReselectProviderModel;
         });
       }
       return;
@@ -2825,8 +2926,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       systemPrompt: strings.ocrDefaultSystemPrompt,
       requestSizeBudgetBytes: requestSizeBudgetBytes,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
-      customParams:
-          selectedOption.model.customParams.map((p) => p.copy()).toList(),
+      customParams: selectedOption.model.customParams
+          .map((p) => p.copy())
+          .toList(),
     );
 
     // A retry instruction restore may still be pending (the generic list
@@ -2851,7 +2953,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final instructions = ref.read(ocrInstructionsProvider);
     final selectedInstructionIndex = _instructionSelectionValue(instructions);
     final retryInstructionSnapshot = _retryInstructionSnapshot;
-    final instructionContent = retryInstructionSnapshot ??
+    final instructionContent =
+        retryInstructionSnapshot ??
         selectedOcrInstructionContent(
           instructions,
           selectedInstructionIndex,
@@ -2923,8 +3026,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           effectiveConfig.requestSizeBudgetBytes,
         );
         if (!mounted || !bgNotifier.mounted) {
-          final remainingTasks =
-              bgNotifier.mounted ? bgNotifier.state : const <BackgroundTask>[];
+          final remainingTasks = bgNotifier.mounted
+              ? bgNotifier.state
+              : const <BackgroundTask>[];
           try {
             await OcrRetryStorage.deleteUnreferenced(
               candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
@@ -3015,14 +3119,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       requestSizeBudgetBytes: requestSizeBudgetBytes,
     );
     try {
-      final retryData = await (widget.testRetrySnapshotCacher?.call(
-            taskId: taskId,
-            snapshot: snapshot,
-          ) ??
-          OcrRetryStorage.cacheSnapshot(
-            taskId: taskId,
-            snapshot: snapshot,
-          ));
+      final retryData =
+          await (widget.testRetrySnapshotCacher?.call(
+                taskId: taskId,
+                snapshot: snapshot,
+              ) ??
+              OcrRetryStorage.cacheSnapshot(
+                taskId: taskId,
+                snapshot: snapshot,
+              ));
       return retryData ??
           OcrRetryStorage.unavailableSnapshot(
             taskId: taskId,
@@ -3243,7 +3348,8 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
               if (index < 0 || index >= widget.images.length) {
                 return Center(
                   child: Text(
-                      AppLocalizations.of(context)!.ocrPreviewInvalidIndex),
+                    AppLocalizations.of(context)!.ocrPreviewInvalidIndex,
+                  ),
                 );
               }
               final image = widget.images[index];

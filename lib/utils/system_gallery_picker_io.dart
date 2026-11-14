@@ -7,6 +7,8 @@ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 import '../l10n/app_localizations.dart';
 
+import '../widgets/constrained_text.dart';
+
 Future<List<XFile>> pickNativeGalleryMedia(
   BuildContext context, {
   required bool isVideo,
@@ -26,8 +28,10 @@ Future<List<XFile>> pickNativeGalleryMedia(
   if (!context.mounted) return [];
 
   final theme = Theme.of(context);
-  final gridCount =
-      (MediaQuery.sizeOf(context).width / 96).floor().clamp(4, 10).toInt();
+  final gridCount = (MediaQuery.sizeOf(context).width / 96)
+      .floor()
+      .clamp(4, 10)
+      .toInt();
   const preferredPageSize = 80;
   final pageSize =
       ((preferredPageSize + gridCount - 1) ~/ gridCount) * gridCount;
@@ -100,16 +104,28 @@ Future<void> _showPermissionDialog(BuildContext context) async {
   final shouldOpenSettings = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: Text(l10n.galleryPermissionTitle),
+      title: ConstrainedText(
+        l10n.galleryPermissionTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Text(l10n.galleryPermissionMessage),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(l10n.galleryPermissionCancel),
+          child: ConstrainedText(
+            l10n.galleryPermissionCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(l10n.galleryPermissionOpenSettings),
+          child: ConstrainedText(
+            l10n.galleryPermissionOpenSettings,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),

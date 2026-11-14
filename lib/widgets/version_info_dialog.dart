@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../l10n/app_localizations.dart';
 import '../utils/app_version.dart';
+
+import 'constrained_text.dart';
 
 /// 版本信息面板：点击设置页「关于」区域的版本卡片后弹出。
 ///
@@ -43,7 +46,10 @@ class VersionInfoDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildInfoRow(
-                cs, strings.versionNumberLabel, version ?? appVersion),
+              cs,
+              strings.versionNumberLabel,
+              version ?? appVersion,
+            ),
             const SizedBox(height: 12),
             _buildInfoRow(
               cs,
@@ -54,8 +60,10 @@ class VersionInfoDialog extends StatelessWidget {
             ),
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(strings.versionReleaseNotesLabel,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                strings.versionReleaseNotesLabel,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 4),
               Text(notes),
             ],
@@ -65,7 +73,11 @@ class VersionInfoDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.versionClose),
+          child: ConstrainedText(
+            strings.versionClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -83,9 +95,7 @@ class VersionInfoDialog extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Expanded(
-          child: Text(value),
-        ),
+        Expanded(child: Text(value)),
       ],
     );
   }

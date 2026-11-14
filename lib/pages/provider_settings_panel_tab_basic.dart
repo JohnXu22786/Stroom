@@ -56,24 +56,29 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             DropdownButtonFormField<String>(
               dropdownColor: StroomMenuStyle.surface(context),
               borderRadius: StroomMenuStyle.borderRadius,
+              isExpanded: true,
               initialValue: _endpointType,
               decoration: InputDecoration(
-                labelText:
-                    AppLocalizations.of(context)!.providerEndpointTypeLabel,
+                labelText: AppLocalizations.of(context)!
+                    .providerEndpointTypeLabel,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
               items: [
                 DropdownMenuItem(
                   value: 'openai',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerEndpointOpenAi,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'anthropic',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerEndpointAnthropic,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -109,8 +114,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText:
-                    AppLocalizations.of(context)!.providerRequestJsonDefault,
+                labelText: AppLocalizations.of(context)!
+                    .providerRequestJsonDefault,
                 hintText: AppLocalizations.of(context)!.providerUseAppDefault,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
@@ -185,10 +190,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerUploadMethodHelp,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
       _buildResponsiveSettingsRow(
@@ -221,23 +224,29 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               items: [
                 DropdownMenuItem(
                   value: AudioUploadMethod.multipart,
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerMultipart,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: AudioUploadMethod.base64Json,
-                  child: Text(
+                  child: ConstrainedText(
                     'Base64 JSON',
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: AudioUploadMethod.url,
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerUrlUpload,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -253,8 +262,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _uploadMethod == AudioUploadMethod.multipart
             ? AppLocalizations.of(context)!.providerUploadMultipartHelp
             : _uploadMethod == AudioUploadMethod.base64Json
-                ? AppLocalizations.of(context)!.providerUploadBase64Help
-                : AppLocalizations.of(context)!.providerUploadUrlHelp,
+            ? AppLocalizations.of(context)!.providerUploadBase64Help
+            : AppLocalizations.of(context)!.providerUploadUrlHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -331,10 +340,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerFallbackTriggerHelp,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
       _buildResponsiveSettingsRow(
@@ -369,41 +376,46 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 _buildAsrSelectedDropdownText(
                   context,
                   AppLocalizations.of(context)!.providerFallbackAll,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
+                  style: Theme.of(context).textTheme.labelLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
               items: [
                 DropdownMenuItem(
                   value: 'none',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerFallbackNone,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'specific',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerFallbackSpecific,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'generic',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerFallbackGeneric,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'all',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerFallbackAll,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                    style: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -419,10 +431,10 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _fallbackMethod == 'specific'
             ? AppLocalizations.of(context)!.providerFallbackSpecificHelp
             : _fallbackMethod == 'generic'
-                ? AppLocalizations.of(context)!.providerFallbackGenericHelp
-                : _fallbackMethod == 'all'
-                    ? AppLocalizations.of(context)!.providerFallbackAllHelp
-                    : AppLocalizations.of(context)!.providerFallbackRejectHelp,
+            ? AppLocalizations.of(context)!.providerFallbackGenericHelp
+            : _fallbackMethod == 'all'
+            ? AppLocalizations.of(context)!.providerFallbackAllHelp
+            : AppLocalizations.of(context)!.providerFallbackRejectHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -446,10 +458,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerPreprocessingHelp,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
       _buildResponsiveSettingsRow(
@@ -481,16 +491,20 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               items: [
                 DropdownMenuItem(
                   value: 'none',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerPreprocessNone,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 DropdownMenuItem(
                   value: 'resampleMono',
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.providerPreprocessResample,
                     style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

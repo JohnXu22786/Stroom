@@ -53,7 +53,11 @@ void showAssistantFullEditDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDlgState) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.assistantEditTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.assistantEditTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: DefaultTabController(
@@ -70,13 +74,26 @@ void showAssistantFullEditDialog(
                   labelPadding: const EdgeInsets.symmetric(horizontal: 24),
                   indicatorSize: TabBarIndicatorSize.label,
                   tabs: [
-                    Tab(text: AppLocalizations.of(context)!.assistantBasicTab),
                     Tab(
-                      text:
-                          AppLocalizations.of(context)!.assistantParametersTab,
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.assistantBasicTab,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     Tab(
-                      text: AppLocalizations.of(context)!.assistantDefaultsTab,
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.assistantParametersTab,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Tab(
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.assistantDefaultsTab,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -126,8 +143,9 @@ void showAssistantFullEditDialog(
                         }),
                         onDefaultToolsChanged: (next) => setDlgState(() {
                           // null = 恢复"未配置"（新话题重新自动启用全部工具）。
-                          vars.defaultToolNames =
-                              next == null ? null : Set<String>.from(next);
+                          vars.defaultToolNames = next == null
+                              ? null
+                              : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
                         onEnableMaxToolOutputCharsChanged: (v) => setDlgState(
@@ -146,7 +164,11 @@ void showAssistantFullEditDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -154,7 +176,9 @@ void showAssistantFullEditDialog(
               if (name.isEmpty) return;
 
               // Update basic info
-              ref.read(assistantProvider.notifier).updateAssistant(
+              ref
+                  .read(assistantProvider.notifier)
+                  .updateAssistant(
                     id: assistant.id,
                     name: name,
                     prompt: promptController.text.trim(),
@@ -163,7 +187,9 @@ void showAssistantFullEditDialog(
                   );
 
               // Update settings
-              ref.read(assistantProvider.notifier).updateAssistantSettings(
+              ref
+                  .read(assistantProvider.notifier)
+                  .updateAssistantSettings(
                     assistantId: assistant.id,
                     temperature: vars.temperature,
                     enableTemperature: vars.enableTemperature,
@@ -206,26 +232,29 @@ void showAssistantFullEditDialog(
                 providerName: assistant.defaultProviderName,
                 displayName: assistant.defaultModelName,
               );
-              final modelStale = (assistant.defaultModelName != null ||
+              final modelStale =
+                  (assistant.defaultModelName != null ||
                       assistant.defaultModelId != null) &&
                   defaultRef == null;
-              ref.read(assistantProvider.notifier).updateAssistantDefaults(
+              ref
+                  .read(assistantProvider.notifier)
+                  .updateAssistantDefaults(
                     id: assistant.id,
                     defaultModelName: vars.defaultsModelEngaged
                         ? vars.defaultModelName
                         : modelStale
-                            ? null
-                            : assistant.defaultModelName,
+                        ? null
+                        : assistant.defaultModelName,
                     defaultModelId: vars.defaultsModelEngaged
                         ? vars.defaultModelId
                         : modelStale
-                            ? null
-                            : assistant.defaultModelId,
+                        ? null
+                        : assistant.defaultModelId,
                     defaultProviderName: vars.defaultsModelEngaged
                         ? vars.defaultProviderName
                         : modelStale
-                            ? null
-                            : assistant.defaultProviderName,
+                        ? null
+                        : assistant.defaultProviderName,
                     // 默认工具集合：仅在用户改过（engaged）时写入；
                     // 从未配置的助手保持 null（新话题自动启用全部工具）。
                     // "恢复未配置"入口（clearDefaultToolNames）已随
@@ -237,7 +266,11 @@ void showAssistantFullEditDialog(
 
               Navigator.pop(ctx);
             },
-            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.mermaidSaveButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

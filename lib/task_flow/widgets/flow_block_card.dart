@@ -9,6 +9,8 @@ import '../utils/task_flow_localization.dart';
 import 'io_type_indicator.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// A card representing a single block in the task flow builder.
 ///
 /// Shows the block's icon, label, input/output types, and a brief
@@ -113,8 +115,8 @@ class FlowBlockCard extends ConsumerWidget {
               color: validationMessage != null
                   ? cs.error
                   : selected
-                      ? cs.primary
-                      : def.color.withValues(alpha: 0.4),
+                  ? cs.primary
+                  : def.color.withValues(alpha: 0.4),
               width: selected ? 2 : 1,
             ),
           ),
@@ -281,13 +283,7 @@ class FlowBlockCard extends ConsumerWidget {
                                   strings,
                                 );
                           return Text(
-                            '$label: ${friendlyParamValue(
-                              paramDef,
-                              e.value,
-                              ref,
-                              strings: strings,
-                              params: block.params,
-                            )}',
+                            '$label: ${friendlyParamValue(paramDef, e.value, ref, strings: strings, params: block.params)}',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,
@@ -313,9 +309,9 @@ class FlowBlockCard extends ConsumerWidget {
                     child: Text(
                       readOnly
                           ? AppLocalizations.of(context)!
-                              .taskFlowUiViewParameters
+                                .taskFlowUiViewParameters
                           : AppLocalizations.of(context)!
-                              .taskFlowUiTapSetParameters,
+                                .taskFlowUiTapSetParameters,
                       style: TextStyle(
                         fontSize: 9,
                         color: cs.primary.withValues(alpha: 0.6),
@@ -454,10 +450,9 @@ class FlowBlockCard extends ConsumerWidget {
     int action,
     String label,
     VoidCallback? callback,
-  ) =>
-      PopupMenuItem(
-        value: action,
-        enabled: callback != null,
-        child: Text(label),
-      );
+  ) => PopupMenuItem(
+    value: action,
+    enabled: callback != null,
+    child: ConstrainedText(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+  );
 }

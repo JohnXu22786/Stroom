@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/connectivity_test_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ConnectivityTestDialog extends StatefulWidget {
   final String title;
   final String initialContent;
@@ -77,8 +79,8 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
         setState(() {
           _result = ConnectivityTestResult(
             succeeded: false,
-            summary:
-                AppLocalizations.of(context)!.connectivityTestFailedSummary,
+            summary: AppLocalizations.of(context)!
+                .connectivityTestFailedSummary,
             details: _readableError(error),
             elapsed: Duration.zero,
           );
@@ -111,7 +113,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
     final colorScheme = Theme.of(context).colorScheme;
     final localizations = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(localizations.connectivityTestTitle(widget.title)),
+      title: ConstrainedText(
+        localizations.connectivityTestTitle(widget.title),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
@@ -177,9 +183,14 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
       ),
       actions: [
         TextButton(
-          onPressed:
-              _isRunning || _isSaving ? null : () => Navigator.pop(context),
-          child: Text(localizations.connectivityTestClose),
+          onPressed: _isRunning || _isSaving
+              ? null
+              : () => Navigator.pop(context),
+          child: ConstrainedText(
+            localizations.connectivityTestClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         OutlinedButton.icon(
           onPressed: _isRunning || _isSaving ? null : _save,
@@ -189,7 +200,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save_outlined, size: 18),
-          label: Text(localizations.connectivityTestSaveContent),
+          label: ConstrainedText(
+            localizations.connectivityTestSaveContent,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton.icon(
           onPressed: _isRunning || _isSaving ? null : _run,
@@ -199,10 +214,12 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.network_check, size: 18),
-          label: Text(
+          label: ConstrainedText(
             _isRunning
                 ? localizations.connectivityTestTesting
                 : localizations.connectivityTestRun,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

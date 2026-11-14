@@ -8,6 +8,8 @@ import 'task_utils.dart';
 import 'file_opener.dart';
 import '../../widgets/running_elapsed_label.dart';
 
+import '../../widgets/constrained_text.dart';
+
 // =============================================================================
 // 合成任务卡片
 // =============================================================================
@@ -36,7 +38,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
     super.initState();
     // Failed tasks used to show their error box in the header unconditionally;
     // expand by default so the error stays visible in the collapsible design.
-    _expanded = widget.task.status == TaskStatus.running ||
+    _expanded =
+        widget.task.status == TaskStatus.running ||
         widget.task.status == TaskStatus.failed;
   }
 
@@ -90,11 +93,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        ConstrainedText(
                           widget.task.title.isNotEmpty
                               ? widget.task.title
                               : AppLocalizations.of(context)!
-                                  .unifiedTaskUnnamedRecording,
+                                    .unifiedTaskUnnamedRecording,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w500,
@@ -240,9 +243,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 ),
                 title: Text(
                   AppLocalizations.of(context)!.unifiedTaskClearTask,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -263,9 +264,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                       .resumeTask(widget.task.id);
                 },
                 icon: const Icon(Icons.play_arrow, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.unifiedTaskContinue,
                   style: TextStyle(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -320,9 +323,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   );
                 },
                 icon: const Icon(Icons.refresh, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.unifiedTaskRetry,
                   style: TextStyle(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -372,9 +377,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   onPressed: () =>
                       openFile(widget.task.downloadedFilePath!, context),
                   icon: const Icon(Icons.folder_open, size: 16),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.unifiedTaskOpenFile,
                     style: TextStyle(fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.green,
@@ -448,7 +455,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     color: cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
+                  child: ConstrainedText(
                     widget.task.text,
                     style: TextStyle(
                       fontSize: 13,
@@ -504,15 +511,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .error
+                    color: Theme.of(context).colorScheme.error
                         .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
+                      color: Theme.of(context).colorScheme.error
                           .withValues(alpha: 0.25),
                     ),
                   ),
@@ -592,7 +595,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.unifiedTaskClose),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.unifiedTaskClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -631,9 +638,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
+                      color: Theme.of(context).colorScheme.onSurface
                           .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -662,9 +667,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
+                      color: Theme.of(context).colorScheme.error
                           .withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -685,7 +688,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.unifiedTaskClose),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.unifiedTaskClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

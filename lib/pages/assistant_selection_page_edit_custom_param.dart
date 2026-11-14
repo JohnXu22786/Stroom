@@ -43,8 +43,10 @@ void showEditCustomParameterDialog(
         final name = nameController.text.trim();
         final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
         return AlertDialog(
-          title: Text(
+          title: ConstrainedText(
             AppLocalizations.of(context)!.assistantEditCustomParameter,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -52,14 +54,14 @@ void showEditCustomParameterDialog(
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.assistantParameterName,
-                  hintText:
-                      AppLocalizations.of(context)!.assistantParameterNameHint,
+                  labelText: AppLocalizations.of(context)!
+                      .assistantParameterName,
+                  hintText: AppLocalizations.of(context)!
+                      .assistantParameterNameHint,
                   border: const OutlineInputBorder(),
                   errorText: hasInvalidName
                       ? AppLocalizations.of(context)!
-                          .assistantParameterNameInvalid
+                            .assistantParameterNameInvalid
                       : null,
                 ),
                 onChanged: (_) => setDlgState(() {}),
@@ -70,6 +72,7 @@ void showEditCustomParameterDialog(
               DropdownButtonFormField<String>(
                 dropdownColor: StroomMenuStyle.surface(context),
                 borderRadius: StroomMenuStyle.borderRadius,
+                isExpanded: true,
                 initialValue: type,
                 decoration: InputDecoration(
                   labelText: AppLocalizations.of(context)!.chatInfoType,
@@ -78,29 +81,37 @@ void showEditCustomParameterDialog(
                 items: [
                   DropdownMenuItem(
                     value: 'string',
-                    child: Text(
+                    child: ConstrainedText(
                       AppLocalizations.of(context)!
                           .assistantParamValueTypeString,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'number',
-                    child: Text(
+                    child: ConstrainedText(
                       AppLocalizations.of(context)!
                           .assistantParamValueTypeNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'boolean',
-                    child: Text(
+                    child: ConstrainedText(
                       AppLocalizations.of(context)!
                           .assistantParamValueTypeBoolean,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'json',
-                    child: Text(
+                    child: ConstrainedText(
                       AppLocalizations.of(context)!.assistantParamValueTypeJson,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -136,15 +147,13 @@ void showEditCustomParameterDialog(
                         labelText: AppLocalizations.of(context)!.assistantValue,
                         hintText: type == 'boolean'
                             ? AppLocalizations.of(context)!
-                                .assistantTrueFalseHint
+                                  .assistantTrueFalseHint
                             : type == 'number'
-                                ? AppLocalizations.of(context)!
-                                    .assistantNumberHint
-                                : type == 'json'
-                                    ? AppLocalizations.of(context)!
-                                        .assistantJsonHint('{"key": "value"}')
-                                    : AppLocalizations.of(context)!
-                                        .assistantValueHint,
+                            ? AppLocalizations.of(context)!.assistantNumberHint
+                            : type == 'json'
+                            ? AppLocalizations.of(context)!
+                                  .assistantJsonHint('{"key": "value"}')
+                            : AppLocalizations.of(context)!.assistantValueHint,
                         border: const OutlineInputBorder(),
                         errorText: jsonError,
                         errorMaxLines: 3,
@@ -166,23 +175,21 @@ void showEditCustomParameterDialog(
                         initialValue: valueController.text,
                         hintText: type == 'boolean'
                             ? AppLocalizations.of(context)!
-                                .assistantTrueFalseHint
+                                  .assistantTrueFalseHint
                             : type == 'number'
-                                ? AppLocalizations.of(context)!
-                                    .assistantNumberHint
-                                : type == 'json'
-                                    ? AppLocalizations.of(context)!
-                                        .assistantJsonHint('{"key": "value"}')
-                                    : AppLocalizations.of(context)!
-                                        .assistantValueHint,
+                            ? AppLocalizations.of(context)!.assistantNumberHint
+                            : type == 'json'
+                            ? AppLocalizations.of(context)!
+                                  .assistantJsonHint('{"key": "value"}')
+                            : AppLocalizations.of(context)!.assistantValueHint,
                         type: type,
                         onSave: (text) {
                           setDlgState(() {
                             valueController.text = text;
                             valueController.selection =
                                 TextSelection.fromPosition(
-                              TextPosition(offset: text.length),
-                            );
+                                  TextPosition(offset: text.length),
+                                );
                             validateJsonValue();
                           });
                         },
@@ -196,7 +203,11 @@ void showEditCustomParameterDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.batchDlgCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () {
@@ -221,7 +232,11 @@ void showEditCustomParameterDialog(
                 valueController.dispose();
                 Navigator.pop(ctx);
               },
-              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         );

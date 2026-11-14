@@ -9,6 +9,8 @@ import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// ASR 模型配置编辑页面
 /// 包含基本设置和 ASR 专有参数（language、response_format 等）
 class AsrModelConfigPage extends StatefulWidget {
@@ -321,8 +323,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-            ? widget.model!.name
-            : AppLocalizations.of(context)!.modelEditTitle)
+              ? widget.model!.name
+              : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
@@ -333,17 +335,29 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -354,11 +368,19 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -464,8 +486,10 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.assistantAddParameter,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   onPressed: _addCustomParam,
                 ),
@@ -487,7 +511,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
                 final name = param.paramName.trim();
-                final isDuplicate = name.isNotEmpty &&
+                final isDuplicate =
+                    name.isNotEmpty &&
                     _customParams.indexWhere(
                           (p) => p.paramName.trim() == name,
                         ) !=
@@ -511,7 +536,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   isDense: true,
                                   errorText: isDuplicate
                                       ? AppLocalizations.of(context)!
-                                          .modelParamExists
+                                            .modelParamExists
                                       : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
@@ -539,17 +564,21 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
+                                  isExpanded: true,
                                   items: ParamType.values
                                       .map(
                                         (t) => DropdownMenuItem(
                                           value: t.value,
-                                          child: Text(
+                                          child: ConstrainedText(
                                             localizedParamTypeLabel(
-                                                AppLocalizations.of(context)!,
-                                                t),
+                                              AppLocalizations.of(context)!,
+                                              t,
+                                            ),
                                             style: const TextStyle(
                                               fontSize: 13,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       )
@@ -598,8 +627,9 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   labelText: AppLocalizations.of(context)!
                                       .modelParamDefaultValue,
                                   hintText: localizedParamTypeDefaultValueHint(
-                                      AppLocalizations.of(context)!,
-                                      param.paramType),
+                                    AppLocalizations.of(context)!,
+                                    param.paramType,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -634,8 +664,9 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   context,
                                   initialValue: param.defaultValue,
                                   hintText: localizedParamTypeDefaultValueHint(
-                                      AppLocalizations.of(context)!,
-                                      param.paramType),
+                                    AppLocalizations.of(context)!,
+                                    param.paramType,
+                                  ),
                                   type: param.type,
                                   onSave: (result) {
                                     param.defaultValue = result;
@@ -711,37 +742,47 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                         items: [
                           DropdownMenuItem(
                             value: 'json',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!
                                   .asrResponseFormatJson,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           DropdownMenuItem(
                             value: 'text',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!
                                   .asrResponseFormatText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           DropdownMenuItem(
                             value: 'srt',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!
                                   .asrResponseFormatSrt,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           DropdownMenuItem(
                             value: 'vtt',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!
                                   .asrResponseFormatVtt,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           DropdownMenuItem(
                             value: 'verbose_json',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!
                                   .asrResponseFormatVerbose,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -825,14 +866,18 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                         items: [
                           DropdownMenuItem(
                             value: 'segment',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!.asrTimestampSegment,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           DropdownMenuItem(
                             value: 'word',
-                            child: Text(
+                            child: ConstrainedText(
                               AppLocalizations.of(context)!.asrTimestampWord,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],

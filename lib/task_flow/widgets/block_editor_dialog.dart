@@ -24,6 +24,8 @@ import '../utils/task_flow_localization.dart';
 import 'catcatch_policy_menu.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 String _localizedIoTypeLabel(IOType type, AppLocalizations strings) =>
     switch (type) {
       IOType.text => strings.taskFlowIoTypeText,
@@ -144,10 +146,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       flattenProviderModels(ref.read(providerEntriesProvider), configType);
 
   ModelConfig? _selectedTtsModel() => resolveProviderModel(
-        ref.read(providerEntriesProvider),
-        'tts',
-        _params['modelRef'],
-      )?.model;
+    ref.read(providerEntriesProvider),
+    'tts',
+    _params['modelRef'],
+  )?.model;
 
   void _selectModel(ProviderModel model) {
     _params['modelRef'] = providerModelReference(model);
@@ -185,7 +187,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiClose),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiClose,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -202,7 +208,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             strings,
           );
     final blockLabel = localizedBlockTypeLabel(def, strings);
-    final temporaryOutput = widget.allowTemporaryOutput &&
+    final temporaryOutput =
+        widget.allowTemporaryOutput &&
         isFlowTemporaryOutputEnabled(widget.block);
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
@@ -361,8 +368,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.taskFlowUiCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -386,8 +395,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         );
                         Navigator.pop(context, updated);
                       },
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.taskFlowUiConfirm,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -451,10 +462,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       final selected = _params.containsKey(param.key)
           ? _params[param.key].toString()
           : (isOutput
-              ? (_params['audioOutput'] == true ? 'audio' : 'video')
-              : (_params['automaticResourceSelection'] == true
-                  ? 'automatic'
-                  : 'manual'));
+                ? (_params['audioOutput'] == true ? 'audio' : 'video')
+                : (_params['automaticResourceSelection'] == true
+                      ? 'automatic'
+                      : 'manual'));
       return CatCatchPolicyMenu(
         outputPolicy: isOutput,
         value: selected,
@@ -469,7 +480,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     switch (param.type) {
       case BlockParamType.string:
       case BlockParamType.secret:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -499,8 +511,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           param.configType,
           value,
         );
-        final selectedIndex =
-            selected == null ? null : models.indexOf(selected);
+        final selectedIndex = selected == null
+            ? null
+            : models.indexOf(selected);
         final customParams =
             selected?.model.customParams ?? const <CustomParam>[];
         return Column(
@@ -509,11 +522,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             DropdownButtonFormField<int>(
               dropdownColor: StroomMenuStyle.surface(context),
               borderRadius: StroomMenuStyle.borderRadius,
+              isExpanded: true,
               value: selectedIndex,
               hint: Text(
                 models.isEmpty
                     ? AppLocalizations.of(context)!
-                        .taskFlowUiConfigureModelFirst
+                          .taskFlowUiConfigureModelFirst
                     : AppLocalizations.of(context)!.taskFlowUiModelUnavailable,
               ),
               isDense: true,
@@ -534,16 +548,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 final modelName = (m.name as String?)?.isNotEmpty == true
                     ? m.name as String
                     : (m.modelId as String? ??
-                        AppLocalizations.of(context)!
-                            .taskFlowUiModelIndexed(i));
-                final providerName = (c.providerName as String?)?.isNotEmpty ==
-                        true
+                          AppLocalizations.of(context)!
+                              .taskFlowUiModelIndexed(i));
+                final providerName =
+                    (c.providerName as String?)?.isNotEmpty == true
                     ? c.providerName as String
                     : AppLocalizations.of(context)!.taskFlowUiUnnamedProvider;
                 return DropdownMenuItem<int>(
                   value: i,
-                  child: Text(
+                  child: ConstrainedText(
                     '$modelName | $providerName',
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 );
@@ -555,8 +570,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     final voice = _params['voice'];
                     if (voice != null &&
                         !models[v].model.voices.any(
-                              (entry) => entry.id == voice,
-                            )) {
+                          (entry) => entry.id == voice,
+                        )) {
                       _params['voice'] = '';
                     }
                   });
@@ -591,12 +606,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                       for (final dynamic cp in customParams)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(
+                          child: ConstrainedText(
                             '${cp.paramName}: ${cp.defaultValue}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
                             ),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -677,6 +693,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         return DropdownButtonFormField<String>(
           dropdownColor: StroomMenuStyle.surface(context),
           borderRadius: StroomMenuStyle.borderRadius,
+          isExpanded: true,
           value: currentOption != null
               ? '${currentOption.modelIndex}:${currentOption.id}'
               : null,
@@ -704,7 +721,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               // Name only — the id (e.g. zh-CN-XiaoxiaoNeural) is a long
               // opaque string that would confuse users; the TTS page shows
               // the same.
-              child: Text(o.name),
+              child: ConstrainedText(
+                o.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             );
           }).toList(),
           onChanged: (v) {
@@ -747,13 +768,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         display == null
                             ? (currentId.isEmpty
-                                ? AppLocalizations.of(context)!
-                                    .taskFlowUiAssistantUseCurrent
-                                : AppLocalizations.of(context)!
-                                    .taskFlowUiAssistantUnavailable)
+                                  ? AppLocalizations.of(context)!
+                                        .taskFlowUiAssistantUseCurrent
+                                  : AppLocalizations.of(context)!
+                                        .taskFlowUiAssistantUnavailable)
                             : '${display.$1} ${display.$2}',
                         style: TextStyle(
                           fontSize: 13,
@@ -761,6 +782,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                               ? cs.onSurfaceVariant
                               : cs.onSurface,
                         ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -829,11 +851,14 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final h = totalSec ~/ 3600;
         final m = (totalSec % 3600) ~/ 60;
         final s = totalSec % 60;
-        final hCtrl = _controllers['${param.key}_h'] ??
+        final hCtrl =
+            _controllers['${param.key}_h'] ??
             TextEditingController(text: h == 0 ? '' : '$h');
-        final mCtrl = _controllers['${param.key}_m'] ??
+        final mCtrl =
+            _controllers['${param.key}_m'] ??
             TextEditingController(text: m == 0 ? '' : '$m');
-        final sCtrl = _controllers['${param.key}_s'] ??
+        final sCtrl =
+            _controllers['${param.key}_s'] ??
             TextEditingController(text: s == 0 ? '' : '$s');
         _controllers['${param.key}_h'] = hCtrl;
         _controllers['${param.key}_m'] = mCtrl;
@@ -848,14 +873,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         }
 
         InputDecoration dec() => InputDecoration(
-              isDense: true,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
-              ),
-            );
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
+        );
         return Row(
           children: [
             Expanded(
@@ -900,7 +924,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -949,7 +974,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               Icon(Icons.folder_outlined, size: 16, color: cs.primary),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   value?.toString().isNotEmpty == true
                       ? value.toString()
                       : AppLocalizations.of(context)!.taskFlowUiDefaultRoot,
@@ -970,9 +995,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!.taskFlowUiSelect,
                   style: TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -1125,8 +1152,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         name,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -1135,7 +1163,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (subtitle.isNotEmpty)
-                        Text(
+                        ConstrainedText(
                           subtitle,
                           style: TextStyle(
                             fontSize: 11,

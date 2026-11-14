@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
 
+import 'constrained_text.dart';
+
 // ============================================================================
 // 代码编辑辅助（自定义参数 JSON 值编辑器共享组件）
 // ============================================================================
@@ -110,7 +112,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
         if (closing != null) {
           // `ab` + 选中 `b` + `{` → `a{b}`，保持选区包裹内容。
           final inner = oldText.substring(oldSel.start, oldSel.end);
-          final text = newText.substring(0, oldSel.start + 1) +
+          final text =
+              newText.substring(0, oldSel.start + 1) +
               inner +
               closing +
               newText.substring(oldSel.start + 1);
@@ -146,8 +149,9 @@ class CodeSmartInputFormatter extends TextInputFormatter {
 
       final closing = _openers[inserted];
       if (closing != null) {
-        final next =
-            insertPos + 1 < newText.length ? newText[insertPos + 1] : null;
+        final next = insertPos + 1 < newText.length
+            ? newText[insertPos + 1]
+            : null;
         final isQuote = inserted == '"' || inserted == "'";
         if (isQuote) {
           // 下一个字符已是引号：视为输入闭合引号 → 跳过（不重复插入）。
@@ -166,7 +170,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
           // 下一个字符已是本开括号的闭合符：只插入开括号，不再补一个。
           return newValue;
         }
-        final text = newText.substring(0, insertPos + 1) +
+        final text =
+            newText.substring(0, insertPos + 1) +
             closing +
             newText.substring(insertPos + 1);
         return TextEditingValue(
@@ -212,12 +217,14 @@ class CodeSmartInputFormatter extends TextInputFormatter {
         return newValue;
       }
       final deleted = oldText[deletePos];
-      final next =
-          deletePos + 1 < oldText.length ? oldText[deletePos + 1] : null;
+      final next = deletePos + 1 < oldText.length
+          ? oldText[deletePos + 1]
+          : null;
       if (next != null && _openers[deleted] == next) {
         // 光标在成对括号中间退格 → 成对删除。
         return TextEditingValue(
-          text: oldText.substring(0, deletePos) +
+          text:
+              oldText.substring(0, deletePos) +
               oldText.substring(deletePos + 2),
           selection: TextSelection.collapsed(offset: deletePos),
         );
@@ -294,7 +301,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
         0,
         lineBefore.length - _indentUnit.length,
       );
-      final text = oldText.substring(0, lineStart) +
+      final text =
+          oldText.substring(0, lineStart) +
           newIndent +
           closer +
           oldText.substring(diff);
@@ -354,8 +362,9 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
 
   void _onScrolled() {
     if (!mounted) return;
-    final offset =
-        _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final offset = _scrollController.hasClients
+        ? _scrollController.offset
+        : 0.0;
     if (offset != _scrollOffset) {
       setState(() => _scrollOffset = offset);
     }
@@ -495,8 +504,8 @@ Future<void> showJsonValueEditorDialog(
     final text = editingController.text.trim();
     if (text.isEmpty) return;
     try {
-      final pretty =
-          const JsonEncoder.withIndent('  ').convert(jsonDecode(text));
+      final pretty = const JsonEncoder.withIndent('  ')
+          .convert(jsonDecode(text));
       editingController.text = pretty;
       editingController.selection = TextSelection.collapsed(
         offset: pretty.length,
@@ -529,8 +538,10 @@ Future<void> showJsonValueEditorDialog(
                     const SizedBox(width: 8),
                     Text(
                       AppLocalizations.of(ctx)!.codeEditorTitle,
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     if (type == 'json') ...[
                       Container(
@@ -555,12 +566,17 @@ Future<void> showJsonValueEditorDialog(
                       const SizedBox(width: 8),
                       TextButton.icon(
                         icon: const Icon(Icons.format_align_left, size: 16),
-                        label: Text(AppLocalizations.of(ctx)!.codeEditorFormat),
+                        label: ConstrainedText(
+                          AppLocalizations.of(ctx)!.codeEditorFormat,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         style: TextButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
-                        onPressed: (liveError == null &&
+                        onPressed:
+                            (liveError == null &&
                                 editingController.text.trim().isNotEmpty)
                             ? () => setDlgState(formatPretty)
                             : null,
@@ -610,9 +626,7 @@ Future<void> showJsonValueEditorDialog(
                         color: Theme.of(ctx).colorScheme.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Theme.of(ctx)
-                              .colorScheme
-                              .error
+                          color: Theme.of(ctx).colorScheme.error
                               .withValues(alpha: 0.35),
                         ),
                       ),
@@ -629,8 +643,9 @@ Future<void> showJsonValueEditorDialog(
                               liveError!,
                               style: TextStyle(
                                 fontSize: 12,
-                                color:
-                                    Theme.of(ctx).colorScheme.onErrorContainer,
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .onErrorContainer,
                                 fontFamily: 'monospace',
                               ),
                             ),
@@ -656,12 +671,20 @@ Future<void> showJsonValueEditorDialog(
                       onPressed: () {
                         Navigator.pop(ctx);
                       },
-                      child: Text(AppLocalizations.of(ctx)!.codeEditorCancel),
+                      child: ConstrainedText(
+                        AppLocalizations.of(ctx)!.codeEditorCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       icon: const Icon(Icons.check, size: 18),
-                      label: Text(AppLocalizations.of(ctx)!.codeEditorConfirm),
+                      label: ConstrainedText(
+                        AppLocalizations.of(ctx)!.codeEditorConfirm,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       onPressed: liveError != null
                           ? null
                           : () {

@@ -108,9 +108,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
       title: Text(title),
       // 模型名显示格式与对话页一致（"模型名 | 供应商名"）；未配置时
       // 提示跟随对话页当前模型。
-      subtitle: Text(
-        _systemAssistantModelSubtitle(task, llmModels),
-      ),
+      subtitle: Text(_systemAssistantModelSubtitle(task, llmModels)),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: () => _showSystemAssistantPanel(
         title: title,
@@ -229,8 +227,10 @@ class _SystemAssistantConfigPanelState
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       setState(() {
-        _modelNames =
-            applySavedOrder(baseNames, prefs.getStringList('model_order'));
+        _modelNames = applySavedOrder(
+          baseNames,
+          prefs.getStringList('model_order'),
+        );
       });
     });
   }
@@ -240,7 +240,8 @@ class _SystemAssistantConfigPanelState
     super.didChangeDependencies();
     final wasShowingDefault =
         !_isCustomPrompt && _promptController.text == _defaultPrompt;
-    _defaultPrompt = localizedBuiltInSystemAssistantById(
+    _defaultPrompt =
+        localizedBuiltInSystemAssistantById(
           widget.defaultAssistantId,
           AppLocalizations.of(context)!,
         )?.prompt ??
@@ -310,7 +311,7 @@ class _SystemAssistantConfigPanelState
               for (final name in _modelNames)
                 ListTile(
                   dense: true,
-                  title: Text(
+                  title: ConstrainedText(
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -330,8 +331,9 @@ class _SystemAssistantConfigPanelState
       if (selected.isEmpty) {
         _draft = _draft.copyWithModel(clearModel: true);
       } else {
-        final resolved =
-            _models.where((m) => m.displayName == selected).firstOrNull;
+        final resolved = _models
+            .where((m) => m.displayName == selected)
+            .firstOrNull;
         _draft = _draft.copyWithModel(
           modelId: resolved?.modelId,
           providerName: resolved?.providerName,
@@ -346,7 +348,11 @@ class _SystemAssistantConfigPanelState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(ctx)!.systemAssistantResetPromptTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(ctx)!.systemAssistantResetPromptTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(ctx)!
               .systemAssistantResetPromptBody(widget.title),
@@ -354,11 +360,19 @@ class _SystemAssistantConfigPanelState
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(ctx)!.systemAssistantCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(ctx)!.systemAssistantCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(AppLocalizations.of(ctx)!.systemAssistantReset),
+            child: ConstrainedText(
+              AppLocalizations.of(ctx)!.systemAssistantReset,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -460,7 +474,7 @@ class _SystemAssistantConfigPanelState
               child: ListTile(
                 dense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                title: Text(
+                title: ConstrainedText(
                   _selectedModelDisplay,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -516,16 +530,17 @@ class _SystemAssistantConfigPanelState
                     _isCustomPrompt
                         ? strings.systemAssistantUsingCustomPrompt
                         : strings.systemAssistantUsingDefaultPrompt,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: _isCustomPrompt ? _resetPromptToDefault : null,
                   icon: const Icon(Icons.restart_alt, size: 18),
-                  label: Text(strings.systemAssistantResetButton),
+                  label: ConstrainedText(
+                    strings.systemAssistantResetButton,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -535,12 +550,20 @@ class _SystemAssistantConfigPanelState
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(strings.systemAssistantCancel),
+                  child: ConstrainedText(
+                    strings.systemAssistantCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _save,
-                  child: Text(strings.systemAssistantSave),
+                  child: ConstrainedText(
+                    strings.systemAssistantSave,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

@@ -9,6 +9,8 @@ import '../services/attachment_storage.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import 'conversations_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
 
@@ -95,7 +97,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!
               .conversationDeleteMany(_selectedIds.length),
@@ -103,14 +109,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.actionDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -160,19 +174,31 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.conversationDeleteOne),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.actionDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -210,7 +236,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationRename),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -234,7 +264,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -247,7 +281,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -298,8 +336,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 controller: _searchController,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText:
-                      AppLocalizations.of(context)!.conversationSearchHint,
+                  hintText: AppLocalizations.of(context)!
+                      .conversationSearchHint,
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
@@ -307,11 +345,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ),
             )
           : AppBar(
-              title: Text(
+              title: ConstrainedText(
                 _selectionMode
                     ? AppLocalizations.of(context)!
-                        .conversationSelected(_selectedIds.length)
+                          .conversationSelected(_selectedIds.length)
                     : AppLocalizations.of(context)!.conversationsTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               actions: [
                 if (!_selectionMode)
@@ -350,58 +390,58 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       body: filtered.isEmpty
           ? _buildEmptyState(cs)
           : _searchController.text.trim().isNotEmpty
-              ? ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final conv = filtered[index];
-                    final isActive = conv.id == activeId;
-                    return _buildConversationItem(
-                      conv,
-                      isActive,
-                      cs,
-                      index,
-                      activeId,
-                    );
-                  },
-                )
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: filtered.length,
-                  buildDefaultDragHandles: false,
-                  onReorderItem: (oldIndex, newIndex) {
-                    // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
-                    // 调整过的索引（框架保证），直接按显示位置映射回存储
-                    // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
-                    final convs = ref.read(conversationsProvider);
-                    final item = filtered[oldIndex];
-                    final realOld = convs.indexWhere((c) => c.id == item.id);
-                    final target = filtered[newIndex];
-                    final realNew = convs.indexWhere((c) => c.id == target.id);
-                    if (realOld >= 0 && realNew >= 0) {
-                      ref
-                          .read(conversationsProvider.notifier)
-                          .reorderConversation(realOld, realNew);
-                    }
-                  },
-                  proxyDecorator: (child, index, animation) => Material(
-                    elevation: 2,
-                    color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(8),
-                    child: child,
-                  ),
-                  itemBuilder: (context, index) {
-                    final conv = filtered[index];
-                    final isActive = conv.id == activeId;
-                    return _buildConversationItem(
-                      conv,
-                      isActive,
-                      cs,
-                      index,
-                      activeId,
-                    );
-                  },
-                ),
+          ? ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: filtered.length,
+              itemBuilder: (context, index) {
+                final conv = filtered[index];
+                final isActive = conv.id == activeId;
+                return _buildConversationItem(
+                  conv,
+                  isActive,
+                  cs,
+                  index,
+                  activeId,
+                );
+              },
+            )
+          : ReorderableListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: filtered.length,
+              buildDefaultDragHandles: false,
+              onReorderItem: (oldIndex, newIndex) {
+                // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
+                // 调整过的索引（框架保证），直接按显示位置映射回存储
+                // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
+                final convs = ref.read(conversationsProvider);
+                final item = filtered[oldIndex];
+                final realOld = convs.indexWhere((c) => c.id == item.id);
+                final target = filtered[newIndex];
+                final realNew = convs.indexWhere((c) => c.id == target.id);
+                if (realOld >= 0 && realNew >= 0) {
+                  ref
+                      .read(conversationsProvider.notifier)
+                      .reorderConversation(realOld, realNew);
+                }
+              },
+              proxyDecorator: (child, index, animation) => Material(
+                elevation: 2,
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(8),
+                child: child,
+              ),
+              itemBuilder: (context, index) {
+                final conv = filtered[index];
+                final isActive = conv.id == activeId;
+                return _buildConversationItem(
+                  conv,
+                  isActive,
+                  cs,
+                  index,
+                  activeId,
+                );
+              },
+            ),
       floatingActionButton: _selectionMode && _selectedIds.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: _batchDelete,
@@ -434,13 +474,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               onChanged: (_) => _toggleSelection(conv.id),
             )
           : conv.isTemporary
-              // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
-              // 不是按钮；拖拽把手让位于该图标）。
-              ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
-              : ReorderableDragStartListener(
-                  index: index,
-                  child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
-                ),
+          // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
+          // 不是按钮；拖拽把手让位于该图标）。
+          ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
+          : ReorderableDragStartListener(
+              index: index,
+              child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
+            ),
       title: Row(
         children: [
           if (conv.isPinned)
@@ -452,7 +492,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           if (conv.isTemporary && conv.temporaryExpiresAt != null)
             TemporaryCountdownCapsule(expiresAt: conv.temporaryExpiresAt!),
           Expanded(
-            child: Text(
+            child: ConstrainedText(
               conv.title.isEmpty
                   ? AppLocalizations.of(context)!.conversationNew
                   : conv.title,
@@ -527,40 +567,52 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   itemBuilder: (ctx) => [
                     PopupMenuItem(
                       value: 'rename',
-                      child: Text(AppLocalizations.of(context)!.actionRename),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.actionRename,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'auto_rename',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.conversationAutoRename,
                         style: TextStyle(color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     PopupMenuItem(
                       value: 'toggle_temporary',
-                      child: Text(
+                      child: ConstrainedText(
                         conv.isTemporary
                             ? AppLocalizations.of(context)!
-                                .conversationCloseTemporary
+                                  .conversationCloseTemporary
                             : AppLocalizations.of(context)!
-                                .conversationTemporary,
+                                  .conversationTemporary,
                         style: TextStyle(color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     PopupMenuItem(
                       value: 'pin',
-                      child: Text(
+                      child: ConstrainedText(
                         conv.isPinned
                             ? AppLocalizations.of(context)!.conversationUnpin
                             : AppLocalizations.of(context)!.conversationPin,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'delete',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.actionDelete,
                         style: TextStyle(color: cs.error),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

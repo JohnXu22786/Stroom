@@ -11,6 +11,8 @@ import '../widgets/folder_picker_dialog.dart';
 import 'browser_page.dart';
 import 'unified_task_list_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 // =============================================================================
 // 单个任务卡片数据
 // =============================================================================
@@ -22,13 +24,11 @@ class _TaskEntry {
   final TextEditingController minuteController;
   final TextEditingController secondController;
 
-  _TaskEntry({
-    String? initialUrl,
-    int? initialDurationSec,
-  })  : urlController = TextEditingController(text: initialUrl ?? ''),
-        hourController = TextEditingController(),
-        minuteController = TextEditingController(),
-        secondController = TextEditingController() {
+  _TaskEntry({String? initialUrl, int? initialDurationSec})
+    : urlController = TextEditingController(text: initialUrl ?? ''),
+      hourController = TextEditingController(),
+      minuteController = TextEditingController(),
+      secondController = TextEditingController() {
     if (initialDurationSec != null && initialDurationSec > 0) {
       final h = initialDurationSec ~/ 3600;
       final m = (initialDurationSec % 3600) ~/ 60;
@@ -136,7 +136,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     final captured = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: widget.browserPageBuilder ??
+        builder:
+            widget.browserPageBuilder ??
             (_) => const BrowserPage(initialUrl: 'https://www.google.com'),
       ),
     );
@@ -240,7 +241,9 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       final totalSec = totalSeconds(hours: h, minutes: m, seconds: s);
 
       try {
-        ref.read(catcatchTasksProvider.notifier).addTask(
+        ref
+            .read(catcatchTasksProvider.notifier)
+            .addTask(
               url,
               totalSec,
               videoFolder: _videoFolder,
@@ -285,7 +288,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_l10n.catCatchPageTitle),
+        title: ConstrainedText(
+          _l10n.catCatchPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
@@ -643,12 +650,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               child: FilledButton.icon(
                 onPressed: hasValidUrl ? _startTask : null,
                 icon: const Icon(Icons.search, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _l10n.catCatchStartAnalysis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

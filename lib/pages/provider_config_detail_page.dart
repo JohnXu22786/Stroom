@@ -12,6 +12,8 @@ import 'ocr_model_config_page.dart';
 import 'simple_model_config_page.dart';
 import 'provider_settings_panel.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ProviderConfigDetailPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
@@ -68,8 +70,9 @@ class _ProviderConfigDetailPageState
     final config = _config;
     if (config == null) return models;
 
-    final names =
-        models.map((m) => _modelDisplayName(m, config.providerName)).toList();
+    final names = models
+        .map((m) => _modelDisplayName(m, config.providerName))
+        .toList();
     final orderedNames = applySavedOrder(names, _savedModelOrder);
     // 按名字逐个配对回模型对象（处理重名：每个名字按出现顺序消费）
     final remaining = List<ModelConfig>.of(models);
@@ -247,7 +250,8 @@ class _ProviderConfigDetailPageState
     final entry = _entry;
     if (entry == null) return;
 
-    final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
+    final style =
+        ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
         ModelConfigStyle.tts;
 
     switch (style) {
@@ -285,9 +289,9 @@ class _ProviderConfigDetailPageState
               builder: (_) => OcrModelConfigPage(
                 providerRequestSizeBudgetBytes:
                     providerRequestSizeBudget is num &&
-                            providerRequestSizeBudget > 0
-                        ? providerRequestSizeBudget.toInt()
-                        : null,
+                        providerRequestSizeBudget > 0
+                    ? providerRequestSizeBudget.toInt()
+                    : null,
               ),
             ),
           );
@@ -371,7 +375,8 @@ class _ProviderConfigDetailPageState
     final entry = _entry;
     if (entry == null) return;
 
-    final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
+    final style =
+        ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
         ModelConfigStyle.tts;
 
     switch (style) {
@@ -471,9 +476,9 @@ class _ProviderConfigDetailPageState
                   model: config.models[modelIndex].copy(),
                   providerRequestSizeBudgetBytes:
                       providerRequestSizeBudget is num &&
-                              providerRequestSizeBudget > 0
-                          ? providerRequestSizeBudget.toInt()
-                          : null,
+                          providerRequestSizeBudget > 0
+                      ? providerRequestSizeBudget.toInt()
+                      : null,
                 ),
               ),
             );
@@ -489,9 +494,9 @@ class _ProviderConfigDetailPageState
                   model: _pendingModels[modelIndex].copy(),
                   providerRequestSizeBudgetBytes:
                       providerRequestSizeBudget is num &&
-                              providerRequestSizeBudget > 0
-                          ? providerRequestSizeBudget.toInt()
-                          : null,
+                          providerRequestSizeBudget > 0
+                      ? providerRequestSizeBudget.toInt()
+                      : null,
                 ),
               ),
             );
@@ -637,8 +642,9 @@ class _ProviderConfigDetailPageState
 
     // 计算新的全局顺序：以全部 LLM 模型的当前合并顺序为基准
     final entriesState = ref.read(providerEntriesProvider);
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     final allNames = <String>[];
     if (llmEntry != null) {
       for (final c in llmEntry.configs) {
@@ -676,17 +682,29 @@ class _ProviderConfigDetailPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.providerDeleteModel),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.providerDeleteModel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.providerDeleteModelConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -742,8 +760,8 @@ class _ProviderConfigDetailPageState
     final entryName = _entry?.name ?? '';
     final title = _isExistingConfig
         ? (_providerNameController.text.isNotEmpty
-            ? _providerNameController.text
-            : AppLocalizations.of(context)!.providerEditConfig)
+              ? _providerNameController.text
+              : AppLocalizations.of(context)!.providerEditConfig)
         : AppLocalizations.of(context)!.providerCreateNamedConfig(entryName);
 
     final models = _displayModels;
@@ -751,7 +769,13 @@ class _ProviderConfigDetailPageState
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -792,7 +816,7 @@ class _ProviderConfigDetailPageState
                         ),
                       ),
                       if (_hostController.text.isNotEmpty)
-                        Text(
+                        ConstrainedText(
                           _hostController.text,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -822,7 +846,11 @@ class _ProviderConfigDetailPageState
             width: double.infinity,
             child: TextButton.icon(
               icon: const Icon(Icons.add),
-              label: Text(AppLocalizations.of(context)!.builtInPromptAdd),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.builtInPromptAdd,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: _addModel,
             ),
           ),
@@ -866,8 +894,9 @@ class _ProviderConfigDetailPageState
     final displayModels = _displayModels;
     final model = displayModels[displayIndex];
     final config = _config;
-    final storageIndex =
-        config != null ? config.models.indexOf(model) : displayIndex;
+    final storageIndex = config != null
+        ? config.models.indexOf(model)
+        : displayIndex;
     final reorderable = _enableModelReorder;
 
     return ListTile(

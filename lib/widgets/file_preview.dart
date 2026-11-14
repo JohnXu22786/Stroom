@@ -1,7 +1,11 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+
 import '../models/chat_message.dart';
+
+import 'constrained_text.dart';
 
 class FilePreviewChip extends StatelessWidget {
   final Attachment attachment;
@@ -68,10 +72,7 @@ class FilePreviewChip extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: cs.surfaceContainerHigh,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: cs.outlineVariant,
-                        width: 0.5,
-                      ),
+                      border: Border.all(color: cs.outlineVariant, width: 0.5),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: isImage
@@ -93,8 +94,11 @@ class FilePreviewChip extends StatelessWidget {
                         : SizedBox(
                             width: 48,
                             height: 48,
-                            child: Icon(_fileIcon(),
-                                size: 24, color: cs.onSurfaceVariant),
+                            child: Icon(
+                              _fileIcon(),
+                              size: 24,
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
                   ),
                 ),
@@ -111,25 +115,18 @@ class FilePreviewChip extends StatelessWidget {
                           color: cs.error,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.close,
-                          size: 12,
-                          color: cs.onError,
-                        ),
+                        child: Icon(Icons.close, size: 12, color: cs.onError),
                       ),
                     ),
                   ),
               ],
             ),
             const SizedBox(height: 2),
-            Text(
+            ConstrainedText(
               _displayName(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
             ),
           ],
         ),

@@ -10,6 +10,8 @@ import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 String _requestSizeBudgetMibText(int bytes) {
   final absoluteBytes = BigInt.from(bytes).abs();
   final bytesPerMib = BigInt.from(1024 * 1024);
@@ -285,14 +287,17 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final value = rawValue.trim();
       final hasRequiredValue =
           param.type == 'string' && param.options.isNotEmpty
-              ? rawValue.isNotEmpty
-              : value.isNotEmpty;
-      final hasImplicitTrueBoolean = param.type == 'boolean' &&
+          ? rawValue.isNotEmpty
+          : value.isNotEmpty;
+      final hasImplicitTrueBoolean =
+          param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
-      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
+      final hasStoredValue =
+          param.defaultValue.trim().isNotEmpty ||
           param.options.any((option) => option.trim().isNotEmpty);
-      final hasUnsupportedStoredType = hasStoredValue &&
+      final hasUnsupportedStoredType =
+          hasStoredValue &&
           ParamType.values.every((type) => type.value != param.type);
       if (name == 'stream') {
         var isNonStreaming = false;
@@ -309,9 +314,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                AppLocalizations.of(context)!.modelParamReserved(
-                  '$name=true',
-                ),
+                AppLocalizations.of(context)!.modelParamReserved('$name=true'),
               ),
               behavior: SnackBarBehavior.floating,
             ),
@@ -526,8 +529,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-            ? widget.model!.name
-            : AppLocalizations.of(context)!.modelEditTitle)
+              ? widget.model!.name
+              : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
@@ -538,17 +541,29 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -559,11 +574,19 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -697,8 +720,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.assistantAddParameter,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   onPressed: _addCustomParam,
                 ),
@@ -719,10 +744,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             else
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
-                final isUnsupportedType =
-                    ParamType.values.every((type) => type.value != param.type);
+                final isUnsupportedType = ParamType.values.every(
+                  (type) => type.value != param.type,
+                );
                 final name = param.paramName.trim();
-                final isDuplicate = name.isNotEmpty &&
+                final isDuplicate =
+                    name.isNotEmpty &&
                     _customParams.indexWhere(
                           (p) => p.paramName.trim() == name,
                         ) !=
@@ -746,7 +773,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   isDense: true,
                                   errorText: isDuplicate
                                       ? AppLocalizations.of(context)!
-                                          .modelParamExists
+                                            .modelParamExists
                                       : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
@@ -780,8 +807,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     if (isUnsupportedType)
                                       DropdownMenuItem(
                                         value: param.type,
-                                        child: Text(
+                                        child: ConstrainedText(
                                           param.type,
+                                          maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(fontSize: 13),
                                         ),
@@ -789,12 +817,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     ...ParamType.values.map(
                                       (t) => DropdownMenuItem<String>(
                                         value: t.value,
-                                        child: Text(
+                                        child: ConstrainedText(
                                           localizedParamTypeLabel(
                                             AppLocalizations.of(context)!,
                                             t,
                                           ),
                                           style: const TextStyle(fontSize: 13),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     ),
@@ -864,8 +894,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   labelText: AppLocalizations.of(context)!
                                       .modelParamDefaultValue,
                                   hintText: localizedParamTypeDefaultValueHint(
-                                      AppLocalizations.of(context)!,
-                                      param.paramType),
+                                    AppLocalizations.of(context)!,
+                                    param.paramType,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -898,11 +929,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               onPressed: () {
                                 showJsonValueEditorDialog(
                                   context,
-                                  initialValue:
-                                      _effectiveCustomParamValue(param),
+                                  initialValue: _effectiveCustomParamValue(
+                                    param,
+                                  ),
                                   hintText: localizedParamTypeDefaultValueHint(
-                                      AppLocalizations.of(context)!,
-                                      param.paramType),
+                                    AppLocalizations.of(context)!,
+                                    param.paramType,
+                                  ),
                                   type: param.type,
                                   onSave: (result) {
                                     _setEffectiveCustomParamValue(
@@ -911,8 +944,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     );
                                     _customParamValueFieldRevisions[i] =
                                         (_customParamValueFieldRevisions[i] ??
-                                                0) +
-                                            1;
+                                            0) +
+                                        1;
                                     _validateJsonField(i, param);
                                     setState(() {});
                                   },

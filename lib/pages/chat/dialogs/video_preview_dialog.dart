@@ -5,6 +5,8 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 /// Video preview dialog — plays a video file using Chewie + video_player
 /// (backed by fvp).
 class VideoPreviewDialog extends StatefulWidget {
@@ -34,9 +36,7 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
 
   Future<void> _initPlayer() async {
     try {
-      final controller = VideoPlayerController.file(
-        File(widget.filePath),
-      );
+      final controller = VideoPlayerController.file(File(widget.filePath));
       _videoPlayerController = controller;
       await controller.initialize();
 
@@ -93,15 +93,15 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
                 children: [
                   Icon(Icons.error_outline, color: Colors.white38, size: 48),
                   SizedBox(height: 12),
-                  Text(AppLocalizations.of(context)!.chatVideoLoadFailed,
-                      style: TextStyle(color: Colors.white70)),
+                  Text(
+                    AppLocalizations.of(context)!.chatVideoLoadFailed,
+                    style: TextStyle(color: Colors.white70),
+                  ),
                 ],
               ),
             )
           else
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             right: 8,
@@ -116,7 +116,7 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
             bottom: 16,
             left: 16,
             right: 16,
-            child: Text(
+            child: ConstrainedText(
               widget.fileName,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 14),

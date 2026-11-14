@@ -5,6 +5,8 @@ import 'package:extended_image/extended_image.dart';
 
 import '../../utils/ocr_image_payload.dart';
 
+import '../../widgets/constrained_text.dart';
+
 // ============================================================================
 // SelectedImage Model
 // ============================================================================
@@ -32,29 +34,24 @@ class SelectedImage {
   final String? sourceName;
   final Object _selectionIdentity;
 
-  SelectedImage({
-    required this.bytes,
-    this.format = 'jpeg',
-    this.sourceName,
-  })  : isPrepared = false,
-        _selectionIdentity = Object();
+  SelectedImage({required this.bytes, this.format = 'jpeg', this.sourceName})
+    : isPrepared = false,
+      _selectionIdentity = Object();
 
-  SelectedImage.fromPayload({
-    required OcrImagePayload payload,
-    this.sourceName,
-  })  : bytes = payload.bytes,
-        format = payload.format,
-        isPrepared = true,
-        _selectionIdentity = Object();
+  SelectedImage.fromPayload({required OcrImagePayload payload, this.sourceName})
+    : bytes = payload.bytes,
+      format = payload.format,
+      isPrepared = true,
+      _selectionIdentity = Object();
 
   SelectedImage._edited(
     OcrImagePayload payload,
     this.sourceName,
     Object selectionIdentity,
-  )   : bytes = payload.bytes,
-        format = payload.format,
-        isPrepared = true,
-        _selectionIdentity = selectionIdentity;
+  ) : bytes = payload.bytes,
+      format = payload.format,
+      isPrepared = true,
+      _selectionIdentity = selectionIdentity;
 
   /// True when [other] is the same selected image, even after an edit replaces
   /// this immutable value with an updated payload.
@@ -117,17 +114,13 @@ class ChoiceCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
+                      style: Theme.of(context).textTheme.bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    ConstrainedText(
                       subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
+                      style: Theme.of(context).textTheme.bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -135,11 +128,7 @@ class ChoiceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, size: 20, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -202,8 +191,10 @@ class ImageGridItem extends StatelessWidget {
                     if (state.extendedImageLoadState == LoadState.failed) {
                       return Container(
                         color: cs.surfaceContainerHigh,
-                        child:
-                            const Icon(Icons.broken_image, color: Colors.grey),
+                        child: const Icon(
+                          Icons.broken_image,
+                          color: Colors.grey,
+                        ),
                       );
                     }
                     return null;
@@ -221,8 +212,11 @@ class ImageGridItem extends StatelessWidget {
                         color: Colors.black54,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close,
-                          color: Colors.white, size: 16),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                     ),
                   ),
                 ),
@@ -232,15 +226,19 @@ class ImageGridItem extends StatelessWidget {
                     left: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         '${index + 1}',
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 11),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),

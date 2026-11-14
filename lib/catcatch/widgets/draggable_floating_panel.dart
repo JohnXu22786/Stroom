@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../utils/audio_utils.dart';
 
+import '../../widgets/constrained_text.dart';
+
 // =============================================================================
 // Draggable Floating Panel
 // =============================================================================
@@ -221,10 +223,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     topRight: Radius.circular(8),
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   children: [
                     SvgPicture.asset(
@@ -383,25 +382,22 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  _iconForUrl(url),
-                  size: 16,
-                  color: _colorForUrl(url),
-                ),
+                Icon(_iconForUrl(url), size: 16, color: _colorForUrl(url)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         _shortUrl(url),
                         style: TextStyle(
                           fontSize: 11,
                           color: isSelected
                               ? colorScheme.primary
                               : colorScheme.onSurface,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -473,9 +469,11 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     }
                   : null,
               icon: const Icon(Icons.check, size: 14),
-              label: const Text(
+              label: const ConstrainedText(
                 '确认捕获',
                 style: TextStyle(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 10),

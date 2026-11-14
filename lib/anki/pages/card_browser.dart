@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart' hide Card;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/anki_provider.dart';
 import '../providers/anki_actions.dart';
 import '../models/card.dart';
 import '../models/note.dart';
 import '../models/deck.dart';
 import '../../l10n/app_localizations.dart';
+
+import '../../widgets/constrained_text.dart';
 
 /// Simple card browser / search page.
 class AnkiCardBrowser extends ConsumerStatefulWidget {
@@ -68,7 +71,11 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.ankiBrowseCardsTooltip),
+        title: ConstrainedText(
+          l10n.ankiBrowseCardsTooltip,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: Column(
@@ -80,15 +87,17 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
               decoration: InputDecoration(
                 hintText: l10n.ankiBrowserSearchHint,
                 prefixIcon: const Icon(Icons.search),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 suffixIcon: _searchCtl.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchCtl.clear();
                           _search('');
-                        })
+                        },
+                      )
                     : null,
               ),
               onChanged: _search,
@@ -98,45 +107,51 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
             child: !_loaded
                 ? const Center(child: CircularProgressIndicator())
                 : _filtered.isEmpty
-                    ? Center(
-                        child: Text(l10n.ankiBrowserEmpty,
-                            style: TextStyle(color: cs.onSurfaceVariant)))
-                    : ListView.builder(
-                        itemCount: _filtered.length,
-                        itemBuilder: (ctx, i) {
-                          final card = _filtered[i];
-                          return FutureBuilder<Note?>(
-                            future: _loadNote(card.note_id),
-                            builder: (ctx, snap) {
-                              final note = snap.data;
-                              final front = note?.fields.isNotEmpty == true
-                                  ? note!.fields[0]
-                                  : l10n.ankiNoCardContent;
-                              return ListTile(
-                                leading: _queueIcon(card.queue.value),
-                                title: Text(front,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                subtitle: Text(
-                                  'ivl=${card.interval}d  factor=${(card.ease_factor / 10).round()}%  reps=${card.reps}',
-                                  style: TextStyle(
-                                      fontSize: 12, color: cs.onSurfaceVariant),
-                                ),
-                                trailing: IconButton(
-                                  icon: Icon(Icons.delete_outline,
-                                      color: cs.error),
-                                  onPressed: () {
-                                    ref
-                                        .read(ankiActionsProvider)
-                                        .removeNote(card.note_id);
-                                    _load();
-                                  },
-                                ),
-                              );
-                            },
+                ? Center(
+                    child: Text(
+                      l10n.ankiBrowserEmpty,
+                      style: TextStyle(color: cs.onSurfaceVariant),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _filtered.length,
+                    itemBuilder: (ctx, i) {
+                      final card = _filtered[i];
+                      return FutureBuilder<Note?>(
+                        future: _loadNote(card.note_id),
+                        builder: (ctx, snap) {
+                          final note = snap.data;
+                          final front = note?.fields.isNotEmpty == true
+                              ? note!.fields[0]
+                              : l10n.ankiNoCardContent;
+                          return ListTile(
+                            leading: _queueIcon(card.queue.value),
+                            title: ConstrainedText(
+                              front,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              'ivl=${card.interval}d  factor=${(card.ease_factor / 10).round()}%  reps=${card.reps}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            trailing: IconButton(
+                              icon: Icon(Icons.delete_outline, color: cs.error),
+                              onPressed: () {
+                                ref
+                                    .read(ankiActionsProvider)
+                                    .removeNote(card.note_id);
+                                _load();
+                              },
+                            ),
                           );
                         },
-                      ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

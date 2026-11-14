@@ -4,6 +4,8 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/widgets/info_row.dart';
 import 'package:stroom/utils/format_file_size.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 /// Full-screen preview for non-image files (documents, audio, video).
 void showFileInfoPreviewDialog({
   required BuildContext context,
@@ -62,7 +64,7 @@ void showFileInfoPreviewDialog({
             ),
             const SizedBox(height: 20),
             // File name
-            Text(
+            ConstrainedText(
               attachment.fileName,
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -76,16 +78,19 @@ void showFileInfoPreviewDialog({
             const SizedBox(height: 12),
             // File info rows
             InfoRow(
-                label: AppLocalizations.of(context)!.chatInfoType,
-                value: '$typeLabel (${attachment.mimeType})'),
+              label: AppLocalizations.of(context)!.chatInfoType,
+              value: '$typeLabel (${attachment.mimeType})',
+            ),
             const SizedBox(height: 6),
             InfoRow(
-                label: AppLocalizations.of(context)!.chatInfoSize,
-                value: formatFileSize(attachment.fileSize)),
+              label: AppLocalizations.of(context)!.chatInfoSize,
+              value: formatFileSize(attachment.fileSize),
+            ),
             const SizedBox(height: 6),
             InfoRow(
-                label: AppLocalizations.of(context)!.chatInfoPath,
-                value: attachment.storagePath),
+              label: AppLocalizations.of(context)!.chatInfoPath,
+              value: attachment.storagePath,
+            ),
             const SizedBox(height: 24),
             // Action buttons
             Row(
@@ -94,7 +99,11 @@ void showFileInfoPreviewDialog({
                 TextButton.icon(
                   onPressed: () => Navigator.pop(ctx),
                   icon: const Icon(Icons.close, size: 18),
-                  label: Text(AppLocalizations.of(context)!.actionClose),
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.actionClose,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
