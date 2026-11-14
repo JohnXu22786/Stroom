@@ -1045,6 +1045,7 @@
   "folderPickerRoot": "根",
   "folderPickerCurrentFolder": "現在のフォルダー",
   "folderPickerSubfolders": "サブフォルダー",
+  "folderPickerNoFolders": "フォルダーはありません",
   "folderPickerExistingFolders": "既存のフォルダー",
   "folderPickerCreateNew": "新しいフォルダーを作成する",
   "folderPickerFolderNameHint": "フォルダ名を入力してください",

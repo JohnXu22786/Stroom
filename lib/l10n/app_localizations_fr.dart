@@ -3860,6 +3860,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get folderPickerSubfolders => 'Sous-dossiers';
 
   @override
+  String get folderPickerNoFolders => 'Aucun dossier';
+
+  @override
   String get folderPickerExistingFolders => 'Dossiers existants';
 
   @override

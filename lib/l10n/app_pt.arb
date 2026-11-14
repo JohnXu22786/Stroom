@@ -1353,6 +1353,7 @@
   "folderPickerRoot": "Raiz",
   "folderPickerCurrentFolder": "Pasta atual",
   "folderPickerSubfolders": "Subpastas",
+  "folderPickerNoFolders": "Nenhuma pasta",
   "folderPickerExistingFolders": "Pastas existentes",
   "folderPickerCreateNew": "Criar nova pasta",
   "folderPickerFolderNameHint": "Digite um nome para a pasta",

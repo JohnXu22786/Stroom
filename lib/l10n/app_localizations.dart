@@ -6399,6 +6399,12 @@ abstract class AppLocalizations {
   /// **'Subfolders'**
   String get folderPickerSubfolders;
 
+  /// No description provided for @folderPickerNoFolders.
+  ///
+  /// In en, this message translates to:
+  /// **'No folders'**
+  String get folderPickerNoFolders;
+
   /// No description provided for @folderPickerExistingFolders.
   ///
   /// In en, this message translates to:

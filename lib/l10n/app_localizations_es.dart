@@ -3851,6 +3851,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get folderPickerSubfolders => 'Subcarpetas';
 
   @override
+  String get folderPickerNoFolders => 'No hay carpetas';
+
+  @override
   String get folderPickerExistingFolders => 'Carpetas existentes';
 
   @override

@@ -3702,6 +3702,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get folderPickerSubfolders => 'サブフォルダー';
 
   @override
+  String get folderPickerNoFolders => 'フォルダーはありません';
+
+  @override
   String get folderPickerExistingFolders => '既存のフォルダー';
 
   @override

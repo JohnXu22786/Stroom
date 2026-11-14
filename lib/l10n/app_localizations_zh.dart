@@ -3609,6 +3609,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get folderPickerSubfolders => '子文件夹';
 
   @override
+  String get folderPickerNoFolders => '没有文件夹';
+
+  @override
   String get folderPickerExistingFolders => '现有文件夹';
 
   @override
@@ -11345,8 +11348,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
 
   @override
-  String get ocrSamplingSliderRepairRequired =>
-      '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
+  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).

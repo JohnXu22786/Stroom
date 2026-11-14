@@ -3841,6 +3841,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get folderPickerSubfolders => 'المجلدات الفرعية';
 
   @override
+  String get folderPickerNoFolders => 'لا توجد مجلدات';
+
+  @override
   String get folderPickerExistingFolders => 'المجلدات الموجودة';
 
   @override

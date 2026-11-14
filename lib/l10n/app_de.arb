@@ -1351,6 +1351,7 @@
   "folderPickerRoot": "Hauptordner",
   "folderPickerCurrentFolder": "Aktueller Ordner",
   "folderPickerSubfolders": "Unterordner",
+  "folderPickerNoFolders": "Keine Ordner",
   "folderPickerExistingFolders": "Vorhandene Ordner",
   "folderPickerCreateNew": "Neuen Ordner erstellen",
   "folderPickerFolderNameHint": "Ordnernamen eingeben",

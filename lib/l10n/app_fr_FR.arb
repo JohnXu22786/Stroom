@@ -1353,6 +1353,7 @@
   "folderPickerRoot": "Racine",
   "folderPickerCurrentFolder": "Dossier actuel",
   "folderPickerSubfolders": "Sous-dossiers",
+  "folderPickerNoFolders": "Aucun dossier",
   "folderPickerExistingFolders": "Dossiers existants",
   "folderPickerCreateNew": "Créer un dossier",
   "folderPickerFolderNameHint": "Saisissez un nom de dossier",

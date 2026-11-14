@@ -376,8 +376,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                   ),
                 ],
 
-                // 现有文件夹列表
-                if (folders.isNotEmpty) ...[
+                // 现有文件夹列表；在子文件夹层级即使为空也保留该分区。
+                if (_isInSubFolder || folders.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   _sectionLabel(
                     context,
@@ -387,25 +387,41 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                             .folderPickerExistingFolders,
                   ),
                   const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final folder in folders)
-                          _buildFolderTile(
-                            context,
-                            cs,
-                            folder,
-                            // 显示文件夹基名（不含父路径）
-                            _isInSubFolder
-                                ? folder.substring(folder.lastIndexOf('/') + 1)
-                                : folder,
-                            Icons.folder_outlined,
-                          ),
-                      ],
+                  if (folders.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: Text(
+                          AppLocalizations.of(context)!.folderPickerNoFolders,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final folder in folders)
+                            _buildFolderTile(
+                              context,
+                              cs,
+                              folder,
+                              // 显示文件夹基名（不含父路径）
+                              _isInSubFolder
+                                  ? folder
+                                      .substring(folder.lastIndexOf('/') + 1)
+                                  : folder,
+                              Icons.folder_outlined,
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
 
                 // 创建新文件夹：仅当调用方支持创建时才显示。

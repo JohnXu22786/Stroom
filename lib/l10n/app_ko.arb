@@ -1356,6 +1356,7 @@
   "folderPickerRoot": "루트",
   "folderPickerCurrentFolder": "현재 폴더",
   "folderPickerSubfolders": "하위 폴더",
+  "folderPickerNoFolders": "폴더가 없습니다",
   "folderPickerExistingFolders": "기존 폴더",
   "folderPickerCreateNew": "새 폴더 만들기",
   "folderPickerFolderNameHint": "폴더 이름 입력",
