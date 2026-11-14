@@ -43,14 +43,13 @@ Widget createTestApp({
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: mediaQuerySize == null
-          ? AssistantSelectionPage()
-          : Builder(
-              builder: (context) => MediaQuery(
+      builder: mediaQuerySize == null
+          ? null
+          : (context, child) => MediaQuery(
                 data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
-                child: AssistantSelectionPage(),
+                child: child!,
               ),
-            ),
+      home: AssistantSelectionPage(),
     ),
   );
 }
@@ -335,18 +334,17 @@ void main() {
         MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Builder(
-            builder: (context) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                size: const Size(740, 360),
-              ),
-              child: Scaffold(
-                body: Center(
-                  child: EmojiAvatarButton(
-                    selectedEmoji: '🤖',
-                    onEmojiSelected: (_) {},
-                  ),
-                ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              size: const Size(740, 360),
+            ),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Center(
+              child: EmojiAvatarButton(
+                selectedEmoji: '🤖',
+                onEmojiSelected: (_) {},
               ),
             ),
           ),
