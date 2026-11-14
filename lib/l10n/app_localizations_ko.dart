@@ -3705,6 +3705,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get folderPickerSubfolders => '하위 폴더';
 
   @override
+  String get folderPickerNoFolders => '폴더가 없습니다';
+
+  @override
   String get folderPickerExistingFolders => '기존 폴더';
 
   @override

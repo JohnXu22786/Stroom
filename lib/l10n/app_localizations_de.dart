@@ -3847,6 +3847,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get folderPickerSubfolders => 'Unterordner';
 
   @override
+  String get folderPickerNoFolders => 'Keine Ordner';
+
+  @override
   String get folderPickerExistingFolders => 'Vorhandene Ordner';
 
   @override

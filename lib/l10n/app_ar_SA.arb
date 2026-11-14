@@ -1353,6 +1353,7 @@
   "folderPickerRoot": "الجذر",
   "folderPickerCurrentFolder": "المجلد الحالي",
   "folderPickerSubfolders": "المجلدات الفرعية",
+  "folderPickerNoFolders": "لا توجد مجلدات",
   "folderPickerExistingFolders": "المجلدات الموجودة",
   "folderPickerCreateNew": "إنشاء مجلد جديد",
   "folderPickerFolderNameHint": "أدخل اسم المجلد",

@@ -3609,6 +3609,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get folderPickerSubfolders => '子文件夹';
 
   @override
+  String get folderPickerNoFolders => '没有文件夹';
+
+  @override
   String get folderPickerExistingFolders => '现有文件夹';
 
   @override

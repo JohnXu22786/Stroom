@@ -1045,6 +1045,7 @@
   "folderPickerRoot": "Raíz",
   "folderPickerCurrentFolder": "Carpeta actual",
   "folderPickerSubfolders": "Subcarpetas",
+  "folderPickerNoFolders": "No hay carpetas",
   "folderPickerExistingFolders": "Carpetas existentes",
   "folderPickerCreateNew": "Crear nueva carpeta",
   "folderPickerFolderNameHint": "Introduzca un nombre de carpeta",

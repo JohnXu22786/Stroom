@@ -3832,6 +3832,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get folderPickerSubfolders => 'Subpastas';
 
   @override
+  String get folderPickerNoFolders => 'Nenhuma pasta';
+
+  @override
   String get folderPickerExistingFolders => 'Pastas existentes';
 
   @override

@@ -1353,6 +1353,7 @@
   "folderPickerRoot": "根目录",
   "folderPickerCurrentFolder": "当前文件夹",
   "folderPickerSubfolders": "子文件夹",
+  "folderPickerNoFolders": "没有文件夹",
   "folderPickerExistingFolders": "现有文件夹",
   "folderPickerCreateNew": "创建新文件夹",
   "folderPickerFolderNameHint": "输入文件夹名称",
