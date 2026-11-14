@@ -42,11 +42,14 @@ void main() {
 
     await tester.pumpWidget(
       const ProviderScope(
-        child: MaterialApp(
-          locale: const Locale('zh', 'CN'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: HomePage(),
+        child: TickerMode(
+          enabled: false,
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: HomePage(),
+          ),
         ),
       ),
     );
@@ -85,11 +88,14 @@ void main() {
     Future<void> pumpHome(Locale locale) async {
       await tester.pumpWidget(
         ProviderScope(
-          child: MaterialApp(
-            locale: locale,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: const HomePage(),
+          child: TickerMode(
+            enabled: false,
+            child: MaterialApp(
+              locale: locale,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const HomePage(),
+            ),
           ),
         ),
       );

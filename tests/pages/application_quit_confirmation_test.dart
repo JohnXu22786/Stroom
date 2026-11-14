@@ -3,6 +3,7 @@ import 'dart:io' show exit;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/application.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/services/desktop_app_service.dart';
@@ -171,6 +173,7 @@ Future<
           (ref) => UpdateNotifier(dio: _createMockDio()),
         ),
         backgroundTasksProvider.overrideWith((ref) => notifier),
+        selectedPageProvider.overrideWith((ref) => AppPage.files),
       ],
       child: const Application(),
     ),

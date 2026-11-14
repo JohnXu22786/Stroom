@@ -16,11 +16,14 @@ void main() {
     try {
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(
-            locale: const Locale('zh', 'CN'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: HomePage(),
+          child: TickerMode(
+            enabled: false,
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: HomePage(),
+            ),
           ),
         ),
       );

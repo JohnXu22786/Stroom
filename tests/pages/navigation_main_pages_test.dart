@@ -63,7 +63,16 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
 /// Helper: simulate the system back button by calling [Navigator.maybePop].
 Future<void> _simulateBackButton(WidgetTester tester) async {
   await _navigatorKey.currentState?.maybePop();
-  await tester.pumpAndSettle();
+  await _pumpPageAnimations(tester);
+}
+
+/// Advances page and route transitions without waiting for the home's
+/// intentionally continuous overflow marquee to stop ticking.
+Future<void> _pumpPageAnimations(WidgetTester tester) async {
+  await tester.pump();
+  for (var frame = 0; frame < 10; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 /// Find a bottom NavigationBar destination by its label. Scoped to the
@@ -91,7 +100,7 @@ void main() {
         (tester) async {
       // Use a portrait size (height > width) so the bottom nav bar is shown
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Bottom nav bar should contain exactly the 4 main destinations
       expect(find.text('主页'), findsOneWidget);
@@ -108,35 +117,35 @@ void main() {
 
     testWidgets('tapping nav bar items switches pages', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Default: home page
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
 
       // Tap "文件" in nav bar to go to Files page
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Should see Files page content
       expect(find.text('文件'), findsWidgets);
 
       // Tap "设置" in nav bar to go to Settings page
       await tester.tap(find.text('设置'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Should see Settings page content
       expect(find.text('设置'), findsWidgets);
 
       // Tap "主页" in nav bar to go back to Home
       await tester.tap(find.text('主页'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
     testWidgets('horizontal swipe does NOT change main page', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Verify we start on home page
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
@@ -146,7 +155,7 @@ void main() {
         find.byType(HomePage),
         const Offset(-300, 0),
       );
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Should still be on home page — swipe had no effect
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
@@ -157,7 +166,7 @@ void main() {
         const Offset(-500, 0),
         1000,
       );
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Should still be on home page
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
@@ -168,7 +177,7 @@ void main() {
         const Offset(500, 0),
         1000,
       );
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Should still be on home page
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
@@ -176,11 +185,11 @@ void main() {
 
     testWidgets('back from Files page returns to Home', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Navigate to Files via nav bar
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Verify on Files page
       expect(find.text('文件'), findsWidgets);
@@ -194,11 +203,11 @@ void main() {
 
     testWidgets('back from Settings page returns to Home', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Navigate to Settings via nav bar
       await tester.tap(find.text('设置'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Simulate system back
       await _simulateBackButton(tester);
@@ -210,7 +219,7 @@ void main() {
     testWidgets('back from Home page does not pop the app (stays on Home)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // We're on home page with empty history
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
@@ -230,19 +239,19 @@ void main() {
       // The back button should navigate to the parent page (Home),
       // not the previously visited tab (Chat).
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Start on Home
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
 
       // Go to Chat
       await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
 
       // Go to Files
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('文件'), findsWidgets);
 
       // Press back — should go to Home (parent), NOT Chat (previous step)
@@ -253,17 +262,17 @@ void main() {
     testWidgets('hierarchical back: Home→Chat→Files→Settings→Back→Home',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Go through multiple tabs
       await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       await tester.tap(find.text('设置'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('设置'), findsWidgets);
 
       // Press back — should go to Home (parent), not Files (previous step)
@@ -275,16 +284,16 @@ void main() {
         'double-tap Chat tab stays on assistant selection (already at home)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // First tap: go to Chat
       await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
 
       // Second tap on same Chat tab: stay at assistant selection (already at home)
       await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
     });
 
@@ -302,12 +311,12 @@ void main() {
           ),
         ],
       ));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Enter chat tab: assistant selection page (root of the nested
       // navigator)
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
 
       // System back at the chat tab root must leave the chat tab and
@@ -332,13 +341,13 @@ void main() {
           ),
         ],
       ));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Drill down: assistant selection → topic selection → chat page
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       await tester.tap(find.text('助手深'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择对话'), findsOneWidget);
 
       final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
@@ -377,14 +386,14 @@ void main() {
           ),
         ],
       ));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Enter chat tab. The nested navigator must have exactly ONE
       // assistant-selection route: the framework's default initial-route
       // generation would also push a '/' ancestor route that renders as a
       // phantom duplicate assistant-selection page (visible offstage).
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手', skipOffstage: false), findsOneWidget,
           reason: 'chat tab must have a single root route — a phantom '
               'duplicate assistant-selection page would make back '
@@ -394,7 +403,7 @@ void main() {
       // no-op (reset to root that is already the root), not a pop that
       // reveals a phantom duplicate.
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
       expect(find.text('选择助手', skipOffstage: false), findsOneWidget,
           reason: 'double-tap at the root must not pop to a phantom '
@@ -409,22 +418,22 @@ void main() {
     testWidgets('chat state preserved when switching away and back',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Enter chat page
       await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
 
       // Switch to files
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('文件'), findsWidgets);
 
       // Switch back to chat - should still show assistant selection (state preserved)
       // Since we never navigated deeper into chat, it should still show assistant selection
       await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
     });
 
@@ -442,20 +451,20 @@ void main() {
           ),
         ],
       ));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Enter chat tab and drill down to topic selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
 
       await tester.tap(find.text('助手甲'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择对话'), findsOneWidget);
 
       // Switch to files — the chat navigator stack must stay alive (hidden)
       await tester.tap(_navTab('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.byKey(const Key('files_page')), findsOneWidget);
       // The chat navigator stack must stay alive (hidden) — IndexedStack
       // keeps non-selected pages in the tree, so search includes offstage.
@@ -465,7 +474,7 @@ void main() {
 
       // Switch back — should return to topic selection, not assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择对话'), findsOneWidget);
       expect(find.text('选择助手'), findsNothing);
     });
@@ -484,18 +493,18 @@ void main() {
           ),
         ],
       ));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Drill down to topic selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       await tester.tap(find.text('助手丙'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择对话'), findsOneWidget);
 
       // Re-tap the chat tab while already on it → reset to assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
       // The topic selection route must be gone entirely (popped, not hidden)
       expect(find.text('选择对话', skipOffstage: false), findsNothing);
@@ -515,15 +524,15 @@ void main() {
           ),
         ],
       ));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Enter chat tab and drill down to the chat page
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择助手'), findsOneWidget);
 
       await tester.tap(find.text('助手乙'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('选择对话'), findsOneWidget);
 
       final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
@@ -538,14 +547,14 @@ void main() {
 
       // Switch to settings — the chat page must stay alive (hidden)
       await tester.tap(_navTab('设置'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('新对话', skipOffstage: false), findsWidgets,
           reason: 'open chat page must not be torn down when switching '
               'to another main page');
 
       // Switch back — should still be on the chat page, not assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('新对话'), findsWidgets);
       expect(find.text('选择助手'), findsNothing);
     });
@@ -553,12 +562,12 @@ void main() {
     testWidgets('home page module cards still work after navigation changes',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Verify OCR module card is tappable
       expect(find.text('OCR'), findsOneWidget);
       await tester.tap(find.text('OCR'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Should navigate to OCR page
       expect(find.text('文字识别'), findsOneWidget);
@@ -571,7 +580,7 @@ void main() {
         'no bottom NavigationBar', (tester) async {
       // e.g. a phone rotated to landscape or a wide desktop window.
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
@@ -589,7 +598,7 @@ void main() {
       // A wide-but-tall window (e.g. a tablet in portrait) must NOT show
       // the side rail even though its width is well above 600 px.
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(800, 1200)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
@@ -601,7 +610,7 @@ void main() {
       // Regression: a small landscape window (width < 600) previously got
       // the bottom bar; by aspect ratio it is wider than tall → side rail.
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(500, 300)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
@@ -610,7 +619,7 @@ void main() {
     testWidgets('square screen shows the side NavigationRail (not taller)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(600, 600)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
@@ -618,20 +627,20 @@ void main() {
 
     testWidgets('side rail taps switch pages on wide screens', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
 
       // Tap "文件" in the rail to go to the Files page. Its root key proves
       // the Files page actually opened (the "文件" label itself would match
       // the rail even if navigation never happened).
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.byKey(const Key('files_page')), findsOneWidget);
 
       // Tap "设置" in the rail to go to the Settings page. Its "常规设置" section
       // header proves the Settings page actually opened (the "设置" label
       // itself would match the rail even if navigation never happened).
       await tester.tap(find.text('设置'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.text('常规设置'), findsOneWidget);
     });
 
@@ -642,17 +651,17 @@ void main() {
       // new size and updated in place, so placement must update live (not be
       // decided once at startup) and page state must survive the resize.
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.byType(NavigationRail), findsOneWidget);
 
       // Navigate to the Files page before rotating, so state survival is
       // verified across the resize
       await tester.tap(find.text('文件'));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.byKey(const Key('files_page')), findsOneWidget);
 
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
       // Still on the Files page after the resize
@@ -660,7 +669,7 @@ void main() {
 
       // And back to landscape again
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
-      await tester.pumpAndSettle();
+      await _pumpPageAnimations(tester);
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
       expect(find.byKey(const Key('files_page')), findsOneWidget);
