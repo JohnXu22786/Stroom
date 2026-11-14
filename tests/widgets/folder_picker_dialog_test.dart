@@ -205,7 +205,8 @@ void main() {
       expect(result, 'A');
     });
 
-    testWidgets('empty folder shows only the current-folder level',
+    testWidgets(
+        'empty folder shows the current folder and subfolder empty state',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(
         Builder(builder: (context) {
@@ -228,12 +229,13 @@ void main() {
       await tester.tap(find.text('A'));
       await tester.pumpAndSettle();
 
-      // Only the current-folder level is shown; no subfolder section,
-      // and A itself is not duplicated anywhere.
+      // Keep the current-folder level and show the empty Subfolders state.
       expect(find.text('当前文件夹'), findsOneWidget);
       expect(find.text('A'), findsOneWidget);
-      expect(find.text('子文件夹'), findsNothing);
-      expect(find.text('现有文件夹'), findsNothing);
+      expect(find.text('子文件夹'), findsOneWidget);
+      expect(find.text('没有文件夹'), findsOneWidget);
+      // The empty state must not create a duplicate child folder list.
+      expect(find.byType(ListView), findsNothing);
     });
 
     testWidgets('current directory (save folder) stays visible and selectable',
