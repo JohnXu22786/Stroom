@@ -20,6 +20,7 @@ import 'package:stroom/widgets/llm/assistant_avatar.dart';
 Widget createTestApp({
   List<Assistant>? assistants,
   Locale locale = const Locale('zh', 'CN'),
+  Size? mediaQuerySize,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -42,7 +43,14 @@ Widget createTestApp({
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: AssistantSelectionPage(),
+      home: mediaQuerySize == null
+          ? AssistantSelectionPage()
+          : Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
+                child: AssistantSelectionPage(),
+              ),
+            ),
     ),
   );
 }
@@ -221,6 +229,7 @@ void main() {
       await tester.pumpWidget(
         createTestApp(
           assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '😊')],
+          mediaQuerySize: const Size(360, 740),
         ),
       );
       await tester.pumpAndSettle();
@@ -296,6 +305,7 @@ void main() {
       await tester.pumpWidget(
         createTestApp(
           assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+          mediaQuerySize: const Size(360, 740),
         ),
       );
       await tester.pumpAndSettle();
@@ -316,6 +326,44 @@ void main() {
       await tester.tapAt(const Offset(8, 8));
       await tester.pumpAndSettle();
       expect(findEmojiGrid(), findsNothing);
+    });
+
+    testWidgets('landscape phone uses a bounded bottom sheet', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(740, 360));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                size: const Size(740, 360),
+              ),
+              child: Scaffold(
+                body: Center(
+                  child: EmojiAvatarButton(
+                    selectedEmoji: '🤖',
+                    onEmojiSelected: (_) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(EmojiAvatarButton));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.text('选择表情'), findsOneWidget);
+      final sheet = tester.getRect(find.byType(BottomSheet));
+      final viewHeight = tester.view.physicalSize.height /
+          tester.view.devicePixelRatio;
+      expect(sheet.top, greaterThanOrEqualTo(0));
+      expect(sheet.bottom, lessThanOrEqualTo(viewHeight));
+      expect(sheet.height, lessThanOrEqualTo(360));
+      expect(findEmojiGrid(), findsOneWidget);
     });
 
     testWidgets('edit dialog system prompt field fills the remaining height', (

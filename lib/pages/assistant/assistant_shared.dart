@@ -153,7 +153,7 @@ class EmojiAvatarButton extends StatelessWidget {
   }
 
   void _showPickerPanel(BuildContext context) {
-    final isPhone = MediaQuery.sizeOf(context).width < 600;
+    final isPhone = MediaQuery.sizeOf(context).shortestSide < 600;
     if (isPhone) {
       showModalBottomSheet<void>(
         context: context,
