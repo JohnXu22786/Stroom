@@ -5,6 +5,11 @@ import 'package:path/path.dart' as p;
 import 'package:stroom/pages/unified_task_list/file_opener.dart';
 
 void main() {
+  test('routes .ts as video while .tsx remains text', () async {
+    expect(await fileOpenKind('/tmp/recording.ts'), FileOpenKind.video);
+    expect(await fileOpenKind('/tmp/app.tsx'), FileOpenKind.text);
+  });
+
   for (final fixture in [
     (name: 'audio_only.mov', extension: 'mov', kind: FileOpenKind.audio),
     (name: 'video_only.mov', extension: 'mov', kind: FileOpenKind.video),
