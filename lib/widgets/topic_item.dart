@@ -48,8 +48,8 @@ class TopicItem extends StatelessWidget {
     final statusBaseColor = isFailed
         ? cs.error
         : isUnread
-        ? Color.lerp(cs.primary, Colors.green, 0.55)
-        : null;
+            ? Color.lerp(cs.primary, Colors.green, 0.55)
+            : null;
     final statusColor = statusBaseColor == null
         ? null
         : Color.lerp(statusBaseColor, cs.onSurfaceVariant, 0.4);
@@ -109,8 +109,7 @@ class TopicItem extends StatelessWidget {
                                   ? Icons.push_pin
                                   : Icons.chat_bubble_outline_rounded,
                               size: 20,
-                              color:
-                                  statusColor ??
+                              color: statusColor ??
                                   (topic.isPinned
                                       ? cs.primary
                                       : cs.onSurfaceVariant),
@@ -147,9 +146,8 @@ class TopicItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: isActive
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
+                              fontWeight:
+                                  isActive ? FontWeight.w600 : FontWeight.w500,
                               color: cs.onSurface,
                             ),
                           ),

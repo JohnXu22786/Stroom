@@ -175,9 +175,7 @@ class _AssistantRemoteSourceDialogState
             assistant.remoteCatalogUrl == catalogUrl;
       }).firstOrNull;
       if (existing == null) {
-        widget.ref
-            .read(assistantProvider.notifier)
-            .createAssistant(
+        widget.ref.read(assistantProvider.notifier).createAssistant(
               name: replacement.name,
               description: replacement.description,
               emoji: replacement.emoji,
@@ -194,9 +192,7 @@ class _AssistantRemoteSourceDialogState
               remoteExtensions: definition.extensions,
             );
       } else {
-        widget.ref
-            .read(assistantProvider.notifier)
-            .updateRemoteAssistant(
+        widget.ref.read(assistantProvider.notifier).updateRemoteAssistant(
               localId: existing.id,
               replacement: replacement,
               remoteVersion: definition.version,
@@ -241,9 +237,8 @@ class _AssistantRemoteSourceDialogState
                 controller: _urlController,
                 keyboardType: TextInputType.url,
                 decoration: InputDecoration(
-                  labelText: _isZh
-                      ? '目录清单或助手文件 URL'
-                      : 'Catalog or assistant file URL',
+                  labelText:
+                      _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
                   hintText: 'https://…/catalog.json',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
@@ -267,7 +262,9 @@ class _AssistantRemoteSourceDialogState
                 contentPadding: EdgeInsets.zero,
                 title: Text(_isZh ? '自动更新' : 'Automatic updates'),
                 subtitle: Text(
-                  _isZh ? '关闭时进入该助手的对话选择页再提醒更新。' : 'When off, check and notify on the assistant topic page.',
+                  _isZh
+                      ? '关闭时进入该助手的对话选择页再提醒更新。'
+                      : 'When off, check and notify on the assistant topic page.',
                 ),
                 value: _autoUpdate,
                 onChanged: _busy
@@ -282,7 +279,9 @@ class _AssistantRemoteSourceDialogState
                       : 'Review with the built-in safety agent',
                 ),
                 subtitle: Text(
-                  _isZh ? '首次接入及每次更新前审查提示词；会发送给当前配置的首个 LLM，可能产生 API 用量。' : 'Reviews imports and updates using the first configured LLM; this may incur API usage.',
+                  _isZh
+                      ? '首次接入及每次更新前审查提示词；会发送给当前配置的首个 LLM，可能产生 API 用量。'
+                      : 'Reviews imports and updates using the first configured LLM; this may incur API usage.',
                 ),
                 value: _reviewSafety,
                 onChanged: _busy
@@ -340,9 +339,8 @@ class _AssistantRemoteSourceDialogState
           ),
         ),
         FilledButton.icon(
-          onPressed: _busy || _urlController.text.trim().isEmpty
-              ? null
-              : _loadCatalog,
+          onPressed:
+              _busy || _urlController.text.trim().isEmpty ? null : _loadCatalog,
           icon: _busy
               ? const SizedBox.square(
                   dimension: 16,

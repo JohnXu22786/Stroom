@@ -46,16 +46,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _browserCookies = true;
 
   BackupSelection get _selection => BackupSelection(
-    chatRecordsAndAttachments: _chatRecordsAndAttachments,
-    settings: _settings,
-    pictures: _pictures,
-    audio: _audio,
-    videos: _videos,
-    texts: _texts,
-    tasks: _tasks,
-    ankiData: _ankiData,
-    browserCookies: _browserCookies,
-  );
+        chatRecordsAndAttachments: _chatRecordsAndAttachments,
+        settings: _settings,
+        pictures: _pictures,
+        audio: _audio,
+        videos: _videos,
+        texts: _texts,
+        tasks: _tasks,
+        ankiData: _ankiData,
+        browserCookies: _browserCookies,
+      );
 
   bool get _hasSelection {
     return _chatRecordsAndAttachments ||
@@ -328,7 +328,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           final message = skippedCategories.isEmpty
               ? _strings.backupRestoreRestoredMessage
               : '${_skippedCategoriesMessage(skippedCategories)}\n\n'
-                    '${_strings.backupRestoreOtherSelectedRestored}';
+                  '${_strings.backupRestoreOtherSelectedRestored}';
           await _showRestartPrompt(message: message);
         }
       }
@@ -378,8 +378,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       TargetPlatform.macOS,
       TargetPlatform.windows,
     };
-    final browserWebsiteDataUnsupported =
-        selection.browserCookies &&
+    final browserWebsiteDataUnsupported = selection.browserCookies &&
         (kIsWeb ||
             !browserWebsiteDataClearPlatforms.contains(defaultTargetPlatform));
 
@@ -653,9 +652,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   String _skippedCategoriesMessage(List<String> categories) {
-    final skippedCategories = categories
-        .where((category) => category != '内置浏览器网站存储')
-        .toList();
+    final skippedCategories =
+        categories.where((category) => category != '内置浏览器网站存储').toList();
     final displayCategories = _localizedCategoryLabels(skippedCategories);
     var message = skippedCategories.isEmpty
         ? ''
@@ -1273,7 +1271,7 @@ class _ClearSelectedDataConfirmationDialogState
             _secondsRemaining == 0
                 ? AppLocalizations.of(context)!.backupRestoreClearSelected
                 : AppLocalizations.of(context)!
-                      .backupRestoreConfirmClearCountdown(_secondsRemaining),
+                    .backupRestoreConfirmClearCountdown(_secondsRemaining),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

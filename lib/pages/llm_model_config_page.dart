@@ -154,9 +154,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         const [],
       ).map((p) => p.copy()).toList();
       final initialEffort = initialReasoning.cast<ReasoningParam?>().firstWhere(
-        (p) => p?.isEffortParam ?? false,
-        orElse: () => null,
-      );
+            (p) => p?.isEffortParam ?? false,
+            orElse: () => null,
+          );
       if (initialEffort != null) {
         _normalizeBaselineEffort(initialEffort, const []);
       }
@@ -195,8 +195,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // context 回退逻辑与 initState 一致（旧模型只有 maxTokens 没有
     // context 时，init 已把 maxTokens 填进输入框——这里只比较
     // context 会把"未修改"误判为"已修改"，每次返回都弹放弃确认）。
-    final originalContext =
-        (m.typeConfig['context'] as num?)?.toInt() ??
+    final originalContext = (m.typeConfig['context'] as num?)?.toInt() ??
         (m.typeConfig['maxTokens'] as num?)?.toInt();
     if (_contextController.text != (originalContext?.toString() ?? '')) {
       return true;
@@ -283,9 +282,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // initState 的块勾选初始值一致。boolean 清空 options/order，json
     // 保留 options（与 sync 一致）。
     final initialEffort = initialReasoning.cast<ReasoningParam?>().firstWhere(
-      (p) => p?.isEffortParam ?? false,
-      orElse: () => null,
-    );
+          (p) => p?.isEffortParam ?? false,
+          orElse: () => null,
+        );
     if (initialEffort != null) {
       _normalizeBaselineEffort(initialEffort, m.reasoningParams);
     }
@@ -354,8 +353,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
     final savedEffort = findEffortParam(modelParams);
     final savedOptions = savedEffort?.options ?? const <String>[];
-    final hasSavedSelection =
-        savedEffort != null &&
+    final hasSavedSelection = savedEffort != null &&
         (savedOptions.isNotEmpty || savedEffort.optionOrder.isNotEmpty);
     effort.optionOrder = mergeOptionBlocks(
       providerOptions: providerEffort?.options ?? const [],
@@ -368,11 +366,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             savedOptions: savedOptions,
           )
         : effort.optionOrder
-              .where(
-                (value) => (providerEffort?.options ?? const <String>[])
-                    .contains(value),
-              )
-              .toList();
+            .where(
+              (value) =>
+                  (providerEffort?.options ?? const <String>[]).contains(value),
+            )
+            .toList();
   }
 
   /// 归一化附加参数基线（string/number）：options = 已保存勾选值按块
@@ -459,8 +457,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 savedOptions: savedOptions,
               )
             : _hasSavedCustomParamOptionSelection(p)
-            ? const []
-            : p.optionOrder.where((v) => providerOptions.contains(v)).toList();
+                ? const []
+                : p.optionOrder
+                    .where((v) => providerOptions.contains(v))
+                    .toList();
       } else if (p.type == 'boolean') {
         p.options = const [];
         p.optionOrder = const [];
@@ -478,8 +478,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
-    final context =
-        (m?.typeConfig['context'] as num?)?.toInt() ??
+    final context = (m?.typeConfig['context'] as num?)?.toInt() ??
         (m?.typeConfig['maxTokens'] as num?)?.toInt();
     _contextController = TextEditingController(
       text: context != null ? context.toString() : '',
@@ -584,8 +583,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       _customParamBlockValues[p] = List.of(p.optionOrder);
       _customParamSelectedValues[p] =
           savedOptions.isNotEmpty || _hasSavedCustomParamOptionSelection(p)
-          ? savedOptions.toSet()
-          : {...providerOptions};
+              ? savedOptions.toSet()
+              : {...providerOptions};
     }
     // Reasoning params: 合并视图工作副本（供应商参数 + 模型参数，
     // 同名时模型参数覆盖供应商参数，与请求构建时的合并语义一致）。
@@ -629,8 +628,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       savedOptions: modelEffortValues,
       savedOrder: modelEffortParam?.optionOrder ?? const [],
     );
-    final hasSavedEffortSelection =
-        modelEffortParam != null &&
+    final hasSavedEffortSelection = modelEffortParam != null &&
         (modelEffortValues.isNotEmpty ||
             modelEffortParam.optionOrder.isNotEmpty);
     _effortSelectedValues = hasSavedEffortSelection
@@ -672,9 +670,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       );
       final hasSavedSelection =
           modelOptions.isNotEmpty || p.optionOrder.isNotEmpty;
-      _additionalSelectedValues[p] = hasSavedSelection
-          ? modelOptions.toSet()
-          : {...providerOptions};
+      _additionalSelectedValues[p] =
+          hasSavedSelection ? modelOptions.toSet() : {...providerOptions};
     }
   }
 
@@ -696,8 +693,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-              ? widget.model!.name
-              : AppLocalizations.of(context)!.modelEditTitle)
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 

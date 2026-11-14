@@ -395,9 +395,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                           color: isSelected
                               ? colorScheme.primary
                               : colorScheme.onSurface,
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.normal,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.normal,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

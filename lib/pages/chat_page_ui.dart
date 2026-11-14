@@ -337,9 +337,8 @@ extension _ChatPageUiExt on _ChatPageState {
       _settleAtBottomAndFinish();
       return;
     }
-    final box =
-        _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
-            as RenderBox?;
+    final box = _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
+        as RenderBox?;
     if (box == null || !box.attached) {
       // Target message not laid out yet. First land at the bottom; while
       // maxScrollExtent is still moving (the sliver estimates it from the
@@ -386,8 +385,7 @@ extension _ChatPageUiExt on _ChatPageState {
       _finishAtBottom();
       return;
     }
-    final targetTop =
-        box.localToGlobal(Offset.zero).dy -
+    final targetTop = box.localToGlobal(Offset.zero).dy -
         viewportBox.localToGlobal(Offset.zero).dy +
         pos.pixels;
     // Measure the tail from the LAST message's render box (when it is
@@ -399,7 +397,7 @@ extension _ChatPageUiExt on _ChatPageState {
     final lastBox = lastMessageId == null
         ? null
         : _messageKeys[lastMessageId]?.currentContext?.findRenderObject()
-              as RenderBox?;
+            as RenderBox?;
     if (lastBox == null || !lastBox.attached) {
       // Tail not measurable (e.g. the last message is a streaming
       // placeholder without a key) — assume it does not fit and show the
@@ -410,8 +408,7 @@ extension _ChatPageUiExt on _ChatPageState {
       _finishInitialScrollAdjustment();
       return;
     }
-    final tailBottom =
-        lastBox.localToGlobal(Offset.zero).dy -
+    final tailBottom = lastBox.localToGlobal(Offset.zero).dy -
         viewportBox.localToGlobal(Offset.zero).dy +
         pos.pixels +
         lastBox.size.height;
@@ -510,8 +507,8 @@ extension _ChatPageUiExt on _ChatPageState {
         .watch(conversationsProvider)
         .where((c) => c.id == convId)
         .firstOrNull;
-    final modelContext = (_adapter.modelConfig?.typeConfig['context'] as num?)
-        ?.toInt();
+    final modelContext =
+        (_adapter.modelConfig?.typeConfig['context'] as num?)?.toInt();
     final inputTokens = conv?.lastInputTokens;
     final cost = conv?.totalCost ?? 0;
     final cs = Theme.of(context).colorScheme;
@@ -578,9 +575,9 @@ extension _ChatPageUiExt on _ChatPageState {
                     child: Text(
                       (_showCompactionSummary
                           ? AppLocalizations.of(context)!
-                                .chatCompactionCollapsed
+                              .chatCompactionCollapsed
                           : AppLocalizations.of(context)!
-                                .chatCompactionExpanded),
+                              .chatCompactionExpanded),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onTertiaryContainer,
@@ -627,9 +624,8 @@ extension _ChatPageUiExt on _ChatPageState {
   Widget _buildTopBar({required String title, Conversation? conversation}) {
     final cs = Theme.of(context).colorScheme;
     final isTemporary = conversation?.isTemporary ?? false;
-    final temporaryExpiresAt = isTemporary
-        ? conversation!.temporaryExpiresAt
-        : null;
+    final temporaryExpiresAt =
+        isTemporary ? conversation!.temporaryExpiresAt : null;
     final titleText = ConstrainedText(
       title,
       maxLines: 1,
@@ -744,9 +740,8 @@ extension _ChatPageUiExt on _ChatPageState {
           IconButton(
             icon: Icon(
               _isSearching ? Icons.search_off : Icons.search,
-              color: _isSearching
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
+              color:
+                  _isSearching ? Theme.of(context).colorScheme.primary : null,
             ),
             tooltip: AppLocalizations.of(context)!.chatSearchMessages,
             onPressed: () => setState(() {
@@ -824,8 +819,8 @@ extension _ChatPageUiExt on _ChatPageState {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: Theme.of(context).colorScheme.errorContainer
-          .withValues(alpha: 0.3),
+      color:
+          Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3),
       child: Row(
         children: [
           Icon(
@@ -890,12 +885,12 @@ extension _ChatPageUiExt on _ChatPageState {
         final copyText = !isCurrentStream
             ? message.text
             : manager.isStreamingFor(liveConvId!)
-            ? manager.fullReplyFor(liveConvId!)
-            : _chatSegments[message.id]
-                      ?.whereType<TextSegment>()
-                      .map((segment) => segment.text)
-                      .join() ??
-                  message.text;
+                ? manager.fullReplyFor(liveConvId!)
+                : _chatSegments[message.id]
+                        ?.whereType<TextSegment>()
+                        .map((segment) => segment.text)
+                        .join() ??
+                    message.text;
         Clipboard.setData(ClipboardData(text: copyText));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -961,7 +956,8 @@ extension _ChatPageUiExt on _ChatPageState {
   /// 首先选择保存位置；应用文件排在第一项。
   Future<MessageSaveDestination?> _askSaveDestinationDialog(
     BuildContext context,
-  ) => showMessageSaveDestinationDialog(context);
+  ) =>
+      showMessageSaveDestinationDialog(context);
 
   /// 多步工具调用且步骤之间有回话反馈时弹出的选择面板：
   /// "保存完整消息" / "保存最后的消息" / 取消。

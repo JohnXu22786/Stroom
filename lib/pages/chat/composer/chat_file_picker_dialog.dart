@@ -192,11 +192,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       _selectedItems.containsKey(_selectionKey(tabType, recordId));
 
   String _tabLabel(AppLocalizations l10n, _FileTabType type) => switch (type) {
-    _FileTabType.text => l10n.chatFilePickerTabText,
-    _FileTabType.image => l10n.chatFilePickerTabImages,
-    _FileTabType.video => l10n.chatFilePickerTabVideos,
-    _FileTabType.audio => l10n.chatFilePickerTabAudio,
-  };
+        _FileTabType.text => l10n.chatFilePickerTabText,
+        _FileTabType.image => l10n.chatFilePickerTabImages,
+        _FileTabType.video => l10n.chatFilePickerTabVideos,
+        _FileTabType.audio => l10n.chatFilePickerTabAudio,
+      };
 
   void _toggleSelection(
     _FileTabType tabType,
@@ -597,16 +597,18 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 decoration: BoxDecoration(
                   color: isImage
                       ? null
-                      : Theme.of(context).colorScheme.primary
-                            .withValues(alpha: 0.1),
+                      : Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 clipBehavior: isImage ? Clip.antiAlias : Clip.none,
                 child: isImage
                     ? _buildImageThumbnail(record)
                     : type == _FileTabType.video
-                    ? _buildVideoThumbnail(record as VideoRecord)
-                    : _buildFileIcon(record),
+                        ? _buildVideoThumbnail(record as VideoRecord)
+                        : _buildFileIcon(record),
               ),
               // File info
               Expanded(
@@ -946,9 +948,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
     // Update the selected item in-memory with edited bytes
     try {
-      final key = _selectedItems.entries
-          .firstWhere((e) => e.value == entry)
-          .key;
+      final key =
+          _selectedItems.entries.firstWhere((e) => e.value == entry).key;
       if (mounted) {
         setState(() {
           _selectedItems[key] = MapEntry(fileName, editedBytes);

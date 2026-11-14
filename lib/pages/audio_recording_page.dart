@@ -431,8 +431,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         child: !_isInitialized
             ? const CircularProgressIndicator()
             : kIsWeb
-            ? _buildWebNotice()
-            : _buildRecordingUI(theme),
+                ? _buildWebNotice()
+                : _buildRecordingUI(theme),
       ),
     );
   }
@@ -486,8 +486,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
             _recordedFilePath != null
                 ? _formatDuration(_recordDurationSeconds)
                 : (_isRecording || _isPaused
-                      ? _formatDuration(_recordDurationSeconds)
-                      : '00:00'),
+                    ? _formatDuration(_recordDurationSeconds)
+                    : '00:00'),
             style: TextStyle(
               fontSize: 48,
               fontWeight: FontWeight.w200,
@@ -495,8 +495,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
               color: _isPaused
                   ? Colors.orange
                   : _isRecording
-                  ? Colors.red
-                  : null,
+                      ? Colors.red
+                      : null,
             ),
           ),
           const SizedBox(height: 8),

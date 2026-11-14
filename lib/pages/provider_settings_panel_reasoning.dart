@@ -125,7 +125,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               .providerOptionIndexLabel((rowIndex + 1).toString()),
           hintText: editable
               ? AppLocalizations.of(context)!
-                    .providerOptionExampleHint('low, medium, high')
+                  .providerOptionExampleHint('low, medium, high')
               : AppLocalizations.of(context)!.providerToggleRequiredHint,
           border: const OutlineInputBorder(),
           isDense: true,
@@ -367,7 +367,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 isDense: true,
                 errorText: isDuplicate
                     ? AppLocalizations.of(context)!
-                          .providerParamAlreadyExists(toggle.paramName.trim())
+                        .providerParamAlreadyExists(toggle.paramName.trim())
                     : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
@@ -524,7 +524,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 isDense: true,
                 errorText: isDuplicate
                     ? AppLocalizations.of(context)!
-                          .providerParamAlreadyExists(effort.paramName.trim())
+                        .providerParamAlreadyExists(effort.paramName.trim())
                     : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
@@ -546,24 +546,22 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else if (effort.type == 'json')
               TextFormField(
-                initialValue: effort.options.isNotEmpty
-                    ? effort.options.first
-                    : '',
+                initialValue:
+                    effort.options.isNotEmpty ? effort.options.first : '',
                 readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!
-                      .providerJsonValueLabel,
-                  hintText: AppLocalizations.of(context)!
-                      .providerOptionExampleHint(
-                        '{"thinking": {"budget": 1024}}',
-                      ),
+                  labelText:
+                      AppLocalizations.of(context)!.providerJsonValueLabel,
+                  hintText:
+                      AppLocalizations.of(context)!.providerOptionExampleHint(
+                    '{"thinking": {"budget": 1024}}',
+                  ),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
-                  errorText:
-                      _jsonValueError(
-                        effort.options.isNotEmpty ? effort.options.first : '',
-                      )
+                  errorText: _jsonValueError(
+                    effort.options.isNotEmpty ? effort.options.first : '',
+                  )
                       ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
@@ -688,12 +686,14 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       isDense: true,
                       hintText: AppLocalizations.of(
                         context,
-                      )!.providerParamNameHint('thinking.type, budget_tokens'),
+                      )!
+                          .providerParamNameHint(
+                              'thinking.type, budget_tokens'),
                       errorText: isDuplicate
                           ? AppLocalizations.of(context)!
-                                .providerParamAlreadyExists(
-                                  param.paramName.trim(),
-                                )
+                              .providerParamAlreadyExists(
+                              param.paramName.trim(),
+                            )
                           : null,
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
@@ -741,23 +741,21 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else if (param.type == 'json')
               TextFormField(
-                initialValue: param.options.isNotEmpty
-                    ? param.options.first
-                    : '',
+                initialValue:
+                    param.options.isNotEmpty ? param.options.first : '',
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!
-                      .providerJsonValueLabel,
-                  hintText: AppLocalizations.of(context)!
-                      .providerOptionExampleHint(
-                        '{"thinking": {"budget": 1024}}',
-                      ),
+                  labelText:
+                      AppLocalizations.of(context)!.providerJsonValueLabel,
+                  hintText:
+                      AppLocalizations.of(context)!.providerOptionExampleHint(
+                    '{"thinking": {"budget": 1024}}',
+                  ),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
-                  errorText:
-                      _jsonValueError(
-                        param.options.isNotEmpty ? param.options.first : '',
-                      )
+                  errorText: _jsonValueError(
+                    param.options.isNotEmpty ? param.options.first : '',
+                  )
                       ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),

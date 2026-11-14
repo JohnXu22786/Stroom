@@ -26,7 +26,7 @@ Future<bool> showQuitConfirmationDialog(
       content: Text(
         runningTaskCount > 0
             ? AppLocalizations.of(context)!
-                  .quitDialogRunningTasks(runningTaskCount)
+                .quitDialogRunningTasks(runningTaskCount)
             : AppLocalizations.of(context)!.quitDialogNoTasks,
       ),
       actions: [

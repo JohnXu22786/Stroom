@@ -125,16 +125,14 @@ class BrowserCookieStorePreparation {
     if (inFlightPreparation != null) return inFlightPreparation;
 
     late final Future<bool> preparation;
-    preparation = Future<bool>.sync(_prepareCookies)
-        .then((prepared) {
-          if (prepared) _prepared = true;
-          return prepared;
-        })
-        .whenComplete(() {
-          if (identical(_inFlightPreparation, preparation)) {
-            _inFlightPreparation = null;
-          }
-        });
+    preparation = Future<bool>.sync(_prepareCookies).then((prepared) {
+      if (prepared) _prepared = true;
+      return prepared;
+    }).whenComplete(() {
+      if (identical(_inFlightPreparation, preparation)) {
+        _inFlightPreparation = null;
+      }
+    });
     _inFlightPreparation = preparation;
     return preparation;
   }
@@ -191,8 +189,8 @@ class UserScript {
     List<String>? matches,
     this.enabled = true,
     this.origin = 'manual',
-  }) : id = id ?? const Uuid().v4(),
-       code = matches == null ? code : _migrateLegacyMatches(code, matches);
+  })  : id = id ?? const Uuid().v4(),
+        code = matches == null ? code : _migrateLegacyMatches(code, matches);
 
   String? get version => _userscriptMetadataValue(code, 'version');
 
@@ -205,12 +203,12 @@ class UserScript {
   bool shouldRunAt(String url) => enabled && code.isNotEmpty && matchesUrl(url);
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'code': code,
-    'enabled': enabled,
-    'origin': origin,
-  };
+        'id': id,
+        'name': name,
+        'code': code,
+        'enabled': enabled,
+        'origin': origin,
+      };
 
   factory UserScript.fromMap(Map<String, dynamic> map) {
     final legacyMatches = map['matches'];
@@ -337,8 +335,7 @@ class UserScript {
       return false;
     }
 
-    final urlPathAndQuery =
-        '${urlUri.path.isEmpty ? '/' : urlUri.path}'
+    final urlPathAndQuery = '${urlUri.path.isEmpty ? '/' : urlUri.path}'
         '${urlUri.hasQuery ? '?${urlUri.query}' : ''}';
     // The path is matched case-sensitively (Chrome semantics).
     return RegExp(globToRegex(pathPat, host: false)).hasMatch(urlPathAndQuery);
@@ -749,8 +746,7 @@ class _BrowserPageState extends State<BrowserPage> {
     if (!_scriptInjectionsInFlight.add(injectionKey)) return;
     final errorSource = 'stroom-userscript-${script.id}.js';
     String? evaluatedCode;
-    final monitor =
-        '''
+    final monitor = '''
 (function() {
   var errorScriptId = ${jsonEncode(script.id)};
   var errorSource = ${jsonEncode(errorSource)};
@@ -1057,8 +1053,7 @@ class _BrowserPageState extends State<BrowserPage> {
         actions: [
           if (widget.recoveryMode)
             TextButton.icon(
-              onPressed:
-                  _recoveryCanContinue &&
+              onPressed: _recoveryCanContinue &&
                       _detectedUrls.isNotEmpty &&
                       !_recoveryContinuationInProgress
                   ? _continueRecovery
@@ -1621,9 +1616,8 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                               overflow: TextOverflow.ellipsis,
                               style: runtimeErrors.contains(s.id)
                                   ? TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .error,
+                                      color:
+                                          Theme.of(context).colorScheme.error,
                                     )
                                   : null,
                             ),
@@ -1753,9 +1747,8 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
 
   Future<void> _editScript(int index) async {
     final isNew = index < 0;
-    final script = isNew
-        ? UserScript(name: '', code: '', matches: [])
-        : _scripts[index];
+    final script =
+        isNew ? UserScript(name: '', code: '', matches: []) : _scripts[index];
     final updated = await showDialog<UserScript>(
       context: context,
       builder: (ctx) => _ScriptEditDialog(script: script),
@@ -1842,7 +1835,8 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                 decoration: InputDecoration(
                   labelText: l10n.browserManualUserscriptLabel,
                   border: OutlineInputBorder(),
-                  hintText: '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
+                  hintText:
+                      '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
@@ -1864,8 +1858,7 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
             Navigator.pop(
               context,
               UserScript(
-                name:
-                    _userscriptMetadataName(_codeCtrl.text) ??
+                name: _userscriptMetadataName(_codeCtrl.text) ??
                     (_nameCtrl.text.trim().isNotEmpty
                         ? _nameCtrl.text.trim()
                         : l10n.browserUnnamedScript),
@@ -1945,9 +1938,8 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
     } catch (_) {
       if (!mounted) return;
       setState(
-        () =>
-            _error = AppLocalizations.of(context)!
-                .browserScriptImportNetworkError,
+        () => _error =
+            AppLocalizations.of(context)!.browserScriptImportNetworkError,
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -2051,14 +2043,14 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
           onPressed: source == null
               ? null
               : () => Navigator.pop(
-                  context,
-                  UserScript(
-                    name: name!,
-                    code: source,
-                    enabled: false,
-                    origin: _urlCtrl.text.trim(),
+                    context,
+                    UserScript(
+                      name: name!,
+                      code: source,
+                      enabled: false,
+                      origin: _urlCtrl.text.trim(),
+                    ),
                   ),
-                ),
           child: ConstrainedText(
             l10n.browserSave,
             maxLines: 1,

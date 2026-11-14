@@ -50,8 +50,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
 
     // Determine header label: "最新版本" when newest is selected or
     // only one version available, "已选择" when user picked an older version.
-    final _isNewestSelected =
-        state.selectedVersionIndex == 0 ||
+    final _isNewestSelected = state.selectedVersionIndex == 0 ||
         (state.availableVersions?.length ?? 0) <= 1;
     final versionLabel = _isNewestSelected
         ? strings.updateLatestVersionLabel
@@ -351,9 +350,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     final strings = AppLocalizations.of(context)!;
 
     // Count visible items first for proper border calculations.
-    final visibleCount = versions
-        .where((v) => showAll || !v.isPreRelease)
-        .length;
+    final visibleCount =
+        versions.where((v) => showAll || !v.isPreRelease).length;
 
     // Build the visible list items, skipping pre-releases when toggle is off.
     final List<Widget> items = [];
@@ -372,8 +370,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           borderRadius: displayIdx == 1
               ? const BorderRadius.vertical(top: Radius.circular(8))
               : isLast
-              ? const BorderRadius.vertical(bottom: Radius.circular(8))
-              : null,
+                  ? const BorderRadius.vertical(bottom: Radius.circular(8))
+                  : null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(

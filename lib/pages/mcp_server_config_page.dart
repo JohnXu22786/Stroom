@@ -95,9 +95,8 @@ class _McpServerConfigDialogState
       return;
     }
     final config = entry.configs[widget.configIndex];
-    final mcpConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final mcpConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
       typeConfig: mcpConfig,
@@ -266,8 +265,7 @@ class _McpServerConfigDialogState
       return;
     }
 
-    final changed =
-        _nameController.text != _originalName ||
+    final changed = _nameController.text != _originalName ||
         _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
@@ -358,10 +356,10 @@ class _McpServerConfigDialogState
     final argsStr = _argsController.text.trim();
     final args = argsStr.isNotEmpty
         ? argsStr
-              .split(',')
-              .map((s) => s.trim())
-              .where((s) => s.isNotEmpty)
-              .toList()
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
         : <String>[];
 
     final apiKey = _apiKeyController.text.trim();
@@ -474,8 +472,7 @@ class _McpServerConfigDialogState
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
-    final existingConfig =
-        _isExistingConfig &&
+    final existingConfig = _isExistingConfig &&
             widget.configIndex >= 0 &&
             widget.configIndex < configs.length
         ? configs[widget.configIndex]
@@ -524,9 +521,8 @@ class _McpServerConfigDialogState
       _commandController.text = _transportType == McpTransportType.stdio
           ? _commandController.text.trim()
           : '';
-      _argsController.text = _transportType == McpTransportType.stdio
-          ? args.join(', ')
-          : '';
+      _argsController.text =
+          _transportType == McpTransportType.stdio ? args.join(', ') : '';
       _urlController.text = _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '';
@@ -542,8 +538,8 @@ class _McpServerConfigDialogState
     final cs = Theme.of(context).colorScheme;
     final title = _isExistingConfig
         ? (_nameController.text.isNotEmpty
-              ? _nameController.text
-              : AppLocalizations.of(context)!.mcpEditServerTitle)
+            ? _nameController.text
+            : AppLocalizations.of(context)!.mcpEditServerTitle)
         : AppLocalizations.of(context)!.mcpCreateServerTitle;
 
     return PopScope(
@@ -657,8 +653,8 @@ class _McpServerConfigDialogState
                       controller: _commandController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText: AppLocalizations.of(context)!
-                            .mcpCommandExample,
+                        hintText:
+                            AppLocalizations.of(context)!.mcpCommandExample,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.terminal, color: Colors.orange),
                       ),
@@ -681,8 +677,8 @@ class _McpServerConfigDialogState
                       controller: _argsController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText: AppLocalizations.of(context)!
-                            .mcpArgumentsHint,
+                        hintText:
+                            AppLocalizations.of(context)!.mcpArgumentsHint,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.list, color: Colors.purple),
                       ),
@@ -705,8 +701,8 @@ class _McpServerConfigDialogState
                       controller: _urlController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText: AppLocalizations.of(context)!
-                            .mcpSseUrlExample,
+                        hintText:
+                            AppLocalizations.of(context)!.mcpSseUrlExample,
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.link, color: Colors.blue),
                       ),
@@ -751,8 +747,8 @@ class _McpServerConfigDialogState
                         onPressed: _isSaving
                             ? null
                             : () => setState(
-                                () => _obscureApiKey = !_obscureApiKey,
-                              ),
+                                  () => _obscureApiKey = !_obscureApiKey,
+                                ),
                       ),
                     ),
                     obscureText: _obscureApiKey,
@@ -779,8 +775,8 @@ class _McpServerConfigDialogState
                     controller: _descriptionController,
                     enabled: !_isSaving,
                     decoration: InputDecoration(
-                      hintText: AppLocalizations.of(context)!
-                          .mcpDescriptionHint,
+                      hintText:
+                          AppLocalizations.of(context)!.mcpDescriptionHint,
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.description, color: Colors.teal),
                     ),
@@ -812,9 +808,9 @@ class _McpServerConfigDialogState
                           child: Text(
                             _transportType == McpTransportType.stdio
                                 ? AppLocalizations.of(context)!
-                                      .mcpStdioDescription
+                                    .mcpStdioDescription
                                 : AppLocalizations.of(context)!
-                                      .mcpSseDescription,
+                                    .mcpSseDescription,
                             style: TextStyle(
                               fontSize: 12,
                               color: cs.onSurfaceVariant,

@@ -105,8 +105,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                   child: sections.isEmpty
                       ? _buildEmptyState()
                       : _selectedSectionId != null
-                      ? _buildDetailView(sections, isDark)
-                      : _buildListView(sections, isDark),
+                          ? _buildDetailView(sections, isDark)
+                          : _buildListView(sections, isDark),
                 ),
                 // Close button
                 Padding(
@@ -211,14 +211,12 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (widget.isOcrDiagnostics) {
       final credentialValues =
           OcrDiagnosticSnapshot.credentialValuesFromRequest(req);
-      final safeRequest =
-          OcrDiagnosticSnapshot.sanitizeRequest(
+      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
             req,
             excludedValues: credentialValues,
           ) ??
           {};
-      final safeResponse =
-          OcrDiagnosticSnapshot.sanitizeResponse(
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
             resp,
             excludedValues: credentialValues,
           ) ??

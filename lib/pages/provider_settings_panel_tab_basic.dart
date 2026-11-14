@@ -59,8 +59,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               isExpanded: true,
               initialValue: _endpointType,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!
-                    .providerEndpointTypeLabel,
+                labelText:
+                    AppLocalizations.of(context)!.providerEndpointTypeLabel,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
@@ -114,8 +114,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!
-                    .providerRequestJsonDefault,
+                labelText:
+                    AppLocalizations.of(context)!.providerRequestJsonDefault,
                 hintText: AppLocalizations.of(context)!.providerUseAppDefault,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
@@ -190,7 +190,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerUploadMethodHelp,
-        style: Theme.of(context).textTheme.bodyMedium
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
             ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
@@ -262,8 +264,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _uploadMethod == AudioUploadMethod.multipart
             ? AppLocalizations.of(context)!.providerUploadMultipartHelp
             : _uploadMethod == AudioUploadMethod.base64Json
-            ? AppLocalizations.of(context)!.providerUploadBase64Help
-            : AppLocalizations.of(context)!.providerUploadUrlHelp,
+                ? AppLocalizations.of(context)!.providerUploadBase64Help
+                : AppLocalizations.of(context)!.providerUploadUrlHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -340,7 +342,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerFallbackTriggerHelp,
-        style: Theme.of(context).textTheme.bodyMedium
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
             ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
@@ -376,7 +380,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 _buildAsrSelectedDropdownText(
                   context,
                   AppLocalizations.of(context)!.providerFallbackAll,
-                  style: Theme.of(context).textTheme.labelLarge
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
@@ -412,7 +418,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   value: 'all',
                   child: ConstrainedText(
                     AppLocalizations.of(context)!.providerFallbackAll,
-                    style: Theme.of(context).textTheme.labelLarge
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelLarge
                         ?.copyWith(fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -431,10 +439,10 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _fallbackMethod == 'specific'
             ? AppLocalizations.of(context)!.providerFallbackSpecificHelp
             : _fallbackMethod == 'generic'
-            ? AppLocalizations.of(context)!.providerFallbackGenericHelp
-            : _fallbackMethod == 'all'
-            ? AppLocalizations.of(context)!.providerFallbackAllHelp
-            : AppLocalizations.of(context)!.providerFallbackRejectHelp,
+                ? AppLocalizations.of(context)!.providerFallbackGenericHelp
+                : _fallbackMethod == 'all'
+                    ? AppLocalizations.of(context)!.providerFallbackAllHelp
+                    : AppLocalizations.of(context)!.providerFallbackRejectHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -458,7 +466,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerPreprocessingHelp,
-        style: Theme.of(context).textTheme.bodyMedium
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
             ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),

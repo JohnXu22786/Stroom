@@ -503,9 +503,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(textFolderListProvider)
-                  .where(
+              ...ref.read(textFolderListProvider).where(
                     (folder) => names.any(
                       (name) => folder == name || folder.startsWith('$name/'),
                     ),
@@ -544,9 +542,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref
-            .read(textFolderListProvider)
-            .where(
+        ...ref.read(textFolderListProvider).where(
               (folder) => names.any(
                 (name) => folder == name || folder.startsWith('$name/'),
               ),

@@ -221,7 +221,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, _CachedStreamingMarkdown> _streamingMarkdownCache = {};
   final Map<String, StreamingFenceInfoCache> _streamingFenceInfoCaches = {};
   final Map<String, _StreamingSearchOccurrenceCount>
-  _streamingSearchOccurrenceCache = {};
+      _streamingSearchOccurrenceCache = {};
   final Map<String, _LiveMarkdownSearchPreview> _liveMarkdownSearchPreviews =
       {};
   final Map<String, int> _liveMarkdownAppendCounts = {};
@@ -528,9 +528,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingMsgId = activeId != null
-        ? ref.watch(streamingMsgIdProvider(activeId))
-        : null;
+    final streamingMsgId =
+        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the
@@ -656,8 +655,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               _pendingInitialScrollAdjustment)
                             Positioned.fill(
                               child: TickerMode(
-                                enabled:
-                                    TickerMode.of(context) &&
+                                enabled: TickerMode.of(context) &&
                                     ChatTabVisibility.of(context),
                                 child: const Center(
                                   child: CircularProgressIndicator(),

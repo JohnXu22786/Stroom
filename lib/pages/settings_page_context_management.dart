@@ -297,12 +297,12 @@ class _PerModelRow extends StatelessWidget {
           subtitle: Text(
             perModelEnabled
                 ? (threshold != null
-                      ? AppLocalizations.of(context)!
-                            .contextIndependentThreshold(threshold)
-                      : AppLocalizations.of(context)!
-                            .contextEnterIndependentThreshold)
+                    ? AppLocalizations.of(context)!
+                        .contextIndependentThreshold(threshold)
+                    : AppLocalizations.of(context)!
+                        .contextEnterIndependentThreshold)
                 : AppLocalizations.of(context)!
-                      .contextFollowGlobalPercent(globalPercent),
+                    .contextFollowGlobalPercent(globalPercent),
           ),
           value: perModelEnabled,
           onChanged: enabled ? onToggle : null,

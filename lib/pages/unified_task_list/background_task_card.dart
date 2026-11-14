@@ -45,13 +45,13 @@ String _localizedBackgroundTaskTitle(
 
   final (prefix, localize) = switch (task.type) {
     BackgroundTaskType.ocr => (
-      '文字识别_',
-      strings.backgroundTaskGeneratedOcrTitle,
-    ),
+        '文字识别_',
+        strings.backgroundTaskGeneratedOcrTitle,
+      ),
     BackgroundTaskType.audioSeparation => (
-      '音频分离_',
-      strings.backgroundTaskGeneratedAudioSeparationTitle,
-    ),
+        '音频分离_',
+        strings.backgroundTaskGeneratedAudioSeparationTitle,
+      ),
     _ => (null, null),
   };
   if (prefix == null || localize == null || !task.title.startsWith(prefix)) {
@@ -419,8 +419,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                   _ocrPageOutcomeLabel(outcome.status, strings),
                   style: TextStyle(
                     fontSize: 12,
-                    color:
-                        outcome.status == OcrPageOutcomeStatus.failed ||
+                    color: outcome.status == OcrPageOutcomeStatus.failed ||
                             outcome.status == OcrPageOutcomeStatus.incomplete
                         ? Colors.red
                         : cs.onSurfaceVariant,
@@ -557,12 +556,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             color: step.completed
                                 ? Colors.green.shade700
                                 : step.skipped
-                                ? Colors.orange.shade700
-                                : step.running
-                                ? colorScheme.primary
-                                : step.failed
-                                ? Colors.red.shade700
-                                : colorScheme.onSurface,
+                                    ? Colors.orange.shade700
+                                    : step.running
+                                        ? colorScheme.primary
+                                        : step.failed
+                                            ? Colors.red.shade700
+                                            : colorScheme.onSurface,
                           ),
                         ),
                         // Show step error detail directly (no folding)
@@ -659,8 +658,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             label: task.resultIsComplete
                 ? strings.unifiedTaskRetrySave
                 : task.partialSaveRequested
-                ? strings.unifiedTaskRetryPartialSave
-                : strings.unifiedTaskSavePartialResult,
+                    ? strings.unifiedTaskRetryPartialSave
+                    : strings.unifiedTaskSavePartialResult,
             color: Colors.blue,
             onPressed: () => _retryOcrSave(task, ref),
           ),

@@ -580,7 +580,9 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
                 Text(
                   widget.message,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
                       ?.copyWith(color: Colors.grey.shade600, height: 1.6),
                 ),
                 const SizedBox(height: 28),

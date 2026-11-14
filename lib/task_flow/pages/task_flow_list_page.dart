@@ -114,21 +114,19 @@ class TaskFlowListPage extends ConsumerWidget {
     WidgetRef ref,
   ) {
     final strings = AppLocalizations.of(context)!;
-    final defs = flow.blocks
-        .map((block) {
-          final definition = block.getDefinition();
-          if (definition == null) return block.typeKey.name;
-          return switch (block.typeKey) {
-            BlockType.ocr => strings.taskFlowBlockOcr,
-            BlockType.asr => strings.taskFlowBlockAsr,
-            BlockType.audioSeparation => strings.taskFlowBlockAudioSeparation,
-            BlockType.catcatch => strings.taskFlowBlockCatCatch,
-            BlockType.tts => strings.taskFlowBlockTts,
-            BlockType.chat => strings.taskFlowBlockChat,
-            BlockType.custom => definition.label,
-          };
-        })
-        .join(' → ');
+    final defs = flow.blocks.map((block) {
+      final definition = block.getDefinition();
+      if (definition == null) return block.typeKey.name;
+      return switch (block.typeKey) {
+        BlockType.ocr => strings.taskFlowBlockOcr,
+        BlockType.asr => strings.taskFlowBlockAsr,
+        BlockType.audioSeparation => strings.taskFlowBlockAudioSeparation,
+        BlockType.catcatch => strings.taskFlowBlockCatCatch,
+        BlockType.tts => strings.taskFlowBlockTts,
+        BlockType.chat => strings.taskFlowBlockChat,
+        BlockType.custom => definition.label,
+      };
+    }).join(' → ');
 
     return Card(
       elevation: 0,
@@ -287,7 +285,9 @@ class TaskFlowListPage extends ConsumerWidget {
               width: 32,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.onSurfaceVariant
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
                     .withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
@@ -430,13 +430,17 @@ class TaskFlowListPage extends ConsumerWidget {
                           children: [
                             Text(
                               strings.taskFlowChooseTemplate,
-                              style: Theme.of(sheetContext).textTheme.titleLarge
+                              style: Theme.of(sheetContext)
+                                  .textTheme
+                                  .titleLarge
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               strings.taskFlowTemplateIntroduction,
-                              style: Theme.of(sheetContext).textTheme.bodySmall
+                              style: Theme.of(sheetContext)
+                                  .textTheme
+                                  .bodySmall
                                   ?.copyWith(color: colors.onSurfaceVariant),
                             ),
                           ],
@@ -445,7 +449,9 @@ class TaskFlowListPage extends ConsumerWidget {
                       const SizedBox(width: 8),
                       Text(
                         strings.taskFlowTemplateCount(templates.length),
-                        style: Theme.of(sheetContext).textTheme.labelMedium
+                        style: Theme.of(sheetContext)
+                            .textTheme
+                            .labelMedium
                             ?.copyWith(color: colors.onSurfaceVariant),
                       ),
                       IconButton(
@@ -499,7 +505,9 @@ class TaskFlowListPage extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             strings.taskFlowTemplateDraftHint,
-                            style: Theme.of(sheetContext).textTheme.bodySmall
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .bodySmall
                                 ?.copyWith(color: colors.onSurfaceVariant),
                           ),
                         ),
@@ -554,7 +562,9 @@ class TaskFlowListPage extends ConsumerWidget {
         ),
         title: Text(
           template.name,
-          style: Theme.of(context).textTheme.titleMedium
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
         subtitle: Padding(
@@ -564,7 +574,9 @@ class TaskFlowListPage extends ConsumerWidget {
             children: [
               Text(
                 template.description,
-                style: Theme.of(context).textTheme.bodyMedium
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
                     ?.copyWith(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 8),
@@ -580,7 +592,9 @@ class TaskFlowListPage extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       template.requirements,
-                      style: Theme.of(context).textTheme.bodySmall
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
                           ?.copyWith(color: colors.onSurfaceVariant),
                     ),
                   ),

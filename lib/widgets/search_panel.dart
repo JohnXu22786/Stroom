@@ -184,9 +184,9 @@ class _SearchPanelState extends State<SearchPanel> {
                             Text(
                               _query.isEmpty
                                   ? AppLocalizations.of(context)!
-                                        .searchPanelPrompt
+                                      .searchPanelPrompt
                                   : AppLocalizations.of(context)!
-                                        .searchPanelNoResults,
+                                      .searchPanelNoResults,
                               style: TextStyle(color: cs.onSurfaceVariant),
                             ),
                           ],

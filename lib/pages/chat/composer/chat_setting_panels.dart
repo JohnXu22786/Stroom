@@ -394,7 +394,7 @@ void showReasoningPanel({
   required ValueChanged<bool> onReasoningToggle,
   required ValueChanged<bool> onReasoningEffortToggle,
   required void Function(String paramName, String value)
-  onReasoningParamChanged,
+      onReasoningParamChanged,
 }) {
   var localEnabled = reasoningEnabled;
   var localEffortEnabled = reasoningEffortEnabled;
@@ -619,9 +619,9 @@ void showReasoningPanel({
                               children: effortParam.options.map((option) {
                                 final currentValue =
                                     localSelections[effortParam.paramName] ??
-                                    (effortParam.options.isNotEmpty
-                                        ? effortParam.options.first
-                                        : '');
+                                        (effortParam.options.isNotEmpty
+                                            ? effortParam.options.first
+                                            : '');
                                 final isSelected = currentValue == option;
                                 return _OptionChip(
                                   label: option,
@@ -688,9 +688,9 @@ void showCustomReasoningParamsPanel({
   required Map<String, String> reasoningParamSelections,
   required List<ReasoningParam> reasoningParams,
   required void Function(String paramName, String value)
-  onReasoningParamChanged,
+      onReasoningParamChanged,
   required void Function(ReasoningParam param, bool enabled)
-  onCustomParamToggle,
+      onCustomParamToggle,
   List<CustomParam> configuredCustomParams = const [],
   Map<String, String> configuredCustomParamSelections = const {},
   void Function(String paramName, String value)? onConfiguredCustomParamChanged,
@@ -721,15 +721,15 @@ void showCustomReasoningParamsPanel({
       paramName: param.paramName,
       options: param.type == 'json'
           ? param.defaultValue.trim().isNotEmpty
-                ? [param.defaultValue]
-                : const []
+              ? [param.defaultValue]
+              : const []
           : param.optionOrder.isNotEmpty
-          ? param.optionOrder
-          : param.options.isNotEmpty
-          ? param.options
-          : param.defaultValue.trim().isNotEmpty
-          ? [param.defaultValue]
-          : const [],
+              ? param.optionOrder
+              : param.options.isNotEmpty
+                  ? param.options
+                  : param.defaultValue.trim().isNotEmpty
+                      ? [param.defaultValue]
+                      : const [],
       type: param.type,
     );
     configuredByRow[row] = param;
@@ -820,8 +820,7 @@ void showCustomReasoningParamsPanel({
                           final selections = configuredParam != null
                               ? localConfiguredSelections
                               : localReasoningSelections;
-                          final currentValue =
-                              selections[param.paramName] ??
+                          final currentValue = selections[param.paramName] ??
                               (param.options.isNotEmpty
                                   ? param.options.first
                                   : '');
@@ -874,8 +873,7 @@ void showCustomReasoningParamsPanel({
                                           // 不依赖参数对象上可变的 enabled 标记。
                                           // boolean 类型参数：开 = 'true'，
                                           // 关 = 'false'（无选项也提供开关）。
-                                          value:
-                                              (selections[param.paramName]
+                                          value: (selections[param.paramName]
                                                       ?.isNotEmpty ??
                                                   false) &&
                                               canEdit,
@@ -885,8 +883,7 @@ void showCustomReasoningParamsPanel({
                                                   setState(() {
                                                     if (value) {
                                                       if (param
-                                                          .options
-                                                          .isNotEmpty) {
+                                                          .options.isNotEmpty) {
                                                         final selected =
                                                             selections[param
                                                                 .paramName];
@@ -894,21 +891,19 @@ void showCustomReasoningParamsPanel({
                                                                 null &&
                                                             !param.options
                                                                 .contains(
-                                                                  selected,
-                                                                )) {
+                                                              selected,
+                                                            )) {
                                                           selections[param
                                                                   .paramName] =
-                                                              param
-                                                                  .options
+                                                              param.options
                                                                   .first;
                                                         } else {
                                                           selections
                                                               .putIfAbsent(
-                                                                param.paramName,
-                                                                () => param
-                                                                    .options
-                                                                    .first,
-                                                              );
+                                                            param.paramName,
+                                                            () => param
+                                                                .options.first,
+                                                          );
                                                         }
                                                       } else if (param.type ==
                                                           'boolean') {
@@ -933,9 +928,9 @@ void showCustomReasoningParamsPanel({
                                                   if (configuredParam != null) {
                                                     onConfiguredCustomParamToggle
                                                         ?.call(
-                                                          configuredParam,
-                                                          value,
-                                                        );
+                                                      configuredParam,
+                                                      value,
+                                                    );
                                                   } else {
                                                     onCustomParamToggle(
                                                       param,

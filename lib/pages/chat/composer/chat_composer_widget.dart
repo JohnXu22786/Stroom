@@ -87,8 +87,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     String messageId,
     String text,
     List<Attachment> attachments,
-  )?
-  onEditSend;
+  )? onEditSend;
 
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
@@ -385,9 +384,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (oldConvId == null) return;
           try {
-            ref
-                .read(conversationsProvider.notifier)
-                .saveDraft(
+            ref.read(conversationsProvider.notifier).saveDraft(
                   oldConvId,
                   oldTextSnapshot,
                   draftAttachments: oldAttsSnapshot,
@@ -512,8 +509,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @override
   Widget build(BuildContext context) {
     final streamingConvs = ref.watch(streamingConversationsProvider);
-    final isStreaming =
-        widget.conversationId != null &&
+    final isStreaming = widget.conversationId != null &&
         streamingConvs.contains(widget.conversationId);
     final hasText = _textController.text.trim().isNotEmpty;
     final hasAttachments = _pendingAttachments.isNotEmpty;

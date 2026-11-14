@@ -183,9 +183,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ],
         ),
-        bottomNavigationBar: isPortrait
-            ? _buildBottomNavigationBar(context)
-            : null,
+        bottomNavigationBar:
+            isPortrait ? _buildBottomNavigationBar(context) : null,
       ),
     );
   }

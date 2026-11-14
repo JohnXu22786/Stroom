@@ -336,8 +336,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 controller: _searchController,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: AppLocalizations.of(context)!
-                      .conversationSearchHint,
+                  hintText:
+                      AppLocalizations.of(context)!.conversationSearchHint,
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
@@ -348,7 +348,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               title: ConstrainedText(
                 _selectionMode
                     ? AppLocalizations.of(context)!
-                          .conversationSelected(_selectedIds.length)
+                        .conversationSelected(_selectedIds.length)
                     : AppLocalizations.of(context)!.conversationsTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -390,58 +390,58 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       body: filtered.isEmpty
           ? _buildEmptyState(cs)
           : _searchController.text.trim().isNotEmpty
-          ? ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: filtered.length,
-              itemBuilder: (context, index) {
-                final conv = filtered[index];
-                final isActive = conv.id == activeId;
-                return _buildConversationItem(
-                  conv,
-                  isActive,
-                  cs,
-                  index,
-                  activeId,
-                );
-              },
-            )
-          : ReorderableListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: filtered.length,
-              buildDefaultDragHandles: false,
-              onReorderItem: (oldIndex, newIndex) {
-                // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
-                // 调整过的索引（框架保证），直接按显示位置映射回存储
-                // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
-                final convs = ref.read(conversationsProvider);
-                final item = filtered[oldIndex];
-                final realOld = convs.indexWhere((c) => c.id == item.id);
-                final target = filtered[newIndex];
-                final realNew = convs.indexWhere((c) => c.id == target.id);
-                if (realOld >= 0 && realNew >= 0) {
-                  ref
-                      .read(conversationsProvider.notifier)
-                      .reorderConversation(realOld, realNew);
-                }
-              },
-              proxyDecorator: (child, index, animation) => Material(
-                elevation: 2,
-                color: cs.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(8),
-                child: child,
-              ),
-              itemBuilder: (context, index) {
-                final conv = filtered[index];
-                final isActive = conv.id == activeId;
-                return _buildConversationItem(
-                  conv,
-                  isActive,
-                  cs,
-                  index,
-                  activeId,
-                );
-              },
-            ),
+              ? ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final conv = filtered[index];
+                    final isActive = conv.id == activeId;
+                    return _buildConversationItem(
+                      conv,
+                      isActive,
+                      cs,
+                      index,
+                      activeId,
+                    );
+                  },
+                )
+              : ReorderableListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: filtered.length,
+                  buildDefaultDragHandles: false,
+                  onReorderItem: (oldIndex, newIndex) {
+                    // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
+                    // 调整过的索引（框架保证），直接按显示位置映射回存储
+                    // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
+                    final convs = ref.read(conversationsProvider);
+                    final item = filtered[oldIndex];
+                    final realOld = convs.indexWhere((c) => c.id == item.id);
+                    final target = filtered[newIndex];
+                    final realNew = convs.indexWhere((c) => c.id == target.id);
+                    if (realOld >= 0 && realNew >= 0) {
+                      ref
+                          .read(conversationsProvider.notifier)
+                          .reorderConversation(realOld, realNew);
+                    }
+                  },
+                  proxyDecorator: (child, index, animation) => Material(
+                    elevation: 2,
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                    child: child,
+                  ),
+                  itemBuilder: (context, index) {
+                    final conv = filtered[index];
+                    final isActive = conv.id == activeId;
+                    return _buildConversationItem(
+                      conv,
+                      isActive,
+                      cs,
+                      index,
+                      activeId,
+                    );
+                  },
+                ),
       floatingActionButton: _selectionMode && _selectedIds.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: _batchDelete,
@@ -474,13 +474,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               onChanged: (_) => _toggleSelection(conv.id),
             )
           : conv.isTemporary
-          // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
-          // 不是按钮；拖拽把手让位于该图标）。
-          ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
-          : ReorderableDragStartListener(
-              index: index,
-              child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
-            ),
+              // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
+              // 不是按钮；拖拽把手让位于该图标）。
+              ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
+              : ReorderableDragStartListener(
+                  index: index,
+                  child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
+                ),
       title: Row(
         children: [
           if (conv.isPinned)
@@ -587,9 +587,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                       child: ConstrainedText(
                         conv.isTemporary
                             ? AppLocalizations.of(context)!
-                                  .conversationCloseTemporary
+                                .conversationCloseTemporary
                             : AppLocalizations.of(context)!
-                                  .conversationTemporary,
+                                .conversationTemporary,
                         style: TextStyle(color: cs.onSurface),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

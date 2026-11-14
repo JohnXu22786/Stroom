@@ -526,8 +526,8 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   /// 「当前：供应商」= 参数继承自供应商；其它情况 → 「当前：模型自定义」。
   String _paramSourceLabel(ReasoningParam param) =>
       _isReasoningParamInherited(param)
-      ? AppLocalizations.of(context)!.reasoningCurrentProvider
-      : AppLocalizations.of(context)!.reasoningCurrentModel;
+          ? AppLocalizations.of(context)!.reasoningCurrentProvider
+          : AppLocalizations.of(context)!.reasoningCurrentModel;
 
   /// 自定义参数是否「继承自供应商」：供应商存在同名且同类型的参数，
   /// 且该参数是打开页面时工作副本里的成员（本会话添加的参数即使改名

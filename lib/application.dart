@@ -265,90 +265,88 @@ class _ApplicationState extends ConsumerState<Application>
 
     // Check SharedPreferences flag to confirm it's a real update scenario
     // (not a stale in-memory flag from a previous failed install).
-    hasPendingUpdateRestart()
-        .then<void>((bool hasPrefsFlag) {
-          if (!hasPrefsFlag) {
-            // SharedPreferences flag cleared externally（例如 Kotlin 侧已处理）：
-            // 同步清除内存标记，避免每次 resume 都重复读取 prefs。
-            setPendingRestartInMemory(false);
-            return;
-          }
-          if (!mounted) return;
+    hasPendingUpdateRestart().then<void>((bool hasPrefsFlag) {
+      if (!hasPrefsFlag) {
+        // SharedPreferences flag cleared externally（例如 Kotlin 侧已处理）：
+        // 同步清除内存标记，避免每次 resume 都重复读取 prefs。
+        setPendingRestartInMemory(false);
+        return;
+      }
+      if (!mounted) return;
 
-          final navigatorContext = _navigatorKey.currentContext;
-          if (navigatorContext == null || !navigatorContext.mounted) return;
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return;
 
+      debugPrint(
+        '[Application] Warm resume after APK install detected — '
+        'showing restart dialog (Kotlin handler may have failed)',
+      );
+
+      // Clear both flags immediately to prevent re-entry
+      setPendingRestartInMemory(false);
+      unawaited(
+        clearPendingUpdateRestart().catchError((
+          Object error,
+          StackTrace stackTrace,
+        ) {
           debugPrint(
-            '[Application] Warm resume after APK install detected — '
-            'showing restart dialog (Kotlin handler may have failed)',
+            '[Application] Failed to clear update restart flag: $error',
           );
+        }),
+      );
 
-          // Clear both flags immediately to prevent re-entry
-          setPendingRestartInMemory(false);
-          unawaited(
-            clearPendingUpdateRestart().catchError((
-              Object error,
-              StackTrace stackTrace,
-            ) {
-              debugPrint(
-                '[Application] Failed to clear update restart flag: $error',
-              );
-            }),
-          );
-
-          showDialog<void>(
-            context: navigatorContext,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              title: Row(
-                children: [
-                  Icon(
-                    Icons.system_update,
-                    color: Theme.of(ctx).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ConstrainedText(
-                      AppLocalizations.of(ctx)!.updateRestartDialogTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+      showDialog<void>(
+        context: navigatorContext,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                Icons.system_update,
+                color: Theme.of(ctx).colorScheme.primary,
               ),
-              content: Text(AppLocalizations.of(ctx)!.updateRestartDialogBody),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    // User chose to continue — hope for the best
-                  },
-                  child: ConstrainedText(
-                    AppLocalizations.of(ctx)!.updateRestartDialogLater,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ConstrainedText(
+                  AppLocalizations.of(ctx)!.updateRestartDialogTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    _exitApp();
-                  },
-                  child: ConstrainedText(
-                    AppLocalizations.of(ctx)!.updateRestartDialogNow,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          content: Text(AppLocalizations.of(ctx)!.updateRestartDialogBody),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                // User chose to continue — hope for the best
+              },
+              child: ConstrainedText(
+                AppLocalizations.of(ctx)!.updateRestartDialogLater,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          );
-        })
-        .catchError((Object error, StackTrace stackTrace) {
-          debugPrint(
-            '[Application] Failed to read update restart flag: $error',
-          );
-        });
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _exitApp();
+              },
+              child: ConstrainedText(
+                AppLocalizations.of(ctx)!.updateRestartDialogNow,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+    }).catchError((Object error, StackTrace stackTrace) {
+      debugPrint(
+        '[Application] Failed to read update restart flag: $error',
+      );
+    });
   }
 
   /// Exits the application (triggers clean cold start on next launch).
@@ -521,10 +519,10 @@ class _ApplicationState extends ConsumerState<Application>
         final colorScheme = themeMode == ThemeMode.light
             ? lightColorScheme
             : themeMode == ThemeMode.dark
-            ? darkColorScheme
-            : MediaQuery.platformBrightnessOf(context) == Brightness.light
-            ? lightColorScheme
-            : darkColorScheme;
+                ? darkColorScheme
+                : MediaQuery.platformBrightnessOf(context) == Brightness.light
+                    ? lightColorScheme
+                    : darkColorScheme;
 
         return Directionality(
           textDirection: textDirectionForLocale(locale),
@@ -626,8 +624,7 @@ class _InAppBannerOverlay extends ConsumerWidget {
     if (payload == null) return const SizedBox.shrink();
 
     final themeMode = ref.watch(themeProvider);
-    final isDark =
-        themeMode == ThemeMode.dark ||
+    final isDark = themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system &&
             MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 

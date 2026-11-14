@@ -25,10 +25,10 @@ class _TaskEntry {
   final TextEditingController secondController;
 
   _TaskEntry({String? initialUrl, int? initialDurationSec})
-    : urlController = TextEditingController(text: initialUrl ?? ''),
-      hourController = TextEditingController(),
-      minuteController = TextEditingController(),
-      secondController = TextEditingController() {
+      : urlController = TextEditingController(text: initialUrl ?? ''),
+        hourController = TextEditingController(),
+        minuteController = TextEditingController(),
+        secondController = TextEditingController() {
     if (initialDurationSec != null && initialDurationSec > 0) {
       final h = initialDurationSec ~/ 3600;
       final m = (initialDurationSec % 3600) ~/ 60;
@@ -136,8 +136,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     final captured = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder:
-            widget.browserPageBuilder ??
+        builder: widget.browserPageBuilder ??
             (_) => const BrowserPage(initialUrl: 'https://www.google.com'),
       ),
     );
@@ -241,9 +240,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       final totalSec = totalSeconds(hours: h, minutes: m, seconds: s);
 
       try {
-        ref
-            .read(catcatchTasksProvider.notifier)
-            .addTask(
+        ref.read(catcatchTasksProvider.notifier).addTask(
               url,
               totalSec,
               videoFolder: _videoFolder,

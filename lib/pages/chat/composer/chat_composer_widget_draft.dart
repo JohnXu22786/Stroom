@@ -68,9 +68,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       return;
     }
     final textToSave = _textController.text;
-    ref
-        .read(conversationsProvider.notifier)
-        .saveDraft(
+    ref.read(conversationsProvider.notifier).saveDraft(
           convId,
           textToSave,
           draftAttachments: _draftAttachmentSnapshot(),

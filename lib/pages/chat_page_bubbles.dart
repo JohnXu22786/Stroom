@@ -78,9 +78,8 @@ class _StreamingSearchOccurrenceCount {
           appended.contains('\u03A3')) {
         return _recount(text, lowerQuery);
       }
-      final normalizedAppended = appended
-          .replaceAll('\r\n', '\n')
-          .replaceAll('\r', '\n');
+      final normalizedAppended =
+          appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
       _appendLowerText(normalizedAppended.toLowerCase(), lowerQuery);
       _textLength = text.length;
       _textEndsWithCr = text.endsWith('\r');
@@ -135,9 +134,8 @@ class _StreamingSearchOccurrenceCount {
     if (_textEndsWithCr && normalizedAppended.startsWith('\n')) {
       normalizedAppended = normalizedAppended.substring(1);
     }
-    normalizedAppended = normalizedAppended
-        .replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n');
+    normalizedAppended =
+        normalizedAppended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     _appendLowerText(normalizedAppended.toLowerCase(), lowerQuery);
     _textLength = sourceLength;
     _textEndsWithCr = appended.endsWith('\r');
@@ -219,8 +217,7 @@ class _StreamingSearchOccurrenceCount {
     _textLength = text.length;
     _textEndsWithCr = text.endsWith('\r');
     _setUnfinishedFenceState(text);
-    _canAppendIncrementally =
-        lowerQuery.isNotEmpty &&
+    _canAppendIncrementally = lowerQuery.isNotEmpty &&
         !_hasPendingFinalSigma &&
         _unfinishedFenceChar == null;
     if (_canAppendIncrementally && lowerQuery.length > 1) {
@@ -240,10 +237,8 @@ class _StreamingSearchOccurrenceCount {
   ) {
     final lastSigmaIndex = searchableText.lastIndexOf('\u03A3');
     if (lastSigmaIndex == -1) return false;
-    final lowerSigmaIndex = searchableText
-        .substring(0, lastSigmaIndex)
-        .toLowerCase()
-        .length;
+    final lowerSigmaIndex =
+        searchableText.substring(0, lastSigmaIndex).toLowerCase().length;
     if (lowerSigmaIndex >= lowerSearchableText.length ||
         lowerSearchableText.codeUnitAt(lowerSigmaIndex) != 0x03C2) {
       return false;
@@ -509,12 +504,12 @@ class _LiveMarkdownSearchPreview {
       initialUpdates: initialUpdates,
       lastSequence: lastSequence,
     )..recoverWithExcerpt(
-      beginning,
-      tail,
-      sourceLength: sourceLength,
-      updateCount: initialUpdates,
-      sequence: lastSequence,
-    );
+        beginning,
+        tail,
+        sourceLength: sourceLength,
+        updateCount: initialUpdates,
+        sequence: lastSequence,
+      );
   }
 
   bool get exceedsBudget => length > _maxLength || updates > _maxUpdates;
@@ -596,11 +591,9 @@ class _LiveMarkdownSearchPreview {
   String _tailFromFragments(String text) {
     var remaining = _previewHalfLength - text.length;
     final suffixes = <String>[];
-    for (
-      var index = fragments.length - 2;
-      index >= 0 && remaining > 0;
-      index--
-    ) {
+    for (var index = fragments.length - 2;
+        index >= 0 && remaining > 0;
+        index--) {
       final fragment = fragments[index];
       final take = fragment.length < remaining ? fragment.length : remaining;
       final suffix = _lastCharacters(fragment, take);
@@ -836,9 +829,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // segments of this message) keeps the "current" highlight aligned with
     // the global navigation cursor across segments.
     final lowerQuery = hasSearchMatch ? _searchQuery.toLowerCase() : '';
-    final messageFirstMatchIndex = hasSearchMatch
-        ? _searchMatchFirstIndexByMessageId[messageId]!
-        : 0;
+    final messageFirstMatchIndex =
+        hasSearchMatch ? _searchMatchFirstIndexByMessageId[messageId]! : 0;
     var occurrenceOffset = 0;
     final streamingConvId = isStreaming && messageId == _streamingMsgId
         ? ref.read(activeConversationIdProvider)
@@ -850,22 +842,20 @@ extension _ChatPageBubblesExt on _ChatPageState {
     final lastTextSegmentIndex = mergedSegments.lastIndexWhere(
       (segment) => segment is TextSegment,
     );
-    for (
-      var segmentIndex = 0;
-      segmentIndex < mergedSegments.length;
-      segmentIndex++
-    ) {
+    for (var segmentIndex = 0;
+        segmentIndex < mergedSegments.length;
+        segmentIndex++) {
       final seg = mergedSegments[segmentIndex];
       switch (seg) {
         case TextSegment s:
           if (s.liveMarkdownAppend != null) {
             final seed = s.liveMarkdownSeed ?? '';
             final append = s.liveMarkdownAppend!;
-            final streamingFenceInfoCache = _streamingFenceInfoCaches
-                .putIfAbsent(
-                  '$messageId:${s.chunkIndex}',
-                  StreamingFenceInfoCache.new,
-                );
+            final streamingFenceInfoCache =
+                _streamingFenceInfoCaches.putIfAbsent(
+              '$messageId:${s.chunkIndex}',
+              StreamingFenceInfoCache.new,
+            );
             final searchSourceConvId =
                 streamingConvId ?? ref.read(activeConversationIdProvider);
             String materializeMarkdownChunk() {
@@ -888,18 +878,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
 
             final legacyRenderGeneration = searchSourceConvId == null
                 ? 0
-                : _legacyFullReplyGenerations['$searchSourceConvId:$messageId'] ??
-                      0;
+                : _legacyFullReplyGenerations[
+                        '$searchSourceConvId:$messageId'] ??
+                    0;
 
             final searchSourceLength =
                 searchSourceConvId != null && s.chunkIndex != null
-                ? ref
-                      .read(chatStreamManagerProvider)
-                      .publishedTextChunkLengthFor(
-                        searchSourceConvId,
-                        s.chunkIndex!,
-                      )
-                : 0;
+                    ? ref
+                        .read(chatStreamManagerProvider)
+                        .publishedTextChunkLengthFor(
+                          searchSourceConvId,
+                          s.chunkIndex!,
+                        )
+                    : 0;
             final legacySnapshot = searchSourceConvId == null
                 ? null
                 : _legacyFullReplySnapshots['$searchSourceConvId:$messageId'];
@@ -921,8 +912,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 lowerQuery,
                 sequence: s.liveMarkdownSequence,
               );
-              occurrenceOffset +=
-                  appendCount ??
+              occurrenceOffset += appendCount ??
                   occurrenceCounter.countFor(
                     materializeMarkdownChunk(),
                     lowerQuery,
@@ -1038,19 +1028,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
                         '$messageId:${s.chunkIndex}:$isDark:$legacyRenderGeneration',
                     incrementalAppend: append,
                     incrementalSequence: s.liveMarkdownSequence,
-                    incrementalInitialUpdateCount:
-                        _liveMarkdownAppendCounts['$messageId:${s.chunkIndex}'] ??
+                    incrementalInitialUpdateCount: _liveMarkdownAppendCounts[
+                            '$messageId:${s.chunkIndex}'] ??
                         0,
                     fullTextOnInvalidation: materializeMarkdownChunk,
                     activeConfigBuilder: (activeText) =>
                         buildMessageMarkdownConfig(
-                          isDark: isDark,
-                          conversationIsStreaming: isStreaming,
-                          streamingMsgId: _streamingMsgId,
-                          messageId: messageId,
-                          streamingText: activeText,
-                          streamingFenceInfoCache: streamingFenceInfoCache,
-                        ),
+                      isDark: isDark,
+                      conversationIsStreaming: isStreaming,
+                      streamingMsgId: _streamingMsgId,
+                      messageId: messageId,
+                      streamingText: activeText,
+                      streamingFenceInfoCache: streamingFenceInfoCache,
+                    ),
                     config: buildMessageMarkdownConfig(
                       isDark: isDark,
                       conversationIsStreaming: isStreaming,
@@ -1093,19 +1083,15 @@ extension _ChatPageBubblesExt on _ChatPageState {
             );
             continue;
           }
-          final canReuseSealedText =
-              !hasSearchMatch &&
+          final canReuseSealedText = !hasSearchMatch &&
               streamingConvId != null &&
               s.chunkIndex != null &&
               s.chunkIndex! < liveTextChunkCount - 1;
-          final cacheKey = canReuseSealedText
-              ? '$messageId:${s.chunkIndex}'
-              : null;
-          final cached = cacheKey == null
-              ? null
-              : _streamingMarkdownCache[cacheKey];
-          final streamingFenceInfoCache =
-              isStreaming &&
+          final cacheKey =
+              canReuseSealedText ? '$messageId:${s.chunkIndex}' : null;
+          final cached =
+              cacheKey == null ? null : _streamingMarkdownCache[cacheKey];
+          final streamingFenceInfoCache = isStreaming &&
                   messageId == _streamingMsgId &&
                   s.chunkIndex != null
               ? _streamingFenceInfoCaches.putIfAbsent(
@@ -1113,8 +1099,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   StreamingFenceInfoCache.new,
                 )
               : null;
-          final isActiveStreamingMarkdown =
-              isStreaming &&
+          final isActiveStreamingMarkdown = isStreaming &&
               messageId == _streamingMsgId &&
               segmentIndex == lastTextSegmentIndex &&
               s.chunkIndex != null;
@@ -1134,68 +1119,65 @@ extension _ChatPageBubblesExt on _ChatPageState {
           final activeSearchPreviewKey = '$messageId:${s.chunkIndex}';
           final existingActiveSearchPreview =
               isActiveStreamingMarkdown && hasSearchMatch
-              ? _liveMarkdownSearchPreviews[activeSearchPreviewKey]
-              : null;
+                  ? _liveMarkdownSearchPreviews[activeSearchPreviewKey]
+                  : null;
           final activeSearchConvId = isActiveStreamingMarkdown && hasSearchMatch
               ? streamingConvId
               : null;
           final activeSearchChunkIndex =
               isActiveStreamingMarkdown && hasSearchMatch ? s.chunkIndex : null;
-          final activeSearchChunkLength =
-              activeSearchConvId != null && activeSearchChunkIndex != null
-              ? ref
-                    .read(chatStreamManagerProvider)
-                    .publishedTextChunkLengthFor(
-                      activeSearchConvId,
-                      activeSearchChunkIndex,
-                    )
+          final activeSearchChunkLength = activeSearchConvId != null &&
+                  activeSearchChunkIndex != null
+              ? ref.read(chatStreamManagerProvider).publishedTextChunkLengthFor(
+                    activeSearchConvId,
+                    activeSearchChunkIndex,
+                  )
               : 0;
-          final activeMarkdownText =
-              isActiveStreamingMarkdown &&
+          final activeMarkdownText = isActiveStreamingMarkdown &&
                   hasSearchMatch &&
                   !(existingActiveSearchPreview?.exceedsBudget ?? false) &&
                   activeSearchChunkLength <=
                       _LiveMarkdownSearchPreview._maxLength
               ? materializeActiveMarkdownChunk()
               : s.text;
-          final activeSearchPreview =
-              isActiveStreamingMarkdown && hasSearchMatch
+          final activeSearchPreview = isActiveStreamingMarkdown &&
+                  hasSearchMatch
               ? existingActiveSearchPreview ??
-                    _liveMarkdownSearchPreviews.putIfAbsent(
-                      activeSearchPreviewKey,
-                      () {
-                        final initialUpdates =
-                            _liveMarkdownAppendCounts[activeSearchPreviewKey] ??
-                            0;
-                        final sequence = s.liveMarkdownSequence;
-                        if (activeSearchChunkLength >
-                                _LiveMarkdownSearchPreview._maxLength &&
-                            activeSearchConvId != null &&
-                            activeSearchChunkIndex != null) {
-                          final excerpt = ref
-                              .read(chatStreamManagerProvider)
-                              .publishedTextChunkExcerptFor(
-                                activeSearchConvId,
-                                activeSearchChunkIndex,
-                                _LiveMarkdownSearchPreview._maxLength,
-                              );
-                          if (excerpt != null && excerpt.length == 2) {
-                            return _LiveMarkdownSearchPreview.fromExcerpt(
-                              excerpt[0],
-                              excerpt[1],
-                              sourceLength: activeSearchChunkLength,
-                              initialUpdates: initialUpdates,
-                              lastSequence: sequence,
+                  _liveMarkdownSearchPreviews.putIfAbsent(
+                    activeSearchPreviewKey,
+                    () {
+                      final initialUpdates =
+                          _liveMarkdownAppendCounts[activeSearchPreviewKey] ??
+                              0;
+                      final sequence = s.liveMarkdownSequence;
+                      if (activeSearchChunkLength >
+                              _LiveMarkdownSearchPreview._maxLength &&
+                          activeSearchConvId != null &&
+                          activeSearchChunkIndex != null) {
+                        final excerpt = ref
+                            .read(chatStreamManagerProvider)
+                            .publishedTextChunkExcerptFor(
+                              activeSearchConvId,
+                              activeSearchChunkIndex,
+                              _LiveMarkdownSearchPreview._maxLength,
                             );
-                          }
+                        if (excerpt != null && excerpt.length == 2) {
+                          return _LiveMarkdownSearchPreview.fromExcerpt(
+                            excerpt[0],
+                            excerpt[1],
+                            sourceLength: activeSearchChunkLength,
+                            initialUpdates: initialUpdates,
+                            lastSequence: sequence,
+                          );
                         }
-                        return _LiveMarkdownSearchPreview(
-                          activeMarkdownText,
-                          initialUpdates: initialUpdates,
-                          lastSequence: sequence,
-                        );
-                      },
-                    )
+                      }
+                      return _LiveMarkdownSearchPreview(
+                        activeMarkdownText,
+                        initialUpdates: initialUpdates,
+                        lastSequence: sequence,
+                      );
+                    },
+                  )
               : null;
           final useRawActiveSearchPreview =
               activeSearchPreview?.exceedsBudget ?? false;
@@ -1227,57 +1209,60 @@ extension _ChatPageBubblesExt on _ChatPageState {
                       style: Theme.of(context).textTheme.bodyMedium,
                     )
                   : hasSearchMatch
-                  ? MarkdownWidget(
-                      data: activeMarkdownText,
-                      selectable: true,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      config: messageMarkdownConfig,
-                      markdownGenerator: buildSearchMarkdownGenerator(
-                        query: _searchQuery,
-                        messageFirstMatchIndex: messageFirstMatchIndex,
-                        occurrenceOffset: occurrenceOffset,
-                        currentMatchIndex: _currentMatchIndex,
-                      ),
-                    )
-                  : MarkdownWidget(
-                      key: isActiveStreamingMarkdown
-                          ? ValueKey(
-                              'streaming-markdown:$messageId:${s.chunkIndex}',
-                            )
-                          : null,
-                      data: s.text,
-                      selectable: true,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      incremental: isActiveStreamingMarkdown,
-                      incrementalKey: isActiveStreamingMarkdown
-                          ? '$messageId:${s.chunkIndex}:$isDark'
-                          : null,
-                      incrementalInitialUpdateCount: isActiveStreamingMarkdown
-                          ? _liveMarkdownAppendCounts['$messageId:${s.chunkIndex}'] ??
-                                0
-                          : 0,
-                      fullTextOnInvalidation: isActiveStreamingMarkdown
-                          ? materializeActiveMarkdownChunk
-                          : null,
-                      activeConfigBuilder: isActiveStreamingMarkdown
-                          ? (activeText) => buildMessageMarkdownConfig(
-                              isDark: isDark,
-                              conversationIsStreaming: isStreaming,
-                              streamingMsgId: _streamingMsgId,
-                              messageId: messageId,
-                              streamingText: activeText,
-                              streamingFenceInfoCache: streamingFenceInfoCache,
-                            )
-                          : null,
-                      // Per-segment streaming config: each segment
-                      // is parsed by its OWN MarkdownWidget, so the
-                      // fence-completion check must run against that
-                      // segment's text.
-                      config: messageMarkdownConfig,
-                      markdownGenerator: markdownGenerator,
-                    ),
+                      ? MarkdownWidget(
+                          data: activeMarkdownText,
+                          selectable: true,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          config: messageMarkdownConfig,
+                          markdownGenerator: buildSearchMarkdownGenerator(
+                            query: _searchQuery,
+                            messageFirstMatchIndex: messageFirstMatchIndex,
+                            occurrenceOffset: occurrenceOffset,
+                            currentMatchIndex: _currentMatchIndex,
+                          ),
+                        )
+                      : MarkdownWidget(
+                          key: isActiveStreamingMarkdown
+                              ? ValueKey(
+                                  'streaming-markdown:$messageId:${s.chunkIndex}',
+                                )
+                              : null,
+                          data: s.text,
+                          selectable: true,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          incremental: isActiveStreamingMarkdown,
+                          incrementalKey: isActiveStreamingMarkdown
+                              ? '$messageId:${s.chunkIndex}:$isDark'
+                              : null,
+                          incrementalInitialUpdateCount:
+                              isActiveStreamingMarkdown
+                                  ? _liveMarkdownAppendCounts[
+                                          '$messageId:${s.chunkIndex}'] ??
+                                      0
+                                  : 0,
+                          fullTextOnInvalidation: isActiveStreamingMarkdown
+                              ? materializeActiveMarkdownChunk
+                              : null,
+                          activeConfigBuilder: isActiveStreamingMarkdown
+                              ? (activeText) => buildMessageMarkdownConfig(
+                                    isDark: isDark,
+                                    conversationIsStreaming: isStreaming,
+                                    streamingMsgId: _streamingMsgId,
+                                    messageId: messageId,
+                                    streamingText: activeText,
+                                    streamingFenceInfoCache:
+                                        streamingFenceInfoCache,
+                                  )
+                              : null,
+                          // Per-segment streaming config: each segment
+                          // is parsed by its OWN MarkdownWidget, so the
+                          // fence-completion check must run against that
+                          // segment's text.
+                          config: messageMarkdownConfig,
+                          markdownGenerator: markdownGenerator,
+                        ),
             );
             widgets.add(textWidget);
             if (cacheKey != null) {
@@ -1344,8 +1329,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
           // would show phantom 4px gaps the live view doesn't have.
           final text =
               (s.sectionIndex < (_reasoningContents[messageId]?.length ?? 0))
-              ? _reasoningContents[messageId]![s.sectionIndex]
-              : '';
+                  ? _reasoningContents[messageId]![s.sectionIndex]
+                  : '';
           if (text.isEmpty) continue;
           widgets.add(
             Padding(
@@ -1374,14 +1359,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
   }) {
     final reasoningSections = _reasoningContents[message.id];
     final segments = _chatSegments[message.id];
-    final isWaitingForFirstToken =
-        message.id == _streamingMsgId &&
+    final isWaitingForFirstToken = message.id == _streamingMsgId &&
         message.text.isEmpty &&
         isStreaming &&
         activeId != null &&
         !ref.read(streamingHasFirstTokenProvider(activeId));
-    final hasSearchMatch =
-        _isSearching &&
+    final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
         _searchMatchFirstIndexByMessageId.containsKey(message.id);
 
@@ -1502,8 +1485,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // otherwise show an empty blue bubble. Whitespace-only content is
     // treated as no text (the composer already trims before sending).
     final hasText = message.text.trim().isNotEmpty;
-    final hasSearchMatch =
-        _isSearching &&
+    final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
         _searchMatchFirstIndexByMessageId.containsKey(message.id);
     return Column(

@@ -287,17 +287,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final value = rawValue.trim();
       final hasRequiredValue =
           param.type == 'string' && param.options.isNotEmpty
-          ? rawValue.isNotEmpty
-          : value.isNotEmpty;
-      final hasImplicitTrueBoolean =
-          param.type == 'boolean' &&
+              ? rawValue.isNotEmpty
+              : value.isNotEmpty;
+      final hasImplicitTrueBoolean = param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
-      final hasStoredValue =
-          param.defaultValue.trim().isNotEmpty ||
+      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
           param.options.any((option) => option.trim().isNotEmpty);
-      final hasUnsupportedStoredType =
-          hasStoredValue &&
+      final hasUnsupportedStoredType = hasStoredValue &&
           ParamType.values.every((type) => type.value != param.type);
       if (name == 'stream') {
         var isNonStreaming = false;
@@ -529,8 +526,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-              ? widget.model!.name
-              : AppLocalizations.of(context)!.modelEditTitle)
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
@@ -748,8 +745,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                   (type) => type.value != param.type,
                 );
                 final name = param.paramName.trim();
-                final isDuplicate =
-                    name.isNotEmpty &&
+                final isDuplicate = name.isNotEmpty &&
                     _customParams.indexWhere(
                           (p) => p.paramName.trim() == name,
                         ) !=
@@ -773,7 +769,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   isDense: true,
                                   errorText: isDuplicate
                                       ? AppLocalizations.of(context)!
-                                            .modelParamExists
+                                          .modelParamExists
                                       : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
@@ -944,8 +940,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     );
                                     _customParamValueFieldRevisions[i] =
                                         (_customParamValueFieldRevisions[i] ??
-                                            0) +
-                                        1;
+                                                0) +
+                                            1;
                                     _validateJsonField(i, param);
                                     setState(() {});
                                   },

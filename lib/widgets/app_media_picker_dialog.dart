@@ -425,41 +425,41 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                     key: const Key('media_picker_confirm_btn'),
                     onPressed:
                         _resultDelivered || _pendingSelectionReads.isNotEmpty
-                        ? null
-                        : () async {
-                            // Guard re-entrancy synchronously BEFORE the
-                            // await: a second tap while the resolver runs
-                            // must not re-enter and double-pop.
-                            if (_resultDelivered ||
-                                _pendingSelectionReads.isNotEmpty) {
-                              return;
-                            }
-                            _resultDelivered = true;
-                            // Path resolution (onRecordsPicked) runs before
-                            // the pop; a throwing resolver must not leave
-                            // the dialog hanging open.
-                            try {
-                              await widget.config.onRecordsPicked?.call(
-                                _selectedRecords.values.toList(),
-                              );
-                            } catch (e) {
-                              debugPrint(
-                                '[MediaPicker] onRecordsPicked failed: $e',
-                              );
-                            }
-                            if (!context.mounted) return;
-                            Navigator.of(context)
-                                .pop(_selectedItems.values.toList());
-                          },
+                            ? null
+                            : () async {
+                                // Guard re-entrancy synchronously BEFORE the
+                                // await: a second tap while the resolver runs
+                                // must not re-enter and double-pop.
+                                if (_resultDelivered ||
+                                    _pendingSelectionReads.isNotEmpty) {
+                                  return;
+                                }
+                                _resultDelivered = true;
+                                // Path resolution (onRecordsPicked) runs before
+                                // the pop; a throwing resolver must not leave
+                                // the dialog hanging open.
+                                try {
+                                  await widget.config.onRecordsPicked?.call(
+                                    _selectedRecords.values.toList(),
+                                  );
+                                } catch (e) {
+                                  debugPrint(
+                                    '[MediaPicker] onRecordsPicked failed: $e',
+                                  );
+                                }
+                                if (!context.mounted) return;
+                                Navigator.of(context)
+                                    .pop(_selectedItems.values.toList());
+                              },
                     icon: const Icon(Icons.check, size: 18),
                     label: ConstrainedText(
                       hasSelection
                           ? AppLocalizations.of(context)!
-                                .appMediaConfirmSelectionCount(
-                                  _selectedItems.length,
-                                )
+                              .appMediaConfirmSelectionCount(
+                              _selectedItems.length,
+                            )
                           : AppLocalizations.of(context)!
-                                .appMediaConfirmSelection,
+                              .appMediaConfirmSelection,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -163,10 +163,10 @@ class TextCreatePageState extends State<TextCreatePage> {
                   child: TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!
-                          .textCreateTitleLabel,
-                      hintText: AppLocalizations.of(context)!
-                          .textCreateTitleHint,
+                      labelText:
+                          AppLocalizations.of(context)!.textCreateTitleLabel,
+                      hintText:
+                          AppLocalizations.of(context)!.textCreateTitleHint,
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -180,8 +180,8 @@ class TextCreatePageState extends State<TextCreatePage> {
                     isExpanded: true,
                     initialValue: _selectedFormat,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!
-                          .textCreateFormatLabel,
+                      labelText:
+                          AppLocalizations.of(context)!.textCreateFormatLabel,
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 12,
@@ -216,8 +216,8 @@ class TextCreatePageState extends State<TextCreatePage> {
               child: TextField(
                 controller: _contentController,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!
-                      .textCreateContentLabel,
+                  labelText:
+                      AppLocalizations.of(context)!.textCreateContentLabel,
                   hintText: AppLocalizations.of(context)!.textCreateContentHint,
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,

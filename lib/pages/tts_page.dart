@@ -70,9 +70,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           .where((t) => t.status == TaskStatus.running)
           .toList();
       if (runningTasks.isNotEmpty) {
-        final errorMsg = state == AppLifecycleState.detached
-            ? '应用已退出，合成中断'
-            : '应用进入后台，合成中断';
+        final errorMsg =
+            state == AppLifecycleState.detached ? '应用已退出，合成中断' : '应用进入后台，合成中断';
         ref
             .read(taskListProvider.notifier)
             .failAllRunningTasks(error: errorMsg);
@@ -583,9 +582,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             files: archiveFiles,
             folders: {
               ...names,
-              ...ref
-                  .read(folderListProvider)
-                  .where(
+              ...ref.read(folderListProvider).where(
                     (folder) => names.any(
                       (name) => folder == name || folder.startsWith('$name/'),
                     ),
@@ -624,9 +621,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       final selectedFolders = <String>{
         ...names,
-        ...ref
-            .read(folderListProvider)
-            .where(
+        ...ref.read(folderListProvider).where(
               (folder) => names.any(
                 (name) => folder == name || folder.startsWith('$name/'),
               ),

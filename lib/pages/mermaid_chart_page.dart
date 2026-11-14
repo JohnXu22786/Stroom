@@ -125,9 +125,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   void initState() {
     super.initState();
-    _editorMode = widget.initialShowPreview
-        ? EditorMode.split
-        : EditorMode.edit;
+    _editorMode =
+        widget.initialShowPreview ? EditorMode.split : EditorMode.edit;
   }
 
   @override
@@ -257,10 +256,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     final currentCode = _codeController.text;
     final snippetWithUniqueDiagramEntityId =
         MermaidTemplates.assignUniqueDiagramEntityId(
-          currentCode,
-          snippet,
-          _selectedTypeId,
-        );
+      currentCode,
+      snippet,
+      _selectedTypeId,
+    );
     final snippetWithUniqueFlowchartSubgraphId = _selectedTypeId == 'flowchart'
         ? MermaidTemplates.assignUniqueFlowchartSubgraphId(
             currentCode,
@@ -275,9 +274,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         : snippetWithUniqueFlowchartSubgraphId;
     final snippetWithUniqueRequirementId =
         MermaidTemplates.assignUniqueRequirementId(
-          currentCode,
-          snippetWithUniqueFlowchartNodeIds,
-        );
+      currentCode,
+      snippetWithUniqueFlowchartNodeIds,
+    );
     final insertionPoint = currentCode.lastIndexOf('\n');
     if (insertionPoint >= 0) {
       final codeToPreserve = currentCode.endsWith('\n')
@@ -439,11 +438,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
-      final saveName = existingRecord == null
-          ? '$baseName-$typeLabel'
-          : baseName;
+      final saveName =
+          existingRecord == null ? '$baseName-$typeLabel' : baseName;
       widget.testOnlyBeforeChartFolderNameLock?.call();
-      final finalName = await MermaidFolderNameLock.withLock(selectedFolder, () async {
+      final finalName =
+          await MermaidFolderNameLock.withLock(selectedFolder, () async {
         // Name selection and record publication must stay together so a
         // concurrent Mermaid save sees the newly published name.
         final records = await TextManifest.loadRecordsUncached();
@@ -628,8 +627,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           else
             IconButton(
               icon: const Icon(Icons.save, size: 20),
-              tooltip: AppLocalizations.of(context)!
-                  .mermaidEditorSaveToTextStorage,
+              tooltip:
+                  AppLocalizations.of(context)!.mermaidEditorSaveToTextStorage,
               onPressed: _isSaveFlowActive ? null : _saveChart,
             ),
         ],
@@ -714,10 +713,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                       index >= 2) {
                                     final currentSnippet =
                                         MermaidTemplates.getSnippets(
-                                              'requirement',
-                                              code: _codeController.text,
-                                              strings: l10n,
-                                            )
+                                      'requirement',
+                                      code: _codeController.text,
+                                      strings: l10n,
+                                    )
                                             .firstWhere(
                                               (item) => item.$1 == label,
                                               orElse: () => (label, ''),
@@ -729,18 +728,18 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                   } else {
                                     final snippetToInsert =
                                         _selectedTypeId == 'gitGraph' &&
-                                            index == 3
-                                        ? MermaidTemplates.getSnippets(
+                                                index == 3
+                                            ? MermaidTemplates.getSnippets(
                                                 'gitGraph',
                                                 code: _codeController.text,
                                                 strings: l10n,
                                               )
-                                              .firstWhere(
-                                                (item) => item.$1 == label,
-                                                orElse: () => (label, ''),
-                                              )
-                                              .$2
-                                        : snippet;
+                                                .firstWhere(
+                                                  (item) => item.$1 == label,
+                                                  orElse: () => (label, ''),
+                                                )
+                                                .$2
+                                            : snippet;
                                     if (snippetToInsert.isNotEmpty) {
                                       _insertSnippet(snippetToInsert);
                                     }
@@ -842,9 +841,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         }
 
         // Vertical layout for narrow split mode, edit mode, or preview mode
-        final editorHeight = isSplitMode
-            ? availableHeight * _splitEditorHeightRatio
-            : 0.0;
+        final editorHeight =
+            isSplitMode ? availableHeight * _splitEditorHeightRatio : 0.0;
 
         return Stack(
           children: [

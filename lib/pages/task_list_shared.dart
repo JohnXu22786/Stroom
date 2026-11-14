@@ -43,7 +43,7 @@ class TaskCard extends ConsumerWidget {
                     task.title.isNotEmpty
                         ? task.title
                         : AppLocalizations.of(context)!
-                              .unifiedTaskUnnamedRecording,
+                            .unifiedTaskUnnamedRecording,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,

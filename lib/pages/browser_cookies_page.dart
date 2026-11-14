@@ -235,8 +235,8 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
         child: _buildActionTile(
           leading: const Icon(Icons.delete_sweep, color: Colors.red),
           title: AppLocalizations.of(context)!.browserCookiesClearAllTitle,
-          subtitle: AppLocalizations.of(context)!
-              .browserCookiesClearAllDescription,
+          subtitle:
+              AppLocalizations.of(context)!.browserCookiesClearAllDescription,
           onTap: _isClearing ? null : _clearAllCookies,
           trailing: _isClearing
               ? const SizedBox(

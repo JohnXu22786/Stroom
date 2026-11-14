@@ -92,85 +92,86 @@ class AssistantSelectionPage extends ConsumerWidget {
               child: const Center(child: CircularProgressIndicator()),
             )
           : assistants.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    size: 64,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.smart_toy_outlined,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        AppLocalizations.of(context)!.assistantEmptyState,
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: ConstrainedText(
+                          AppLocalizations.of(context)!.assistantCreate,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: () =>
+                            _showCreateAssistantDialog(context, ref),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    AppLocalizations.of(context)!.assistantEmptyState,
-                    style: TextStyle(color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: ConstrainedText(
-                      AppLocalizations.of(context)!.assistantCreate,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onPressed: () => _showCreateAssistantDialog(context, ref),
-                  ),
-                ],
-              ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Center(
-                      child: Text(
-                        AppLocalizations.of(context)!.assistantReorderHint,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Center(
+                          child: Text(
+                            AppLocalizations.of(context)!.assistantReorderHint,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      DragSortArea(
+                        // 与旧 GridView 相同的几何：
+                        // SliverGridDelegateWithMaxCrossAxisExtent(
+                        //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
+                        wrap: false,
+                        grid: true,
+                        gridMaxCrossAxisExtent: 220,
+                        gridCrossAxisSpacing: 12,
+                        gridMainAxisSpacing: 12,
+                        gridChildAspectRatio: 0.85,
+                        dragDelay: const Duration(milliseconds: 600),
+                        dragHighlightColor: dragHighlightColor,
+                        draggedItemOpacity: 0.88,
+                        values: [for (final a in assistants) a.id],
+                        onReorder: (from, to) => ref
+                            .read(assistantProvider.notifier)
+                            .reorderAssistant(from, to),
+                        itemBuilder: (context, index, id) {
+                          final assistant = assistants[index];
+                          return AssistantCard(
+                            assistant: assistant,
+                            pressHighlightColor: pressHighlightColor,
+                            onTap: () =>
+                                _onAssistantSelected(context, ref, assistant),
+                            // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
+                            onMenu: () =>
+                                _showAssistantMenu(context, ref, assistant),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  DragSortArea(
-                    // 与旧 GridView 相同的几何：
-                    // SliverGridDelegateWithMaxCrossAxisExtent(
-                    //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
-                    wrap: false,
-                    grid: true,
-                    gridMaxCrossAxisExtent: 220,
-                    gridCrossAxisSpacing: 12,
-                    gridMainAxisSpacing: 12,
-                    gridChildAspectRatio: 0.85,
-                    dragDelay: const Duration(milliseconds: 600),
-                    dragHighlightColor: dragHighlightColor,
-                    draggedItemOpacity: 0.88,
-                    values: [for (final a in assistants) a.id],
-                    onReorder: (from, to) => ref
-                        .read(assistantProvider.notifier)
-                        .reorderAssistant(from, to),
-                    itemBuilder: (context, index, id) {
-                      final assistant = assistants[index];
-                      return AssistantCard(
-                        assistant: assistant,
-                        pressHighlightColor: pressHighlightColor,
-                        onTap: () =>
-                            _onAssistantSelected(context, ref, assistant),
-                        // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
-                        onMenu: () =>
-                            _showAssistantMenu(context, ref, assistant),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 
@@ -218,8 +219,8 @@ class AssistantSelectionPage extends ConsumerWidget {
               onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
               autofocusName: true,
               nameHint: AppLocalizations.of(context)!.assistantNewNameHint,
-              descriptionHint: AppLocalizations.of(context)!
-                  .assistantNewDescriptionHint,
+              descriptionHint:
+                  AppLocalizations.of(context)!.assistantNewDescriptionHint,
             ),
           ),
           actions: [
@@ -238,9 +239,7 @@ class AssistantSelectionPage extends ConsumerWidget {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                ref
-                    .read(assistantProvider.notifier)
-                    .createAssistant(
+                ref.read(assistantProvider.notifier).createAssistant(
                       name: name,
                       prompt: promptController.text.trim(),
                       emoji: selectedEmoji,

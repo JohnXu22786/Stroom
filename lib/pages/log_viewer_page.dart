@@ -366,14 +366,14 @@ class _LogViewerPageState extends State<LogViewerPage>
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _logFiles.isEmpty
-                ? _buildEmptyState(theme)
-                : RefreshIndicator(
-                    onRefresh: () async {
-                      _retryCount = 0;
-                      await _loadLogFiles();
-                    },
-                    child: _buildLogFileList(theme),
-                  ),
+                    ? _buildEmptyState(theme)
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          _retryCount = 0;
+                          await _loadLogFiles();
+                        },
+                        child: _buildLogFileList(theme),
+                      ),
           ),
         ],
       ),
@@ -473,13 +473,13 @@ class _LogViewerPageState extends State<LogViewerPage>
   /// 新格式：app_YYYY-MM-DD-HH.log → 2024-01-01 14:00
   /// 兼容旧格式：app_YYYY-MM-DD.log → 2024-01-01
   String _getFileDateLabel(String fileName) {
-    final hourMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})-(\d{2})\.log')
-        .firstMatch(fileName);
+    final hourMatch =
+        RegExp(r'app_(\d{4}-\d{2}-\d{2})-(\d{2})\.log').firstMatch(fileName);
     if (hourMatch != null) {
       return '${hourMatch.group(1)} ${hourMatch.group(2)}:00';
     }
-    final dayMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log')
-        .firstMatch(fileName);
+    final dayMatch =
+        RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log').firstMatch(fileName);
     if (dayMatch != null) {
       return dayMatch.group(1)!;
     }
@@ -695,11 +695,11 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
 }
 
 String _logLevelLabel(AppLocalizations l10n, LogLevel level) => switch (level) {
-  LogLevel.debug => l10n.appLogLevelDebug,
-  LogLevel.info => l10n.appLogLevelInfo,
-  LogLevel.warning => l10n.appLogLevelWarning,
-  LogLevel.error => l10n.appLogLevelError,
-};
+      LogLevel.debug => l10n.appLogLevelDebug,
+      LogLevel.info => l10n.appLogLevelInfo,
+      LogLevel.warning => l10n.appLogLevelWarning,
+      LogLevel.error => l10n.appLogLevelError,
+    };
 
 // ====================================================================
 // 日志内容查看页面
@@ -797,9 +797,8 @@ class _LogContentPageState extends State<LogContentPage> {
 
   void _scrollToBottom() {
     if (!mounted) return;
-    final controller = _showRaw
-        ? _rawScrollController
-        : _structuredScrollController;
+    final controller =
+        _showRaw ? _rawScrollController : _structuredScrollController;
     if (!controller.hasClients) return;
     controller.jumpTo(controller.position.maxScrollExtent);
   }
@@ -832,9 +831,8 @@ class _LogContentPageState extends State<LogContentPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final nowRaw = _showRaw;
-      final target = nowRaw
-          ? _rawScrollController
-          : _structuredScrollController;
+      final target =
+          nowRaw ? _rawScrollController : _structuredScrollController;
       if (!target.hasClients) return;
 
       final double? saved = nowRaw ? _rawSavedOffset : _structuredSavedOffset;
@@ -901,8 +899,8 @@ class _LogContentPageState extends State<LogContentPage> {
           if (_levelFilter != null && entry.level != _levelFilter) return false;
           if (_sourceFilter.trim().isNotEmpty &&
               !(entry.source ?? '').toLowerCase().contains(
-                _sourceFilter.trim().toLowerCase(),
-              )) {
+                    _sourceFilter.trim().toLowerCase(),
+                  )) {
             return false;
           }
           if ((_fromTime != null || _untilTime != null) &&
@@ -944,44 +942,40 @@ class _LogContentPageState extends State<LogContentPage> {
   }
 
   static List<_ParsedLogLine> _parseLines(String content) {
-    return content
-        .split('\n')
-        .map((line) {
-          if (line.trim().isEmpty) {
-            return _ParsedLogLine(text: line, isEmpty: true);
-          }
-          final match = _levelPattern.firstMatch(line);
-          final entryMatch = _logEntryPattern.firstMatch(line);
-          final timestamp = entryMatch == null
-              ? null
-              : DateTime.tryParse(entryMatch.group(1)!);
-          if (match == null) {
-            return _ParsedLogLine(
-              text: line,
-              isEmpty: false,
-              timestamp: timestamp,
-              level: entryMatch?.group(2),
-              source: entryMatch?.group(3),
-            );
-          }
-          final (Color?, IconData?) levelStyle = switch (match.group(1)!) {
-            'ERROR' => (Colors.red, Icons.error_outline),
-            'WARN' => (Colors.orange, Icons.warning_amber_rounded),
-            'INFO' => (Colors.blue, Icons.info_outline),
-            'DEBUG' => (Colors.grey, Icons.bug_report_outlined),
-            _ => (null, null),
-          };
-          return _ParsedLogLine(
-            text: line,
-            isEmpty: false,
-            color: levelStyle.$1,
-            icon: levelStyle.$2,
-            timestamp: timestamp,
-            level: entryMatch?.group(2) ?? match.group(1),
-            source: entryMatch?.group(3),
-          );
-        })
-        .toList(growable: false);
+    return content.split('\n').map((line) {
+      if (line.trim().isEmpty) {
+        return _ParsedLogLine(text: line, isEmpty: true);
+      }
+      final match = _levelPattern.firstMatch(line);
+      final entryMatch = _logEntryPattern.firstMatch(line);
+      final timestamp =
+          entryMatch == null ? null : DateTime.tryParse(entryMatch.group(1)!);
+      if (match == null) {
+        return _ParsedLogLine(
+          text: line,
+          isEmpty: false,
+          timestamp: timestamp,
+          level: entryMatch?.group(2),
+          source: entryMatch?.group(3),
+        );
+      }
+      final (Color?, IconData?) levelStyle = switch (match.group(1)!) {
+        'ERROR' => (Colors.red, Icons.error_outline),
+        'WARN' => (Colors.orange, Icons.warning_amber_rounded),
+        'INFO' => (Colors.blue, Icons.info_outline),
+        'DEBUG' => (Colors.grey, Icons.bug_report_outlined),
+        _ => (null, null),
+      };
+      return _ParsedLogLine(
+        text: line,
+        isEmpty: false,
+        color: levelStyle.$1,
+        icon: levelStyle.$2,
+        timestamp: timestamp,
+        level: entryMatch?.group(2) ?? match.group(1),
+        source: entryMatch?.group(3),
+      );
+    }).toList(growable: false);
   }
 
   @override
@@ -1039,9 +1033,8 @@ class _LogContentPageState extends State<LogContentPage> {
         children: [
           if (_showFilters) _buildFilterPanel(l10n),
           Expanded(
-            child: _showRaw
-                ? _buildRawView(theme)
-                : _buildStructuredView(theme),
+            child:
+                _showRaw ? _buildRawView(theme) : _buildStructuredView(theme),
           ),
         ],
       ),
@@ -1145,14 +1138,14 @@ class _LogContentPageState extends State<LogContentPage> {
                 tooltip: l10n.appLogClearFilters,
                 onPressed: _hasActiveFilters
                     ? () => setState(() {
-                        _keyword = '';
-                        _sourceFilter = '';
-                        _keywordController.clear();
-                        _sourceController.clear();
-                        _levelFilter = null;
-                        _fromTime = null;
-                        _untilTime = null;
-                      })
+                          _keyword = '';
+                          _sourceFilter = '';
+                          _keywordController.clear();
+                          _sourceController.clear();
+                          _levelFilter = null;
+                          _fromTime = null;
+                          _untilTime = null;
+                        })
                     : null,
                 icon: const Icon(Icons.clear_all),
               ),

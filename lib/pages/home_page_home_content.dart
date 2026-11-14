@@ -61,52 +61,52 @@ class HomeStatusLabel extends StatelessWidget {
 /// CPU-bound extraction pipelines.
 final homeStatusCountsProvider =
     Provider<({int inProgress, int completed, int failed})>((ref) {
-      final bgTasks = ref.watch(backgroundTasksProvider);
-      final catcatchTasks = ref.watch(catcatchTasksProvider);
-      final synthesisTasks = ref.watch(taskListProvider);
-      final flowExecutions = ref.watch(taskFlowExecutionsProvider);
+  final bgTasks = ref.watch(backgroundTasksProvider);
+  final catcatchTasks = ref.watch(catcatchTasksProvider);
+  final synthesisTasks = ref.watch(taskListProvider);
+  final flowExecutions = ref.watch(taskFlowExecutionsProvider);
 
-      final flowSubTaskIds = <String>{
-        for (final e in flowExecutions)
-          for (final st in e.subTasks) st.subTaskId,
-      };
+  final flowSubTaskIds = <String>{
+    for (final e in flowExecutions)
+      for (final st in e.subTasks) st.subTaskId,
+  };
 
-      int inProgress = 0, completed = 0, failed = 0;
+  int inProgress = 0, completed = 0, failed = 0;
 
-      void addStatus(String statusName) {
-        if (statusName == 'running' ||
-            statusName == 'paused' ||
-            statusName == 'waiting') {
-          inProgress++;
-        } else if (statusName == 'completed') {
-          completed++;
-        } else if (statusName == 'failed') {
-          failed++;
-        }
-      }
+  void addStatus(String statusName) {
+    if (statusName == 'running' ||
+        statusName == 'paused' ||
+        statusName == 'waiting') {
+      inProgress++;
+    } else if (statusName == 'completed') {
+      completed++;
+    } else if (statusName == 'failed') {
+      failed++;
+    }
+  }
 
-      void addTaskIfStandalone(String id, String statusName) {
-        if (flowSubTaskIds.contains(id)) return;
-        addStatus(statusName);
-      }
+  void addTaskIfStandalone(String id, String statusName) {
+    if (flowSubTaskIds.contains(id)) return;
+    addStatus(statusName);
+  }
 
-      for (final t in bgTasks) {
-        addTaskIfStandalone(t.id, t.status.name);
-      }
-      for (final t in catcatchTasks) {
-        addTaskIfStandalone(t.id, t.status.name);
-      }
-      for (final t in synthesisTasks) {
-        addTaskIfStandalone(t.id, t.status.name);
-      }
-      // Each flow execution is exactly one card in the unified task list —
-      // count it once, matching what the user sees there.
-      for (final e in flowExecutions) {
-        addStatus(e.status.name);
-      }
+  for (final t in bgTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  for (final t in catcatchTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  for (final t in synthesisTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  // Each flow execution is exactly one card in the unified task list —
+  // count it once, matching what the user sees there.
+  for (final e in flowExecutions) {
+    addStatus(e.status.name);
+  }
 
-      return (inProgress: inProgress, completed: completed, failed: failed);
-    });
+  return (inProgress: inProgress, completed: completed, failed: failed);
+});
 
 extension _HomePageHomeContentExt on _HomePageState {
   /// 构建模块化首页内容
@@ -419,7 +419,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                       text: taskFlows.isEmpty
                           ? AppLocalizations.of(context)!.homeTaskFlowEmpty
                           : AppLocalizations.of(context)!
-                                .homeTaskFlowManage(taskFlows.length),
+                              .homeTaskFlowManage(taskFlows.length),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onSurfaceVariant,

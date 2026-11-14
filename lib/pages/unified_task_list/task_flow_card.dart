@@ -48,8 +48,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   void initState() {
     super.initState();
     // A restored failed run has no status transition for ref.listen to catch.
-    final initialStatus =
-        ref
+    final initialStatus = ref
             .read(taskFlowExecutionsProvider)
             .where((execution) => execution.id == widget.execution.id)
             .firstOrNull
@@ -238,40 +237,40 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   Widget _flowStatusIcon(TaskFlowExecution execution, ColorScheme cs) {
     return switch (execution.status) {
       FlowExecutionStatus.running => SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary),
-      ),
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary),
+        ),
       FlowExecutionStatus.completed => const Icon(
-        Icons.check_circle,
-        size: 20,
-        color: Colors.green,
-      ),
+          Icons.check_circle,
+          size: 20,
+          color: Colors.green,
+        ),
       FlowExecutionStatus.failed => Icon(
-        Icons.error,
-        size: 20,
-        color: cs.error,
-      ),
+          Icons.error,
+          size: 20,
+          color: cs.error,
+        ),
       FlowExecutionStatus.paused => const Icon(
-        Icons.pause_circle,
-        size: 20,
-        color: Colors.orange,
-      ),
+          Icons.pause_circle,
+          size: 20,
+          color: Colors.orange,
+        ),
       FlowExecutionStatus.cancelled => Icon(
-        Icons.cancel_outlined,
-        size: 20,
-        color: cs.onSurfaceVariant,
-      ),
+          Icons.cancel_outlined,
+          size: 20,
+          color: cs.onSurfaceVariant,
+        ),
       FlowExecutionStatus.interrupted => const Icon(
-        Icons.warning_amber,
-        size: 20,
-        color: Colors.orange,
-      ),
+          Icons.warning_amber,
+          size: 20,
+          color: Colors.orange,
+        ),
       FlowExecutionStatus.waiting => Icon(
-        Icons.hourglass_empty,
-        size: 20,
-        color: cs.onSurfaceVariant,
-      ),
+          Icons.hourglass_empty,
+          size: 20,
+          color: cs.onSurfaceVariant,
+        ),
     };
   }
 
@@ -316,13 +315,11 @@ class _ExpandedContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
-    final restoreReady =
-        ref.watch(taskFlowExecutionRestoreStatusProvider) ==
+    final restoreReady = ref.watch(taskFlowExecutionRestoreStatusProvider) ==
         FlowExecutionRestoreStatus.ready;
     final executions = ref.watch(taskFlowExecutionsProvider);
     final execution = executions.where((e) => e.id == executionId).firstOrNull;
-    final hasBatchWork =
-        execution != null &&
+    final hasBatchWork = execution != null &&
         hasUnfinishedFlowBatchMember(execution, executions);
 
     final catcatchTasks = ref.watch(catcatchTasksProvider);
@@ -598,8 +595,7 @@ class _ExpandedContent extends ConsumerWidget {
         .where((e) => e.id == execId)
         .firstOrNull;
     final isRunning = execution != null && !execution.isTerminal;
-    final cancelsBatch =
-        execution != null &&
+    final cancelsBatch = execution != null &&
         hasUnfinishedFlowBatchMember(
           execution,
           ref.read(taskFlowExecutionsProvider),
@@ -619,10 +615,10 @@ class _ExpandedContent extends ConsumerWidget {
           cancelsBatch
               ? strings.taskFlowCardDeleteBatchConfirm
               : isRunning
-              ? strings.taskFlowCardDeleteRunningConfirm
-              : execution != null && execution.subTasks.isNotEmpty
-              ? strings.taskFlowCardDeleteRecordConfirm
-              : strings.taskFlowCardDeleteConfirm,
+                  ? strings.taskFlowCardDeleteRunningConfirm
+                  : execution != null && execution.subTasks.isNotEmpty
+                      ? strings.taskFlowCardDeleteRecordConfirm
+                      : strings.taskFlowCardDeleteConfirm,
         ),
         actions: [
           TextButton(
@@ -674,9 +670,8 @@ class _ExpandedContent extends ConsumerWidget {
                   )) {
                     continue;
                   }
-                  final latest = snapshot
-                      .where((e) => e.id == execId)
-                      .firstOrNull;
+                  final latest =
+                      snapshot.where((e) => e.id == execId).firstOrNull;
                   if (latest != null && !latest.isTerminal) {
                     throw StateError(strings.taskFlowCardStillRunning);
                   }
@@ -865,41 +860,41 @@ class _ExpandedContent extends ConsumerWidget {
   Widget _statusIcon(FlowStepOutcome outcome, ColorScheme cs) =>
       switch (outcome) {
         FlowStepOutcome.running => SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-        ),
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+          ),
         FlowStepOutcome.succeeded => const Icon(
-          Icons.check_circle,
-          size: 16,
-          color: Colors.green,
-        ),
+            Icons.check_circle,
+            size: 16,
+            color: Colors.green,
+          ),
         FlowStepOutcome.failed => Icon(Icons.error, size: 16, color: cs.error),
         FlowStepOutcome.paused => const Icon(
-          Icons.pause_circle,
-          size: 16,
-          color: Colors.orange,
-        ),
+            Icons.pause_circle,
+            size: 16,
+            color: Colors.orange,
+          ),
         FlowStepOutcome.skipped => Icon(
-          Icons.skip_next,
-          size: 16,
-          color: cs.onSurfaceVariant,
-        ),
+            Icons.skip_next,
+            size: 16,
+            color: cs.onSurfaceVariant,
+          ),
         FlowStepOutcome.cancelled => Icon(
-          Icons.cancel_outlined,
-          size: 16,
-          color: cs.onSurfaceVariant,
-        ),
+            Icons.cancel_outlined,
+            size: 16,
+            color: cs.onSurfaceVariant,
+          ),
         FlowStepOutcome.interrupted => const Icon(
-          Icons.warning_amber,
-          size: 16,
-          color: Colors.orange,
-        ),
+            Icons.warning_amber,
+            size: 16,
+            color: Colors.orange,
+          ),
         FlowStepOutcome.pending => Icon(
-          Icons.hourglass_empty,
-          size: 16,
-          color: cs.onSurfaceVariant,
-        ),
+            Icons.hourglass_empty,
+            size: 16,
+            color: cs.onSurfaceVariant,
+          ),
       };
 }
 

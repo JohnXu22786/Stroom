@@ -143,9 +143,8 @@ void showAssistantFullEditDialog(
                         }),
                         onDefaultToolsChanged: (next) => setDlgState(() {
                           // null = 恢复"未配置"（新话题重新自动启用全部工具）。
-                          vars.defaultToolNames = next == null
-                              ? null
-                              : Set<String>.from(next);
+                          vars.defaultToolNames =
+                              next == null ? null : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
                         onEnableMaxToolOutputCharsChanged: (v) => setDlgState(
@@ -176,9 +175,7 @@ void showAssistantFullEditDialog(
               if (name.isEmpty) return;
 
               // Update basic info
-              ref
-                  .read(assistantProvider.notifier)
-                  .updateAssistant(
+              ref.read(assistantProvider.notifier).updateAssistant(
                     id: assistant.id,
                     name: name,
                     prompt: promptController.text.trim(),
@@ -187,9 +184,7 @@ void showAssistantFullEditDialog(
                   );
 
               // Update settings
-              ref
-                  .read(assistantProvider.notifier)
-                  .updateAssistantSettings(
+              ref.read(assistantProvider.notifier).updateAssistantSettings(
                     assistantId: assistant.id,
                     temperature: vars.temperature,
                     enableTemperature: vars.enableTemperature,
@@ -232,29 +227,26 @@ void showAssistantFullEditDialog(
                 providerName: assistant.defaultProviderName,
                 displayName: assistant.defaultModelName,
               );
-              final modelStale =
-                  (assistant.defaultModelName != null ||
+              final modelStale = (assistant.defaultModelName != null ||
                       assistant.defaultModelId != null) &&
                   defaultRef == null;
-              ref
-                  .read(assistantProvider.notifier)
-                  .updateAssistantDefaults(
+              ref.read(assistantProvider.notifier).updateAssistantDefaults(
                     id: assistant.id,
                     defaultModelName: vars.defaultsModelEngaged
                         ? vars.defaultModelName
                         : modelStale
-                        ? null
-                        : assistant.defaultModelName,
+                            ? null
+                            : assistant.defaultModelName,
                     defaultModelId: vars.defaultsModelEngaged
                         ? vars.defaultModelId
                         : modelStale
-                        ? null
-                        : assistant.defaultModelId,
+                            ? null
+                            : assistant.defaultModelId,
                     defaultProviderName: vars.defaultsModelEngaged
                         ? vars.defaultProviderName
                         : modelStale
-                        ? null
-                        : assistant.defaultProviderName,
+                            ? null
+                            : assistant.defaultProviderName,
                     // 默认工具集合：仅在用户改过（engaged）时写入；
                     // 从未配置的助手保持 null（新话题自动启用全部工具）。
                     // "恢复未配置"入口（clearDefaultToolNames）已随

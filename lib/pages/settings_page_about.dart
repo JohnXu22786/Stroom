@@ -70,7 +70,7 @@ extension _SettingsPageAboutExt on _SettingsPageState {
               title: AppLocalizations.of(context)!.aboutCheckUpdates,
               subtitle: updateState.updateAvailable
                   ? AppLocalizations.of(context)!
-                        .aboutNewVersionFound(updateState.latestVersion!)
+                      .aboutNewVersionFound(updateState.latestVersion!)
                   : null,
               trailing: updateState.updateAvailable
                   ? Container(
@@ -93,13 +93,12 @@ extension _SettingsPageAboutExt on _SettingsPageState {
             _buildListTile(
               leading: Icon(
                 Icons.science,
-                color: updateState.acceptPreRelease
-                    ? Colors.orange
-                    : Colors.grey,
+                color:
+                    updateState.acceptPreRelease ? Colors.orange : Colors.grey,
               ),
               title: AppLocalizations.of(context)!.aboutPreviewUpdates,
-              subtitle: AppLocalizations.of(context)!
-                  .aboutPreviewUpdatesDescription,
+              subtitle:
+                  AppLocalizations.of(context)!.aboutPreviewUpdatesDescription,
               trailing: Switch(
                 value: updateState.acceptPreRelease,
                 onChanged: (value) {

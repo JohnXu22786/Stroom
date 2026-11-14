@@ -50,7 +50,9 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         _InfoRow(
           'assistants',
           '对象列表',
-          isZh ? '每项包含助手摘要、版本、文件路径、格式和 SHA-256。' : 'Entries include summary, version, file path, format, and SHA-256.',
+          isZh
+              ? '每项包含助手摘要、版本、文件路径、格式和 SHA-256。'
+              : 'Entries include summary, version, file path, format, and SHA-256.',
         ),
         _InfoRow(
           'file',
@@ -148,7 +150,9 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         _InfoRow(
           'maxToolCalls / enableMaxToolCalls',
           '正整数 / bool',
-          isZh ? '最大工具调用轮数；UI 接受任意正整数，运行时最多按 100 轮执行；关闭开关表示不限。' : 'Tool-call rounds; the UI accepts any positive integer and runtime execution is capped at 100 rounds; disabled means unlimited.',
+          isZh
+              ? '最大工具调用轮数；UI 接受任意正整数，运行时最多按 100 轮执行；关闭开关表示不限。'
+              : 'Tool-call rounds; the UI accepts any positive integer and runtime execution is capped at 100 rounds; disabled means unlimited.',
         ),
         _InfoRow(
           'streamOutput',
@@ -194,19 +198,25 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
         _InfoRow(
           'defaultModelName',
           '当前设备已配置的模型',
-          isZh ? '值必须匹配本机模型；不匹配时接入后不设默认模型。' : 'Must match a model configured on this device; otherwise no default model is applied.',
+          isZh
+              ? '值必须匹配本机模型；不匹配时接入后不设默认模型。'
+              : 'Must match a model configured on this device; otherwise no default model is applied.',
         ),
         _InfoRow(
           'defaultModelId / defaultProviderName',
           '字符串',
-          isZh ? '模型 ID 与供应商名应对应本机配置，用于稳定识别。' : 'Should identify a model and provider configured on this device.',
+          isZh
+              ? '模型 ID 与供应商名应对应本机配置，用于稳定识别。'
+              : 'Should identify a model and provider configured on this device.',
         ),
         _InfoRow(
           'defaultToolNames',
           supportedToolNames.isEmpty
               ? '字符串列表（当前未发现可用工具）'
               : (supportedToolNames.toList()..sort()).join(', '),
-          isZh ? '每项必须是当前设备可用的 Stroom 工具名；空列表表示全部关闭；省略表示保留应用默认行为。' : 'Each value must be a Stroom tool available on this device; an empty list disables all tools, while omission keeps app defaults.',
+          isZh
+              ? '每项必须是当前设备可用的 Stroom 工具名；空列表表示全部关闭；省略表示保留应用默认行为。'
+              : 'Each value must be a Stroom tool available on this device; an empty list disables all tools, while omission keeps app defaults.',
         ),
         _InfoRow(
           'extensions',

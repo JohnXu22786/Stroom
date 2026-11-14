@@ -56,9 +56,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
                         label: ConstrainedText(
                           segmentsExpanded
                               ? AppLocalizations.of(ctx)!
-                                    .mediaCollapseSegments(segmentCount)
+                                  .mediaCollapseSegments(segmentCount)
                               : AppLocalizations.of(ctx)!
-                                    .mediaExpandSegments(segmentCount),
+                                  .mediaExpandSegments(segmentCount),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -115,9 +115,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                           ? Icons.audiotrack
                                           : Icons.videocam,
                                       size: 18,
-                                      color: isAudio
-                                          ? Colors.purple
-                                          : Colors.blue,
+                                      color:
+                                          isAudio ? Colors.purple : Colors.blue,
                                     ),
                                     const SizedBox(width: 8),
                                     Icon(
@@ -143,22 +142,24 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                 ),
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 5,
-                                                      vertical: 2,
-                                                    ),
+                                                  horizontal: 5,
+                                                  vertical: 2,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: media.isPlaylistSegment
                                                       ? Colors.orange
-                                                            .withValues(
-                                                              alpha: 0.12,
-                                                            )
-                                                      : media.isPlaylist
-                                                      ? Colors.blue.withValues(
+                                                          .withValues(
                                                           alpha: 0.12,
                                                         )
-                                                      : Colors.teal.withValues(
-                                                          alpha: 0.12,
-                                                        ),
+                                                      : media.isPlaylist
+                                                          ? Colors.blue
+                                                              .withValues(
+                                                              alpha: 0.12,
+                                                            )
+                                                          : Colors.teal
+                                                              .withValues(
+                                                              alpha: 0.12,
+                                                            ),
                                                   borderRadius:
                                                       BorderRadius.circular(8),
                                                 ),
@@ -166,22 +167,27 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                   media.isPlaylistSegment
                                                       ? AppLocalizations.of(
                                                           ctx,
-                                                        )!.mediaSegment
+                                                        )!
+                                                          .mediaSegment
                                                       : media.isPlaylist
-                                                      ? AppLocalizations.of(
-                                                          ctx,
-                                                        )!.mediaPlaylist
-                                                      : AppLocalizations.of(
-                                                          ctx,
-                                                        )!.mediaFullVideo,
+                                                          ? AppLocalizations.of(
+                                                              ctx,
+                                                            )!
+                                                              .mediaPlaylist
+                                                          : AppLocalizations.of(
+                                                              ctx,
+                                                            )!
+                                                              .mediaFullVideo,
                                                   style: TextStyle(
                                                     fontSize: 10,
-                                                    color:
-                                                        media.isPlaylistSegment
+                                                    color: media
+                                                            .isPlaylistSegment
                                                         ? Colors.orange.shade800
                                                         : media.isPlaylist
-                                                        ? Colors.blue.shade800
-                                                        : Colors.teal.shade800,
+                                                            ? Colors
+                                                                .blue.shade800
+                                                            : Colors
+                                                                .teal.shade800,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
@@ -206,11 +212,11 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                             Text(
                                               AppLocalizations.of(ctx)!
                                                   .mediaDuration(
-                                                    formatDurationShort(
-                                                      media.duration!,
-                                                      AppLocalizations.of(ctx)!,
-                                                    ),
-                                                  ),
+                                                formatDurationShort(
+                                                  media.duration!,
+                                                  AppLocalizations.of(ctx)!,
+                                                ),
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)
@@ -223,9 +229,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                             Text(
                                               AppLocalizations.of(ctx)!
                                                   .mediaResolution(
-                                                    media.width!,
-                                                    media.height!,
-                                                  ),
+                                                media.width!,
+                                                media.height!,
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)
@@ -240,9 +246,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                       IconButton(
                                         icon: Icon(
                                           Icons.play_circle_filled,
-                                          color: Theme.of(ctx)
-                                              .colorScheme
-                                              .primary,
+                                          color:
+                                              Theme.of(ctx).colorScheme.primary,
                                           size: 22,
                                         ),
                                         tooltip: AppLocalizations.of(ctx)!
@@ -297,19 +302,18 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 ),
               ),
               FilledButton(
-                onPressed:
-                    selectedIdentities.isNotEmpty ||
+                onPressed: selectedIdentities.isNotEmpty ||
                         (mediaList.length == 1 && visibleResources.length == 1)
                     ? () {
                         final selectedMediaList = mediaList.length == 1
                             ? mediaList
                             : mediaList
-                                  .where(
-                                    (m) => selectedIdentities.contains(
-                                      m.selectionIdentity,
-                                    ),
-                                  )
-                                  .toList();
+                                .where(
+                                  (m) => selectedIdentities.contains(
+                                    m.selectionIdentity,
+                                  ),
+                                )
+                                .toList();
                         Navigator.pop(ctx);
                         ref
                             .read(catcatchTasksProvider.notifier)
@@ -319,7 +323,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 child: ConstrainedText(
                   selectedIdentities.isNotEmpty
                       ? AppLocalizations.of(ctx)!
-                            .mediaDownloadSelected(selectedIdentities.length)
+                          .mediaDownloadSelected(selectedIdentities.length)
                       : AppLocalizations.of(ctx)!.mediaConfirmDownload,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

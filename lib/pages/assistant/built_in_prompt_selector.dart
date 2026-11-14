@@ -42,9 +42,7 @@ class _BuiltInPromptSelectorDialogState
     setState(() => _addingIndices.add(index));
 
     // Immediately create the assistant (synchronous operation)
-    ref
-        .read(assistantProvider.notifier)
-        .createAssistant(
+    ref.read(assistantProvider.notifier).createAssistant(
           name: prompt.name,
           prompt: prompt.prompt,
           emoji: prompt.emoji,
@@ -114,8 +112,8 @@ class _BuiltInPromptSelectorDialogState
                     icon: const Icon(Icons.add_link),
                     tooltip:
                         Localizations.localeOf(context).languageCode == 'zh'
-                        ? '接入远程助手'
-                        : 'Connect remote assistants',
+                            ? '接入远程助手'
+                            : 'Connect remote assistants',
                     onPressed: () => showAssistantRemoteSourceDialog(
                       context,
                       ref,

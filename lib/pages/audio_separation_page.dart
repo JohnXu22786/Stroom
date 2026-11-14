@@ -89,8 +89,7 @@ Future<void> _runAudioSeparation({
   required String errorPrefix,
   Future<({Uint8List audioBytes, String hash, String format})> Function(
     SelectedVideo video,
-  )?
-  workerExtract,
+  )? workerExtract,
 }) async {
   final throttler = _BgThrottler(bgNotifier);
   final taskIds = <String>{};
@@ -119,9 +118,8 @@ Future<void> _runAudioSeparation({
         if (!isTaskLive()) continue;
         bgNotifier.setRetryData(taskId, retryData);
 
-        final result =
-            await (workerExtract?.call(video) ??
-                _workerExtract(video.bytes, video.format));
+        final result = await (workerExtract?.call(video) ??
+            _workerExtract(video.bytes, video.format));
         // Isolate.run cannot be stopped after it starts, so discard a result
         // whose task was removed before it reaches persistence.
         if (!isTaskLive()) continue;
@@ -165,15 +163,16 @@ Future<void> runAudioSeparationForTesting({
   required String saveFolder,
   required String errorPrefix,
   required Future<({Uint8List audioBytes, String hash, String format})>
-  Function(SelectedVideo video)
-  workerExtract,
-}) => _runAudioSeparation(
-  videos: videos,
-  bgNotifier: bgNotifier,
-  saveFolder: saveFolder,
-  errorPrefix: errorPrefix,
-  workerExtract: workerExtract,
-);
+          Function(SelectedVideo video)
+      workerExtract,
+}) =>
+    _runAudioSeparation(
+      videos: videos,
+      bgNotifier: bgNotifier,
+      saveFolder: saveFolder,
+      errorPrefix: errorPrefix,
+      workerExtract: workerExtract,
+    );
 
 Future<Map<String, dynamic>> _computeAudioSeparationRetryData(
   SelectedVideo video,
@@ -220,23 +219,24 @@ class _BgThrottler {
     bool? running,
     bool? failed,
     bool? skipped,
-  }) => _enqueue(
-    taskId,
-    () => _notifier.updateStep(
-      taskId,
-      index,
-      completed: completed,
-      running: running,
-      failed: failed,
-      skipped: skipped,
-    ),
-  );
+  }) =>
+      _enqueue(
+        taskId,
+        () => _notifier.updateStep(
+          taskId,
+          index,
+          completed: completed,
+          running: running,
+          failed: failed,
+          skipped: skipped,
+        ),
+      );
 
   void completeTask(String taskId, {String? downloadedFilePath}) => _enqueue(
-    taskId,
-    () =>
-        _notifier.completeTask(taskId, downloadedFilePath: downloadedFilePath),
-  );
+        taskId,
+        () => _notifier.completeTask(taskId,
+            downloadedFilePath: downloadedFilePath),
+      );
 
   void failTask(String taskId, {String? error}) =>
       _enqueue(taskId, () => _notifier.failTask(taskId, error: error));
@@ -571,7 +571,9 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(height: 24),
               Text(
                 _l10n.audioSeparationChooseVideoSource,
-                style: Theme.of(context).textTheme.titleLarge
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),

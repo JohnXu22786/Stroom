@@ -240,8 +240,7 @@ class _SystemAssistantConfigPanelState
     super.didChangeDependencies();
     final wasShowingDefault =
         !_isCustomPrompt && _promptController.text == _defaultPrompt;
-    _defaultPrompt =
-        localizedBuiltInSystemAssistantById(
+    _defaultPrompt = localizedBuiltInSystemAssistantById(
           widget.defaultAssistantId,
           AppLocalizations.of(context)!,
         )?.prompt ??
@@ -331,9 +330,8 @@ class _SystemAssistantConfigPanelState
       if (selected.isEmpty) {
         _draft = _draft.copyWithModel(clearModel: true);
       } else {
-        final resolved = _models
-            .where((m) => m.displayName == selected)
-            .firstOrNull;
+        final resolved =
+            _models.where((m) => m.displayName == selected).firstOrNull;
         _draft = _draft.copyWithModel(
           modelId: resolved?.modelId,
           providerName: resolved?.providerName,

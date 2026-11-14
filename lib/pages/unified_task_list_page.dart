@@ -182,10 +182,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           .toList();
       final executionsNotifier = ref.read(taskFlowExecutionsProvider.notifier);
       final selectedIds = selectedExecutions.map((e) => e.id).toSet();
-      final batchIds = selectedExecutions
-          .map((e) => e.batchId)
-          .whereType<String>()
-          .toSet();
+      final batchIds =
+          selectedExecutions.map((e) => e.batchId).whereType<String>().toSet();
       if (batchIds.isNotEmpty) {
         final service = ref.read(taskFlowExecutionServiceProvider);
         while (mounted) {
@@ -484,8 +482,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                             );
                             if (!await executionsNotifier
                                 .removeExecutionsPersisted(
-                                  executionsToClear.map((e) => e.id),
-                                )) {
+                              executionsToClear.map((e) => e.id),
+                            )) {
                               throw const TaskFlowPersistenceException(
                                 '任务流记录删除状态无法保存，请重试清除',
                               );

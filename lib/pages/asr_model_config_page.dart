@@ -323,8 +323,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
   Widget build(BuildContext context) {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty
-              ? widget.model!.name
-              : AppLocalizations.of(context)!.modelEditTitle)
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
         : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
@@ -511,8 +511,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
                 final name = param.paramName.trim();
-                final isDuplicate =
-                    name.isNotEmpty &&
+                final isDuplicate = name.isNotEmpty &&
                     _customParams.indexWhere(
                           (p) => p.paramName.trim() == name,
                         ) !=
@@ -536,7 +535,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   isDense: true,
                                   errorText: isDuplicate
                                       ? AppLocalizations.of(context)!
-                                            .modelParamExists
+                                          .modelParamExists
                                       : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),

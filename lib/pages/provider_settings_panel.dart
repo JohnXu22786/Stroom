@@ -167,8 +167,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   void _showMaxFileSizeError() {
     setState(() {
-      _maxFileSizeError = AppLocalizations.of(context)!
-          .providerMaxUploadSizePositive;
+      _maxFileSizeError =
+          AppLocalizations.of(context)!.providerMaxUploadSizePositive;
     });
   }
 
@@ -223,9 +223,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _ocrRequestSizeBudgetController = TextEditingController(
       text: _isOcrType && ocrRequestBudget is num
           ? (ocrRequestBudget / (1024 * 1024)).toString().replaceFirst(
-              RegExp(r'\.0$'),
-              '',
-            )
+                RegExp(r'\.0$'),
+                '',
+              )
           : '',
     );
     // Initialize JSON validation for existing params
@@ -249,17 +249,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       );
       final savedPreprocessing =
           c.typeConfig['preprocessing'] as String? ?? 'none';
-      _preprocessing = savedPreprocessing == 'resampleMono'
-          ? savedPreprocessing
-          : 'none';
+      _preprocessing =
+          savedPreprocessing == 'resampleMono' ? savedPreprocessing : 'none';
       final savedChunking = c.typeConfig['chunking'] as String? ?? 'silence';
-      _chunking =
-          const {
-            'none',
-            'silence',
-            'fixedDuration',
-            'fixedSize',
-          }.contains(savedChunking)
+      _chunking = const {
+        'none',
+        'silence',
+        'fixedDuration',
+        'fixedSize',
+      }.contains(savedChunking)
           ? savedChunking
           : 'silence';
       // Only codecs with valid standalone output are supported
@@ -271,13 +269,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           : 'none';
       final savedFallbackMethod =
           c.typeConfig['fallbackMethod'] as String? ?? 'all';
-      _fallbackMethod =
-          const {
-            'none',
-            'specific',
-            'generic',
-            'all',
-          }.contains(savedFallbackMethod)
+      _fallbackMethod = const {
+        'none',
+        'specific',
+        'generic',
+        'all',
+      }.contains(savedFallbackMethod)
           ? savedFallbackMethod
           : 'all';
     } else {

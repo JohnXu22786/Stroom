@@ -79,8 +79,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
   ) {
     final credentialHeaderNames =
         HttpToolService.credentialHeaderNamesForProvider(
-          widget.config.providerName,
-        );
+      widget.config.providerName,
+    );
     final rawHeaders = typeConfig['headers'];
     if (rawHeaders is! Map) return;
 
@@ -146,7 +146,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 SelectableText(
                   const JsonEncoder.withIndent('  ')
                       .convert(definition.parameters),
-                  style: Theme.of(context).textTheme.bodySmall
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
                       ?.copyWith(fontFamily: 'monospace'),
                 ),
               ],
@@ -215,8 +217,10 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
 
   static const _englishDescriptions = <String, Map<String, String>>{
     'todowrite': {
-      'description': 'Create, read, and manage a to-do list. Passing todos replaces the full list; omitting it reads the current list. Each item has content, status (pending, in_progress, completed, or cancelled), and priority (high, medium, or low). Use it to manage complex tasks with three or more steps.',
-      'properties.todos.description': 'Complete replacement of the to-do list. Omit this parameter to read the current list.',
+      'description':
+          'Create, read, and manage a to-do list. Passing todos replaces the full list; omitting it reads the current list. Each item has content, status (pending, in_progress, completed, or cancelled), and priority (high, medium, or low). Use it to manage complex tasks with three or more steps.',
+      'properties.todos.description':
+          'Complete replacement of the to-do list. Omit this parameter to read the current list.',
       'properties.todos.items.properties.content.description':
           'Task description.',
       'properties.todos.items.properties.status.description':
@@ -225,9 +229,11 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
           'Priority: high, medium, or low.',
     },
     'web_search': {
-      'description': 'Search the web for current information. Choose Google, Bing, or Baidu with the source parameter (Google is the default). If the preferred engine is unavailable or returns no usable results, the tool tries other engines automatically. No API key is required. Each result includes a title, link, and summary.',
+      'description':
+          'Search the web for current information. Choose Google, Bing, or Baidu with the source parameter (Google is the default). If the preferred engine is unavailable or returns no usable results, the tool tries other engines automatically. No API key is required. Each result includes a title, link, and summary.',
       'properties.query.description': 'Search terms.',
-      'properties.source.description': 'Preferred search engine: google, bing, or baidu. The tool switches automatically if it is unavailable.',
+      'properties.source.description':
+          'Preferred search engine: google, bing, or baidu. The tool switches automatically if it is unavailable.',
       'properties.count.description':
           'Number of results to return (maximum 10).',
     },
@@ -235,7 +241,8 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
 
   static const _chineseDescriptions = <String, Map<String, String>>{
     'todowrite': {
-      'description': '创建、读取并管理待办事项列表。传入 todos（完整的待办事项列表）时覆盖写入，系统将替换所有现有事项；省略 todos 参数时读取当前待办事项列表。各事项包含：content（任务描述）、status（状态：pending/in_progress/completed/cancelled）、priority（优先级：high/medium/low）。适用于 3 个以上步骤的复杂任务管理。',
+      'description':
+          '创建、读取并管理待办事项列表。传入 todos（完整的待办事项列表）时覆盖写入，系统将替换所有现有事项；省略 todos 参数时读取当前待办事项列表。各事项包含：content（任务描述）、status（状态：pending/in_progress/completed/cancelled）、priority（优先级：high/medium/low）。适用于 3 个以上步骤的复杂任务管理。',
       'properties.todos.description': '待办事项列表（全量替换）。省略该参数时读取当前待办列表。',
       'properties.todos.items.properties.content.description': '任务描述',
       'properties.todos.items.properties.status.description':
@@ -244,7 +251,8 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
           '优先级：high（高）、medium（中）、low（低）',
     },
     'web_search': {
-      'description': '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，通过 source 参数选择首选引擎（默认 google）；首选引擎不可用或未返回可解析结果时会自动尝试其他引擎。无需 API Key，免费使用。每个结果包含标题、链接和内容摘要。',
+      'description':
+          '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，通过 source 参数选择首选引擎（默认 google）；首选引擎不可用或未返回可解析结果时会自动尝试其他引擎。无需 API Key，免费使用。每个结果包含标题、链接和内容摘要。',
       'properties.query.description': '搜索关键词',
       'properties.source.description':
           '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；不可用时会自动切换',
@@ -278,8 +286,8 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
         (locale.languageCode == 'en'
             ? _englishDescriptions[definition.name]
             : locale.languageCode == 'zh'
-            ? _chineseDescriptions[definition.name]
-            : null);
+                ? _chineseDescriptions[definition.name]
+                : null);
   }
 
   Map<String, dynamic> _localizedParameters(
@@ -294,10 +302,9 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
         return <String, dynamic>{
           for (final entry in value.entries)
             entry.key as String: entry.key == 'description'
-                ? translations[path.isEmpty
-                          ? 'description'
-                          : '$path.description'] ??
-                      entry.value
+                ? translations[
+                        path.isEmpty ? 'description' : '$path.description'] ??
+                    entry.value
                 : localize(
                     entry.value,
                     path.isEmpty ? entry.key as String : '$path.${entry.key}',
@@ -347,7 +354,9 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
               SelectableText(
                 const JsonEncoder.withIndent('  ')
                     .convert(_localizedParameters(locale, strings)),
-                style: Theme.of(context).textTheme.bodySmall
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
                     ?.copyWith(fontFamily: 'monospace'),
               ),
               const SizedBox(height: 12),

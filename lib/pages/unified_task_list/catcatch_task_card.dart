@@ -22,27 +22,29 @@ import '../../widgets/constrained_text.dart';
 String _localizedCatCatchStatus(
   catcatch.TaskStatus status,
   AppLocalizations strings,
-) => switch (status) {
-  catcatch.TaskStatus.running => strings.catcatchStatusRunning,
-  catcatch.TaskStatus.completed => strings.catcatchStatusCompleted,
-  catcatch.TaskStatus.failed => strings.catcatchStatusFailed,
-  catcatch.TaskStatus.paused => strings.catcatchStatusPaused,
-  catcatch.TaskStatus.waiting => strings.catcatchStatusWaiting,
-};
+) =>
+    switch (status) {
+      catcatch.TaskStatus.running => strings.catcatchStatusRunning,
+      catcatch.TaskStatus.completed => strings.catcatchStatusCompleted,
+      catcatch.TaskStatus.failed => strings.catcatchStatusFailed,
+      catcatch.TaskStatus.paused => strings.catcatchStatusPaused,
+      catcatch.TaskStatus.waiting => strings.catcatchStatusWaiting,
+    };
 
 String _localizedCatCatchStep(
   catcatch.StepType type,
   AppLocalizations strings,
-) => switch (type) {
-  catcatch.StepType.fetching => strings.catcatchStepFetching,
-  catcatch.StepType.analyzing => strings.catcatchStepAnalyzing,
-  catcatch.StepType.parsingPlaylist => strings.catcatchStepParsingPlaylist,
-  catcatch.StepType.filtering => strings.catcatchStepFiltering,
-  catcatch.StepType.userSelecting => strings.catcatchStepUserSelecting,
-  catcatch.StepType.downloading => strings.catcatchStepDownloading,
-  catcatch.StepType.converting => strings.catcatchStepConverting,
-  catcatch.StepType.saving => strings.catcatchStepSaving,
-};
+) =>
+    switch (type) {
+      catcatch.StepType.fetching => strings.catcatchStepFetching,
+      catcatch.StepType.analyzing => strings.catcatchStepAnalyzing,
+      catcatch.StepType.parsingPlaylist => strings.catcatchStepParsingPlaylist,
+      catcatch.StepType.filtering => strings.catcatchStepFiltering,
+      catcatch.StepType.userSelecting => strings.catcatchStepUserSelecting,
+      catcatch.StepType.downloading => strings.catcatchStepDownloading,
+      catcatch.StepType.converting => strings.catcatchStepConverting,
+      catcatch.StepType.saving => strings.catcatchStepSaving,
+    };
 
 // =============================================================================
 // CatCatch 任务卡片
@@ -78,9 +80,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   void _openRecoveryPageWhenReady() {
     if (_recoveryPageOpened ||
         widget.task.status != catcatch.TaskStatus.paused ||
-        widget.task.metadata[catcatch
-                .CatCatchTask
-                .webViewRecoveryRequiredKey] !=
+        widget.task
+                .metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] !=
             'true') {
       return;
     }
@@ -100,16 +101,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     );
     if (!mounted || result == null || result.mediaUrls.isEmpty) return;
     final notifier = ref.read(catcatchTasksProvider.notifier);
-    final action = (CatCatchNotifier current) =>
-        current.continueAfterBrowserRecovery(
-          widget.task.id,
-          mediaUrls: result.mediaUrls,
-          mimeTypesByUrl: result.mimeTypesByUrl,
-          initiatorsByUrl: result.initiatorsByUrl,
-          pageUrl: result.pageUrl,
-          pageTitle: result.pageTitle,
-          cookieHeadersByUrl: result.cookieHeadersByUrl,
-        );
+    final action =
+        (CatCatchNotifier current) => current.continueAfterBrowserRecovery(
+              widget.task.id,
+              mediaUrls: result.mediaUrls,
+              mimeTypesByUrl: result.mimeTypesByUrl,
+              initiatorsByUrl: result.initiatorsByUrl,
+              pageUrl: result.pageUrl,
+              pageTitle: result.pageTitle,
+              cookieHeadersByUrl: result.cookieHeadersByUrl,
+            );
     if (widget.isFlowManaged) {
       await _performFlowAction(widget.task.id, false, action);
     } else {
@@ -204,8 +205,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   Widget build(BuildContext context) {
     final task = widget.task;
     final colorScheme = Theme.of(context).colorScheme;
-    final isSelectingMedia =
-        task.status == catcatch.TaskStatus.running &&
+    final isSelectingMedia = task.status == catcatch.TaskStatus.running &&
         task.steps.any(
           (s) => s.type == catcatch.StepType.userSelecting && s.running,
         ) &&
@@ -213,8 +213,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final viewportHeight = widget.taskListViewportHeight;
     final resourceViewportHeight =
         viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
-        ? viewportHeight * (2 / 3)
-        : MediaQuery.sizeOf(context).height * (2 / 3);
+            ? viewportHeight * (2 / 3)
+            : MediaQuery.sizeOf(context).height * (2 / 3);
     Color statusColor;
     IconData statusIcon;
     switch (task.status) {
@@ -315,13 +315,17 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                               : truncateUrl(task.url),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '${_localizedCatCatchStatus(task.status, AppLocalizations.of(context)!)} · ${task.progress}%',
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(color: statusColor),
                         ),
                         if (task.status == catcatch.TaskStatus.running) ...[
@@ -330,7 +334,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           // long download/conversion is still alive.
                           RunningElapsedLabel(
                             startedAt: task.createdAt,
-                            style: Theme.of(context).textTheme.bodySmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
                                 ?.copyWith(color: Colors.grey),
                           ),
                         ],
@@ -383,7 +389,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 child: Column(
                   children: [
                     if (_expandedSegments.contains(task.id) &&
-                        _getMediaSelectionData(task).selectableMedia
+                        _getMediaSelectionData(task)
+                            .selectableMedia
                             .any((media) => media.isPlaylistSegment))
                       _buildSegmentCollapseControl(task),
                     Expanded(
@@ -478,8 +485,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             color: step.skipped
                                 ? Colors.orange.shade300
                                 : step.completed
-                                ? Colors.green.shade300
-                                : colorScheme.outlineVariant,
+                                    ? Colors.green.shade300
+                                    : colorScheme.outlineVariant,
                           ),
                         ),
                     ],
@@ -500,18 +507,20 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                                   step.type,
                                   AppLocalizations.of(context)!,
                                 ),
-                                style: Theme.of(context).textTheme.bodyMedium
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
                                     ?.copyWith(
                                       fontWeight: FontWeight.w500,
                                       color: step.completed
                                           ? Colors.green.shade700
                                           : step.skipped
-                                          ? Colors.orange.shade700
-                                          : step.running
-                                          ? colorScheme.primary
-                                          : step.failed
-                                          ? Colors.red.shade700
-                                          : colorScheme.onSurface,
+                                              ? Colors.orange.shade700
+                                              : step.running
+                                                  ? colorScheme.primary
+                                                  : step.failed
+                                                      ? Colors.red.shade700
+                                                      : colorScheme.onSurface,
                                     ),
                               ),
                             ),
@@ -646,8 +655,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     List<MediaResource> mediaList,
     Map<String, List<MediaResource>> splitGroups,
     List<MediaResource> selectableMedia,
-  })
-  _getMediaSelectionData(catcatch.CatCatchTask task) {
+  }) _getMediaSelectionData(catcatch.CatCatchTask task) {
     final encodedCandidates = widget.isFlowManaged
         ? task.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey]
         : null;
@@ -660,16 +668,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final mediaList = allowedIdentities == null
         ? task.detectedMedia
         : task.detectedMedia
-              .where(
-                (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
-                  candidates: allowedIdentities,
-                  identity: media.selectionIdentity,
-                  url: media.url,
-                  hasByteRange: media.hasByteRange,
-                  identityVersioned: identityVersioned,
-                ),
-              )
-              .toList();
+            .where(
+              (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                candidates: allowedIdentities,
+                identity: media.selectionIdentity,
+                url: media.url,
+                hasByteRange: media.hasByteRange,
+                identityVersioned: identityVersioned,
+              ),
+            )
+            .toList();
 
     final splitGroups = <String, List<MediaResource>>{};
     for (final media in mediaList) {
@@ -679,8 +687,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     }
     final splitUrls = allowedIdentities == null
         ? splitGroups.values
-              .expand((group) => group.map((media) => media.selectionIdentity))
-              .toSet()
+            .expand((group) => group.map((media) => media.selectionIdentity))
+            .toSet()
         : <String>{
             for (final group in splitGroups.values)
               if (group.any((media) => media.isAudio) &&
@@ -698,7 +706,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   }
 
   Widget _buildSegmentCollapseControl(catcatch.CatCatchTask task) {
-    final segments = _getMediaSelectionData(task).selectableMedia
+    final segments = _getMediaSelectionData(task)
+        .selectableMedia
         .where((media) => media.isPlaylistSegment)
         .toList();
     final segmentsExpanded = _expandedSegments.contains(task.id);
@@ -719,9 +728,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           label: ConstrainedText(
             segmentsExpanded
                 ? AppLocalizations.of(context)!
-                      .catcatchCollapseSegments(segments.length)
+                    .catcatchCollapseSegments(segments.length)
                 : AppLocalizations.of(context)!
-                      .catcatchShowSegments(segments.length),
+                    .catcatchShowSegments(segments.length),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -758,8 +767,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         : null;
     final resourceHeight =
         viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
-        ? viewportHeight * (2 / 3)
-        : MediaQuery.sizeOf(context).height / 3;
+            ? viewportHeight * (2 / 3)
+            : MediaQuery.sizeOf(context).height / 3;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -771,7 +780,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             key: const Key('catcatch_selection_title'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
@@ -782,13 +793,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     mediaList.length,
                   )
                 : AppLocalizations.of(context)!
-                          .catcatchDetectedMediaResources(mediaList.length) +
-                      (widget.isFlowManaged
-                          ? AppLocalizations.of(context)!
-                                .catcatchFlowSelectOrCombine
-                          : AppLocalizations.of(context)!
-                                .catcatchSelectMultiple),
-            style: Theme.of(context).textTheme.titleSmall
+                        .catcatchDetectedMediaResources(mediaList.length) +
+                    (widget.isFlowManaged
+                        ? AppLocalizations.of(context)!
+                            .catcatchFlowSelectOrCombine
+                        : AppLocalizations.of(context)!.catcatchSelectMultiple),
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
@@ -822,33 +834,30 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       child: SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
-          onPressed:
-              selectedIdentities.isNotEmpty &&
+          onPressed: selectedIdentities.isNotEmpty &&
                   !_isFlowActionPending(task.id) &&
                   (!widget.isFlowManaged ||
                       task.status == catcatch.TaskStatus.running)
               ? () async {
                   final encodedCandidates = widget.isFlowManaged
-                      ? task.metadata[catcatch
-                            .CatCatchTask
-                            .flowSelectionCandidatesKey]
+                      ? task.metadata[
+                          catcatch.CatCatchTask.flowSelectionCandidatesKey]
                       : null;
                   final allowedIdentities = encodedCandidates == null
                       ? null
                       : (jsonDecode(encodedCandidates) as List)
-                            .cast<String>()
-                            .toSet();
+                          .cast<String>()
+                          .toSet();
                   final identityVersioned = task.metadata.containsKey(
                     catcatch
-                        .CatCatchTask
-                        .flowSelectionCandidatesIdentityVersionKey,
+                        .CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
                   );
                   final selectedMediaList = task.detectedMedia
                       .where(
                         (media) =>
                             (allowedIdentities == null ||
-                                catcatch
-                                    .CatCatchTask.flowSelectionCandidateAllowed(
+                                catcatch.CatCatchTask
+                                    .flowSelectionCandidateAllowed(
                                   candidates: allowedIdentities,
                                   identity: media.selectionIdentity,
                                   url: media.url,
@@ -896,9 +905,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             _isFlowActionPending(task.id)
                 ? AppLocalizations.of(context)!.catcatchWaitingForResources
                 : selectedIdentities.isNotEmpty
-                ? AppLocalizations.of(context)!
-                      .catcatchDownloadSelected(selectedIdentities.length)
-                : AppLocalizations.of(context)!.catcatchSelectResources,
+                    ? AppLocalizations.of(context)!
+                        .catcatchDownloadSelected(selectedIdentities.length)
+                    : AppLocalizations.of(context)!.catcatchSelectResources,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1158,9 +1167,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: isSelected
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ),
@@ -1182,18 +1190,18 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 tooltip: media.isPlaylistSegment
                     ? AppLocalizations.of(context)!
-                          .catcatchSegmentsPlaylistPreview
+                        .catcatchSegmentsPlaylistPreview
                     : isAudio
-                    ? AppLocalizations.of(context)!.catcatchPreviewAudio
-                    : AppLocalizations.of(context)!.catcatchPreviewVideo,
+                        ? AppLocalizations.of(context)!.catcatchPreviewAudio
+                        : AppLocalizations.of(context)!.catcatchPreviewVideo,
                 onPressed: media.canPreview
                     ? () => showMediaPreview(
-                        context,
-                        media,
-                        task.title.isNotEmpty
-                            ? task.title
-                            : truncateUrl(task.url),
-                      )
+                          context,
+                          media,
+                          task.title.isNotEmpty
+                              ? task.title
+                              : truncateUrl(task.url),
+                        )
                     : null,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -1227,9 +1235,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ...group.map((media) => media.url),
           }
         : splitGroups.values.expand((group) => group.map((m) => m.url)).toSet();
-    final remaining = mediaList
-        .where((m) => !splitIds.contains(m.url))
-        .toList();
+    final remaining =
+        mediaList.where((m) => !splitIds.contains(m.url)).toList();
     if (remaining.isEmpty) return [];
 
     final withDuration = <MediaResource>[];
@@ -1258,8 +1265,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       final currSec = media.duration != null
           ? parseDurationToSeconds(media.duration!)
           : null;
-      final showLabel =
-          currSec != null &&
+      final showLabel = currSec != null &&
           (lastDurationSec == null || (currSec - lastDurationSec).abs() > 5);
       if (showLabel) {
         lastDurationSec = currSec;
@@ -1360,8 +1366,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           label: media.isPlaylistSegment
                               ? AppLocalizations.of(context)!.catcatchSegment
                               : media.isPlaylist
-                              ? AppLocalizations.of(context)!.catcatchPlaylist
-                              : AppLocalizations.of(context)!.catcatchFullVideo,
+                                  ? AppLocalizations.of(context)!
+                                      .catcatchPlaylist
+                                  : AppLocalizations.of(context)!
+                                      .catcatchFullVideo,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -1369,7 +1377,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             '${media.name}.${media.ext}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
                                 ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                         ),
@@ -1380,7 +1390,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       children: [
                         Text(
                           '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                         if (media.isLikelySplitTrack) ...[
@@ -1430,9 +1442,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   child: Text(
                     media.isPlaylistSegment
                         ? AppLocalizations.of(context)!
-                              .catcatchPreviewPlaylistOnly
+                            .catcatchPreviewPlaylistOnly
                         : AppLocalizations.of(context)!
-                              .catcatchPreviewUnsupported,
+                            .catcatchPreviewUnsupported,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   ),
                 ),
@@ -1447,8 +1459,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final format =
-        task.metadata['pendingConfirmFormat'] ??
+    final format = task.metadata['pendingConfirmFormat'] ??
         AppLocalizations.of(context)!.catcatchUnknownFormat;
     final isPlaylist = task.selectedMedia?.isPlaylist ?? false;
     final pending = _isFlowActionPending(task.id);
@@ -1480,9 +1491,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   child: Text(
                     isPlaylist
                         ? AppLocalizations.of(context)!
-                              .catcatchNeedPlaylistProcessing
+                            .catcatchNeedPlaylistProcessing
                         : AppLocalizations.of(context)!
-                              .catcatchSpecialFormatDetected,
+                            .catcatchSpecialFormatDetected,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Colors.blue.shade800,
@@ -1603,7 +1614,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     resumeSupported
                         ? AppLocalizations.of(context)!.catcatchResumeSupported
                         : AppLocalizations.of(context)!
-                              .catcatchResumeUnsupported,
+                            .catcatchResumeUnsupported,
                     style: TextStyle(
                       fontSize: 11,
                       color: resumeSupported ? Colors.green : Colors.grey,

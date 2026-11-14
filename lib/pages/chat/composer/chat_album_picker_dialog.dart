@@ -39,12 +39,12 @@ Future<void> Function(String fileName)? beforeAppAlbumPickerReadForTesting;
 /// Overrides edited-image temp writes in focused async lifecycle tests.
 @visibleForTesting
 Future<void> Function(File file, Uint8List bytes)?
-beforeAppAlbumPickerTempWriteForTesting;
+    beforeAppAlbumPickerTempWriteForTesting;
 
 /// Supplies edited bytes without opening the editor in lifecycle tests.
 @visibleForTesting
 Future<Uint8List?> Function(String fileName, Uint8List imageBytes)?
-appAlbumPickerEditImageForTesting;
+    appAlbumPickerEditImageForTesting;
 
 int _appAlbumPickerTempEditCounter = 0;
 
@@ -177,7 +177,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   int get _selectionCount => _selectedItems.length + _pendingSelections.length;
 
   List<MapEntry<String, MapEntry<String, Uint8List>>>
-  get _orderedSelectedItems {
+      get _orderedSelectedItems {
     return [
       for (final key in _selectionOrder)
         if (_selectedItems.containsKey(key))
@@ -763,14 +763,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     try {
       final tempDir = await getTemporaryDirectory();
       if (!mounted) return;
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_'
+      final tempFileName = 'edited_${DateTime.now().millisecondsSinceEpoch}_'
           '${_appAlbumPickerTempEditCounter++}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
       tempPath = tempFile.path;
       _tempEditFiles.add(tempPath);
-      final write =
-          beforeAppAlbumPickerTempWriteForTesting?.call(
+      final write = beforeAppAlbumPickerTempWriteForTesting?.call(
             tempFile,
             editedImageBytes,
           ) ??

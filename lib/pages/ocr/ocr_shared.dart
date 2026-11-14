@@ -35,23 +35,23 @@ class SelectedImage {
   final Object _selectionIdentity;
 
   SelectedImage({required this.bytes, this.format = 'jpeg', this.sourceName})
-    : isPrepared = false,
-      _selectionIdentity = Object();
+      : isPrepared = false,
+        _selectionIdentity = Object();
 
   SelectedImage.fromPayload({required OcrImagePayload payload, this.sourceName})
-    : bytes = payload.bytes,
-      format = payload.format,
-      isPrepared = true,
-      _selectionIdentity = Object();
+      : bytes = payload.bytes,
+        format = payload.format,
+        isPrepared = true,
+        _selectionIdentity = Object();
 
   SelectedImage._edited(
     OcrImagePayload payload,
     this.sourceName,
     Object selectionIdentity,
-  ) : bytes = payload.bytes,
-      format = payload.format,
-      isPrepared = true,
-      _selectionIdentity = selectionIdentity;
+  )   : bytes = payload.bytes,
+        format = payload.format,
+        isPrepared = true,
+        _selectionIdentity = selectionIdentity;
 
   /// True when [other] is the same selected image, even after an edit replaces
   /// this immutable value with an updated payload.
@@ -114,13 +114,17 @@ class ChoiceCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context).textTheme.bodyMedium
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
                     ConstrainedText(
                       subtitle,
-                      style: Theme.of(context).textTheme.bodySmall
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
