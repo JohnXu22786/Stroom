@@ -226,6 +226,8 @@ class BackupService {
   static String? restoreAppDirectoryForTesting;
   @visibleForTesting
   static bool restorePathsWindowsSeparatorsForTesting = false;
+  @visibleForTesting
+  static void Function(int entryIndex)? beforeRestoreBinaryPublishForTesting;
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
     r'^recording_\d+\.m4a$',
@@ -245,6 +247,23 @@ class BackupService {
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
     bool useStartupPreferenceAdapter = false,
+  }) {
+    return _createBackup(
+      outputPath: outputPath,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+      selection: selection,
+      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+    );
+  }
+
+  static Future<String> _createBackup({
+    required String outputPath,
+    void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
+    BackupSelection selection = BackupSelection.all,
+    bool useStartupPreferenceAdapter = false,
+    bool skipMissingSelectedFiles = false,
   }) async {
     final operationClock = Stopwatch()..start();
     await AppLogService.info(
@@ -269,6 +288,7 @@ class BackupService {
         isCancelled: isCancelled,
         selection: selection,
         useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        skipMissingSelectedFiles: skipMissingSelectedFiles,
       );
       await AppLogService.info(
         'BackupService',
@@ -365,6 +385,7 @@ class BackupService {
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
     bool useStartupPreferenceAdapter = false,
+    bool skipMissingSelectedFiles = false,
   }) async {
     void checkCancelled() {
       if (isCancelled != null && isCancelled()) {
@@ -384,6 +405,7 @@ class BackupService {
       checkCancelled: checkCancelled,
       onProgress: onProgress,
       useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      skipMissingSelectedFiles: skipMissingSelectedFiles,
     );
 
     // ------------------------------------------------------------
@@ -438,6 +460,7 @@ class BackupService {
     required void Function() checkCancelled,
     void Function(double progress)? onProgress,
     bool useStartupPreferenceAdapter = false,
+    bool skipMissingSelectedFiles = false,
   }) async {
     final jsonFiles = <String, String>{};
     final memoryFiles = <String, Uint8List>{};
@@ -605,6 +628,7 @@ class BackupService {
             'task_flow_attachments/${entry.key}',
             entry.value,
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
         }
         await _addDirectoryPlanFiles(
@@ -700,6 +724,7 @@ class BackupService {
             'pictures/$hash.$format',
             p.join(appDir, 'pictures', '$hash.$format'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           await _addPlanFile(
             diskFiles,
@@ -746,6 +771,7 @@ class BackupService {
             'tts_audio/$hash.$format',
             p.join(appDir, 'tts_audio', '$hash.$format'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           await _addPlanFile(
             diskFiles,
@@ -798,6 +824,7 @@ class BackupService {
             'videos/$hash.$format',
             p.join(appDir, 'videos', '$hash.$format'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
@@ -835,6 +862,7 @@ class BackupService {
             'texts/$hash.txt',
             p.join(appDir, 'texts', '$hash.txt'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
@@ -870,6 +898,7 @@ class BackupService {
           storagePath,
           sourcePath,
           useStreaming,
+          required: !skipMissingSelectedFiles,
         );
       }
     }
@@ -2388,6 +2417,8 @@ class BackupService {
     bool skipMissingCategories = false,
     bool trustEmptyLegacyTaskPayloads = false,
     bool useStartupPreferenceAdapter = false,
+    bool skipAnkiMigrationMarkerInvalidation = false,
+    bool skipAnkiSyncIndexClear = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2462,107 +2493,216 @@ class BackupService {
       onProgress?.call(0.15);
       await _yieldToEventLoop();
 
-      // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
-      await _prepareSelectedFilesForRestore(
-        restoreSelection,
-        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
-        taskFilesToReplace: metadata.taskFilesToReplace,
-        completeFileInventories: metadata.completeFileInventories,
+      // Extract every selected binary entry to a private staging directory
+      // before changing any selected destination files, records or prefs.
+      // This keeps a late ZIP read/decompression/filesystem failure from
+      // leaving a partially restored app state.
+      final appDir =
+          WebFileStore.isTestMode ? null : await AppStorage.directory;
+      final stageParent =
+          appDir == null ? Directory.systemTemp : Directory(appDir);
+      final stagingDirectory = await stageParent.createTemp(
+        '.stroom-restore-$pid-',
       );
-
-      // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
-      debugPrint('[BackupService] _restoreFromZipFile: restoring database');
-      await _restoreRecordsAndPrefs(
-        metadata,
-        restoreSelection,
-        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-      );
-      onProgress?.call(0.55);
-      await _yieldToEventLoop();
-
-      // 恢复二进制文件和任务文件：逐条目分块流式落盘
-      // （新格式: pictures/, tts_audio/, ...；旧格式: files/, tasks/ 前缀）
-      // （条目损坏在此处按恢复中途失败传播，调用方需提示重启）
-      debugPrint(
-        '[BackupService] _restoreFromZipFile: restoring binary files '
-        '(selection: ${restoreSelection.selectedLabels})',
-      );
-      var restoreIndex = 0;
-      for (final entry in reader.entries) {
-        final handled = await _restoreArchiveEntry(
-          entry.name,
-          restoreSelection,
-          (subDir, fileName) =>
-              _writeZipEntryStreamed(reader, entry, subDir, fileName),
+      final stagedEntries = <({String subDir, String fileName, String path})>[];
+      Directory? rollbackDirectory;
+      var retainRollbackSnapshot = false;
+      try {
+        debugPrint(
+          '[BackupService] _restoreFromZipFile: staging binary files '
+          '(selection: ${restoreSelection.selectedLabels})',
         );
-        if (handled) {
-          restoreIndex++;
-          // 每处理 20 个文件让出事件循环
-          if (restoreIndex % 20 == 0) await _yieldToEventLoop();
+        var handledEntryCount = 0;
+        for (final entry in reader.entries) {
+          final handled = await _restoreArchiveEntry(
+            entry.name,
+            restoreSelection,
+            (subDir, fileName) async {
+              final stagedFile = File(
+                p.join(stagingDirectory.path, subDir, fileName),
+              );
+              await stagedFile.parent.create(recursive: true);
+              await AtomicFile.writeFromSync(
+                stagedFile,
+                (output) => reader.extractEntry(entry, output.writeFromSync),
+              );
+              stagedEntries.add((
+                subDir: subDir,
+                fileName: fileName,
+                path: stagedFile.path,
+              ));
+            },
+            deferAnkiMigrationMarkerInvalidation: true,
+          );
+          if (handled) {
+            handledEntryCount++;
+            if (handledEntryCount % 20 == 0) await _yieldToEventLoop();
+          }
+        }
+
+        // Keep a streaming snapshot of the selected pre-restore state. If a
+        // staged file cannot be published, the restore can roll back files,
+        // manifest records, and selected preferences together.
+        rollbackDirectory = await Directory.systemTemp.createTemp(
+          '.stroom-restore-rollback-$pid-',
+        );
+        final rollbackArchivePath =
+            p.join(rollbackDirectory.path, 'pre-restore.zip');
+        await _createBackup(
+          outputPath: rollbackArchivePath,
+          selection: restoreSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+          skipMissingSelectedFiles: true,
+        );
+
+        try {
+          // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
+          await _prepareSelectedFilesForRestore(
+            restoreSelection,
+            taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+            taskFilesToReplace: metadata.taskFilesToReplace,
+            completeFileInventories: metadata.completeFileInventories,
+            deferAnkiMigrationMarkerInvalidation: true,
+            deferAnkiSyncIndexClear: true,
+          );
+
+          // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+          debugPrint('[BackupService] _restoreFromZipFile: restoring database');
+          await _restoreRecordsAndPrefs(
+            metadata,
+            restoreSelection,
+            useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+          );
+          onProgress?.call(0.55);
+          await _yieldToEventLoop();
+
+          // Restore all extracted files after ZIP reads and writes have succeeded.
+          debugPrint(
+            '[BackupService] _restoreFromZipFile: publishing binary files '
+            '(selection: ${restoreSelection.selectedLabels})',
+          );
+          var publishedEntryCount = 0;
+          for (final entry in stagedEntries) {
+            beforeRestoreBinaryPublishForTesting?.call(publishedEntryCount);
+            final stagedFile = File(entry.path);
+            if (WebFileStore.isTestMode) {
+              await writeBackupFile(
+                entry.subDir,
+                entry.fileName,
+                await stagedFile.readAsBytes(),
+              );
+            } else {
+              final destination = File(
+                p.join(appDir!, entry.subDir, entry.fileName),
+              );
+              await destination.parent.create(recursive: true);
+              await stagedFile.rename(destination.path);
+            }
+            publishedEntryCount++;
+            if (publishedEntryCount % 20 == 0) await _yieldToEventLoop();
+          }
+          await _restorePortableTaskPaths(
+            restoreSelection,
+            taskFilesToRestore: metadata.taskFilesToReplace,
+          );
+
+          // 数据迁移：确保恢复后的数据格式是最新的
+          // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
+          final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+          final deferVersionCommit =
+              !skipPostRestoreMigration && !_isBackupFlutterTest;
+          final restoredPartVersions =
+              await DataMigrationService.mergeRestoredPartVersions(
+            backupVersions: metadata.dataPartVersions,
+            restoredParts: restoredPartIds,
+            deferCommit: deferVersionCommit,
+          );
+          if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+            await DataMigrationService.migrateDataFormatIfNeeded(
+              onlyParts: restoredPartIds,
+              restoredPartVersions:
+                  deferVersionCommit ? restoredPartVersions : null,
+              validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+            );
+          }
+          await _restoreBrowserCookiesAfterDataRestore(
+            restoreSelection,
+            metadata.browserCookiesData,
+          );
+          if (restoreSelection.ankiData &&
+              restoreSelection.includeMediaFiles &&
+              metadata.completeFileInventories.contains(DataParts.anki) &&
+              !skipAnkiSyncIndexClear &&
+              !kIsWeb &&
+              !WebFileStore.isTestMode) {
+            await AnkiMediaSync.clearSyncIndexes(
+              documentsPath: await AppStorage.directory,
+            );
+          }
+          if (restoreSelection.ankiData &&
+              !skipAnkiMigrationMarkerInvalidation) {
+            await _invalidateAnkiSyncMetadataMigrationMarker();
+          }
+          onProgress?.call(1.0);
+          return metadata.skippedLabels;
+        } catch (restoreError, restoreStackTrace) {
+          final publishHook = beforeRestoreBinaryPublishForTesting;
+          beforeRestoreBinaryPublishForTesting = null;
+          try {
+            await _restoreFromZipFile(
+              rollbackArchivePath,
+              selection: restoreSelection,
+              skipPostRestoreMigration: true,
+              useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+              skipAnkiMigrationMarkerInvalidation: true,
+              skipAnkiSyncIndexClear: true,
+            );
+          } catch (rollbackError, rollbackStackTrace) {
+            retainRollbackSnapshot = true;
+            debugPrint(
+              '[BackupService] restore rollback failed; snapshot retained at '
+              '${rollbackDirectory.path}: $rollbackError\n'
+              '$rollbackStackTrace',
+            );
+          } finally {
+            beforeRestoreBinaryPublishForTesting = publishHook;
+          }
+          if (retainRollbackSnapshot) {
+            throw StateError(
+              'Restore failed: $restoreError; rollback also failed. '
+              'The recovery archive is retained at '
+              '${p.join(rollbackDirectory.path, 'pre-restore.zip')}.',
+            );
+          }
+          Error.throwWithStackTrace(restoreError, restoreStackTrace);
+        }
+      } finally {
+        try {
+          if (await stagingDirectory.exists()) {
+            await stagingDirectory.delete(recursive: true);
+          }
+        } catch (cleanupError) {
+          debugPrint(
+            '[BackupService] failed to remove restore staging directory '
+            '${stagingDirectory.path}: $cleanupError',
+          );
+        }
+        if (!retainRollbackSnapshot && rollbackDirectory != null) {
+          try {
+            if (await rollbackDirectory.exists()) {
+              await rollbackDirectory.delete(recursive: true);
+            }
+          } catch (cleanupError) {
+            debugPrint(
+              '[BackupService] failed to remove restore rollback snapshot '
+              '${rollbackDirectory.path}: $cleanupError',
+            );
+          }
         }
       }
-      await _restorePortableTaskPaths(
-        restoreSelection,
-        taskFilesToRestore: metadata.taskFilesToReplace,
-      );
-
-      // 数据迁移：确保恢复后的数据格式是最新的
-      // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-      final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-      final deferVersionCommit =
-          !skipPostRestoreMigration && !_isBackupFlutterTest;
-      final restoredPartVersions =
-          await DataMigrationService.mergeRestoredPartVersions(
-        backupVersions: metadata.dataPartVersions,
-        restoredParts: restoredPartIds,
-        deferCommit: deferVersionCommit,
-      );
-      if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
-        await DataMigrationService.migrateDataFormatIfNeeded(
-          onlyParts: restoredPartIds,
-          restoredPartVersions:
-              deferVersionCommit ? restoredPartVersions : null,
-          validateRestoredDataBeforeVersionCommit: deferVersionCommit,
-        );
-      }
-      await _restoreBrowserCookiesAfterDataRestore(
-        restoreSelection,
-        metadata.browserCookiesData,
-      );
-      onProgress?.call(1.0);
-      return metadata.skippedLabels;
     } finally {
       reader.close();
     }
-  }
-
-  /// 把单个 ZIP 条目分块写出到应用数据目录。
-  ///
-  /// 测试模式（[WebFileStore.isTestMode]）：收集后经 [writeBackupFile]
-  /// 写入（与内存版测试路径一致）；原生：直接分块写磁盘，峰值内存
-  /// O(块大小)，不随条目大小增长。
-  ///
-  /// 写出失败时删除半成品文件，避免损坏的半个文件被后续逻辑使用。
-  static Future<void> _writeZipEntryStreamed(
-    _ZipStreamReader reader,
-    _ZipEntryInfo entry,
-    String subDir,
-    String fileName,
-  ) async {
-    if (WebFileStore.isTestMode) {
-      final builder = BytesBuilder(copy: false);
-      reader.extractEntry(entry, builder.add);
-      await writeBackupFile(subDir, fileName, builder.takeBytes());
-      return;
-    }
-    final appDir = await AppStorage.directory;
-    final dir = Directory(p.join(appDir, subDir));
-    final dest = File(p.join(dir.path, fileName));
-    await dest.parent.create(recursive: true);
-    await AtomicFile.writeFromSync(
-      dest,
-      (output) => reader.extractEntry(entry, output.writeFromSync),
-    );
   }
 
   /// 预解析并校验备份中的全部 JSON 元数据（在任何删除操作之前调用）。
@@ -4804,6 +4944,8 @@ class BackupService {
     required Set<String> taskFlowAttachmentKeys,
     required Set<String> taskFilesToReplace,
     required Set<String> completeFileInventories,
+    bool deferAnkiMigrationMarkerInvalidation = false,
+    bool deferAnkiSyncIndexClear = false,
   }) async {
     if (await _deleteSelectedFiles(
       selection,
@@ -4811,6 +4953,8 @@ class BackupService {
       preserveBrowserCookieSnapshot: selection.browserCookies,
       taskFilesToReplace: taskFilesToReplace,
       completeFileInventories: completeFileInventories,
+      invalidateAnkiMigrationMarker: !deferAnkiMigrationMarkerInvalidation,
+      clearAnkiSyncIndexes: !deferAnkiSyncIndexClear,
     )) {
       throw Exception('部分数据文件删除失败，请重启应用后重试');
     }
@@ -5036,10 +5180,10 @@ class BackupService {
   ///
   /// [writeEntry] 负责把条目内容写出到 (subDir, fileName)。
   static Future<bool> _restoreArchiveEntry(
-    String rawKey,
-    BackupSelection selection,
-    Future<void> Function(String subDir, String fileName) writeEntry,
-  ) async {
+      String rawKey,
+      BackupSelection selection,
+      Future<void> Function(String subDir, String fileName) writeEntry,
+      {bool deferAnkiMigrationMarkerInvalidation = false}) async {
     var key = rawKey;
 
     // ZIP 归档可能包含显式目录条目；它们不是数据文件，不能作为类别
@@ -5076,7 +5220,9 @@ class BackupService {
     if (key == 'collection.anki2') {
       if (!selection.ankiData) return false;
       await AnkiDatabase.closeOpenedInstance();
-      await _invalidateAnkiSyncMetadataMigrationMarker();
+      if (!deferAnkiMigrationMarkerInvalidation) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       await writeEntry('', key);
       return true;
     }
@@ -5121,7 +5267,8 @@ class BackupService {
       //（备份归档内的路径为 anki/collection.anki2）。
       // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
       await AnkiDatabase.closeOpenedInstance();
-      if (relativePath == 'collection.anki2') {
+      if (relativePath == 'collection.anki2' &&
+          !deferAnkiMigrationMarkerInvalidation) {
         await _invalidateAnkiSyncMetadataMigrationMarker();
       }
       await writeEntry('', relativePath);
@@ -6205,6 +6352,8 @@ class BackupService {
     bool preserveBrowserCookieSnapshot = false,
     Set<String>? taskFilesToReplace,
     Set<String>? completeFileInventories,
+    bool invalidateAnkiMigrationMarker = true,
+    bool clearAnkiSyncIndexes = true,
   }) async {
     var deleteFailed = false;
 
@@ -6392,7 +6541,9 @@ class BackupService {
     // 同时清理历史恢复写入的 anki/collection.anki2 残留文件。
     if (selection.ankiData) {
       await AnkiDatabase.closeOpenedInstance();
-      await _invalidateAnkiSyncMetadataMigrationMarker();
+      if (invalidateAnkiMigrationMarker) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
       if (selection.includeMediaFiles &&
@@ -6402,7 +6553,10 @@ class BackupService {
           'collection.media',
         );
         if (!mediaDirectoryDeleted) deleteFailed = true;
-        if (mediaDirectoryDeleted && !kIsWeb && !WebFileStore.isTestMode) {
+        if (clearAnkiSyncIndexes &&
+            mediaDirectoryDeleted &&
+            !kIsWeb &&
+            !WebFileStore.isTestMode) {
           try {
             await AnkiMediaSync.clearSyncIndexes(
               documentsPath: await AppStorage.directory,
