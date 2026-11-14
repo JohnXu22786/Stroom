@@ -7,6 +7,11 @@ part of 'chat_composer_widget.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
+  _PendingAttachmentOrigin _capturePendingAttachmentOrigin() => (
+        conversationId: widget.conversationId,
+        draftGeneration: _pendingAttachmentDraftGeneration,
+      );
+
   // ═══════════════════════════════════════════════════════════════
   // Attachment / File pickers
   // ═══════════════════════════════════════════════════════════════
@@ -26,18 +31,21 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// Uses the new unified file picker with folder hierarchy, multi-select,
   /// cross-folder selection, and preview bar.
   Future<void> _pickFromAppFiles() async {
+    final origin = _capturePendingAttachmentOrigin();
     try {
       final result = await showAppFilePickerDialog(context);
       if (result == null || result.isEmpty) return;
       for (final entry in result) {
-        await _addPendingAttachment(entry.key, entry.value);
+        await _addPendingAttachment(entry.key, entry.value, origin: origin);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .chatAttachmentImportFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .chatAttachmentImportFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -46,18 +54,21 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   }
 
   Future<void> _pickFromCamera() async {
+    final origin = _capturePendingAttachmentOrigin();
     try {
       final picker = ImagePicker();
       final file = await picker.pickImage(source: ImageSource.camera);
       if (file == null) return;
       final bytes = await file.readAsBytes();
-      await _addPendingAttachment(file.name, bytes);
+      await _addPendingAttachment(file.name, bytes, origin: origin);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .chatAttachmentCameraFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .chatAttachmentCameraFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -72,6 +83,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// - 桌面原生/桌面 Web: file_picker 文件选择器
   /// 不支持时显示清晰的错误信息。
   Future<void> _pickFromGallery() async {
+    final origin = _capturePendingAttachmentOrigin();
     try {
       final files = await pickGalleryMedia(
         GalleryMediaKind.image,
@@ -80,7 +92,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (files.isEmpty) return;
       for (final file in files) {
         final bytes = await file.readAsBytes();
-        await _addPendingAttachment(file.name, bytes);
+        await _addPendingAttachment(file.name, bytes, origin: origin);
       }
     } on UnsupportedError catch (e) {
       // 平台不支持当前设备的媒体选择能力（极少数情况）
@@ -140,6 +152,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// - Web (桌面/移动): 浏览器文件选择器
   /// - 桌面原生: 原生系统文件对话框（定位到系统"文档"目录）
   Future<void> _pickFromFilePicker() async {
+    final origin = _capturePendingAttachmentOrigin();
     try {
       final file = await FilePicker.pickFile(
         type: FileType.any,
@@ -148,7 +161,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (file == null) return;
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) return;
-      await _addPendingAttachment(file.name, bytes);
+      await _addPendingAttachment(file.name, bytes, origin: origin);
     } on UnsupportedError catch (e) {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
@@ -198,7 +211,12 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     }
   }
 
-  Future<void> _addPendingAttachment(String fileName, Uint8List bytes) async {
+  Future<void> _addPendingAttachment(
+    String fileName,
+    Uint8List bytes, {
+    _PendingAttachmentOrigin? origin,
+  }) async {
+    final attachmentOrigin = origin ?? _capturePendingAttachmentOrigin();
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     final fileType = mimeType.startsWith('image/')
         ? 'image'
@@ -208,6 +226,18 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
                 ? 'audio'
                 : 'document';
     final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
+    if (!mounted ||
+        widget.conversationId != attachmentOrigin.conversationId ||
+        _pendingAttachmentDraftGeneration != attachmentOrigin.draftGeneration) {
+      // A conversation/draft switch may have completed while the file was
+      // being saved. Its unique storage path is not referenced by any draft.
+      try {
+        await AttachmentStorage.deleteFile(storagePath);
+      } catch (_) {
+        // Stale-import cleanup is best-effort and must not surface as an error.
+      }
+      return;
+    }
     final hash = AttachmentStorage.computeHash(bytes);
 
     // Immediately compute base64 for the attachment so it's cached
@@ -246,7 +276,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              AppLocalizations.of(context)!.chatAttachmentImported(fileName)),
+            AppLocalizations.of(context)!.chatAttachmentImported(fileName),
+          ),
           behavior: SnackBarBehavior.floating,
           margin: EdgeInsets.only(
             top: 8,
@@ -554,8 +585,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .chatAttachmentEditedImageSaveFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .chatAttachmentEditedImageSaveFailed(e.toString()),
+            ),
             duration: Duration(seconds: 2),
           ),
         );
@@ -579,3 +612,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     return fallback;
   }
 }
+
+typedef _PendingAttachmentOrigin = ({
+  String? conversationId,
+  int draftGeneration,
+});
