@@ -7,6 +7,8 @@ import '../providers/provider_config.dart';
 import 'voice_batch_add_page.dart';
 import 'voice_editor_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 class VoiceEditorPage extends StatefulWidget {
   final List<VoiceEntry> initialVoices;
   const VoiceEditorPage({super.key, required this.initialVoices});
@@ -234,7 +236,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.voiceEditorTitle),
+        title: ConstrainedText(
+          l10n.voiceEditorTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -244,7 +250,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 _save();
               }
             },
-            child: Text(l10n.save),
+            child: ConstrainedText(
+              l10n.save,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -258,13 +268,21 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 OutlinedButton.icon(
                   onPressed: _addRow,
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(l10n.voiceAddRow),
+                  label: ConstrainedText(
+                    l10n.voiceAddRow,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _batchAdd,
                   icon: const Text('📋', style: TextStyle(fontSize: 16)),
-                  label: Text(l10n.voiceBatchAdd),
+                  label: ConstrainedText(
+                    l10n.voiceBatchAdd,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

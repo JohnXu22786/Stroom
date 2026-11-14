@@ -20,6 +20,8 @@ import 'package:stroom/widgets/folder_picker_dialog.dart';
 
 import 'code_block_source_widget.dart';
 
+import 'constrained_text.dart';
+
 /// A [OneSequenceGestureRecognizer] that accepts a drag after the pointer moves
 /// beyond the pointer's gesture slop, before the parent [ScrollView]'s
 /// [VerticalDragGestureRecognizer] can take the gesture.
@@ -2950,7 +2952,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
+            ConstrainedText(
               message,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
@@ -2961,7 +2963,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             OutlinedButton.icon(
               onPressed: _retry,
               icon: const Icon(Icons.refresh, size: 16),
-              label: Text(AppLocalizations.of(context)!.mermaidRetry),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidRetry,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

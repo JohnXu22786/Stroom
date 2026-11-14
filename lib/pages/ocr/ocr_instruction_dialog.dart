@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/ocr_instructions_provider.dart';
 
+import '../../widgets/constrained_text.dart';
+
 // ============================================================================
 // 识别指令管理对话框 — 在 OCR 页面统一设置通用识别指令
 // ============================================================================
@@ -21,10 +23,7 @@ String ocrInstructionLabel(OcrInstruction instruction) {
 class OcrInstructionManageDialog extends ConsumerStatefulWidget {
   final ValueChanged<int>? onInstructionDeleted;
 
-  const OcrInstructionManageDialog({
-    super.key,
-    this.onInstructionDeleted,
-  });
+  const OcrInstructionManageDialog({super.key, this.onInstructionDeleted});
 
   @override
   ConsumerState<OcrInstructionManageDialog> createState() =>
@@ -129,9 +128,7 @@ class _OcrInstructionManageDialogState
                               ),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: cs.outlineVariant.withValues(
-                                  alpha: 0.4,
-                                ),
+                                color: cs.outlineVariant.withValues(alpha: 0.4),
                               ),
                             ),
                             padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
@@ -148,7 +145,7 @@ class _OcrInstructionManageDialogState
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
+                                      ConstrainedText(
                                         ocrInstructionLabel(instruction),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -160,7 +157,7 @@ class _OcrInstructionManageDialogState
                                       ),
                                       if (name.isNotEmpty) ...[
                                         const SizedBox(height: 2),
-                                        Text(
+                                        ConstrainedText(
                                           instruction.content,
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
@@ -174,8 +171,10 @@ class _OcrInstructionManageDialogState
                                   ),
                                 ),
                                 IconButton(
-                                  icon:
-                                      const Icon(Icons.edit_outlined, size: 18),
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
+                                  ),
                                   tooltip: l10n.ocrInstructionEditTooltip,
                                   onPressed: () => _editInstruction(index),
                                 ),
@@ -188,9 +187,7 @@ class _OcrInstructionManageDialogState
                                   tooltip: l10n.ocrInstructionDeleteTooltip,
                                   onPressed: () async {
                                     final removal = ref
-                                        .read(
-                                          ocrInstructionsProvider.notifier,
-                                        )
+                                        .read(ocrInstructionsProvider.notifier)
                                         .remove(index);
                                     widget.onInstructionDeleted?.call(index);
                                     await removal;
@@ -209,12 +206,20 @@ class _OcrInstructionManageDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(l10n.builtInPromptClose),
+          child: ConstrainedText(
+            l10n.builtInPromptClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton.icon(
           onPressed: _addInstruction,
           icon: const Icon(Icons.add, size: 18),
-          label: Text(l10n.ocrInstructionAdd),
+          label: ConstrainedText(
+            l10n.ocrInstructionAdd,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -255,10 +260,10 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
   }
 
   void _save() {
-    Navigator.pop(
-      context,
-      (_nameController.text.trim(), _contentController.text.trim()),
-    );
+    Navigator.pop(context, (
+      _nameController.text.trim(),
+      _contentController.text.trim(),
+    ));
   }
 
   @override
@@ -266,11 +271,13 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
     final l10n = AppLocalizations.of(context)!;
     final canSave = _contentController.text.trim().isNotEmpty;
     return AlertDialog(
-      title: Text(
+      title: ConstrainedText(
         widget.initialName.isEmpty && widget.initialContent.isEmpty
             ? l10n.ocrInstructionAdd
             : l10n.ocrInstructionEditorEditTitle,
         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       content: SizedBox(
         width: 320,
@@ -304,11 +311,19 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(l10n.ocrCancel),
+          child: ConstrainedText(
+            l10n.ocrCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: canSave ? _save : null,
-          child: Text(l10n.systemAssistantSave),
+          child: ConstrainedText(
+            l10n.systemAssistantSave,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

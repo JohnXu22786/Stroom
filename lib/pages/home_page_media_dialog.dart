@@ -24,11 +24,15 @@ extension _HomePageMediaDialogExt on _HomePageState {
           final contentViewportHeight = MediaQuery.sizeOf(ctx).height * 0.5;
           final resourceViewportHeight = contentViewportHeight * (2 / 3);
           return AlertDialog(
-            title: Text(
+            title: ConstrainedText(
               selectedIdentities.isNotEmpty
                   ? AppLocalizations.of(ctx)!.mediaSelectionCount(
-                      selectedIdentities.length, mediaList.length)
+                      selectedIdentities.length,
+                      mediaList.length,
+                    )
                   : AppLocalizations.of(ctx)!.mediaSelectionTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             content: SizedBox(
               width: double.maxFinite,
@@ -49,20 +53,23 @@ extension _HomePageMediaDialogExt on _HomePageState {
                               ? Icons.expand_less
                               : Icons.expand_more,
                         ),
-                        label: Text(
+                        label: ConstrainedText(
                           segmentsExpanded
                               ? AppLocalizations.of(ctx)!
                                   .mediaCollapseSegments(segmentCount)
                               : AppLocalizations.of(ctx)!
                                   .mediaExpandSegments(segmentCount),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
                   if (mediaList.isEmpty)
                     Expanded(
-                        child: Center(
-                            child: Text(
-                                AppLocalizations.of(ctx)!.mediaNoResources)))
+                      child: Center(
+                        child: Text(AppLocalizations.of(ctx)!.mediaNoResources),
+                      ),
+                    )
                   else
                     SizedBox(
                       height: resourceViewportHeight,
@@ -159,14 +166,17 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                 child: Text(
                                                   media.isPlaylistSegment
                                                       ? AppLocalizations.of(
-                                                              ctx)!
+                                                          ctx,
+                                                        )!
                                                           .mediaSegment
                                                       : media.isPlaylist
                                                           ? AppLocalizations.of(
-                                                                  ctx)!
+                                                              ctx,
+                                                            )!
                                                               .mediaPlaylist
                                                           : AppLocalizations.of(
-                                                                  ctx)!
+                                                              ctx,
+                                                            )!
                                                               .mediaFullVideo,
                                                   style: TextStyle(
                                                     fontSize: 10,
@@ -183,7 +193,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                 ),
                                               ),
                                               Expanded(
-                                                child: Text(
+                                                child: ConstrainedText(
                                                   '${media.name}.${media.ext}',
                                                   maxLines: 1,
                                                   overflow:
@@ -202,10 +212,11 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                             Text(
                                               AppLocalizations.of(ctx)!
                                                   .mediaDuration(
-                                                      formatDurationShort(
-                                                media.duration!,
-                                                AppLocalizations.of(ctx)!,
-                                              )),
+                                                formatDurationShort(
+                                                  media.duration!,
+                                                  AppLocalizations.of(ctx)!,
+                                                ),
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)
@@ -217,8 +228,10 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                               media.height != null)
                                             Text(
                                               AppLocalizations.of(ctx)!
-                                                  .mediaResolution(media.width!,
-                                                      media.height!),
+                                                  .mediaResolution(
+                                                media.width!,
+                                                media.height!,
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)
@@ -282,7 +295,11 @@ extension _HomePageMediaDialogExt on _HomePageState {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text(AppLocalizations.of(ctx)!.actionCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(ctx)!.actionCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               FilledButton(
                 onPressed: selectedIdentities.isNotEmpty ||
@@ -291,8 +308,11 @@ extension _HomePageMediaDialogExt on _HomePageState {
                         final selectedMediaList = mediaList.length == 1
                             ? mediaList
                             : mediaList
-                                .where((m) => selectedIdentities
-                                    .contains(m.selectionIdentity))
+                                .where(
+                                  (m) => selectedIdentities.contains(
+                                    m.selectionIdentity,
+                                  ),
+                                )
                                 .toList();
                         Navigator.pop(ctx);
                         ref
@@ -300,11 +320,13 @@ extension _HomePageMediaDialogExt on _HomePageState {
                             .batchSelectMedia(task.id, selectedMediaList);
                       }
                     : null,
-                child: Text(
+                child: ConstrainedText(
                   selectedIdentities.isNotEmpty
                       ? AppLocalizations.of(ctx)!
                           .mediaDownloadSelected(selectedIdentities.length)
                       : AppLocalizations.of(ctx)!.mediaConfirmDownload,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

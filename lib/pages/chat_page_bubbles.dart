@@ -15,8 +15,10 @@ class _CachedStreamingMarkdown {
 }
 
 class _StreamingSearchOccurrenceCount {
-  static final _caseIgnorablePattern =
-      RegExp(r'^\p{Case_Ignorable}+$', unicode: true);
+  static final _caseIgnorablePattern = RegExp(
+    r'^\p{Case_Ignorable}+$',
+    unicode: true,
+  );
 
   String _query = '';
   int _textLength = 0;
@@ -720,9 +722,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
 
     // Blank line before original error
     if (errorWidgets.isNotEmpty && originalErrorText.isNotEmpty) {
-      errorWidgets.add(
-        const SizedBox(height: 8),
-      );
+      errorWidgets.add(const SizedBox(height: 8));
     }
 
     // Original error (DIO Exception etc.)
@@ -739,13 +739,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-        vertical: 2,
-      ),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:
-            (isDark ? Colors.red[900] : Colors.red[50])!.withValues(alpha: 0.7),
+        color: (isDark ? Colors.red[900] : Colors.red[50])!.withValues(
+          alpha: 0.7,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -776,30 +775,25 @@ extension _ChatPageBubblesExt on _ChatPageState {
           if (chatMsg != null &&
               (chatMsg.rawRequest != null || chatMsg.rawResponse != null))
             Padding(
-              padding: const EdgeInsets.only(
-                top: 8,
-              ),
+              padding: const EdgeInsets.only(top: 8),
               child: TextButton.icon(
                 icon: Icon(
                   Icons.preview,
                   size: 14,
                   color: isDark ? Colors.red[300] : Colors.red[700],
                 ),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.chatViewErrorDetails,
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? Colors.red[300] : Colors.red[700],
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                onPressed: () => _showErrorDetailDialog(
-                  context,
-                  message.id,
-                ),
+                onPressed: () => _showErrorDetailDialog(context, message.id),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -845,8 +839,9 @@ extension _ChatPageBubblesExt on _ChatPageState {
         ? 0
         : ref.read(streamingTextSectionsProvider(streamingConvId)).length;
     final mergedSegments = mergeConsecutiveTextSegments(segments);
-    final lastTextSegmentIndex =
-        mergedSegments.lastIndexWhere((segment) => segment is TextSegment);
+    final lastTextSegmentIndex = mergedSegments.lastIndexWhere(
+      (segment) => segment is TextSegment,
+    );
     for (var segmentIndex = 0;
         segmentIndex < mergedSegments.length;
         segmentIndex++) {
@@ -974,83 +969,90 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 },
               );
               if (searchPreview.exceedsBudget) {
-                widgets.add(Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: SelectableText.rich(
-                    TextSpan(
-                      children: [
-                        for (final fragment in searchPreview.displayFragments)
-                          TextSpan(text: fragment),
-                      ],
+                widgets.add(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: SelectableText.rich(
+                      TextSpan(
+                        children: [
+                          for (final fragment in searchPreview.displayFragments)
+                            TextSpan(text: fragment),
+                        ],
+                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                ));
+                );
               } else {
                 final fullText = materializeMarkdownChunk();
-                widgets.add(Padding(
+                widgets.add(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: MarkdownWidget(
+                      data: fullText,
+                      selectable: true,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      config: buildMessageMarkdownConfig(
+                        isDark: isDark,
+                        conversationIsStreaming: isStreaming,
+                        streamingMsgId: _streamingMsgId,
+                        messageId: messageId,
+                        streamingText: fullText,
+                        streamingFenceInfoCache: streamingFenceInfoCache,
+                      ),
+                      markdownGenerator: buildSearchMarkdownGenerator(
+                        query: _searchQuery,
+                        messageFirstMatchIndex: messageFirstMatchIndex,
+                        occurrenceOffset: occurrenceOffset,
+                        currentMatchIndex: _currentMatchIndex,
+                      ),
+                    ),
+                  ),
+                );
+              }
+            } else {
+              widgets.add(
+                Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: MarkdownWidget(
-                    data: fullText,
+                    key: ValueKey(
+                      'streaming-markdown:$messageId:${s.chunkIndex}',
+                    ),
+                    data: seed,
                     selectable: true,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
+                    incremental: true,
+                    incrementalKey:
+                        '$messageId:${s.chunkIndex}:$isDark:$legacyRenderGeneration',
+                    incrementalAppend: append,
+                    incrementalSequence: s.liveMarkdownSequence,
+                    incrementalInitialUpdateCount: _liveMarkdownAppendCounts[
+                            '$messageId:${s.chunkIndex}'] ??
+                        0,
+                    fullTextOnInvalidation: materializeMarkdownChunk,
+                    activeConfigBuilder: (activeText) =>
+                        buildMessageMarkdownConfig(
+                      isDark: isDark,
+                      conversationIsStreaming: isStreaming,
+                      streamingMsgId: _streamingMsgId,
+                      messageId: messageId,
+                      streamingText: activeText,
+                      streamingFenceInfoCache: streamingFenceInfoCache,
+                    ),
                     config: buildMessageMarkdownConfig(
                       isDark: isDark,
                       conversationIsStreaming: isStreaming,
                       streamingMsgId: _streamingMsgId,
                       messageId: messageId,
-                      streamingText: fullText,
+                      streamingText: seed,
                       streamingFenceInfoCache: streamingFenceInfoCache,
                     ),
-                    markdownGenerator: buildSearchMarkdownGenerator(
-                      query: _searchQuery,
-                      messageFirstMatchIndex: messageFirstMatchIndex,
-                      occurrenceOffset: occurrenceOffset,
-                      currentMatchIndex: _currentMatchIndex,
-                    ),
+                    markdownGenerator: markdownGenerator,
                   ),
-                ));
-              }
-            } else {
-              widgets.add(Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: MarkdownWidget(
-                  key:
-                      ValueKey('streaming-markdown:$messageId:${s.chunkIndex}'),
-                  data: seed,
-                  selectable: true,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  incremental: true,
-                  incrementalKey:
-                      '$messageId:${s.chunkIndex}:$isDark:$legacyRenderGeneration',
-                  incrementalAppend: append,
-                  incrementalSequence: s.liveMarkdownSequence,
-                  incrementalInitialUpdateCount:
-                      _liveMarkdownAppendCounts['$messageId:${s.chunkIndex}'] ??
-                          0,
-                  fullTextOnInvalidation: materializeMarkdownChunk,
-                  activeConfigBuilder: (activeText) =>
-                      buildMessageMarkdownConfig(
-                    isDark: isDark,
-                    conversationIsStreaming: isStreaming,
-                    streamingMsgId: _streamingMsgId,
-                    messageId: messageId,
-                    streamingText: activeText,
-                    streamingFenceInfoCache: streamingFenceInfoCache,
-                  ),
-                  config: buildMessageMarkdownConfig(
-                    isDark: isDark,
-                    conversationIsStreaming: isStreaming,
-                    streamingMsgId: _streamingMsgId,
-                    messageId: messageId,
-                    streamingText: seed,
-                    streamingFenceInfoCache: streamingFenceInfoCache,
-                  ),
-                  markdownGenerator: markdownGenerator,
                 ),
-              ));
+              );
             }
             continue;
           }
@@ -1066,17 +1068,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
                   .countLiveFragmentsFor(s.liveTextFragments!, lowerQuery);
             }
-            widgets.add(Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: SelectableText.rich(
-                TextSpan(
-                  children: s.liveTextFragments!
-                      .map((fragment) => TextSpan(text: fragment))
-                      .toList(growable: false),
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: SelectableText.rich(
+                  TextSpan(
+                    children: s.liveTextFragments!
+                        .map((fragment) => TextSpan(text: fragment))
+                        .toList(growable: false),
+                  ),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                style: Theme.of(context).textTheme.bodyMedium,
               ),
-            ));
+            );
             continue;
           }
           final canReuseSealedText = !hasSearchMatch &&
@@ -1221,7 +1225,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
                       : MarkdownWidget(
                           key: isActiveStreamingMarkdown
                               ? ValueKey(
-                                  'streaming-markdown:$messageId:${s.chunkIndex}')
+                                  'streaming-markdown:$messageId:${s.chunkIndex}',
+                                )
                               : null,
                           data: s.text,
                           selectable: true,
@@ -1296,22 +1301,25 @@ extension _ChatPageBubblesExt on _ChatPageState {
             }
           }
         case ErrorSegment s:
-          widgets.add(Container(
-            margin: const EdgeInsets.only(top: 4),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: (isDark ? Colors.red[900] : Colors.red[50])!
-                  .withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: SelectableText(
-              s.message,
-              style: TextStyle(
-                color: isDark ? Colors.red[200] : Colors.red[800],
-                fontSize: 13,
+          widgets.add(
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.red[900] : Colors.red[50])!.withValues(
+                  alpha: 0.7,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                s.message,
+                style: TextStyle(
+                  color: isDark ? Colors.red[200] : Colors.red[800],
+                  fontSize: 13,
+                ),
               ),
             ),
-          ));
+          );
         case ToolCallSegment s:
           widgets.add(ToolCallCard(data: s.data));
         case ReasoningSegment s:
@@ -1324,19 +1332,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   ? _reasoningContents[messageId]![s.sectionIndex]
                   : '';
           if (text.isEmpty) continue;
-          widgets.add(Padding(
-            padding: const EdgeInsets.only(
-              bottom: 4,
-            ),
-            child: ReasoningSection(
-              sections: ReasoningSectionData(
-                texts: [text],
-                streaming: s.isStreaming,
-                sectionIndices: [s.sectionIndex],
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: [text],
+                  streaming: s.isStreaming,
+                  sectionIndices: [s.sectionIndex],
+                ),
+                messageId: messageId,
               ),
-              messageId: messageId,
             ),
-          ));
+          );
       }
     }
     return widgets;
@@ -1355,9 +1363,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
         message.text.isEmpty &&
         isStreaming &&
         activeId != null &&
-        !ref.read(
-          streamingHasFirstTokenProvider(activeId),
-        );
+        !ref.read(streamingHasFirstTokenProvider(activeId));
     final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
         _searchMatchFirstIndexByMessageId.containsKey(message.id);
@@ -1393,9 +1399,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
     );
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-        vertical: 2,
-      ),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.grey[100],
@@ -1412,9 +1416,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
               (reasoningSections == null || reasoningSections.isEmpty) &&
               (segments == null || segments.isEmpty))
             const Padding(
-              padding: EdgeInsets.symmetric(
-                vertical: 8,
-              ),
+              padding: EdgeInsets.symmetric(vertical: 8),
               child: JumpingDotsProgressIndicator(
                 color: Colors.grey,
                 fontSize: 14,
@@ -1493,16 +1495,9 @@ extension _ChatPageBubblesExt on _ChatPageState {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (hasSearchMatch && hasText)
-          _buildHighlightedText(
-            message.text,
-            message.id,
-          )
+          _buildHighlightedText(message.text, message.id)
         else if (hasText)
-          SimpleTextMessage(
-            message: message,
-            index: index,
-            showTime: false,
-          ),
+          SimpleTextMessage(message: message, index: index, showTime: false),
         if (hasAttachments)
           Padding(
             key: const ValueKey('user-message-attachment-area'),
@@ -1527,9 +1522,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 itemCount: chatMsg!.attachments.length,
                 itemBuilder: (ctx, i) {
                   final att = chatMsg.attachments[i];
-                  return _buildMessageAttachmentPreview(
-                    att,
-                  );
+                  return _buildMessageAttachmentPreview(att);
                 },
               ),
             ),

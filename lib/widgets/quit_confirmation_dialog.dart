@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 
+import 'constrained_text.dart';
+
 /// 任务运行中退出确认对话框。
 ///
 /// 桌面端（Windows/macOS/Linux）退出应用会立即中断所有运行中的
@@ -16,7 +18,11 @@ Future<bool> showQuitConfirmationDialog(
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: Text(AppLocalizations.of(context)!.quitDialogTitle),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.quitDialogTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Text(
         runningTaskCount > 0
             ? AppLocalizations.of(context)!
@@ -26,11 +32,19 @@ Future<bool> showQuitConfirmationDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: Text(AppLocalizations.of(context)!.quitDialogCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.quitDialogCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: Text(AppLocalizations.of(context)!.quitDialogExit),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.quitDialogExit,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),

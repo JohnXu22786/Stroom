@@ -6,8 +6,11 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
+
 import '../l10n/app_localizations.dart';
 import '../widgets/markdown_extensions.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 文本预览/编辑页面 - 查看和编辑文本内容
 ///
@@ -164,18 +167,31 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     final shouldDiscard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.textPreviewDiscardEditsTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
-            AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
+          AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.textPreviewCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewDiscard,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -220,7 +236,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.textPreviewFontSize),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.textPreviewFontSize,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: 260,
             height: 100,
@@ -262,12 +282,19 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                 setState(() => _fontSize = temp);
                 _persistFontSize();
               },
-              child:
-                  Text(AppLocalizations.of(context)!.textPreviewRestoreDefault),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.textPreviewRestoreDefault,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(AppLocalizations.of(context)!.textPreviewClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.textPreviewClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -326,8 +353,9 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .textPreviewSaveFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.textPreviewSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -449,19 +477,31 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(
-                AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewDiscardEditsTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(
-                AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
+              AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.textPreviewCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.textPreviewCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.textPreviewDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -478,7 +518,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: _buildAppBarActions(),
         ),
         body: _isEditMode

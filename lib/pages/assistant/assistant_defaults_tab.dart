@@ -20,6 +20,8 @@ import '../../services/todo_tool_service.dart';
 import '../../services/web_search_service.dart';
 import '../../utils/model_order.dart' show applySavedOrder;
 
+import '../../widgets/constrained_text.dart';
+
 /// "默认设置" tab of the assistant edit dialog: the default model, the
 /// default enabled tools that NEW conversations (topics) created under this
 /// assistant start with, and the tool-result truncation applied when sending
@@ -329,7 +331,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         value: m.displayName,
-                        title: Text(
+                        title: ConstrainedText(
                           m.displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -369,14 +371,18 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         TextButton(
                           onPressed: () =>
                               widget.onDefaultToolsChanged(validToolNames),
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.assistantEnableAll,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       TextButton(
                         onPressed: () => widget.onDefaultToolsChanged(const {}),
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.assistantDisableAll,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -408,7 +414,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                             ),
                           ),
                           subtitle: tool.description.isNotEmpty
-                              ? Text(
+                              ? ConstrainedText(
                                   tool.description,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,

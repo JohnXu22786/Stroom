@@ -18,6 +18,8 @@ import '../providers/update_provider.dart';
 import '../services/backup_service.dart';
 import '../widgets/update_dialog.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ====================================================================
 // StartupApp — 应用启动入口
 // ====================================================================
@@ -202,14 +204,22 @@ class _StartupAppState extends ConsumerState<StartupApp>
                 Navigator.of(dialogContext).pop();
                 _exitApp();
               },
-              child: Text(l10n.startupMigrationExit),
+              child: ConstrainedText(
+                l10n.startupMigrationExit,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 restartApp();
               },
-              child: Text(l10n.startupMigrationRestart),
+              child: ConstrainedText(
+                l10n.startupMigrationRestart,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -416,7 +426,11 @@ class _StartupErrorBoundaryState extends State<StartupErrorBoundary> {
                             FilledButton.icon(
                               onPressed: _onRetry,
                               icon: const Icon(Icons.refresh),
-                              label: Text(l10n.startupRecoveryRetry),
+                              label: ConstrainedText(
+                                l10n.startupRecoveryRetry,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
@@ -587,12 +601,20 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_alt),
-                      label: Text(l10n.startupSafetyExportButton),
+                      label: ConstrainedText(
+                        l10n.startupSafetyExportButton,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     FilledButton.icon(
                       onPressed: widget.onExit ?? () => SystemNavigator.pop(),
                       icon: const Icon(Icons.exit_to_app),
-                      label: Text(l10n.startupSafetyExitButton),
+                      label: ConstrainedText(
+                        l10n.startupSafetyExitButton,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -616,7 +638,11 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.update),
-      label: Text(l10n.startupSafetyUpdateButton),
+      label: ConstrainedText(
+        l10n.startupSafetyUpdateButton,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }

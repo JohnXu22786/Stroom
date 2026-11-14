@@ -31,6 +31,8 @@ import 'chat_setting_panels.dart';
 import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 part 'chat_composer_widget_draft.dart';
 part 'chat_composer_widget_attachments.dart';
 part 'chat_composer_widget_panels.dart';

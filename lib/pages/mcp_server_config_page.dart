@@ -6,6 +6,8 @@ import '../models/mcp.dart';
 import '../providers/provider_config.dart';
 import 'mcp_server_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 Future<bool?> showMcpServerConfigDialog({
   required BuildContext context,
   required String entryId,
@@ -547,19 +549,31 @@ class _McpServerConfigDialogState
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.mcpUnsavedChangesTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.mcpUnsavedChangesTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(
               AppLocalizations.of(context)!.mcpUnsavedChangesConfirm,
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -579,7 +593,14 @@ class _McpServerConfigDialogState
           width: 560,
           height: MediaQuery.sizeOf(context).height * 0.85,
           child: Scaffold(
-            appBar: AppBar(title: Text(title), actions: _buildAppBarActions()),
+            appBar: AppBar(
+              title: ConstrainedText(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              actions: _buildAppBarActions(),
+            ),
             body: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -906,16 +927,22 @@ class _McpServerConfigDialogState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save, size: 20),
-          label: Text(
+          label: ConstrainedText(
             _isSaving
                 ? AppLocalizations.of(context)!.mcpSaving
                 : AppLocalizations.of(context)!.mermaidSaveButton,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         TextButton.icon(
           onPressed: _isSaving ? null : _discardChanges,
           icon: const Icon(Icons.close, size: 20),
-          label: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.taskFlowUiDiscard,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ];
     }
@@ -923,7 +950,11 @@ class _McpServerConfigDialogState
       if (_isExistingConfig)
         TextButton.icon(
           icon: const Icon(Icons.edit, size: 20),
-          label: Text(AppLocalizations.of(context)!.imagePreviewEdit),
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.imagePreviewEdit,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           onPressed: _enterEditMode,
         ),
     ];

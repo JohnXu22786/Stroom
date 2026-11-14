@@ -17,6 +17,8 @@ import 'task_utils.dart';
 import 'file_opener.dart';
 import '../../widgets/running_elapsed_label.dart';
 
+import '../../widgets/constrained_text.dart';
+
 String _localizedBackgroundStepLabel(String label, AppLocalizations strings) =>
     switch (label) {
       '连接服务器' => strings.bgStepConnectServer,
@@ -161,7 +163,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
+                              child: ConstrainedText(
                                 _localizedBackgroundTaskTitle(
                                   widget.task,
                                   strings,
@@ -339,9 +341,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       TextButton.icon(
                         onPressed: () => _showErrorDetailDialog(context, task),
                         icon: const Icon(Icons.preview, size: 14),
-                        label: Text(
+                        label: ConstrainedText(
                           strings.unifiedTaskViewErrorDetails,
                           style: TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.red,
@@ -684,9 +688,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
               ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
             },
             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-            label: Text(
+            label: ConstrainedText(
               strings.unifiedTaskDelete,
               style: TextStyle(fontSize: 13, color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -763,7 +769,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       child: TextButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 13)),
+        label: ConstrainedText(
+          label,
+          style: const TextStyle(fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         style: TextButton.styleFrom(
           foregroundColor: color,
           padding: const EdgeInsets.symmetric(horizontal: 8),

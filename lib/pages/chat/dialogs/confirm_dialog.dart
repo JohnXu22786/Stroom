@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 /// Shows a confirmation dialog for editing a user message or retrying an AI message.
 Future<void> showRetryEditConfirmDialog({
   required BuildContext context,
@@ -13,7 +15,11 @@ Future<void> showRetryEditConfirmDialog({
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.chatConfirmEditTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.chatConfirmEditTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           newerMessagesExist
               ? AppLocalizations.of(context)!.chatConfirmEditDeleteFollowing
@@ -22,14 +28,22 @@ Future<void> showRetryEditConfirmDialog({
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               onEdit();
             },
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -38,7 +52,11 @@ Future<void> showRetryEditConfirmDialog({
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.chatConfirmRetryTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.chatConfirmRetryTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           newerMessagesExist
               ? AppLocalizations.of(context)!.chatConfirmRetryDeleteFollowing
@@ -47,14 +65,22 @@ Future<void> showRetryEditConfirmDialog({
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               onRetry();
             },
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -70,12 +96,20 @@ Future<void> showDeleteConfirmDialog({
   return showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text(AppLocalizations.of(context)!.chatDeleteMessageTitle),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.chatDeleteMessageTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Text(AppLocalizations.of(context)!.chatDeleteMessageConfirm),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: Text(AppLocalizations.of(context)!.actionCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.actionCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         TextButton(
           onPressed: () {
@@ -85,7 +119,11 @@ Future<void> showDeleteConfirmDialog({
           style: TextButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.error,
           ),
-          child: Text(AppLocalizations.of(context)!.actionDelete),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.actionDelete,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     ),

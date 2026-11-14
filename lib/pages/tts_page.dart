@@ -25,6 +25,8 @@ import 'tts_create_page.dart';
 import 'audio_player_page.dart';
 import 'audio_recording_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 class TtsPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
@@ -161,11 +163,13 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           size: bytes.length,
           folder: _currentFolder,
         );
-        await FileManifest.withStorageFileSaveLock(record.storageFileName,
-            () async {
-          await FileManifest.writeFile(record.storageFileName, bytes);
-          await FileManifest.addRecord(record);
-        });
+        await FileManifest.withStorageFileSaveLock(
+          record.storageFileName,
+          () async {
+            await FileManifest.writeFile(record.storageFileName, bytes);
+            await FileManifest.addRecord(record);
+          },
+        );
         count++;
       }
 
@@ -277,7 +281,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.ttsConfirmRegenerate),
+        title: ConstrainedText(
+          l10n.ttsConfirmRegenerate,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,12 +316,20 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.cancel),
+            child: ConstrainedText(
+              l10n.cancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text(l10n.ttsRegenerate),
+            child: ConstrainedText(
+              l10n.ttsRegenerate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -491,18 +507,30 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(l10n.ttsFolderExport),
+              title: ConstrainedText(
+                l10n.ttsFolderExport,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(l10n.ttsWebFolderExportHelp),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.cancel),
+                  child: ConstrainedText(
+                    l10n.cancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(l10n.ttsDownloadZip),
+                  child: ConstrainedText(
+                    l10n.ttsDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -720,9 +748,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                     ),
                   ),
                   icon: const Icon(Icons.mic, size: 20),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.ttsRecord,
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -740,9 +770,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                     ),
                   ),
                   icon: const Icon(Icons.file_download_outlined, size: 20),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.ttsImport,
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),

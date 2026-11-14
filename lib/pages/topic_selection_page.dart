@@ -19,6 +19,8 @@ import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
 import '../services/attachment_storage.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// Merged page: after selecting an assistant, choose or create a conversation.
 /// Features: card-based UI, selection mode, pin, rename, reorder, search panel.
 class TopicSelectionPage extends ConsumerStatefulWidget {
@@ -58,18 +60,32 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         final apply = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(isZh ? '助手有更新' : 'Assistant update available'),
-            content: Text(isZh
-                ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
-                : '${assistant.name} has version ${update.definition.version}. Review and update now?'),
+            title: ConstrainedText(
+              isZh ? '助手有更新' : 'Assistant update available',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            content: Text(
+              isZh
+                  ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
+                  : '${assistant.name} has version ${update.definition.version}. Review and update now?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: Text(isZh ? '稍后' : 'Later'),
+                child: ConstrainedText(
+                  isZh ? '稍后' : 'Later',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(isZh ? '更新' : 'Update'),
+                child: ConstrainedText(
+                  isZh ? '更新' : 'Update',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -82,9 +98,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context)!.topicAssistantUpdateCheckFailed(
-                error.toString(),
-              ),
+              AppLocalizations.of(context)!
+                  .topicAssistantUpdateCheckFailed(error.toString()),
             ),
           ),
         );
@@ -119,12 +134,20 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           await showDialog<void>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: Text(isZh ? '安全审查未通过' : 'Safety review rejected update'),
+              title: ConstrainedText(
+                isZh ? '安全审查未通过' : 'Safety review rejected update',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(review.reason),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(isZh ? '关闭' : 'Close'),
+                  child: ConstrainedText(
+                    isZh ? '关闭' : 'Close',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -215,18 +238,31 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.conversationDeleteTitle),
+        title: ConstrainedText(
+          l10n.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.conversationDeleteMany(_selectedIds.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
+            child: ConstrainedText(
+              l10n.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: Text(l10n.actionDelete),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: ConstrainedText(
+              l10n.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -277,22 +313,37 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.conversationDeleteTitle),
-        content: Text(l10n.conversationDeleteNamed(
-          topic.title.isEmpty ? l10n.conversationNew : topic.title,
-        )),
+        title: ConstrainedText(
+          l10n.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: Text(
+          l10n.conversationDeleteNamed(
+            topic.title.isEmpty ? l10n.conversationNew : topic.title,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.actionCancel),
+            child: ConstrainedText(
+              l10n.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx, true);
             },
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: Text(l10n.actionDelete),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: ConstrainedText(
+              l10n.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -331,7 +382,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.conversationRename),
+        title: ConstrainedText(
+          l10n.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -355,7 +410,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(l10n.actionCancel),
+            child: ConstrainedText(
+              l10n.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -368,7 +427,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(l10n.actionConfirm),
+            child: ConstrainedText(
+              l10n.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -418,18 +481,24 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.chat_bubble_outline,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             l10n.topicSelectionEmptyTitle,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          Text(l10n.topicSelectionEmptyMessage,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+          Text(
+            l10n.topicSelectionEmptyMessage,
+            style: TextStyle(
+              fontSize: 13,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
@@ -451,9 +520,13 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(_selectionMode
-            ? l10n.conversationSelected(_selectedIds.length)
-            : l10n.conversationSelectTitle),
+        title: ConstrainedText(
+          _selectionMode
+              ? l10n.conversationSelected(_selectedIds.length)
+              : l10n.conversationSelectTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: false,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -471,9 +544,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
             ),
           IconButton(
-            icon: Icon(
-              _selectionMode ? Icons.close : Icons.checklist,
-            ),
+            icon: Icon(_selectionMode ? Icons.close : Icons.checklist),
             tooltip: _selectionMode ? l10n.actionUnselect : l10n.actionSelect,
             onPressed: _toggleSelectionMode,
           ),
@@ -484,12 +555,16 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 48,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
                   const SizedBox(height: 16),
-                  Text(l10n.topicSelectionNoAssistant,
-                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(
+                    l10n.topicSelectionNoAssistant,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -497,7 +572,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           null;
                       Navigator.pop(context);
                     },
-                    child: Text(l10n.topicSelectionBackToAssistants),
+                    child: ConstrainedText(
+                      l10n.topicSelectionBackToAssistants,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -511,10 +590,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: cs.primaryContainer,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: cs.primaryContainer, width: 0.5),
                   ),
                   child: Row(
                     children: [
@@ -536,7 +612,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               ),
                             ),
                             if (selectedAssistant.description.isNotEmpty)
-                              Text(
+                              ConstrainedText(
                                 selectedAssistant.description,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -553,7 +629,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         tooltip: l10n.topicSelectionEditAssistant,
                         onPressed: () {
                           showAssistantFullEditDialog(
-                              context, ref, selectedAssistant);
+                            context,
+                            ref,
+                            selectedAssistant,
+                          );
                         },
                       ),
                     ],
@@ -562,8 +641,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
                 // Fixed hint: long-press drag to reorder
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
                   child: Text(
                     l10n.topicSelectionReorderHint,
                     style: TextStyle(
@@ -587,20 +668,24 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           ? _buildEmptyState(cs)
                           : ReorderableListView.builder(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                               itemCount: sorted.length,
                               buildDefaultDragHandles: false,
                               onReorderItem: (oldIndex, newIndex) {
                                 final convs = ref.read(conversationsProvider);
                                 final item = sorted[oldIndex];
-                                final realOld =
-                                    convs.indexWhere((c) => c.id == item.id);
+                                final realOld = convs.indexWhere(
+                                  (c) => c.id == item.id,
+                                );
                                 // onReorderItem 的 newIndex 已是移除后的索引
                                 // （框架会先移除 oldIndex 再计算插入位置），
                                 // 不需要再手动减一。
                                 final target = sorted[newIndex];
-                                final realNew =
-                                    convs.indexWhere((c) => c.id == target.id);
+                                final realNew = convs.indexWhere(
+                                  (c) => c.id == target.id,
+                                );
                                 if (realOld >= 0 && realNew >= 0) {
                                   ref
                                       .read(conversationsProvider.notifier)
@@ -617,7 +702,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               itemBuilder: (context, index) {
                                 final topic = sorted[index];
                                 final isRunning =
-                                    streamingConversations.contains(topic.id);
+                                    streamingConversations.contains(
+                                  topic.id,
+                                );
                                 final latestMessage = topic.messages.isEmpty
                                     ? null
                                     : topic.messages.last;
@@ -685,7 +772,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         width: double.infinity,
                         child: FilledButton.icon(
                           icon: const Icon(Icons.add),
-                          label: Text(l10n.topicSelectionNewTopic),
+                          label: ConstrainedText(
+                            l10n.topicSelectionNewTopic,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           onPressed: _createNewTopic,
                         ),
                       ),

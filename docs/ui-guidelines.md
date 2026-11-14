@@ -40,11 +40,11 @@ Use the active theme's text roles for comparable UI: `bodyMedium` is 14 px for o
 
 The app does not define a complete custom global `textTheme`; read the nearest theme and current comparable widgets before adding local styles. Let text scaling and localization expand layout naturally.
 
-### Constrained localized labels
+### Constrained display labels
 
-For a localized label in a constrained, single-line slot, keep the existing text widget, size, wrapping, and alignment when the full label fits. Add a bidirectional marquee only when that existing layout actually truncates the label; preserve the original alignment while it moves and expose the complete text as one semantic label. When the page opens, hold all overflowing labels still for 1 second, then start them together. Use 24 logical px/s by default and pause for 2 seconds at each endpoint; the initial delay is separate from endpoint pauses. Honor reduced-motion settings and stop or pause motion while the containing view is hidden. Do not shrink text for individual translations. Leave naturally wrapping text unchanged instead of forcing it into a marquee.
+Apply this rule to first-party display labels in finite-width or finite-line slots across `lib/` and `packages/streaming_markdown/`, including navigation tabs, dropdown options and selected values, buttons, chips, card and list labels, and dialog titles. Use [`ConstrainedText`](../lib/widgets/constrained_text.dart) for labels that can be clipped. Keep the current size, wrapping, and alignment when the complete label fits; animate only when the bounded layout clips it. Preserve control sizing, focus, selection, keyboard, and touch behavior, and expose the complete value as one semantic label.
 
-The homepage module cards are the approved implementation of this pattern. This guidance describes the behavior for future constrained labels; it does not expand the current implementation beyond the home screen.
+Overflowing labels remain still for 1 second when first laid out, then move bidirectionally at 24 logical px/s by default with a 2 second pause at each endpoint. The initial delay is separate from endpoint pauses. Honor reduced-motion settings and pause motion while the containing view is hidden. Do not shrink text for individual translations. A description, helper, or subtitle in a finite single-line slot is also a constrained label, even when it reads as prose. Keep prose and content bodies that are not explicitly line-bounded naturally wrapping or scrollable. For truncated multi-line labels, retain their line wrapping and reveal the clipped lines through vertical scrolling. Editable inputs retain native caret-follow behavior; never animate typed content or code/document bodies as labels.
 
 ## 2. App shell, navigation, and page layout
 

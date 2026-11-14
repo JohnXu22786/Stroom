@@ -10,6 +10,8 @@ import '../models/task_flow_templates.dart';
 import '../providers/task_flow_provider.dart';
 import 'task_flow_builder_page.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// Page that lists all saved task flows.
 ///
 /// Shows each flow with its name, description, block count, and last update.
@@ -26,7 +28,11 @@ class TaskFlowListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.taskFlowPageTitle),
+        title: ConstrainedText(
+          strings.taskFlowPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -69,8 +75,10 @@ class TaskFlowListPage extends ConsumerWidget {
           FilledButton.icon(
             onPressed: () => _showTemplates(context),
             icon: const Icon(Icons.auto_awesome_outlined),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.taskFlowStartFromTemplate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -164,7 +172,7 @@ class TaskFlowListPage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        ConstrainedText(
                           flow.name,
                           style: TextStyle(
                             fontSize: 15,
@@ -175,7 +183,7 @@ class TaskFlowListPage extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (flow.description.isNotEmpty)
-                          Text(
+                          ConstrainedText(
                             flow.description,
                             style: TextStyle(
                               fontSize: 12,
@@ -326,8 +334,10 @@ class TaskFlowListPage extends ConsumerWidget {
                 showDialog(
                   context: context,
                   builder: (dCtx) => AlertDialog(
-                    title: Text(
+                    title: ConstrainedText(
                       AppLocalizations.of(context)!.taskFlowConfirmDelete,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     content: Text(
                       AppLocalizations.of(context)!
@@ -336,8 +346,10 @@ class TaskFlowListPage extends ConsumerWidget {
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dCtx),
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.systemAssistantCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       TextButton(
@@ -347,11 +359,13 @@ class TaskFlowListPage extends ConsumerWidget {
                               .read(taskFlowListProvider.notifier)
                               .removeFlow(flow.id);
                         },
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.taskFlowDelete,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.error,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -591,7 +605,11 @@ class TaskFlowListPage extends ConsumerWidget {
         ),
         trailing: FilledButton.tonal(
           onPressed: onPressed,
-          child: Text(AppLocalizations.of(context)!.taskFlowUseTemplate),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.taskFlowUseTemplate,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     );

@@ -8,6 +8,8 @@ import '../../providers/assistant_provider.dart';
 import '../../services/assistant_catalog_service.dart';
 import 'assistant_remote_source_dialog.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// Shows a dialog listing all built-in assistant prompts (the assistant
 /// "market"). Tapping a card opens a detail panel where the user can review
 /// the prompt before importing it as a regular, editable [Assistant].
@@ -245,7 +247,7 @@ class _PromptCard extends StatelessWidget {
                     if (prompt.description.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
-                        child: Text(
+                        child: ConstrainedText(
                           prompt.description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -396,7 +398,11 @@ class _PromptDetailDialog extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: onAdd,
                     icon: const Icon(Icons.add),
-                    label: Text(strings.builtInPromptAddAssistant),
+                    label: ConstrainedText(
+                      strings.builtInPromptAddAssistant,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ],
@@ -454,8 +460,9 @@ class _PromptViewerDialog extends StatelessWidget {
           Text(prompt.emoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
+            child: ConstrainedText(
               strings.builtInPromptViewerTitle(prompt.name),
+              maxLines: 1,
               style: const TextStyle(fontSize: 16),
               overflow: TextOverflow.ellipsis,
             ),
@@ -469,7 +476,11 @@ class _PromptViewerDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.builtInPromptClose),
+          child: ConstrainedText(
+            strings.builtInPromptClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

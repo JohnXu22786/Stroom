@@ -9,6 +9,8 @@ import '../services/attachment_storage.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import 'conversations_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
 
@@ -95,7 +97,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!
               .conversationDeleteMany(_selectedIds.length),
@@ -103,14 +109,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.actionDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -160,19 +174,31 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.conversationDeleteOne),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.actionDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -210,7 +236,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationRename),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -234,7 +264,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -247,7 +281,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -307,11 +345,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ),
             )
           : AppBar(
-              title: Text(
+              title: ConstrainedText(
                 _selectionMode
                     ? AppLocalizations.of(context)!
                         .conversationSelected(_selectedIds.length)
                     : AppLocalizations.of(context)!.conversationsTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               actions: [
                 if (!_selectionMode)
@@ -452,7 +492,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           if (conv.isTemporary && conv.temporaryExpiresAt != null)
             TemporaryCountdownCapsule(expiresAt: conv.temporaryExpiresAt!),
           Expanded(
-            child: Text(
+            child: ConstrainedText(
               conv.title.isEmpty
                   ? AppLocalizations.of(context)!.conversationNew
                   : conv.title,
@@ -527,40 +567,52 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   itemBuilder: (ctx) => [
                     PopupMenuItem(
                       value: 'rename',
-                      child: Text(AppLocalizations.of(context)!.actionRename),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.actionRename,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'auto_rename',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.conversationAutoRename,
                         style: TextStyle(color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     PopupMenuItem(
                       value: 'toggle_temporary',
-                      child: Text(
+                      child: ConstrainedText(
                         conv.isTemporary
                             ? AppLocalizations.of(context)!
                                 .conversationCloseTemporary
                             : AppLocalizations.of(context)!
                                 .conversationTemporary,
                         style: TextStyle(color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     PopupMenuItem(
                       value: 'pin',
-                      child: Text(
+                      child: ConstrainedText(
                         conv.isPinned
                             ? AppLocalizations.of(context)!.conversationUnpin
                             : AppLocalizations.of(context)!.conversationPin,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'delete',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.actionDelete,
                         style: TextStyle(color: cs.error),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

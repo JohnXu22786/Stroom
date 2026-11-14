@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'constrained_text.dart';
+
 /// 长按触发拖拽的默认延迟（约 280ms，比默认 500ms 跟手）。
 const Duration kDragSortDelay = Duration(milliseconds: 280);
 
@@ -616,7 +618,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     final selected = widget.selected?.call(value) ?? false;
     final deletable = widget.deletable?.call(value) ?? false;
     final editable = widget.editable?.call(value) ?? false;
-    final text = Text(
+    final text = ConstrainedText(
       value,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,

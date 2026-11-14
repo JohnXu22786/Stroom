@@ -9,6 +9,8 @@ import 'text_storage_page.dart';
 import 'tts_page.dart';
 import 'video_gallery_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// Tab order provider - allows reordering the tabs
 final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2, 3]);
 
@@ -91,7 +93,17 @@ class _FilesPageState extends ConsumerState<FilesPage>
               child: TabBar(
                 controller: _tabController,
                 onTap: _onTabTapped,
-                tabs: tabOrder.map((i) => Tab(text: _tabLabels[i])).toList(),
+                tabs: tabOrder
+                    .map(
+                      (i) => Tab(
+                        child: ConstrainedText(
+                          _tabLabels[i],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
               ),
             ),
           ),
@@ -159,7 +171,11 @@ class _FilesPageState extends ConsumerState<FilesPage>
           builder: (context, setDialogState) {
             return AlertDialog(
               key: const Key('files_reorder_dialog'),
-              title: Text(localizations.filesReorderTabs),
+              title: ConstrainedText(
+                localizations.filesReorderTabs,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               // 内容可滚动：短屏（如横屏手机）上不会溢出
               scrollable: true,
               content: Column(
@@ -197,7 +213,11 @@ class _FilesPageState extends ConsumerState<FilesPage>
                 TextButton(
                   key: const Key('files_reorder_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(localizations.filesReorderCancel),
+                  child: ConstrainedText(
+                    localizations.filesReorderCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 TextButton(
                   key: const Key('files_reorder_confirm_btn'),
@@ -214,7 +234,11 @@ class _FilesPageState extends ConsumerState<FilesPage>
                     _lastTappedLogicalTabIndex = -1;
                     Navigator.pop(ctx);
                   },
-                  child: Text(localizations.filesReorderDone),
+                  child: ConstrainedText(
+                    localizations.filesReorderDone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             );

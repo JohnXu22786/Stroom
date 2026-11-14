@@ -12,6 +12,8 @@ import '../../services/chat_adapter.dart' show resolveModelRef;
 import '../../services/assistant_tool_policy.dart';
 import 'assistant_schema_info_dialog.dart';
 
+import '../../widgets/constrained_text.dart';
+
 void showAssistantRemoteSourceDialog(
   BuildContext context,
   WidgetRef ref, {
@@ -19,10 +21,8 @@ void showAssistantRemoteSourceDialog(
 }) {
   showDialog<void>(
     context: context,
-    builder: (context) => _AssistantRemoteSourceDialog(
-      ref: ref,
-      initialUrl: initialUrl,
-    ),
+    builder: (context) =>
+        _AssistantRemoteSourceDialog(ref: ref, initialUrl: initialUrl),
   );
 }
 
@@ -208,9 +208,7 @@ class _AssistantRemoteSourceDialogState
       Navigator.of(context).pop();
       imported = true;
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(_isZh ? '助手已接入' : 'Assistant added'),
-        ),
+        SnackBar(content: Text(_isZh ? '助手已接入' : 'Assistant added')),
       );
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -223,7 +221,11 @@ class _AssistantRemoteSourceDialogState
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: Text(_isZh ? '接入远程助手' : 'Connect remote assistants'),
+      title: ConstrainedText(
+        _isZh ? '接入远程助手' : 'Connect remote assistants',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -259,9 +261,11 @@ class _AssistantRemoteSourceDialogState
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(_isZh ? '自动更新' : 'Automatic updates'),
-                subtitle: Text(_isZh
-                    ? '关闭时进入该助手的对话选择页再提醒更新。'
-                    : 'When off, check and notify on the assistant topic page.'),
+                subtitle: Text(
+                  _isZh
+                      ? '关闭时进入该助手的对话选择页再提醒更新。'
+                      : 'When off, check and notify on the assistant topic page.',
+                ),
                 value: _autoUpdate,
                 onChanged: _busy
                     ? null
@@ -269,12 +273,16 @@ class _AssistantRemoteSourceDialogState
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(_isZh
-                    ? '使用内置安全审查 agent'
-                    : 'Review with the built-in safety agent'),
-                subtitle: Text(_isZh
-                    ? '首次接入及每次更新前审查提示词；会发送给当前配置的首个 LLM，可能产生 API 用量。'
-                    : 'Reviews imports and updates using the first configured LLM; this may incur API usage.'),
+                title: Text(
+                  _isZh
+                      ? '使用内置安全审查 agent'
+                      : 'Review with the built-in safety agent',
+                ),
+                subtitle: Text(
+                  _isZh
+                      ? '首次接入及每次更新前审查提示词；会发送给当前配置的首个 LLM，可能产生 API 用量。'
+                      : 'Reviews imports and updates using the first configured LLM; this may incur API usage.',
+                ),
                 value: _reviewSafety,
                 onChanged: _busy
                     ? null
@@ -293,8 +301,10 @@ class _AssistantRemoteSourceDialogState
                 for (final entry in _catalog!.assistants)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading:
-                        Text(entry.emoji, style: const TextStyle(fontSize: 24)),
+                    leading: Text(
+                      entry.emoji,
+                      style: const TextStyle(fontSize: 24),
+                    ),
                     title: Text(entry.name),
                     subtitle: Text('${entry.description}\n${entry.version}'),
                     isThreeLine: true,
@@ -312,13 +322,21 @@ class _AssistantRemoteSourceDialogState
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: Text(_isZh ? '关闭' : 'Close'),
+          child: ConstrainedText(
+            _isZh ? '关闭' : 'Close',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         TextButton(
           onPressed: _busy || _urlController.text.trim().isEmpty
               ? null
               : _importDirectFile,
-          child: Text(_isZh ? '直接导入文件' : 'Import file'),
+          child: ConstrainedText(
+            _isZh ? '直接导入文件' : 'Import file',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton.icon(
           onPressed:
@@ -329,7 +347,11 @@ class _AssistantRemoteSourceDialogState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.download),
-          label: Text(_isZh ? '读取目录' : 'Load catalog'),
+          label: ConstrainedText(
+            _isZh ? '读取目录' : 'Load catalog',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

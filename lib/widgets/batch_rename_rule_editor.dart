@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/batch_rename.dart';
 
+import 'constrained_text.dart';
+
 String localizedBatchRenameOperationLabel(
   BatchRenameOp operation,
   AppLocalizations strings,
@@ -209,7 +211,11 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
         children: [
           for (final e in choices.entries)
             ChoiceChip(
-              label: Text(e.value),
+              label: ConstrainedText(
+                e.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               selected: value == e.key,
               showCheckmark: false,
               onSelected: (_) => onChanged(e.key),
@@ -520,12 +526,20 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
                   itemBuilder: (_) => [
                     PopupMenuItem(
                       value: 'duplicate',
-                      child: Text(_strings.batchRuleDuplicate),
+                      child: ConstrainedText(
+                        _strings.batchRuleDuplicate,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'remove',
-                      child: Text(_strings.batchRuleRemove),
+                      child: ConstrainedText(
+                        _strings.batchRuleRemove,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                   onSelected: (v) => v == 'duplicate'

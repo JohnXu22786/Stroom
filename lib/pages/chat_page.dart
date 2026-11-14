@@ -79,6 +79,8 @@ import 'chat/dialogs/video_preview_dialog.dart';
 import 'chat/composer/chat_composer_widget.dart';
 import 'chat/chat_overlay_buttons.dart';
 
+import '../widgets/constrained_text.dart';
+
 part 'chat_page_streaming.dart';
 part 'chat_page_editing.dart';
 part 'chat_page_messages.dart';

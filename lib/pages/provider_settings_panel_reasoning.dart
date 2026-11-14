@@ -274,14 +274,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Center(
         child: TextButton.icon(
-          icon: Icon(
-            Icons.add,
-            size: 16,
-            color: null,
-          ),
-          label: Text(
+          icon: Icon(Icons.add, size: 16, color: null),
+          label: ConstrainedText(
             AppLocalizations.of(context)!.providerAddReasoningParam,
             style: Theme.of(context).textTheme.labelLarge,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addReasoningParam,
         ),
@@ -299,9 +297,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         child: Center(
           child: TextButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.providerAddReasoningToggle,
               style: Theme.of(context).textTheme.labelLarge,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             onPressed: () {
               setState(() {
@@ -459,14 +459,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: TextButton.icon(
-          icon: Icon(
-            Icons.add,
-            size: 16,
-            color: null,
-          ),
-          label: Text(
+          icon: Icon(Icons.add, size: 16, color: null),
+          label: ConstrainedText(
             AppLocalizations.of(context)!.providerAddReasoningEffort,
             style: Theme.of(context).textTheme.labelLarge,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addEffortReasoningParam,
         ),
@@ -594,20 +592,17 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   from,
                   to,
                 ),
-                itemBuilder: (context, j, value) => _buildOptionRow(
-                  j,
-                  value,
-                  effort,
-                  cs,
-                  editable: true,
-                ),
+                itemBuilder: (context, j, value) =>
+                    _buildOptionRow(j, value, effort, cs, editable: true),
               ),
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.providerAddOption,
                   style: Theme.of(context).textTheme.labelLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () =>
                     _addOptionToParam(_reasoningParams.indexOf(effort)),
@@ -636,13 +631,17 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ? param.type
               : 'string',
           isDense: true,
+          isExpanded: true,
           items: ParamType.values
               .map(
                 (t) => DropdownMenuItem(
                   value: t.value,
-                  child: Text(
-                      localizedParamTypeLabel(AppLocalizations.of(context)!, t),
-                      style: const TextStyle(fontSize: 12)),
+                  child: ConstrainedText(
+                    localizedParamTypeLabel(AppLocalizations.of(context)!, t),
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               )
               .toList(),
@@ -790,9 +789,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.providerAddOption,
                   style: Theme.of(context).textTheme.labelLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: () => _addOptionToParam(actualIndex),
               ),

@@ -1,4 +1,5 @@
 part of 'chat_composer_widget.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -20,7 +21,8 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 产物）也会触发一次保存，把可零等待的载荷落进草稿。
   List<String> _draftAttSignature() => _pendingAttachments
       .map(
-          (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}')
+        (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
+      )
       .toList();
 
   /// 生成待保存的附件草稿快照（深拷贝，与 pending 列表无引用共享）。
@@ -275,11 +277,9 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     final convId = widget.conversationId;
     if (convId != null) {
       _draftTimer?.cancel();
-      ref.read(conversationsProvider.notifier).saveDraft(
-        convId,
-        '',
-        draftAttachments: const [],
-      );
+      ref
+          .read(conversationsProvider.notifier)
+          .saveDraft(convId, '', draftAttachments: const []);
       _lastSavedDraft = '';
       _lastSavedDraftAttSignature = const [];
     }
@@ -365,8 +365,9 @@ class _FullscreenComposerEditorDialog extends StatefulWidget {
 
 class _FullscreenComposerEditorDialogState
     extends State<_FullscreenComposerEditorDialog> {
-  late final TextEditingController _editingController =
-      TextEditingController(text: widget.initialText);
+  late final TextEditingController _editingController = TextEditingController(
+    text: widget.initialText,
+  );
 
   /// Guards against double-invocation (e.g. X tapped while back key is
   /// pressed during the exit animation, or a rapid double-tap).
@@ -447,7 +448,11 @@ class _FullscreenComposerEditorDialogState
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(
                   icon: const Icon(Icons.send_rounded, size: 18),
-                  label: Text(l10n.actionSend),
+                  label: ConstrainedText(
+                    l10n.actionSend,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   onPressed: _send,
                 ),
               ),

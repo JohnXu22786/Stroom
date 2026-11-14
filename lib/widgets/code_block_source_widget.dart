@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:stroom/utils/file_picker_utils.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
 
+import 'constrained_text.dart';
+
 /// A reusable widget that displays source code with line numbers and a
 /// toolbar of copy / save / wrap buttons, providing a consistent "code
 /// display area" UI form that matches what [HtmlCodeBlockWidget] uses.
@@ -583,7 +585,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
         color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
+      child: ConstrainedText(
         widget.language,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -668,7 +670,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
             height: heights[i],
             child: Align(
               alignment: Alignment.topRight,
-              child: Text(
+              child: ConstrainedText(
                 '${i + 1}',
                 textAlign: TextAlign.right,
                 style: lineNumStyle,

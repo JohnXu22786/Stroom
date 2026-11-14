@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/natural_sort.dart';
 
+import 'constrained_text.dart';
+
 /// 文件夹选择器对话框
 ///
 /// 单击选中文件夹，双击进入查看子文件夹；支持在子文件夹内
@@ -332,9 +334,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!
                                 .folderPickerPath(_currentPath),
+                            maxLines: 1,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -421,8 +424,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         Icons.create_new_folder_outlined,
                         size: 18,
                       ),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.folderPickerCreateNew,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     )
                   else
@@ -489,14 +494,22 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             // 创建进行中禁用：避免在途创建时直接关闭对话框，
             // 导致文件夹已创建但调用方收到「取消」
             onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-            child: Text(AppLocalizations.of(context)!.folderPickerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.folderPickerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             // 创建进行中禁用：避免在途创建时弹出旧选择
             onPressed: _isCreating
                 ? null
                 : () => Navigator.of(context).pop(_selectedFolder),
-            child: Text(AppLocalizations.of(context)!.folderPickerConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.folderPickerConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

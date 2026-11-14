@@ -1,3 +1,5 @@
+import '../widgets/constrained_text.dart';
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -17,7 +19,11 @@ class TaskListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.taskListTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.taskListTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: tasks.isEmpty

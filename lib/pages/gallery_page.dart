@@ -25,6 +25,8 @@ import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'gallery_viewer_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 class GalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
@@ -295,29 +297,32 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         usedInBatch.add(displayName);
 
         final destinationFolder = _currentFolder;
-        await ImageManifest.withFilePublicationLock(hash, destinationFolder,
-            () async {
-          await ImageManifest.writeFile(storageFileName, bytes);
-          final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
-            bytes,
-          );
-          if (thumbnailBytes != null) {
-            await ImageManifest.writeFile(
-              imageThumbFileName(hash),
-              thumbnailBytes,
+        await ImageManifest.withFilePublicationLock(
+          hash,
+          destinationFolder,
+          () async {
+            await ImageManifest.writeFile(storageFileName, bytes);
+            final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
+              bytes,
             );
-          }
-          await ImageManifest.addRecord(
-            ImageRecord(
-              name: displayName,
-              hash: hash,
-              format: format,
-              createdAt: DateTime.now(),
-              size: bytes.length,
-              folder: destinationFolder,
-            ),
-          );
-        });
+            if (thumbnailBytes != null) {
+              await ImageManifest.writeFile(
+                imageThumbFileName(hash),
+                thumbnailBytes,
+              );
+            }
+            await ImageManifest.addRecord(
+              ImageRecord(
+                name: displayName,
+                hash: hash,
+                format: format,
+                createdAt: DateTime.now(),
+                size: bytes.length,
+                folder: destinationFolder,
+              ),
+            );
+          },
+        );
         count++;
       }
 
@@ -517,18 +522,30 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(strings.galleryFolderExportTitle),
+              title: ConstrainedText(
+                strings.galleryFolderExportTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(strings.galleryWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(strings.actionCancel),
+                  child: ConstrainedText(
+                    strings.actionCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(strings.galleryDownloadZip),
+                  child: ConstrainedText(
+                    strings.galleryDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -712,9 +729,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryTakePhoto,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -731,9 +750,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

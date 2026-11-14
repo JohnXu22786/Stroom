@@ -32,6 +32,8 @@ import '../widgets/folder_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
 import 'provider_config_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Helper: Pair model config with its source provider info
 // ============================================================================
@@ -532,7 +534,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.asrPageTitle),
+        title: ConstrainedText(
+          l10n.asrPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           if ((_selectedAudios.isNotEmpty || _retrySourcesIncomplete) &&
@@ -540,7 +546,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
-              label: Text(l10n.clear),
+              label: ConstrainedText(
+                l10n.clear,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),
@@ -630,9 +640,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!.configure,
                   style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -694,10 +706,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
-                    hint: Text(
+                    hint: ConstrainedText(
                       _modelSelectionRequired || _selectedModelReference != null
                           ? AppLocalizations.of(context)!.reselectModel
                           : AppLocalizations.of(context)!.selectAsrModel,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     isDense: true,
@@ -748,8 +761,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
-                        child: Text(
+                        child: ConstrainedText(
                           displayText,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -782,9 +796,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ),
             ),
             icon: const Icon(Icons.link, size: 20),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.enterPublicAudioUrl,
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -807,9 +823,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.mic, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.recordingSelection,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -827,9 +845,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.audio_file_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.audioFiles,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -908,7 +928,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                               ? _showUrlInputDialog
                               : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
-                      label: Text(AppLocalizations.of(context)!.asrReselect),
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.asrReselect,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -951,7 +975,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          ConstrainedText(
                             '${index + 1}. ${audio.name}',
                             style: TextStyle(
                               fontSize: 13,
@@ -1035,9 +1059,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
                       icon: const Icon(Icons.preview, size: 14),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.asrErrorDetails,
                         style: TextStyle(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       onPressed: () => _showErrorDetailDialog(context),
                       style: TextButton.styleFrom(
@@ -1157,7 +1183,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         ),
                       )
                     : const Icon(Icons.transcribe, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _isProcessing
                       ? AppLocalizations.of(context)!.asrWorking
                       : AppLocalizations.of(context)!.asrStart,
@@ -1165,6 +1191,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1929,7 +1957,11 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.asrEnterAudioUrl),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.asrEnterAudioUrl,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1955,11 +1987,19 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.cancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.cancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: _submit,
-          child: Text(AppLocalizations.of(context)!.add),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.add,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

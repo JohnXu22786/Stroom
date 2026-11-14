@@ -6,6 +6,8 @@ import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 import 'temporary_countdown_capsule.dart';
 
+import 'constrained_text.dart';
+
 class TopicItem extends StatelessWidget {
   final Conversation topic;
   final bool selectionMode;
@@ -138,7 +140,7 @@ class TopicItem extends StatelessWidget {
                             expiresAt: topic.temporaryExpiresAt!,
                           ),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -227,31 +229,39 @@ class TopicItem extends StatelessWidget {
                       itemBuilder: (ctx) => [
                         PopupMenuItem(
                           value: 'rename',
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.topicItemRename,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         PopupMenuItem(
                           value: 'auto_rename',
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.topicItemAutoName,
                             style: TextStyle(color: cs.onSurface),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         PopupMenuItem(
                           value: 'pin',
-                          child: Text(
+                          child: ConstrainedText(
                             topic.isPinned
                                 ? AppLocalizations.of(context)!.topicItemUnpin
                                 : AppLocalizations.of(context)!.topicItemPin,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const PopupMenuDivider(),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.topicItemDelete,
                             style: TextStyle(color: cs.error),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],

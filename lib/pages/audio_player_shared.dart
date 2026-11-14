@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // StreamModelOption — data class for streaming model selection
 // ============================================================================
@@ -73,7 +75,11 @@ class AudioPlayerErrorView extends StatelessWidget {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: onRetry,
-            child: Text(AppLocalizations.of(context)!.audioPlayerRetry),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.audioPlayerRetry,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -109,13 +115,19 @@ class AudioPlayerToolbarButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon,
-                  size: 16, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                icon,
+                size: 16,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(width: 4),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
             ],
           ),
         ),

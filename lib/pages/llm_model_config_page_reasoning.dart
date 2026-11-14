@@ -131,7 +131,11 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.reasoningAddOptionValue),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.reasoningAddOptionValue,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -144,12 +148,20 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: Text(AppLocalizations.of(context)!.batchDlgConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -259,7 +271,11 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.reasoningAddOptionValue),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.reasoningAddOptionValue,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -272,12 +288,20 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: Text(AppLocalizations.of(context)!.batchDlgConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -356,9 +380,11 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         const SizedBox(height: 4),
         TextButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: Text(
+          label: ConstrainedText(
             AppLocalizations.of(context)!.reasoningAddOption,
             style: TextStyle(fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: () => _addCustomParamOptionWithDialog(param),
         ),
@@ -566,7 +592,11 @@ class _EditCustomParamOptionDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.reasoningEditOptionValue),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.reasoningEditOptionValue,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: TextField(
         controller: _controller,
         autofocus: true,
@@ -579,11 +609,19 @@ class _EditCustomParamOptionDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.batchDlgCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.mermaidSaveButton,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
