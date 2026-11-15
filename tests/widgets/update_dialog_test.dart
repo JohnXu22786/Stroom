@@ -95,6 +95,45 @@ String _githubRelease(
 
 void main() {
   group('UpdateDialog - Shared Dialog', () {
+    testWidgets('phone layout gives the primary action a full-width target', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          latestVersion: 'v0.5.5',
+          releaseNotes: List.filled(
+            20,
+            'A long release note that needs a readable scrolling area. ',
+          ).join(),
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/tag/v0.5.5',
+          updateAvailable: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+      );
+
+      final dialogRect = tester.getRect(find.byType(AlertDialog));
+      final primaryAction = find.ancestor(
+        of: find.text('Download in browser'),
+        matching: find.byType(FilledButton),
+      );
+      final primaryRect = tester.getRect(primaryAction);
+      expect(primaryRect.width, greaterThanOrEqualTo(dialogRect.width - 40));
+      expect(primaryRect.bottom, lessThanOrEqualTo(dialogRect.bottom));
+
+      await tester.tap(find.text('Remind me later'));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('labels follow the selected locale', (tester) async {
       final notifier = _setupNotifier(
         state: const UpdateState(
