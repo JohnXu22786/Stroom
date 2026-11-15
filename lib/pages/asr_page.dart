@@ -1116,10 +1116,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  _transcriptionResult!.length > 200
-                      ? '${_transcriptionResult!.substring(0, 200)}...'
-                      : _transcriptionResult!,
+                ConstrainedText(
+                  _transcriptionResult!,
                   style: TextStyle(color: cs.onPrimaryContainer, fontSize: 12),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
