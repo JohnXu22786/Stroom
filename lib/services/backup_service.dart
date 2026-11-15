@@ -358,6 +358,69 @@ class BackupService {
     }
   }
 
+  static bool _isSelectedWebStoreKey(
+    String key,
+    BackupSelection selection,
+  ) {
+    final rootKey = key.startsWith('/') ? key.substring(1) : key;
+    if (selection.tasks &&
+        const {'task_list_last_read.json', 'app_launches.json'}
+            .contains(rootKey)) {
+      return true;
+    }
+    if (selection.ankiData &&
+        (rootKey == 'collection.anki2' ||
+            (selection.includeMediaFiles &&
+                rootKey.startsWith('collection.media/')))) {
+      return true;
+    }
+    if (selection.browserCookies && rootKey == 'browser_cookies.json') {
+      return true;
+    }
+    if ((selection.chatRecordsAndAttachments || selection.tasks) &&
+        selection.includeMediaFiles &&
+        (key.startsWith('attachments/') || key.startsWith('temp_edited/'))) {
+      return true;
+    }
+    for (final dir in _restoreKnownDirs) {
+      if (key.startsWith('$dir/')) {
+        if (dir == 'attachments' &&
+            selection.tasks &&
+            selection.includeMediaFiles) {
+          return true;
+        }
+        return _shouldRestoreDir(dir, selection);
+      }
+    }
+    return false;
+  }
+
+  static Future<Map<String, Uint8List>> _snapshotSelectedWebStoreFiles(
+    BackupSelection selection,
+  ) async {
+    final snapshot = <String, Uint8List>{};
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (!_isSelectedWebStoreKey(key, selection)) continue;
+      final bytes = await WebFileStore.read(key);
+      if (bytes != null) snapshot[key] = bytes;
+    }
+    return snapshot;
+  }
+
+  static Future<void> _restoreSelectedWebStoreFiles(
+    BackupSelection selection,
+    Map<String, Uint8List> snapshot,
+  ) async {
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (_isSelectedWebStoreKey(key, selection)) {
+        await WebFileStore.delete(key);
+      }
+    }
+    for (final entry in snapshot.entries) {
+      await WebFileStore.write(entry.key, entry.value);
+    }
+  }
+
   // ================================================================
   // 核心：流式备份 — 收集计划 + 后台 isolate 构建，UI 零阻塞
   // ================================================================
@@ -2243,6 +2306,8 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
+    bool skipRollbackSnapshot = false,
+    bool skipAnkiMigrationMarkerInvalidation = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2323,74 +2388,137 @@ class BackupService {
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
-    // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
-    // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
-    // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
-    // 与清除功能的行为一致。
-    await _prepareSelectedFilesForRestore(
-      restoreSelection,
-      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
-      taskFilesToReplace: metadata.taskFilesToReplace,
-      completeFileInventories: metadata.completeFileInventories,
-    );
-
-    // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
-    debugPrint('[BackupService] _restoreFromBytes: restoring database');
-    await _restoreRecordsAndPrefs(metadata, restoreSelection);
-    onProgress?.call(0.55);
-    await _yieldToEventLoop();
-
-    // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
-    // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
-    // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
-    debugPrint(
-      '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
-    );
-    var restoreIndex = 0;
+    // Resolve every archive entry to its destination and retain its bytes
+    // before clearing selected live data.
+    final stagedEntries =
+        <({String subDir, String fileName, Uint8List bytes})>[];
     for (final entry in fileMap.entries) {
-      final handled = await _restoreArchiveEntry(entry.key, restoreSelection, (
-        subDir,
-        fileName,
-      ) async {
-        final builder = BytesBuilder(copy: false);
-        builder.add(entry.value);
-        await writeBackupFile(subDir, fileName, builder.takeBytes());
-      });
-      if (handled) {
-        restoreIndex++;
-        // 每处理 20 个文件让出事件循环
-        if (restoreIndex % 20 == 0) await _yieldToEventLoop();
-      }
-    }
-    await _restorePortableTaskPaths(
-      restoreSelection,
-      taskFilesToRestore: metadata.taskFilesToReplace,
-    );
-
-    // 数据迁移：确保恢复后的数据格式是最新的
-    // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
-    // 需要迁移到当前数据格式才能正常使用。
-    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-    final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-    final deferVersionCommit =
-        !skipPostRestoreMigration && !_isBackupFlutterTest;
-    final restoredPartVersions =
-        await DataMigrationService.mergeRestoredPartVersions(
-      backupVersions: metadata.dataPartVersions,
-      restoredParts: restoredPartIds,
-      deferCommit: deferVersionCommit,
-    );
-    if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
-      await DataMigrationService.migrateDataFormatIfNeeded(
-        onlyParts: restoredPartIds,
-        restoredPartVersions: deferVersionCommit ? restoredPartVersions : null,
-        validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+      await _restoreArchiveEntry(
+        entry.key,
+        restoreSelection,
+        (subDir, fileName) async {
+          stagedEntries.add((
+            subDir: subDir,
+            fileName: fileName,
+            bytes: entry.value,
+          ));
+        },
+        deferAnkiMigrationMarkerInvalidation: true,
       );
     }
-    await _restoreBrowserCookiesAfterDataRestore(
-      restoreSelection,
-      metadata.browserCookiesData,
-    );
+
+    final rollbackBytes = skipRollbackSnapshot
+        ? null
+        : await _buildBackupBytes(selection: restoreSelection);
+    final webStoreSnapshot =
+        skipRollbackSnapshot || !(kIsWeb || WebFileStore.isTestMode)
+            ? null
+            : await _snapshotSelectedWebStoreFiles(restoreSelection);
+    try {
+      // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
+      // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
+      await _prepareSelectedFilesForRestore(
+        restoreSelection,
+        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+        taskFilesToReplace: metadata.taskFilesToReplace,
+        completeFileInventories: metadata.completeFileInventories,
+        deferAnkiMigrationMarkerInvalidation: true,
+      );
+
+      // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+      debugPrint('[BackupService] _restoreFromBytes: restoring database');
+      await _restoreRecordsAndPrefs(metadata, restoreSelection);
+      onProgress?.call(0.55);
+      await _yieldToEventLoop();
+
+      // Restore selected binary files and task files from the staged entries.
+      debugPrint(
+        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
+      );
+      for (var restoreIndex = 0;
+          restoreIndex < stagedEntries.length;
+          restoreIndex++) {
+        final entry = stagedEntries[restoreIndex];
+        beforeRestoreBinaryPublishForTesting?.call(restoreIndex);
+        await writeBackupFile(entry.subDir, entry.fileName, entry.bytes);
+        if ((restoreIndex + 1) % 20 == 0) await _yieldToEventLoop();
+      }
+      await _restorePortableTaskPaths(
+        restoreSelection,
+        taskFilesToRestore: metadata.taskFilesToReplace,
+      );
+
+      // 数据迁移：确保恢复后的数据格式是最新的
+      final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+      final deferVersionCommit =
+          !skipPostRestoreMigration && !_isBackupFlutterTest;
+      final restoredPartVersions =
+          await DataMigrationService.mergeRestoredPartVersions(
+        backupVersions: metadata.dataPartVersions,
+        restoredParts: restoredPartIds,
+        deferCommit: deferVersionCommit,
+      );
+      if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+        await DataMigrationService.migrateDataFormatIfNeeded(
+          onlyParts: restoredPartIds,
+          restoredPartVersions:
+              deferVersionCommit ? restoredPartVersions : null,
+          validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+        );
+      }
+      if (restoreSelection.ankiData && !skipAnkiMigrationMarkerInvalidation) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
+      await _restoreBrowserCookiesAfterDataRestore(
+        restoreSelection,
+        metadata.browserCookiesData,
+      );
+    } catch (restoreError, restoreStackTrace) {
+      if (rollbackBytes != null) {
+        final publishHook = beforeRestoreBinaryPublishForTesting;
+        beforeRestoreBinaryPublishForTesting = null;
+        Object? rollbackError;
+        StackTrace? rollbackStackTrace;
+        try {
+          try {
+            await _restoreFromBytes(
+              rollbackBytes,
+              selection: restoreSelection,
+              skipPostRestoreMigration: true,
+              skipMissingCategories: true,
+              skipRollbackSnapshot: true,
+              skipAnkiMigrationMarkerInvalidation: true,
+            );
+          } catch (error, stackTrace) {
+            rollbackError = error;
+            rollbackStackTrace = stackTrace;
+          }
+          if (webStoreSnapshot != null) {
+            try {
+              await _restoreSelectedWebStoreFiles(
+                restoreSelection,
+                webStoreSnapshot,
+              );
+            } catch (error, stackTrace) {
+              rollbackError ??= error;
+              rollbackStackTrace ??= stackTrace;
+            }
+          }
+          if (rollbackError != null) {
+            debugPrint(
+              '[BackupService] byte restore rollback failed: $rollbackError\n'
+              '${rollbackStackTrace ?? StackTrace.current}',
+            );
+            throw StateError(
+              'Restore failed: $restoreError; rollback also failed: $rollbackError.',
+            );
+          }
+        } finally {
+          beforeRestoreBinaryPublishForTesting = publishHook;
+        }
+      }
+      Error.throwWithStackTrace(restoreError, restoreStackTrace);
+    }
     onProgress?.call(1.0);
     return metadata.skippedLabels;
   }
