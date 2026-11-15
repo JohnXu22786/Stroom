@@ -143,6 +143,12 @@ final fileManagerNavManifestBridge = ManifestBridge(
   getAllDescendantFolderPaths: (parentPath, allPaths) => [],
 );
 
+Widget _disableTestAnimations(BuildContext context, Widget? child) =>
+    MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    );
+
 /// Simple helper from file_manager_view_test.dart — wraps a widget in
 /// MaterialApp + Scaffold.
 Widget _buildTestApp(
@@ -150,6 +156,7 @@ Widget _buildTestApp(
   Locale locale = const Locale('zh', 'CN'),
 }) {
   return MaterialApp(
+    builder: _disableTestAnimations,
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
@@ -205,6 +212,7 @@ Widget _buildFileManagerApp({
 
   return ProviderScope(
     child: MaterialApp(
+      builder: _disableTestAnimations,
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Navigator(
@@ -1154,6 +1162,7 @@ void main() {
       ManifestBridge? bridge,
     }) {
       return MaterialApp(
+        builder: _disableTestAnimations,
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
@@ -1345,6 +1354,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              builder: _disableTestAnimations,
               locale: const Locale('zh', 'CN'),
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
@@ -3042,6 +3052,7 @@ void main() {
       VoidCallback? onTap,
     }) {
       return MaterialApp(
+        builder: _disableTestAnimations,
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,

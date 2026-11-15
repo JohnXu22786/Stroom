@@ -328,142 +328,69 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final animateable = (widget.maxLines != null || widget.softWrap == false) &&
         widget.maxLines != 0;
     if (!animateable) return _original();
-    return CustomSingleChildLayout(
-      delegate: _ConstrainedTextLayoutDelegate(
-        data: widget.data,
-        maxLines: widget.maxLines ?? 1,
-        style: style,
-        strutStyle: widget.strutStyle,
-        textAlign: textAlign,
-        textDirection: direction,
-        locale: widget.locale ?? locale,
-        textScaler: scaler,
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          if (!width.isFinite || width <= 0) return _original();
-          _measure(
-            width,
-            direction,
-            scaler,
-            style,
-            locale,
-            textAlign,
-            !MediaQuery.disableAnimationsOf(context) &&
-                TickerMode.valuesOf(context).enabled,
-          );
-          if (_overflow <= 0 ||
-              MediaQuery.disableAnimationsOf(context) ||
-              !TickerMode.valuesOf(context).enabled) {
-            return _original();
-          }
-          return Semantics(
-            label: widget.semanticsLabel ?? widget.data,
-            child: SizedBox(
-              width: width,
-              height: _textHeight,
-              child: ClipRect(
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  child: SizedBox(
-                    width: _vertical ? width : _textWidth,
-                    child: Text(
-                      widget.data,
-                      style: style,
-                      strutStyle: widget.strutStyle,
-                      textAlign: widget.marqueeTextAlign ?? textAlign,
-                      textDirection: direction,
-                      locale: locale,
-                      softWrap: _vertical,
-                      overflow: TextOverflow.clip,
-                      textScaler: scaler,
-                      maxLines: _vertical ? null : widget.maxLines ?? 1,
-                      semanticsLabel: widget.semanticsLabel,
-                      selectionColor: widget.selectionColor,
-                    ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        if (!width.isFinite || width <= 0) return _original();
+        _measure(
+          width,
+          direction,
+          scaler,
+          style,
+          locale,
+          textAlign,
+          !MediaQuery.disableAnimationsOf(context) &&
+              TickerMode.valuesOf(context).enabled,
+        );
+        if (_overflow <= 0 ||
+            MediaQuery.disableAnimationsOf(context) ||
+            !TickerMode.valuesOf(context).enabled) {
+          return _original();
+        }
+        return Semantics(
+          label: widget.semanticsLabel ?? widget.data,
+          child: SizedBox(
+            width: width,
+            height: _textHeight,
+            child: ClipRect(
+              child: AnimatedBuilder(
+                animation: _controller,
+                child: SizedBox(
+                  width: _vertical ? width : _textWidth,
+                  child: Text(
+                    widget.data,
+                    style: style,
+                    strutStyle: widget.strutStyle,
+                    textAlign: widget.marqueeTextAlign ?? textAlign,
+                    textDirection: direction,
+                    locale: locale,
+                    softWrap: _vertical,
+                    overflow: TextOverflow.clip,
+                    textScaler: scaler,
+                    maxLines: _vertical ? null : widget.maxLines ?? 1,
+                    semanticsLabel: widget.semanticsLabel,
+                    selectionColor: widget.selectionColor,
                   ),
-                  builder: (context, child) {
-                    final progress = _position.value;
-                    final horizontalOffset = _vertical
-                        ? 0.0
-                        : direction == TextDirection.ltr
-                            ? -_overflow * progress
-                            : -_overflow * (1 - progress);
-                    final verticalOffset =
-                        _vertical ? -_overflow * progress : 0.0;
-                    return Transform.translate(
-                      offset: Offset(horizontalOffset, verticalOffset),
-                      child: child,
-                    );
-                  },
                 ),
+                builder: (context, child) {
+                  final progress = _position.value;
+                  final horizontalOffset = _vertical
+                      ? 0.0
+                      : direction == TextDirection.ltr
+                          ? -_overflow * progress
+                          : -_overflow * (1 - progress);
+                  final verticalOffset =
+                      _vertical ? -_overflow * progress : 0.0;
+                  return Transform.translate(
+                    offset: Offset(horizontalOffset, verticalOffset),
+                    child: child,
+                  );
+                },
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
-}
-
-class _ConstrainedTextLayoutDelegate extends SingleChildLayoutDelegate {
-  const _ConstrainedTextLayoutDelegate({
-    required this.data,
-    required this.maxLines,
-    required this.style,
-    required this.strutStyle,
-    required this.textAlign,
-    required this.textDirection,
-    required this.locale,
-    required this.textScaler,
-  });
-
-  final String data;
-  final int maxLines;
-  final TextStyle style;
-  final StrutStyle? strutStyle;
-  final TextAlign textAlign;
-  final TextDirection textDirection;
-  final Locale? locale;
-  final TextScaler textScaler;
-
-  TextPainter _painter({int? lines, String? ellipsis}) => TextPainter(
-        text: TextSpan(text: data, style: style),
-        textDirection: textDirection,
-        textScaler: textScaler,
-        locale: locale,
-        strutStyle: strutStyle,
-        textAlign: textAlign,
-        maxLines: lines,
-        ellipsis: ellipsis,
-      );
-
-  @override
-  Size getSize(BoxConstraints constraints) {
-    final intrinsic = _painter()..layout();
-    final preferredWidth = intrinsic.maxIntrinsicWidth;
-    final width =
-        constraints.maxWidth.isFinite ? constraints.maxWidth : preferredWidth;
-    final bounded = _painter(lines: maxLines, ellipsis: '…')
-      ..layout(maxWidth: width);
-    return constraints.constrain(
-      Size(bounded.didExceedMaxLines ? width : bounded.width, bounded.height),
-    );
-  }
-
-  @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      BoxConstraints.tight(getSize(constraints));
-
-  @override
-  bool shouldRelayout(covariant _ConstrainedTextLayoutDelegate oldDelegate) =>
-      data != oldDelegate.data ||
-      maxLines != oldDelegate.maxLines ||
-      style != oldDelegate.style ||
-      strutStyle != oldDelegate.strutStyle ||
-      textAlign != oldDelegate.textAlign ||
-      textDirection != oldDelegate.textDirection ||
-      locale != oldDelegate.locale ||
-      textScaler != oldDelegate.textScaler;
 }
