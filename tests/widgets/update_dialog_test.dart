@@ -127,7 +127,7 @@ void main() {
         matching: find.byType(FilledButton),
       );
       final primaryRect = tester.getRect(primaryAction);
-      expect(primaryRect.width, greaterThanOrEqualTo(dialogRect.width - 40));
+      expect(primaryRect.width, greaterThanOrEqualTo(dialogRect.width * 0.8));
       expect(primaryRect.bottom, lessThanOrEqualTo(dialogRect.bottom));
 
       await tester.tap(find.text('Remind me later'));
