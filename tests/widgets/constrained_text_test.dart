@@ -90,4 +90,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('lays out safely inside dropdown form fields', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: 'format',
+              items: [
+                DropdownMenuItem(
+                  value: 'format',
+                  child: ConstrainedText(
+                    'A short dropdown label',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -403,7 +403,11 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final isDropdownItem =
         context.findAncestorWidgetOfExactType<DropdownMenuItem<dynamic>>() !=
             null;
-    if (widget.useNaturalWidthLayout || isDropdownItem) return measuredLayout;
+    final isInputDecorator =
+        context.findAncestorWidgetOfExactType<InputDecorator>() != null;
+    if (widget.useNaturalWidthLayout || isDropdownItem || isInputDecorator) {
+      return measuredLayout;
+    }
     return CustomSingleChildLayout(
       delegate: _ConstrainedTextLayoutDelegate(
         data: widget.data,
