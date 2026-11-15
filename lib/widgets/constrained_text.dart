@@ -69,6 +69,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
   );
   Animation<double> _position = const AlwaysStoppedAnimation(0);
   Timer? _startTimer;
+  Timer? _endpointTimer;
   double _overflow = 0;
   double _textWidth = 0;
   double _textHeight = 0;
@@ -82,6 +83,32 @@ class _ConstrainedTextState extends State<ConstrainedText>
   TextStyle? _measuredStyle;
   Locale? _measuredLocale;
   TextAlign? _measuredAlign;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addStatusListener(_handleAnimationStatus);
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (!_motionAllowed ||
+        (status != AnimationStatus.completed &&
+            status != AnimationStatus.dismissed)) {
+      return;
+    }
+    _animating = false;
+    _endpointTimer?.cancel();
+    _endpointTimer = Timer(const Duration(seconds: 2), () {
+      _endpointTimer = null;
+      if (!mounted || !_motionAllowed) return;
+      _animating = true;
+      if (_controller.status == AnimationStatus.completed) {
+        _controller.reverse();
+      } else {
+        _controller.forward();
+      }
+    });
+  }
 
   @override
   void didUpdateWidget(covariant ConstrainedText oldWidget) {
@@ -101,6 +128,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
   void _reset() {
     _startTimer?.cancel();
     _startTimer = null;
+    _endpointTimer?.cancel();
+    _endpointTimer = null;
     _controller.stop();
     _controller.value = 0;
     _animating = false;
@@ -229,7 +258,10 @@ class _ConstrainedTextState extends State<ConstrainedText>
       }
     }
     _motionAllowed = allowMotion && _overflow > 0;
-    if (_motionAllowed && !_animating && _startTimer == null) {
+    if (_motionAllowed &&
+        !_animating &&
+        _startTimer == null &&
+        _endpointTimer == null) {
       if (_started) {
         _startAnimation();
       } else {
@@ -241,6 +273,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
     } else if (!_motionAllowed) {
       _startTimer?.cancel();
       _startTimer = null;
+      _endpointTimer?.cancel();
+      _endpointTimer = null;
       if (_animating) {
         _controller.stop();
         _animating = false;
@@ -252,20 +286,9 @@ class _ConstrainedTextState extends State<ConstrainedText>
     if (_animating || !_motionAllowed || _overflow <= 0) return;
     final travel =
         math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
-    _controller.duration = Duration(milliseconds: travel * 2 + 4000);
-    _position = TweenSequence<double>([
-      TweenSequenceItem(tween: ConstantTween(0), weight: 2000),
-      TweenSequenceItem(
-        tween: Tween(begin: 0, end: 1),
-        weight: travel.toDouble(),
-      ),
-      TweenSequenceItem(tween: ConstantTween(1), weight: 2000),
-      TweenSequenceItem(
-        tween: Tween(begin: 1, end: 0),
-        weight: travel.toDouble(),
-      ),
-    ]).animate(_controller);
-    _controller.repeat();
+    _controller.duration = Duration(milliseconds: travel);
+    _position = Tween<double>(begin: 0, end: 1).animate(_controller);
+    _controller.forward(from: 0);
     _animating = true;
     _started = true;
   }
@@ -288,6 +311,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
   @override
   void dispose() {
     _startTimer?.cancel();
+    _endpointTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
