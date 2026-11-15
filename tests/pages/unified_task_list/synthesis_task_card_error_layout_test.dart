@@ -64,6 +64,7 @@ void main() {
     tester,
   ) async {
     await _pumpFailedCard(tester, 390);
+    expect(tester.takeException(), isNull);
 
     final error = find.text(_error);
     final details = find.text('Details');
@@ -76,7 +77,10 @@ void main() {
 
     await tester.tap(details);
     await tester.pumpAndSettle();
-    expect(find.text('Raw Request/Response'), findsOneWidget);
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(SynthesisTaskCard)),
+    )!;
+    expect(find.text(strings.unifiedTaskRawRequestResponse), findsOneWidget);
   });
 
   testWidgets('tablet keeps Details beside the error summary', (tester) async {
@@ -96,6 +100,7 @@ void main() {
     tester,
   ) async {
     await _pumpFailedCard(tester, 390, textScale: 1.5, darkMode: true);
+    expect(tester.takeException(), isNull);
 
     final error = find.text(_error);
     final details = find.text('Details');
@@ -105,6 +110,5 @@ void main() {
       tester.getTopLeft(details).dy,
       greaterThanOrEqualTo(tester.getBottomLeft(error).dy),
     );
-    expect(tester.takeException(), isNull);
   });
 }

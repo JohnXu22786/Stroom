@@ -103,13 +103,15 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             buildStatusChip(
                               widget.task.status,
                               AppLocalizations.of(context)!,
                             ),
-                            const SizedBox(width: 8),
                             Text(
                               formatRelativeTime(
                                 widget.task.createdAt,
@@ -123,7 +125,6 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                               ),
                             ),
                             if (widget.task.status == TaskStatus.running) ...[
-                              const SizedBox(width: 8),
                               // Live elapsed time — lets the user see a
                               // slow-but-working synthesis is still alive.
                               RunningElapsedLabel(
