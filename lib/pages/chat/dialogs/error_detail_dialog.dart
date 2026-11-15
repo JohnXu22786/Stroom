@@ -108,8 +108,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                   child: sections.isEmpty
                       ? _buildEmptyState()
                       : _selectedSectionId != null
-                      ? _buildDetailView(sections, isDark)
-                      : _buildListView(sections, isDark),
+                          ? _buildDetailView(sections, isDark)
+                          : _buildListView(sections, isDark),
                 ),
                 // Close button
                 Padding(
@@ -210,14 +210,12 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (widget.isOcrDiagnostics) {
       final credentialValues =
           OcrDiagnosticSnapshot.credentialValuesFromRequest(req);
-      final safeRequest =
-          OcrDiagnosticSnapshot.sanitizeRequest(
+      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
             req,
             excludedValues: credentialValues,
           ) ??
           {};
-      final safeResponse =
-          OcrDiagnosticSnapshot.sanitizeResponse(
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
             resp,
             excludedValues: credentialValues,
           ) ??
@@ -501,8 +499,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       final characters = textValue.characters;
       final l10n = AppLocalizations.of(context)!;
       final first = decodedPreview?.first ?? characters.take(40).toString();
-      final last =
-          decodedPreview?.last ??
+      final last = decodedPreview?.last ??
           characters.skip(characters.length - 40).toString();
       final omittedCount = decodedPreview?.isSavedPreview == true
           ? decodedPreview!.omittedCharacters
@@ -511,9 +508,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           ? l10n.chatErrorDetailOmittedContentUnknown
           : l10n.chatErrorDetailOmittedContentMarker(omittedCount);
       final isSavedPreview = decodedPreview?.isSavedPreview == true;
-      final fullAvailableText = isSavedPreview
-          ? '$first$marker$last'
-          : textValue;
+      final fullAvailableText =
+          isSavedPreview ? '$first$marker$last' : textValue;
       final colors = Theme.of(context).colorScheme;
       return RichText(
         text: TextSpan(
@@ -621,9 +617,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                         child: Text(
                           path,
                           style: _jsonStyle.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -649,12 +644,12 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                         if (isSavedPreview) ...[
                           Text(
                             l10n.chatErrorDetailSavedPreviewNotice,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
                           ),
                           const SizedBox(height: 12),
                         ],

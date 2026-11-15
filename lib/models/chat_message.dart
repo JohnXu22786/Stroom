@@ -359,9 +359,8 @@ class ChatMessage {
     final separator = value.indexOf('|', _storedPreviewPrefix.length);
     if (separator < 0) return null;
     final omittedText = value.substring(_storedPreviewPrefix.length, separator);
-    final omittedCharacters = omittedText == '?'
-        ? null
-        : int.tryParse(omittedText);
+    final omittedCharacters =
+        omittedText == '?' ? null : int.tryParse(omittedText);
     if (omittedText != '?' && omittedCharacters == null) return null;
 
     final excerpt = value.substring(separator + 1).characters;
