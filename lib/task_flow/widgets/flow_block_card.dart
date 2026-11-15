@@ -108,10 +108,7 @@ class FlowBlockCard extends ConsumerWidget {
         ),
         Text(
           def.typeKey.name,
-          style: TextStyle(
-            fontSize: 10,
-            color: cs.onSurfaceVariant,
-          ),
+          style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
         ),
       ],
     );
@@ -135,43 +132,26 @@ class FlowBlockCard extends ConsumerWidget {
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              Text(
-                strings.taskFlowUiTemporary,
-                style: TextStyle(fontSize: 10),
-              ),
+              Text(strings.taskFlowUiTemporary, style: TextStyle(fontSize: 10)),
             ],
           ),
         ),
       // Settings button (hidden in readOnly)
       if (!readOnly)
         IconButton(
-          icon: Icon(
-            Icons.settings,
-            size: 16,
-            color: cs.primary,
-          ),
+          icon: Icon(Icons.settings, size: 16, color: cs.primary),
           onPressed: onSettings ?? onTap,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(
-            minWidth: 28,
-            minHeight: 28,
-          ),
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           tooltip: strings.taskFlowUiSetParameters,
         ),
       // Replace button (hidden in readOnly)
       if (!readOnly)
         IconButton(
-          icon: Icon(
-            Icons.swap_horiz,
-            size: 16,
-            color: cs.primary,
-          ),
+          icon: Icon(Icons.swap_horiz, size: 16, color: cs.primary),
           onPressed: onReplace,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(
-            minWidth: 28,
-            minHeight: 28,
-          ),
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           tooltip: strings.taskFlowUiReplaceBlock,
         ),
       if (!readOnly) _buildMenu(context),
@@ -237,8 +217,8 @@ class FlowBlockCard extends ConsumerWidget {
               color: validationMessage != null
                   ? cs.error
                   : selected
-                      ? cs.primary
-                      : def.color.withValues(alpha: 0.4),
+                  ? cs.primary
+                  : def.color.withValues(alpha: 0.4),
               width: selected ? 2 : 1,
             ),
           ),
@@ -307,13 +287,7 @@ class FlowBlockCard extends ConsumerWidget {
                                   strings,
                                 );
                           return Text(
-                            '$label: ${friendlyParamValue(
-                              paramDef,
-                              e.value,
-                              ref,
-                              strings: strings,
-                              params: block.params,
-                            )}',
+                            '$label: ${friendlyParamValue(paramDef, e.value, ref, strings: strings, params: block.params)}',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,
@@ -339,9 +313,9 @@ class FlowBlockCard extends ConsumerWidget {
                     child: Text(
                       readOnly
                           ? AppLocalizations.of(context)!
-                              .taskFlowUiViewParameters
+                                .taskFlowUiViewParameters
                           : AppLocalizations.of(context)!
-                              .taskFlowUiTapSetParameters,
+                                .taskFlowUiTapSetParameters,
                       style: TextStyle(
                         fontSize: 9,
                         color: cs.primary.withValues(alpha: 0.6),
@@ -480,10 +454,9 @@ class FlowBlockCard extends ConsumerWidget {
     int action,
     String label,
     VoidCallback? callback,
-  ) =>
-      PopupMenuItem(
-        value: action,
-        enabled: callback != null,
-        child: Text(label),
-      );
+  ) => PopupMenuItem(
+    value: action,
+    enabled: callback != null,
+    child: Text(label),
+  );
 }
