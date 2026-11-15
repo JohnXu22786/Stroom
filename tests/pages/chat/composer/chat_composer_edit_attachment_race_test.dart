@@ -155,7 +155,10 @@ void main() {
       finishCleanup.complete();
       await tester.runAsync(() => edit);
 
-      final files = await Directory('${root.path}/attachments').list().toList();
+      final files = await tester.runAsync(
+            () => Directory('${root.path}/attachments').list().toList(),
+          ) ??
+          const <FileSystemEntity>[];
       expect(
         files,
         hasLength(1),
@@ -212,7 +215,67 @@ void main() {
       ]);
       final edited = sent!.last;
       expect(edited.storagePath, startsWith('temp_edited/'));
-      expect(await AttachmentStorage.readFile(edited.storagePath), editedBytes);
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(edited.storagePath),
+        ),
+        editedBytes,
+      );
+    },
+  );
+
+  testWidgets(
+    'overlapping edits keep only the replacement that commits last',
+    (tester) async {
+      await mountComposer(tester);
+      await addImage(tester, 'edited');
+      final editedBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+      );
+      final savedPaths = List<String?>.filled(2, null);
+      final releaseSave = List.generate(2, (_) => Completer<void>());
+      final bothSaved = Completer<void>();
+      var saveCount = 0;
+      AttachmentStorage.saveEditedFileOverrideForTesting =
+          (fileName, bytes) async {
+        final index = saveCount++;
+        final savedPath = await AttachmentStorage.saveFile(fileName, bytes);
+        savedPaths[index] = 'temp_edited/${savedPath.split('/').last}';
+        if (savedPaths.every((path) => path != null) &&
+            !bothSaved.isCompleted) {
+          bothSaved.complete();
+        }
+        await releaseSave[index].future;
+        return savedPaths[index]!;
+      };
+
+      final firstEdit = composerKey.currentState!
+          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      final secondEdit = composerKey.currentState!
+          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      await tester.runAsync(() => bothSaved.future);
+
+      releaseSave[1].complete();
+      await tester.runAsync(() => secondEdit);
+      releaseSave[0].complete();
+      await tester.runAsync(() => firstEdit);
+
+      final pending =
+          composerKey.currentState!.pendingAttachmentsForTesting.single;
+      expect(pending.storagePath, savedPaths[1]);
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(savedPaths[0]!),
+        ),
+        isNull,
+        reason: 'a superseded overlapping edit must clean up its saved file',
+      );
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(savedPaths[1]!),
+        ),
+        editedBytes,
+      );
     },
   );
 
@@ -257,7 +320,9 @@ void main() {
       expect(
           latestEditedOriginal.storagePath, isNot(editedOriginal.storagePath));
       expect(
-        await AttachmentStorage.readFile(editedOriginal.storagePath),
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(editedOriginal.storagePath),
+        ),
         isNull,
         reason: 'a superseded edit replacement must be deleted',
       );
@@ -288,23 +353,31 @@ void main() {
       });
 
       expect(
-        await AttachmentStorage.readFile(source.storagePath),
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(source.storagePath),
+        ),
         sourceBytes,
         reason: 'the original message must keep its source file',
       );
       expect(
-        await AttachmentStorage.readFile(editedOriginal.storagePath),
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(editedOriginal.storagePath),
+        ),
         isNull,
         reason: 'a removed original edit replacement must not be orphaned',
       );
       expect(
-        await AttachmentStorage.readFile(latestEditedOriginal.storagePath),
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(latestEditedOriginal.storagePath),
+        ),
         isNull,
         reason:
             'the current original edit replacement must be deleted on removal',
       );
       expect(
-        await AttachmentStorage.readFile(editedAdded.storagePath),
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(editedAdded.storagePath),
+        ),
         isNull,
         reason: 'a removed new edit replacement must not be orphaned',
       );
@@ -337,7 +410,10 @@ void main() {
       finishSave.complete();
       await tester.runAsync(() => edit);
 
-      final files = await Directory('${root.path}/attachments').list().toList();
+      final files = await tester.runAsync(
+            () => Directory('${root.path}/attachments').list().toList(),
+          ) ??
+          const <FileSystemEntity>[];
       expect(
         files,
         hasLength(1),

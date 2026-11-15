@@ -526,15 +526,17 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         base64Data: newBase64,
       );
 
-      // The attachment may have been removed, reordered, or the composer
-      // disposed while the file was being written. Only publish the edit
-      // while its identity is still present; otherwise the new file has no
-      // owner and must be cleaned up.
+      // The attachment may have been removed, reordered, superseded by a
+      // second edit, or the composer disposed while the file was being
+      // written. Publish only if its id still points to the captured file
+      // version; otherwise the new file has no owner and must be cleaned up.
       final currentIndex = mounted
           ? _pendingAttachments
               .indexWhere((attachment) => attachment.id == oldAtt.id)
           : -1;
-      if (currentIndex < 0) {
+      if (currentIndex < 0 ||
+          _pendingAttachments[currentIndex].storagePath != oldAtt.storagePath ||
+          _pendingAttachments[currentIndex].hash != oldAtt.hash) {
         await _deleteTempFile(tempStoragePath);
         return;
       }
