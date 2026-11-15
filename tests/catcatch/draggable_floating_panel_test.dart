@@ -66,11 +66,12 @@ void main() {
 
       // First, find and tap the first item to select it
       await tester.tap(find.textContaining('video.mp4'));
-      await tester.pumpAndSettle();
+      // The selected URL may marquee continuously, so settle one frame only.
+      await tester.pump();
 
       // Then tap the confirm button
       await tester.tap(find.text('确认捕获'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(capturedUrl, equals('https://cdn.example.com/video.mp4'));
     });
@@ -122,10 +123,10 @@ void main() {
 
       // Select the second URL
       await tester.tap(find.textContaining('video2.mp4'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       await tester.tap(find.text('确认捕获'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(capturedUrl, equals('https://cdn.example.com/video2.mp4'));
     });
@@ -445,9 +446,9 @@ void main() {
 
       // Selecting the first new URL captures it correctly.
       await tester.tap(find.textContaining('audio1.mp3'));
-      await tester.pumpAndSettle();
+      await tester.pump();
       await tester.tap(find.text('确认捕获'));
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(capturedUrl, 'https://cdn.example.com/audio1.mp3');
     });
 
