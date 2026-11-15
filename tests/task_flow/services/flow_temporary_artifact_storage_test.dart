@@ -47,6 +47,9 @@ class _FailingWriteFile extends Fake implements File {
   File get absolute => file.absolute;
 
   @override
+  Directory get parent => file.parent;
+
+  @override
   Future<bool> exists() => file.exists();
 
   @override
