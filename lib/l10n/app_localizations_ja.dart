@@ -3477,7 +3477,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fileManagerMultiSelect => '複数選択';
 
   @override
-  String get fileManagerOpen => '開ける';
+  String get fileManagerOpen => '開く';
 
   @override
   String get fileManagerPreview => 'プレビュー';
@@ -15153,7 +15153,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get fileManagerMultiSelect => '複数選択';
 
   @override
-  String get fileManagerOpen => '開ける';
+  String get fileManagerOpen => '開く';
 
   @override
   String get fileManagerPreview => 'プレビュー';

@@ -1016,15 +1016,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       },
       extraPopupMenuItems: (file) => [
         PopupMenuItem(
-          value: 'play',
-          child: ListTile(
-            leading: Icon(Icons.play_arrow, size: 20),
-            title: Text(AppLocalizations.of(context)!.galleryPlayVideo),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
           value: 'export',
           child: ListTile(
             leading: Icon(Icons.file_download, size: 20),
@@ -1034,11 +1025,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         ),
       ],
-      onExtraMenuAction: (file, value) {
-        if (value == 'play') {
-          _playVideo(file);
-        }
-      },
     );
 
     final navigateToParentSignal = ref.watch(

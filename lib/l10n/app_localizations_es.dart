@@ -3619,7 +3619,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fileManagerMultiSelect => 'Seleccionar múltiples';
 
   @override
-  String get fileManagerOpen => 'Abierto';
+  String get fileManagerOpen => 'Abrir';
 
   @override
   String get fileManagerPreview => 'Avance';
@@ -15802,7 +15802,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get fileManagerMultiSelect => 'Seleccionar múltiples';
 
   @override
-  String get fileManagerOpen => 'Abierto';
+  String get fileManagerOpen => 'Abrir';
 
   @override
   String get fileManagerPreview => 'Avance';

@@ -986,7 +986,7 @@
   "fileManagerBackRoot": "Volver a la raíz",
   "fileManagerBackFolder": "Atrás: {name}",
   "fileManagerMultiSelect": "Seleccionar múltiples",
-  "fileManagerOpen": "Abierto",
+  "fileManagerOpen": "Abrir",
   "fileManagerPreview": "Avance",
   "fileManagerFolderAndFilesCount": "Archivos {files}, subcarpetas {folders}",
   "fileManagerSubfoldersCount": "Subcarpetas {count}",

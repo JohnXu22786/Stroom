@@ -791,15 +791,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       onFileTap: (file) => _playAudio(file),
       extraPopupMenuItems: (file) => [
         PopupMenuItem(
-          value: 'play',
-          child: ListTile(
-            leading: const Icon(Icons.play_arrow, size: 20),
-            title: Text(AppLocalizations.of(context)!.ttsPlay),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
           value: 'regenerate',
           child: ListTile(
             leading: const Icon(Icons.refresh, size: 20),
@@ -820,8 +811,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       ],
       onExtraMenuAction: (file, value) {
         switch (value) {
-          case 'play':
-            _playAudio(file);
           case 'regenerate':
             _regenerateFile(file);
         }
