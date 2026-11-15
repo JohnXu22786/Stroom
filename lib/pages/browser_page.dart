@@ -7,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
@@ -1438,6 +1439,7 @@ class _BrowserPageState extends State<BrowserPage> {
   void _showScriptManager() {
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       builder: (ctx) => _ScriptManagerSheet(
         scripts: _scripts,

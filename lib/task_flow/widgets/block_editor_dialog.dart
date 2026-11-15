@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -71,6 +72,7 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
 }) {
   return showModalBottomSheet<TaskFlowBlock>(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
@@ -1024,6 +1026,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     final assistants = ref.read(assistantProvider);
     final selected = await showModalBottomSheet<String>(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       // Without isScrollControlled the sheet is capped at 9/16 of the
       // screen height — the fractions below would resolve to ~37%.
       isScrollControlled: true,

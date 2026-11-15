@@ -3,6 +3,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart'
     show CustomParam, ReasoningParam, findEffortParam;
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 import 'setting_panels_shared.dart';
 
 // ═══════════════════════════════════════════════════════════════
@@ -44,6 +45,7 @@ void showModelPanel({
 
   showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -211,6 +213,7 @@ void showToolsPanel({
   var localEnabledTools = Set<String>.from(enabledTools);
   showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -400,6 +403,7 @@ void showReasoningPanel({
 
   showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -702,6 +706,7 @@ void showCustomReasoningParamsPanel({
 
   showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),

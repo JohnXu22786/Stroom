@@ -87,14 +87,12 @@ Use a popup for a short set of contextual actions or a compact selection. Use a 
 
 #### Responsive modal bottom-origin panels
 
-Apply this Stroom convention to every component whose compact-screen presentation originates as a modal bottom sheet. At `shortestSide < 600 dp`, keep the panel anchored to the bottom, including in phone landscape. At `shortestSide >= 600 dp`, present that bottom-origin flow as a centered surface. A component already designed as a centered dialog stays centered at every size and is outside this conversion rule. These are Stroom conventions, not universal Material requirements.
+Apply these Stroom width rules only to modal bottom sheets (panels that originate from the bottom).
 
-- On wider viewports, cap the centered surface at `640 dp` and leave at least `24 dp` of side gutter (`width <= availableWidth - 48 dp`). A narrow phone sheet may use the full available width.
-- Bound sheet and centered-surface height to `min(80% of the available viewport, 640 dp)`. Keep long content scrollable within that bound and respect system safe areas.
+- When the available viewport width is at least `600 dp`, constrain the panel width to `min(640 dp, availableWidth - 48 dp)` and keep at least `24 dp` between each panel edge and the viewport edge. Do not stretch a bottom-origin panel edge-to-edge on these wide viewports.
+- Bound these bottom-origin panels to `min(80% of the available viewport, 640 dp)` in height. Keep long content scrollable within that bound and respect system safe areas.
 - Use a `28 dp` corner radius and `16 dp` content inset. Use theme-aware `surfaceContainerHigh` or `surface` roles, with a clear title and close or cancel action.
 - Preserve the panel's expected selection, cancel, outside-tap, and back behavior, and expose selected state semantically.
-
-The merged [emoji picker](../lib/pages/assistant/assistant_shared.dart) illustrates a bottom-origin flow adapting to a centered presentation on larger screens. It is an example, not the source of the dimensions above.
 
 - Keep overlays anchored to the action or selection they belong to and inside the visible viewport, including short windows and keyboard-open states.
 - Preserve expected outside-tap, back, escape, and selection dismissal behavior. Don't dismiss a destructive confirmation merely because a child control was tapped.

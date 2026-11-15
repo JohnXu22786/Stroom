@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../pages/assistant_selection_page.dart';
 import '../models/assistant.dart';
@@ -402,6 +403,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(

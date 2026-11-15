@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
@@ -1989,6 +1990,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final cs = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
