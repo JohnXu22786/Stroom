@@ -22,6 +22,21 @@ Finder _codeBlockSizeBox() => find
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('buildHtmlDocument preserves complete documents and their head', () {
+    const html = '''<!-- generated document -->
+<!DOCTYPE html>
+<!-- generated root element -->
+<html>
+<head>
+  <base href="https://cdn.example/assets/">
+  <script src="bundle.js"></script>
+</head>
+<body><main>Loaded page</main></body>
+</html>''';
+
+    expect(HtmlCodeBlockWidget.buildHtmlDocument(html), html);
+  });
+
   group('HtmlCodeBlockWidget - card preview (default)', () {
     testWidgets(
         'shows a card with language badge, inline title and two '

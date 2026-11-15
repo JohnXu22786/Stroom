@@ -153,7 +153,10 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
     // Keep site storage available so Android's WebView profile can be included
     // in manual browser-data backups.
     domStorageEnabled: true,
-    mixedContentMode: MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+    // Generated pages and older sites often host scripts/styles over HTTP
+    // while the top-level page is HTTPS. Do not silently suppress those
+    // resources in the in-app browser.
+    mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
     // Mobile mode: use device viewport for correct touch targeting.
     // Desktop mode: use wide viewport to show full desktop pages.
     useWideViewPort: isDesktopMode,
