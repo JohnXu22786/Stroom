@@ -1011,8 +1011,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           .split('/')
           .map((part) => part.replaceFirst(RegExp(r'[ .]+$'), ''))
           .join('/');
-      final windowsEntryPath = p.normalize(p.join(outputRoot, windowsEntryName));
-      final windowsRelativePath = p.relative(windowsEntryPath, from: outputRoot);
+      final windowsEntryPath =
+          p.normalize(p.join(outputRoot, windowsEntryName));
+      final windowsRelativePath =
+          p.relative(windowsEntryPath, from: outputRoot);
       if (_escapesDirectory(relativePath) ||
           _escapesDirectory(windowsRelativePath)) {
         throw FormatException(

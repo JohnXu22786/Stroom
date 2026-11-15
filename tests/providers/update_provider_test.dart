@@ -167,7 +167,8 @@ void main() {
       await outputDir.create();
       final outsideFile = File('${tempDir.path}/outside.txt');
       final absoluteFile = File('${tempDir.path}/outside_absolute.txt');
-      final trailingSpaceFile = File('${tempDir.path}/outside_trailing_space.txt');
+      final trailingSpaceFile =
+          File('${tempDir.path}/outside_trailing_space.txt');
       final zipFile = File('${tempDir.path}/update.zip');
 
       for (final entryName in [
