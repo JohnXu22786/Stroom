@@ -158,6 +158,11 @@ jobs:
               lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart)
                 test_f="tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart"
                 ;;
+              lib/pages/video_gallery_web_source.dart|\
+              lib/pages/video_gallery_web_source_stub.dart|\
+              lib/pages/video_gallery_web_source_web.dart)
+                test_f="tests/pages/video_gallery_shared_test.dart"
+                ;;
               *)
                 test_f="tests/${file#lib/}"
                 test_f="${test_f%.dart}_test.dart"
@@ -294,15 +299,20 @@ jobs:
       - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'feature-ui'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'feature-ui'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
       - name: Run Mermaid preview web controls regression
         if: matrix.suite == 'chat-ai-ui'
         run: flutter test --reporter expanded --platform chrome --plain-name 'renders clickable HTML controls above the fullscreen web preview' test/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Web video playback regression in Chrome
+        if: matrix.suite == 'feature-ui'
+        run: flutter test --reporter expanded --platform chrome test/pages/video_gallery_shared_test.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Mermaid preview loading regressions in Chrome
