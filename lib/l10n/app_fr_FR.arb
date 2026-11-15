@@ -415,7 +415,18 @@
   "actionRename": "Renommer",
   "conversationAutoRename": "Nommer automatiquement",
   "conversationTemporary": "Conversation temporaire",
+  "conversationSetTemporary": "Définir comme conversation temporaire",
   "conversationCloseTemporary": "Fermer la conversation temporaire",
+  "conversationKeep": "Conserver la conversation",
+  "conversationTemporaryStatus": "Temporaire",
+  "conversationTemporaryWarning": "Expiration proche",
+  "conversationTemporaryExplanation": "Cette conversation sera supprimée après une heure. Chaque message redémarre le délai. Désactivez le mode temporaire pour la conserver.",
+  "conversationEnableTemporary": "Activer le mode temporaire",
+  "chatLoadingConversation": "Chargement de la conversation…",
+  "chatEmptyConversation": "Envoyez un message pour commencer la conversation.",
+  "chatNoActiveConversation": "Choisissez ou créez une conversation pour commencer à discuter.",
+  "chatConversationLoadError": "Impossible de charger cette conversation.",
+  "chatRetryLoadConversation": "Réessayer",
   "taskListTitle": "Liste des tâches",
   "taskListEmpty": "Aucune tâche",
   "unifiedTaskListTabAll": "Toutes",
@@ -1194,6 +1205,8 @@
   "topicItemNew": "Nouveau sujet",
   "topicItemUnpin": "Désépingler",
   "topicItemPin": "Épingler",
+  "topicItemMarkUnread": "Marquer comme non lu",
+  "topicItemMarkRead": "Marquer comme lu",
   "topicItemRename": "Renommer",
   "topicItemAutoName": "Nom automatique",
   "topicItemDelete": "Supprimer",
@@ -1342,6 +1355,7 @@
   "folderPickerRoot": "Racine",
   "folderPickerCurrentFolder": "Dossier actuel",
   "folderPickerSubfolders": "Sous-dossiers",
+  "folderPickerNoFolders": "Aucun dossier",
   "folderPickerExistingFolders": "Dossiers existants",
   "folderPickerCreateNew": "Créer un dossier",
   "folderPickerFolderNameHint": "Saisissez un nom de dossier",
@@ -7086,5 +7100,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "La température enregistrée est hors de la plage 0–2. Réglez le curseur ou désactivez l’option avant d’enregistrer.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "La valeur top-P enregistrée est hors de la plage 0–1. Réglez le curseur ou désactivez l’option avant d’enregistrer.",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

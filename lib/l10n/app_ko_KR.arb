@@ -418,7 +418,18 @@
   "actionRename": "이름 변경",
   "conversationAutoRename": "자동 이름 지정",
   "conversationTemporary": "임시 대화",
+  "conversationSetTemporary": "임시 대화로 설정",
   "conversationCloseTemporary": "임시 대화 닫기",
+  "conversationKeep": "대화 유지",
+  "conversationTemporaryStatus": "임시",
+  "conversationTemporaryWarning": "곧 만료",
+  "conversationTemporaryExplanation": "이 대화는 1시간 후 삭제됩니다. 메시지를 보내면 타이머가 다시 시작됩니다. 임시 모드를 끄면 대화가 보존됩니다.",
+  "conversationEnableTemporary": "임시 모드 사용",
+  "chatLoadingConversation": "대화 불러오는 중…",
+  "chatEmptyConversation": "메시지를 보내 대화를 시작하세요.",
+  "chatNoActiveConversation": "대화를 시작하려면 대화를 선택하거나 새로 만드세요.",
+  "chatConversationLoadError": "대화를 불러오지 못했습니다.",
+  "chatRetryLoadConversation": "다시 시도",
   "taskListTitle": "작업 목록",
   "taskListEmpty": "작업이 없습니다",
   "unifiedTaskListTabAll": "전체",
@@ -1197,6 +1208,8 @@
   "topicItemNew": "새 주제",
   "topicItemUnpin": "고정 해제",
   "topicItemPin": "고정",
+  "topicItemMarkUnread": "읽지 않음으로 표시",
+  "topicItemMarkRead": "읽음으로 표시",
   "topicItemRename": "이름 변경",
   "topicItemAutoName": "자동 이름 지정",
   "topicItemDelete": "삭제",
@@ -1345,6 +1358,7 @@
   "folderPickerRoot": "루트",
   "folderPickerCurrentFolder": "현재 폴더",
   "folderPickerSubfolders": "하위 폴더",
+  "folderPickerNoFolders": "폴더가 없습니다",
   "folderPickerExistingFolders": "기존 폴더",
   "folderPickerCreateNew": "새 폴더 만들기",
   "folderPickerFolderNameHint": "폴더 이름 입력",
@@ -7086,5 +7100,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "저장된 온도 값이 0–2 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "저장된 top-P 값이 0–1 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

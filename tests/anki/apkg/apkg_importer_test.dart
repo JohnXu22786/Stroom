@@ -116,6 +116,119 @@ void main() {
     }
   });
 
+  test('rejects oversized packages before reading their bytes', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_package_size_test_',
+    );
+    final packagePath = '${directory.path}/oversized.apkg';
+    final handle = await File(packagePath).open(mode: FileMode.write);
+    await handle.setPosition(128 * 1024 * 1024 + 1);
+    await handle.writeByte(0);
+    await handle.close();
+    var bytesRead = false;
+
+    try {
+      await expectLater(
+        AnkiApkgImporter.import(
+          packagePath,
+          readPackageBytes: (_) {
+            bytesRead = true;
+            return [];
+          },
+        ),
+        throwsA(
+          isA<AnkiApkgException>().having(
+            (error) => error.code,
+            'code',
+            AnkiApkgErrorCode.invalidArchive,
+          ),
+        ),
+      );
+      expect(bytesRead, isFalse);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('rejects a collection entry above the expanded size limit', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_expanded_size_test_',
+    );
+    final archive = Archive()..addFile(ArchiveFile('collection.anki2', 1, [0]));
+    final packagePath = '${directory.path}/oversized-entry.apkg';
+    final bytes = ZipEncoder().encode(archive);
+    _setZipEntryExpandedSize(bytes, 'collection.anki2', 128 * 1024 * 1024 + 1);
+    await File(packagePath).writeAsBytes(bytes);
+
+    try {
+      await expectLater(
+        AnkiApkgImporter.import(packagePath),
+        throwsA(
+          isA<AnkiApkgException>().having(
+            (error) => error.code,
+            'code',
+            AnkiApkgErrorCode.invalidArchive,
+          ),
+        ),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('rejects data descriptor sizes above the expanded limit', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_descriptor_size_test_',
+    );
+    final archive = Archive()..addFile(ArchiveFile('collection.anki2', 1, [0]));
+    final packagePath = '${directory.path}/oversized-descriptor.apkg';
+    final bytes = List<int>.from(ZipEncoder().encode(archive));
+    _setZipDataDescriptorExpandedSize(
+      bytes,
+      'collection.anki2',
+      128 * 1024 * 1024 + 1,
+    );
+    await File(packagePath).writeAsBytes(bytes);
+
+    try {
+      await expectLater(
+        AnkiApkgImporter.import(packagePath),
+        throwsA(
+          isA<AnkiApkgException>().having(
+            (error) => error.code,
+            'code',
+            AnkiApkgErrorCode.invalidArchive,
+          ),
+        ),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('rejects package streams that cross the input size limit', () async {
+    expect(
+      await AnkiApkgImporter.readPackageStreamWithLimit(
+        Stream<List<int>>.fromIterable([
+          [1, 2, 3],
+          [4],
+        ]),
+        maxSizeBytes: 4,
+      ),
+      [1, 2, 3, 4],
+    );
+    await expectLater(
+      AnkiApkgImporter.readPackageStreamWithLimit(
+        Stream<List<int>>.fromIterable([
+          [1, 2, 3],
+          [4, 5],
+        ]),
+        maxSizeBytes: 4,
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('links imported cards to newly imported notes', () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_apkg_import_note_card_link_test_',
@@ -350,8 +463,10 @@ void main() {
       await AnkiApkgImporter.import(packagePath);
       await AnkiApkgImporter.import(packagePath);
 
-      final verifiedTarget =
-          await sqflite.openDatabase(targetPath, readOnly: true);
+      final verifiedTarget = await sqflite.openDatabase(
+        targetPath,
+        readOnly: true,
+      );
       try {
         final revlogs = await verifiedTarget.query('revlog');
         expect(revlogs, hasLength(3));
@@ -371,111 +486,121 @@ void main() {
     }
   });
 
-  test('retains distinct equal-valued reviews despite target history',
-      () async {
-    final documents = await Directory.systemTemp.createTemp(
-      'stroom_anki_apkg_import_similar_revlogs_test_',
-    );
-    final previous = PathProviderPlatform.instance;
-    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
-    final sourcePath = '${documents.path}/source.anki2';
-    final targetPath = '${documents.path}/collection.anki2';
-
-    try {
-      await _createCollection(
-        sourcePath,
-        includeNote: true,
-        includeCard: true,
-        revlogs: [
-          _revlogEntry(id: 123456, cardId: 43),
-          _revlogEntry(id: 123457, cardId: 43),
-        ],
+  test(
+    'retains distinct equal-valued reviews despite target history',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_import_similar_revlogs_test_',
       );
-      await _createCollection(
-        targetPath,
-        includeNote: true,
-        includeCard: true,
-        noteId: 900,
-        cardId: 901,
-        revlogs: [_revlogEntry(id: 123455, cardId: 901)],
-      );
-      final packagePath = await _packageCollection(documents, sourcePath);
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final sourcePath = '${documents.path}/source.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
 
-      await AnkiApkgImporter.import(packagePath);
-      await AnkiApkgImporter.import(packagePath);
-
-      final target = await sqflite.openDatabase(targetPath, readOnly: true);
       try {
-        final revlogs = await target.query('revlog');
-        expect(revlogs, hasLength(3));
-        expect(
-          revlogs.map((row) => row['id']).toSet(),
-          {123455, 123456, 123457},
+        await _createCollection(
+          sourcePath,
+          includeNote: true,
+          includeCard: true,
+          revlogs: [
+            _revlogEntry(id: 123456, cardId: 43),
+            _revlogEntry(id: 123457, cardId: 43),
+          ],
         );
+        await _createCollection(
+          targetPath,
+          includeNote: true,
+          includeCard: true,
+          noteId: 900,
+          cardId: 901,
+          revlogs: [_revlogEntry(id: 123455, cardId: 901)],
+        );
+        final packagePath = await _packageCollection(documents, sourcePath);
+
+        await AnkiApkgImporter.import(packagePath);
+        await AnkiApkgImporter.import(packagePath);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final revlogs = await target.query('revlog');
+          expect(revlogs, hasLength(3));
+          expect(revlogs.map((row) => row['id']).toSet(), {
+            123455,
+            123456,
+            123457,
+          });
+        } finally {
+          await target.close();
+        }
       } finally {
-        await target.close();
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
       }
-    } finally {
-      PathProviderPlatform.instance = previous;
-      await documents.delete(recursive: true);
-    }
-  });
+    },
+  );
 
-  test('tracks review provenance separately for different source collections',
-      () async {
-    final documents = await Directory.systemTemp.createTemp(
-      'stroom_anki_apkg_import_separate_sources_test_',
-    );
-    final previous = PathProviderPlatform.instance;
-    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
-    final firstSourcePath = '${documents.path}/first.anki2';
-    final secondSourcePath = '${documents.path}/second.anki2';
-    final targetPath = '${documents.path}/collection.anki2';
-
-    try {
-      await _createCollection(
-        firstSourcePath,
-        includeNote: true,
-        includeCard: true,
-        collectionCreated: 100,
-        noteGuid: 'first-source-note',
-        revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+  test(
+    'tracks review provenance separately for different source collections',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_import_separate_sources_test_',
       );
-      await _createCollection(
-        secondSourcePath,
-        includeNote: true,
-        includeCard: true,
-        collectionCreated: 100,
-        noteGuid: 'second-source-note',
-        revlogs: [_revlogEntry(id: 123456, cardId: 43)],
-      );
-      await _createCollection(targetPath);
-      final firstPackage = await _packageCollection(documents, firstSourcePath);
-      final retainedFirstPackage = '${documents.path}/first.apkg';
-      await File(firstPackage).copy(retainedFirstPackage);
-      final secondPackage =
-          await _packageCollection(documents, secondSourcePath);
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final firstSourcePath = '${documents.path}/first.anki2';
+      final secondSourcePath = '${documents.path}/second.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
 
-      await AnkiApkgImporter.import(retainedFirstPackage);
-      await AnkiApkgImporter.import(secondPackage);
-      await AnkiApkgImporter.import(retainedFirstPackage);
-      await AnkiApkgImporter.import(secondPackage);
-
-      final target = await sqflite.openDatabase(targetPath, readOnly: true);
       try {
-        final revlogs = await target.query('revlog');
-        expect(revlogs, hasLength(2));
-        expect(revlogs.map((row) => row['cid']).toSet(), hasLength(2));
-        expect(revlogs.map((row) => row['id']).toSet(), hasLength(2));
-        expect(revlogs.map((row) => row['usn']).toSet(), {-1});
+        await _createCollection(
+          firstSourcePath,
+          includeNote: true,
+          includeCard: true,
+          collectionCreated: 100,
+          noteGuid: 'first-source-note',
+          revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+        );
+        await _createCollection(
+          secondSourcePath,
+          includeNote: true,
+          includeCard: true,
+          collectionCreated: 100,
+          noteGuid: 'second-source-note',
+          revlogs: [_revlogEntry(id: 123456, cardId: 43)],
+        );
+        await _createCollection(targetPath);
+        final firstPackage = await _packageCollection(
+          documents,
+          firstSourcePath,
+        );
+        final retainedFirstPackage = '${documents.path}/first.apkg';
+        await File(firstPackage).copy(retainedFirstPackage);
+        final secondPackage = await _packageCollection(
+          documents,
+          secondSourcePath,
+        );
+
+        await AnkiApkgImporter.import(retainedFirstPackage);
+        await AnkiApkgImporter.import(secondPackage);
+        await AnkiApkgImporter.import(retainedFirstPackage);
+        await AnkiApkgImporter.import(secondPackage);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final revlogs = await target.query('revlog');
+          expect(revlogs, hasLength(2));
+          expect(revlogs.map((row) => row['cid']).toSet(), hasLength(2));
+          expect(revlogs.map((row) => row['id']).toSet(), hasLength(2));
+          expect(revlogs.map((row) => row['usn']).toSet(), {-1});
+        } finally {
+          await target.close();
+        }
       } finally {
-        await target.close();
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
       }
-    } finally {
-      PathProviderPlatform.instance = previous;
-      await documents.delete(recursive: true);
-    }
-  });
+    },
+  );
 
   test('imports large review histories with distinct source events', () async {
     const existingReviewCount = 512;
@@ -537,7 +662,8 @@ void main() {
         expect(
           revlogs,
           hasLength(
-              existingReviewCount + existingReviewCount + importedReviewCount),
+            existingReviewCount + existingReviewCount + importedReviewCount,
+          ),
         );
         expect(
           revlogs.where((row) => row['usn'] == -1),
@@ -1145,6 +1271,120 @@ Future<String> _packageCollection(
   final packagePath = '${directory.path}/package.apkg';
   await File(packagePath).writeAsBytes(ZipEncoder().encode(archive));
   return packagePath;
+}
+
+void _setZipEntryExpandedSize(List<int> bytes, String name, int size) {
+  _setZipUint32(
+    bytes,
+    _findZipCentralEntry(bytes, utf8.encode(name)) + 24,
+    size,
+  );
+}
+
+void _setZipDataDescriptorExpandedSize(
+  List<int> bytes,
+  String name,
+  int expandedSize,
+) {
+  final nameBytes = utf8.encode(name);
+  final centralOffset = _findZipCentralEntry(bytes, nameBytes);
+  final compressedSize = _readZipUint32(bytes, centralOffset + 20);
+  final checksum = _readZipUint32(bytes, centralOffset + 16);
+  final localOffset = _readZipUint32(bytes, centralOffset + 42);
+  final localNameLength =
+      bytes[localOffset + 26] | (bytes[localOffset + 27] << 8);
+  final localExtraLength =
+      bytes[localOffset + 28] | (bytes[localOffset + 29] << 8);
+  final dataEnd =
+      localOffset + 30 + localNameLength + localExtraLength + compressedSize;
+  bytes.insertAll(dataEnd, [
+    ..._zipUint32(checksum),
+    ..._zipUint32(compressedSize),
+    ..._zipUint32(expandedSize),
+  ]);
+
+  final shiftedCentralOffset = centralOffset + 12;
+  _setZipUint16(
+    bytes,
+    localOffset + 6,
+    _readZipUint16(bytes, localOffset + 6) | 0x0008,
+  );
+  _setZipUint16(
+    bytes,
+    shiftedCentralOffset + 8,
+    _readZipUint16(bytes, shiftedCentralOffset + 8) | 0x0008,
+  );
+  _setZipUint32(bytes, localOffset + 14, 0);
+  _setZipUint32(bytes, localOffset + 18, 0);
+  _setZipUint32(bytes, localOffset + 22, 0);
+  _setZipUint32(bytes, shiftedCentralOffset + 24, 0);
+  final endRecordOffset = _findZipSignature(bytes, [0x50, 0x4b, 0x05, 0x06]);
+  _setZipUint32(
+    bytes,
+    endRecordOffset + 16,
+    _readZipUint32(bytes, endRecordOffset + 16) + 12,
+  );
+}
+
+int _findZipCentralEntry(List<int> bytes, List<int> nameBytes) {
+  for (var offset = 0;
+      offset <= bytes.length - 46 - nameBytes.length;
+      offset++) {
+    if (!_hasZipSignatureAt(bytes, offset, [0x50, 0x4b, 0x01, 0x02])) continue;
+    final nameLength = _readZipUint16(bytes, offset + 28);
+    if (nameLength != nameBytes.length) continue;
+    var matches = true;
+    for (var index = 0; index < nameBytes.length; index++) {
+      if (bytes[offset + 46 + index] != nameBytes[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return offset;
+  }
+  throw StateError('ZIP central directory entry was not found');
+}
+
+int _findZipSignature(List<int> bytes, List<int> signature) {
+  for (var offset = bytes.length - signature.length; offset >= 0; offset--) {
+    if (_hasZipSignatureAt(bytes, offset, signature)) return offset;
+  }
+  throw StateError('ZIP signature was not found');
+}
+
+bool _hasZipSignatureAt(List<int> bytes, int offset, List<int> signature) {
+  for (var index = 0; index < signature.length; index++) {
+    if (bytes[offset + index] != signature[index]) return false;
+  }
+  return true;
+}
+
+int _readZipUint16(List<int> bytes, int offset) =>
+    bytes[offset] | (bytes[offset + 1] << 8);
+
+void _setZipUint16(List<int> bytes, int offset, int value) {
+  bytes[offset] = value & 0xff;
+  bytes[offset + 1] = (value >> 8) & 0xff;
+}
+
+int _readZipUint32(List<int> bytes, int offset) =>
+    bytes[offset] |
+    (bytes[offset + 1] << 8) |
+    (bytes[offset + 2] << 16) |
+    (bytes[offset + 3] << 24);
+
+List<int> _zipUint32(int value) => [
+      value & 0xff,
+      (value >> 8) & 0xff,
+      (value >> 16) & 0xff,
+      (value >> 24) & 0xff,
+    ];
+
+void _setZipUint32(List<int> bytes, int offset, int value) {
+  final encoded = _zipUint32(value);
+  for (var index = 0; index < encoded.length; index++) {
+    bytes[offset + index] = encoded[index];
+  }
 }
 
 class _DocumentsPathProvider extends PathProviderPlatform {

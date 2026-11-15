@@ -715,22 +715,23 @@ extension _ChatPageUiExt on _ChatPageState {
               ),
             ),
           ),
-          // ── 临时对话开关（搜索按钮左侧）──
-          // 图标为虚线框对话气泡风格：开启后气泡内带打勾
-          // （原生 Material 图标组：chat_bubble_outline ↔ mark_chat_read_outlined）。
+          // Temporary conversation control (left of search).
           IconButton(
             icon: Icon(
-              isTemporary
-                  ? Icons.mark_chat_read_outlined
-                  : Icons.chat_bubble_outline,
+              isTemporary ? Icons.timer : Icons.timer_outlined,
               color: isTemporary ? cs.primary : null,
             ),
             tooltip: isTemporary
-                ? AppLocalizations.of(context)!.conversationCloseTemporary
+                ? AppLocalizations.of(context)!.conversationKeep
                 : AppLocalizations.of(context)!.conversationTemporary,
             onPressed: conversation == null
                 ? null
-                : () {
+                : () async {
+                    if (!isTemporary &&
+                        !await showTemporaryConversationEnableDialog(context)) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                     ref
                         .read(conversationsProvider.notifier)
                         .toggleTemporary(conversation.id);

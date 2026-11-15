@@ -1392,7 +1392,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get conversationKeep => '保留对话';
+
+  @override
+  String get conversationTemporaryStatus => '临时';
+
+  @override
+  String get conversationTemporaryWarning => '即将过期';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。';
+
+  @override
+  String get conversationEnableTemporary => '开启临时模式';
+
+  @override
+  String get chatLoadingConversation => '正在加载对话…';
+
+  @override
+  String get chatEmptyConversation => '发送消息以开始对话。';
+
+  @override
+  String get chatNoActiveConversation => '请选择或新建对话以开始聊天。';
+
+  @override
+  String get chatConversationLoadError => '无法加载此对话。';
+
+  @override
+  String get chatRetryLoadConversation => '重试';
 
   @override
   String get taskListTitle => '任务列表';
@@ -3072,6 +3106,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get topicItemPin => '置顶';
 
   @override
+  @override
+  String get topicItemMarkUnread => '标记为未读';
+
+  @override
+  String get topicItemMarkRead => '标记为已读';
+
   String get topicItemRename => '重命名';
 
   @override
@@ -3573,6 +3613,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => '子文件夹';
+
+  @override
+  String get folderPickerNoFolders => '没有文件夹';
 
   @override
   String get folderPickerExistingFolders => '现有文件夹';
@@ -11301,6 +11344,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -12690,7 +12744,41 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get conversationKeep => '保留对话';
+
+  @override
+  String get conversationTemporaryStatus => '临时';
+
+  @override
+  String get conversationTemporaryWarning => '即将过期';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。';
+
+  @override
+  String get conversationEnableTemporary => '开启临时模式';
+
+  @override
+  String get chatLoadingConversation => '正在加载对话…';
+
+  @override
+  String get chatEmptyConversation => '发送消息以开始对话。';
+
+  @override
+  String get chatNoActiveConversation => '请选择或新建对话以开始聊天。';
+
+  @override
+  String get chatConversationLoadError => '无法加载此对话。';
+
+  @override
+  String get chatRetryLoadConversation => '重试';
 
   @override
   String get taskListTitle => '任务列表';
@@ -14370,6 +14458,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get topicItemPin => '置顶';
 
   @override
+  @override
+  String get topicItemMarkUnread => '标记为未读';
+
+  @override
+  String get topicItemMarkRead => '标记为已读';
+
   String get topicItemRename => '重命名';
 
   @override

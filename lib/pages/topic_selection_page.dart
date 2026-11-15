@@ -711,6 +711,15 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                 final isFailed = !isRunning &&
                                     latestMessage?.role == 'assistant' &&
                                     latestMessage?.isError == true;
+                                final isUnread = topic.isManuallyUnread ||
+                                    (!isRunning &&
+                                        !isFailed &&
+                                        topic.id != activeConversationId &&
+                                        latestMessage?.role == 'assistant' &&
+                                        latestMessage?.isStreaming == false &&
+                                        latestMessage?.isError == false &&
+                                        latestMessage?.id !=
+                                            topic.lastReadMessageId);
                                 final itemWidget = TopicItem(
                                   key: ValueKey('topic_${topic.id}'),
                                   topic: topic,
@@ -719,14 +728,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   isActive: topic.id == activeConversationId,
                                   isRunning: isRunning,
                                   isFailed: isFailed,
-                                  isUnread: !isRunning &&
-                                      !isFailed &&
-                                      topic.id != activeConversationId &&
-                                      latestMessage?.role == 'assistant' &&
-                                      latestMessage?.isStreaming == false &&
-                                      latestMessage?.isError == false &&
-                                      latestMessage?.id !=
-                                          topic.lastReadMessageId,
+                                  isUnread: isUnread,
                                   onTap: () {
                                     if (_selectionMode) {
                                       _toggleSelection(topic.id);
@@ -747,8 +749,19 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                         .read(conversationsProvider.notifier)
                                         .autoRenameConversation(topic.id);
                                   },
+                                  onReadStateToggle: () {
+                                    ref
+                                        .read(conversationsProvider.notifier)
+                                        .toggleConversationReadState(
+                                          topic.id,
+                                          isUnread: isUnread,
+                                        );
+                                  },
                                   onSelectionToggle: () =>
                                       _toggleSelection(topic.id),
+                                  onTemporaryToggle: () => ref
+                                      .read(conversationsProvider.notifier)
+                                      .toggleTemporary(topic.id),
                                 );
                                 // When NOT in selection mode, wrap in long-press drag listener
                                 if (!_selectionMode) {

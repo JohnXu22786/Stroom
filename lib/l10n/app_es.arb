@@ -193,7 +193,7 @@
   "ocrImagesLoaded": "{count, plural, one{Se cargó {count} imagen} other{Se cargaron {count} imágenes}}",
   "ocrProcessImageFailed": "Error al procesar la imagen: {error}",
   "ocrUnknownSourceImageCount": "No se puede determinar el recuento de imágenes originales",
-  "ocrConfirmClear": "Confirmar claro",
+  "ocrConfirmClear": "Confirmar borrado",
   "ocrRetryUnavailableConfirmClear": "La caché de imágenes OCR original no está disponible y su recuento de imágenes no se puede recuperar. Al borrarlo se restablecerá el estado de reintento anterior. Seleccione todas las imágenes para esta tarea de OCR nuevamente.",
   "ocrConfirmClearSelected": "¿Borrar las imágenes OCR seleccionadas?",
   "ocrCancel": "Cancelar",
@@ -403,7 +403,18 @@
   "actionRename": "Rebautizar",
   "conversationAutoRename": "Nombre automático",
   "conversationTemporary": "conversación temporal",
+  "conversationSetTemporary": "Establecer como conversación temporal",
   "conversationCloseTemporary": "Cerrar conversación temporal",
+  "conversationKeep": "Conservar conversación",
+  "conversationTemporaryStatus": "Temporal",
+  "conversationTemporaryWarning": "Caduca pronto",
+  "conversationTemporaryExplanation": "Esta conversación se eliminará después de una hora. Cada mensaje reinicia el temporizador. Desactiva el modo temporal para conservarla.",
+  "conversationEnableTemporary": "Activar modo temporal",
+  "chatLoadingConversation": "Cargando conversación…",
+  "chatEmptyConversation": "Envía un mensaje para iniciar la conversación.",
+  "chatNoActiveConversation": "Elige o crea una conversación para empezar a chatear.",
+  "chatConversationLoadError": "No se pudo cargar esta conversación.",
+  "chatRetryLoadConversation": "Reintentar",
   "taskListTitle": "lista de tareas",
   "taskListEmpty": "Sin tareas",
   "unifiedTaskListTabAll": "Todo",
@@ -891,6 +902,8 @@
   "topicItemNew": "Nuevo tema",
   "topicItemUnpin": "Desprender",
   "topicItemPin": "Alfiler",
+  "topicItemMarkUnread": "Marcar como no leído",
+  "topicItemMarkRead": "Marcar como leído",
   "topicItemRename": "Rebautizar",
   "topicItemAutoName": "Nombre automático",
   "topicItemDelete": "Borrar",
@@ -1034,6 +1047,7 @@
   "folderPickerRoot": "Raíz",
   "folderPickerCurrentFolder": "Carpeta actual",
   "folderPickerSubfolders": "Subcarpetas",
+  "folderPickerNoFolders": "No hay carpetas",
   "folderPickerExistingFolders": "Carpetas existentes",
   "folderPickerCreateNew": "Crear nueva carpeta",
   "folderPickerFolderNameHint": "Introduzca un nombre de carpeta",
@@ -7086,5 +7100,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

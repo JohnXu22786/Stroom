@@ -1499,7 +1499,44 @@ class AppLocalizationsPt extends AppLocalizations {
   String get conversationTemporary => 'Conversa temporária';
 
   @override
+  String get conversationSetTemporary => 'Definir como conversa temporária';
+
+  @override
   String get conversationCloseTemporary => 'Fechar conversa temporária';
+
+  @override
+  String get conversationKeep => 'Manter conversa';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporária';
+
+  @override
+  String get conversationTemporaryWarning => 'Expira em breve';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Esta conversa será excluída após uma hora. Cada mensagem reinicia o temporizador. Desative o modo temporário para mantê-la.';
+
+  @override
+  String get conversationEnableTemporary => 'Ativar modo temporário';
+
+  @override
+  String get chatLoadingConversation => 'Carregando conversa…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envie uma mensagem para iniciar a conversa.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Escolha ou crie uma conversa para começar a conversar.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Não foi possível carregar esta conversa.';
+
+  @override
+  String get chatRetryLoadConversation => 'Tentar novamente';
 
   @override
   String get taskListTitle => 'Lista de tarefas';
@@ -3272,6 +3309,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get topicItemPin => 'Fixar';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como não lida';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como lida';
+
   String get topicItemRename => 'Renomear';
 
   @override
@@ -3793,6 +3836,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => 'Subpastas';
+
+  @override
+  String get folderPickerNoFolders => 'Nenhuma pasta';
 
   @override
   String get folderPickerExistingFolders => 'Pastas existentes';
@@ -12092,6 +12138,18 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'O tamanho máximo de envio deve ser um número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'A temperatura salva está fora do intervalo de 0–2. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'O valor top-P salvo está fora do intervalo de 0–1. Ajuste o controle deslizante ou desative a opção antes de salvar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -13588,7 +13646,44 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get conversationTemporary => 'Conversa temporária';
 
   @override
+  String get conversationSetTemporary => 'Definir como conversa temporária';
+
+  @override
   String get conversationCloseTemporary => 'Fechar conversa temporária';
+
+  @override
+  String get conversationKeep => 'Manter conversa';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporária';
+
+  @override
+  String get conversationTemporaryWarning => 'Expira em breve';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Esta conversa será excluída após uma hora. Cada mensagem reinicia o temporizador. Desative o modo temporário para mantê-la.';
+
+  @override
+  String get conversationEnableTemporary => 'Ativar modo temporário';
+
+  @override
+  String get chatLoadingConversation => 'Carregando conversa…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envie uma mensagem para iniciar a conversa.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Escolha ou crie uma conversa para começar a conversar.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Não foi possível carregar esta conversa.';
+
+  @override
+  String get chatRetryLoadConversation => 'Tentar novamente';
 
   @override
   String get taskListTitle => 'Lista de tarefas';
@@ -15361,6 +15456,12 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get topicItemPin => 'Fixar';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como não lida';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como lida';
+
   String get topicItemRename => 'Renomear';
 
   @override

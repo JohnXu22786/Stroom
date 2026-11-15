@@ -400,6 +400,13 @@ class OcrDiagnosticSnapshot {
     return _bounded(result);
   }
 
+  /// Returns an allowlisted provider finish reason safe for display/storage.
+  static String? safeFinishReason(
+    String? value, {
+    Iterable<String> excludedValues = const [],
+  }) =>
+      _safeReason(value, excludedValues: excludedValues);
+
   static Map<String, dynamic> request({
     required String? url,
     required int imageCount,

@@ -10,12 +10,11 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'package:stroom/services/background_service.dart' as background_service;
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
-import 'package:window_manager/legacy.dart' show WindowListener;
 
 /// Records window-manager calls without loading native FFI code.
 class RecordingChannelMock implements DesktopWindowManagerAdapter {
   final List<MethodCall> calls = [];
-  final List<WindowListener> listeners = [];
+  final List<DesktopWindowListener> listeners = [];
   Object? throwError;
   String? throwOnMethod;
   bool hasListeners = false;
@@ -51,13 +50,13 @@ class RecordingChannelMock implements DesktopWindowManagerAdapter {
   Future<void> destroy() async => _record('destroy');
 
   @override
-  void addListener(WindowListener listener) {
+  void addListener(DesktopWindowListener listener) {
     listeners.add(listener);
     _record('addListener');
   }
 
   @override
-  void removeListener(WindowListener listener) {
+  void removeListener(DesktopWindowListener listener) {
     listeners.remove(listener);
     _record('removeListener');
   }

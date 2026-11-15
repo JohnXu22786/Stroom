@@ -17,7 +17,6 @@ import 'package:stroom/services/desktop_app_service.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
 import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
-import 'package:window_manager/legacy.dart' show WindowListener;
 
 class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
   _TestDesktopTrayAdapter({this.onSetContextMenu});
@@ -48,7 +47,7 @@ class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
 
 class _TestDesktopWindowManagerAdapter implements DesktopWindowManagerAdapter {
   final calls = <MethodCall>[];
-  final listeners = <WindowListener>[];
+  final listeners = <DesktopWindowListener>[];
 
   void reset() {
     calls.clear();
@@ -82,13 +81,13 @@ class _TestDesktopWindowManagerAdapter implements DesktopWindowManagerAdapter {
   Future<void> destroy() async => _record('destroy');
 
   @override
-  void addListener(WindowListener listener) {
+  void addListener(DesktopWindowListener listener) {
     listeners.add(listener);
     _record('addListener');
   }
 
   @override
-  void removeListener(WindowListener listener) {
+  void removeListener(DesktopWindowListener listener) {
     listeners.remove(listener);
     _record('removeListener');
   }
