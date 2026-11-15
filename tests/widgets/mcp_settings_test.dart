@@ -140,7 +140,7 @@ Future<void> _openCustomMcpConfig(
 
   await tester.pumpWidget(_buildTestApp(updateGate: updateGate));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('MCP供应商'));
+  await tester.tap(find.text('MCP（模型上下文协议）'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Custom MCP'));
   await tester.pumpAndSettle();
@@ -751,7 +751,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Navigate to the built-in Jina AI MCP server details page.
-      await tester.tap(find.text('MCP供应商'));
+      await tester.tap(find.text('MCP（模型上下文协议）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Jina AI'));
       await tester.pumpAndSettle();
@@ -858,7 +858,7 @@ void main() {
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('MCP供应商'));
+        await tester.tap(find.text('MCP（模型上下文协议）'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Jina AI'));
         await tester.pumpAndSettle();
