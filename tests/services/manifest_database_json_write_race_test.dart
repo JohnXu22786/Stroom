@@ -1,12 +1,14 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ManifestDatabase.beforeWebDataReadForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
