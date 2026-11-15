@@ -605,8 +605,8 @@ void main() {
       BackupLocationManager.debugAppLocalLogsRootPath = localRoot.path;
       BackupLocationManager.debugPendingLogRootPath = pendingRoot.path;
       await File('${localRoot.path}/$fileName').writeAsString('local log');
-      await File('$pendingRoot/$fileName').writeAsString('pending log');
-      final pendingMarker = File('$pendingRoot/$fileName.saf_pending');
+      await File('${pendingRoot.path}/$fileName').writeAsString('pending log');
+      final pendingMarker = File('${pendingRoot.path}/$fileName.saf_pending');
       await pendingMarker.writeAsString('complete');
       const channel = MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -643,8 +643,8 @@ void main() {
       BackupLocationManager.debugAppLocalLogsRootPath = localRoot.path;
       BackupLocationManager.debugPendingLogRootPath = pendingRoot.path;
       await File('${localRoot.path}/$fileName').writeAsString('local log');
-      await File('$pendingRoot/$fileName').writeAsString('pending log');
-      final pendingMarker = File('$pendingRoot/$fileName.saf_pending');
+      await File('${pendingRoot.path}/$fileName').writeAsString('pending log');
+      final pendingMarker = File('${pendingRoot.path}/$fileName.saf_pending');
       await pendingMarker.writeAsString('complete');
 
       try {

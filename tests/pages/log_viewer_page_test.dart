@@ -122,13 +122,16 @@ void main() {
           home: const LogViewerPage(),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(fileName), findsOneWidget);
 
       await tester.tap(find.byTooltip('Delete'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(await fallbackLog.exists(), isFalse);
       expect(await remainingLog.exists(), isTrue);
@@ -184,13 +187,16 @@ void main() {
           home: const LogViewerPage(),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(fileName), findsOneWidget);
 
       await tester.tap(find.byTooltip('删除'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, '删除'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(await fallbackLog.exists(), isFalse);
       expect(await remainingLog.exists(), isTrue);
@@ -246,9 +252,12 @@ void main() {
           home: const LogViewerPage(),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(fileName), findsOneWidget);
       await tester.tap(find.byTooltip('Delete'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       for (var attempt = 0; attempt < 5 && !deleteStarted; attempt++) {
         await tester.pump(const Duration(milliseconds: 20));
