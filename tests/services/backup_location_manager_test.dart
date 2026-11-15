@@ -26,8 +26,7 @@ Future<void> _deleteLogRootFixture(String path) async {
 }
 
 /// Helper: creates test UUID-like strings for SAF URI testing.
-String _fakeUri(int id) =>
-    'content://com.android.externalstorage.documents/'
+String _fakeUri(int id) => 'content://com.android.externalstorage.documents/'
     'tree/primary%3ADocument%2FStroomBackups/test_$id';
 
 void main() {
@@ -324,13 +323,13 @@ void main() {
       const channel = MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'listLogMetadata') {
-              throw PlatformException(code: 'list_metadata_failed');
-            }
-            throw MissingPluginException(
-              'Unexpected SAF method: ${call.method}',
-            );
-          });
+        if (call.method == 'listLogMetadata') {
+          throw PlatformException(code: 'list_metadata_failed');
+        }
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
 
       try {
         await expectLater(
@@ -358,26 +357,26 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'listLogMetadata') {
-                return [
-                  {
-                    'name': 'app_2026-01-01-10.log',
-                    'sizeBytes': 12,
-                    'modifiedAtMillis': 1,
-                  },
-                  includeMissingSize
-                      ? {'name': 'app_2026-01-01-11.log'}
-                      : {
-                          'name': 'app_2026-01-01-11.log',
-                          'sizeBytes': -1,
-                          'modifiedAtMillis': 1,
-                        },
-                ];
-              }
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'listLogMetadata') {
+            return [
+              {
+                'name': 'app_2026-01-01-10.log',
+                'sizeBytes': 12,
+                'modifiedAtMillis': 1,
+              },
+              includeMissingSize
+                  ? {'name': 'app_2026-01-01-11.log'}
+                  : {
+                      'name': 'app_2026-01-01-11.log',
+                      'sizeBytes': -1,
+                      'modifiedAtMillis': 1,
+                    },
+            ];
+          }
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           await expectLater(
@@ -416,12 +415,12 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'deleteLog') return false;
-              if (call.method == 'listLogs') return <String>[fileName];
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'deleteLog') return false;
+          if (call.method == 'listLogs') return <String>[fileName];
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
@@ -454,12 +453,12 @@ void main() {
       const channel = MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'deleteLog') return true;
-            if (call.method == 'listLogs') return <String>[fileName];
-            throw MissingPluginException(
-              'Unexpected SAF method: ${call.method}',
-            );
-          });
+        if (call.method == 'deleteLog') return true;
+        if (call.method == 'listLogs') return <String>[fileName];
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
 
       try {
         expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
@@ -493,14 +492,14 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'deleteLog') return true;
-              if (call.method == 'listLogs') {
-                throw PlatformException(code: 'list_failed');
-              }
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'deleteLog') return true;
+          if (call.method == 'listLogs') {
+            throw PlatformException(code: 'list_failed');
+          }
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
@@ -535,12 +534,12 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'deleteLog') return true;
-              if (call.method == 'listLogs') return <String>[];
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'deleteLog') return true;
+          if (call.method == 'listLogs') return <String>[];
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           expect(await BackupLocationManager.deleteLogFile(fileName), isTrue);
@@ -575,12 +574,12 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'deleteLog') return false;
-              if (call.method == 'listLogs') return <String>[];
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'deleteLog') return false;
+          if (call.method == 'listLogs') return <String>[];
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
@@ -604,31 +603,27 @@ void main() {
         await prefs.setString('backup_saf_uri', safUri);
         BackupLocationManager.debugIsAndroidOverride = true;
         const fileName = 'app_2026-01-01-10.log';
-        const combinedContent =
-            '[2026-01-01 10:00:00] [INFO] [Test] Earlier\n'
+        const combinedContent = '[2026-01-01 10:00:00] [INFO] [Test] Earlier\n'
             '[2026-01-01 10:00:10] [INFO] [Test] New entry\n';
-        const updatedCombinedContent =
-            '$combinedContent'
+        const updatedCombinedContent = '$combinedContent'
             '[2026-01-01 10:00:20] [INFO] [Test] Retry entry\n';
         var writes = 0;
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'writeLog') {
-                writes++;
-                throw PlatformException(
-                  code: 'LOG_TARGET_REMOVED',
-                  details: writes == 1
-                      ? combinedContent
-                      : updatedCombinedContent,
-                );
-              }
-              if (call.method == 'listLogs') return <String>[];
-              if (call.method == 'readLog') return null;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'writeLog') {
+            writes++;
+            throw PlatformException(
+              code: 'LOG_TARGET_REMOVED',
+              details: writes == 1 ? combinedContent : updatedCombinedContent,
+            );
+          }
+          if (call.method == 'listLogs') return <String>[];
+          if (call.method == 'readLog') return null;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           final logRoot = Directory(BackupLocationManager.testLogRoot);
@@ -676,8 +671,7 @@ void main() {
         await prefs.setString('backup_saf_uri', safUri);
         BackupLocationManager.debugIsAndroidOverride = true;
         const fileName = 'app_2026-01-01-10.log';
-        const completeContent =
-            '[2026-01-01 10:00:00] [INFO] [Test] Earlier\n'
+        const completeContent = '[2026-01-01 10:00:00] [INFO] [Test] Earlier\n'
             '[2026-01-01 10:00:10] [INFO] [Test] Current batch\n';
         const retryContent =
             '[2026-01-01 10:00:20] [INFO] [Test] Retried batch\n';
@@ -692,25 +686,24 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'writeLog') {
-                calls++;
-                if (calls == 1) {
-                  throw PlatformException(
-                    code: 'LOG_TARGET_REMOVED',
-                    details: completeContent,
-                  );
-                }
-                contentSentOnRetry = call.arguments['content'] as String;
-                replaceExistingOnRetry =
-                    call.arguments['replaceExisting'] as bool;
-                return null;
-              }
-              if (call.method == 'listLogs') return <String>[];
-              if (call.method == 'readLog') return null;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
+          if (call.method == 'writeLog') {
+            calls++;
+            if (calls == 1) {
+              throw PlatformException(
+                code: 'LOG_TARGET_REMOVED',
+                details: completeContent,
               );
-            });
+            }
+            contentSentOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            return null;
+          }
+          if (call.method == 'listLogs') return <String>[];
+          if (call.method == 'readLog') return null;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           expect(
@@ -769,27 +762,26 @@ void main() {
         bool? replaceExistingOnRetry;
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'writeLog') {
-                writes++;
-                if (writes == 1) {
-                  throw PlatformException(
-                    code: 'CREATE_FILE_FAILED',
-                    details: completeContent,
-                  );
-                }
-                contentWrittenOnRetry = call.arguments['content'] as String;
-                replaceExistingOnRetry =
-                    call.arguments['replaceExisting'] as bool;
-                return null;
-              }
-              if (call.method == 'listLogs') {
-                return contentWrittenOnRetry == null ? <String>[] : [fileName];
-              }
-              if (call.method == 'readLog') return contentWrittenOnRetry;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
+          if (call.method == 'writeLog') {
+            writes++;
+            if (writes == 1) {
+              throw PlatformException(
+                code: 'CREATE_FILE_FAILED',
+                details: completeContent,
               );
-            });
+            }
+            contentWrittenOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            return null;
+          }
+          if (call.method == 'listLogs') {
+            return contentWrittenOnRetry == null ? <String>[] : [fileName];
+          }
+          if (call.method == 'readLog') return contentWrittenOnRetry;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           final pendingRoot = Directory(
@@ -875,25 +867,24 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'writeLog') {
-                writes++;
-                if (writes == 1) {
-                  throw PlatformException(
-                    code: 'CREATE_FILE_FAILED',
-                    details: completeContent,
-                  );
-                }
-                contentWrittenOnRetry = call.arguments['content'] as String;
-                replaceExistingOnRetry =
-                    call.arguments['replaceExisting'] as bool;
-                return null;
-              }
-              if (call.method == 'listLogs') return [fileName];
-              if (call.method == 'readLog') return contentWrittenOnRetry;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
+          if (call.method == 'writeLog') {
+            writes++;
+            if (writes == 1) {
+              throw PlatformException(
+                code: 'CREATE_FILE_FAILED',
+                details: completeContent,
               );
-            });
+            }
+            contentWrittenOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            return null;
+          }
+          if (call.method == 'listLogs') return [fileName];
+          if (call.method == 'readLog') return contentWrittenOnRetry;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           expect(
@@ -951,18 +942,18 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'writeLog') {
-                throw PlatformException(
-                  code: 'LOG_REPLACE_FAILED',
-                  details: newContent,
-                );
-              }
-              if (call.method == 'listLogs') return [fileName];
-              if (call.method == 'readLog') return existingContent;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'writeLog') {
+            throw PlatformException(
+              code: 'LOG_REPLACE_FAILED',
+              details: newContent,
+            );
+          }
+          if (call.method == 'listLogs') return [fileName];
+          if (call.method == 'readLog') return existingContent;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           final logRoot = Directory(BackupLocationManager.testLogRoot);
@@ -1004,11 +995,11 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'readLog') return safContent;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'readLog') return safContent;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           final merged = await BackupLocationManager.readLogContent(fileName);
@@ -1058,11 +1049,11 @@ void main() {
       const channel = MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'readLog') return secondEntry;
-            throw MissingPluginException(
-              'Unexpected SAF method: ${call.method}',
-            );
-          });
+        if (call.method == 'readLog') return secondEntry;
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
 
       try {
         final merged = await BackupLocationManager.readLogContent(fileName);

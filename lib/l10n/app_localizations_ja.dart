@@ -10263,8 +10263,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appLogDelete => '消去';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      '削除を確認できませんでした。';
+  String get appLogDeleteUnconfirmed => '削除を確認できませんでした。';
 
   @override
   String get appLogConfirmDeleteTitle => '削除の確認';
@@ -21935,8 +21934,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get appLogDelete => '消去';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      '削除を確認できませんでした。';
+  String get appLogDeleteUnconfirmed => '削除を確認できませんでした。';
 
   @override
   String get appLogConfirmDeleteTitle => '削除の確認';

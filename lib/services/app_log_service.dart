@@ -69,13 +69,13 @@ class AppLogPolicy {
     LogLevel? minimumLevel,
     int? maxStorageBytes,
     bool unlimitedStorage = false,
-  }) => AppLogPolicy(
-    retentionDays: retentionDays ?? this.retentionDays,
-    minimumLevel: minimumLevel ?? this.minimumLevel,
-    maxStorageBytes: unlimitedStorage
-        ? null
-        : maxStorageBytes ?? this.maxStorageBytes,
-  );
+  }) =>
+      AppLogPolicy(
+        retentionDays: retentionDays ?? this.retentionDays,
+        minimumLevel: minimumLevel ?? this.minimumLevel,
+        maxStorageBytes:
+            unlimitedStorage ? null : maxStorageBytes ?? this.maxStorageBytes,
+      );
 }
 
 /// Aggregate log storage information for the settings UI.
@@ -457,8 +457,7 @@ class AppLogService {
 
   static String _serializeEntry(_LogEntry entry) {
     final ts = entry.timestamp;
-    final timestamp =
-        '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+    final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
         '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}.'
         '${ts.millisecond.toString().padLeft(3, '0')}'
         '${(ts.microsecond % 1000).toString().padLeft(3, '0')}';
@@ -759,8 +758,8 @@ class AppLogService {
 
   static DateTime? _dateFromLogFileName(String name) {
     if (!_appLogName.hasMatch(name)) return null;
-    final dateMatch = RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$')
-        .firstMatch(name);
+    final dateMatch =
+        RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$').firstMatch(name);
     if (dateMatch == null) return null;
     try {
       final date = DateTime.parse(dateMatch.group(1)!);

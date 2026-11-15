@@ -9986,8 +9986,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appLogDelete => '删除';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      '无法确认删除结果。';
+  String get appLogDeleteUnconfirmed => '无法确认删除结果。';
 
   @override
   String get appLogConfirmDeleteTitle => '确认删除';
@@ -21334,8 +21333,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get appLogDelete => '删除';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      '无法确认删除结果。';
+  String get appLogDeleteUnconfirmed => '无法确认删除结果。';
 
   @override
   String get appLogConfirmDeleteTitle => '确认删除';

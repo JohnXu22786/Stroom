@@ -316,8 +316,7 @@ void main() {
       expect(
         position.pixels,
         greaterThanOrEqualTo(position.maxScrollExtent - 2),
-        reason:
-            'After entering the page, the view must be scrolled '
+        reason: 'After entering the page, the view must be scrolled '
             'to the bottom (latest log lines)',
       );
     });
@@ -347,8 +346,7 @@ void main() {
       expect(
         structuredOffset,
         lessThan(bottomOffset - 3000),
-        reason:
-            'the drag must move the reading position away from '
+        reason: 'the drag must move the reading position away from '
             'the bottom',
       );
 
@@ -372,8 +370,7 @@ void main() {
       expect(
         position.pixels,
         lessThan(position.maxScrollExtent - 2000),
-        reason:
-            'switching modes must not scroll to the bottom — only '
+        reason: 'switching modes must not scroll to the bottom — only '
             'the initial page entry may auto-scroll',
       );
       final expectedProportional =
@@ -381,8 +378,7 @@ void main() {
       expect(
         (position.pixels - expectedProportional).abs(),
         lessThan(300),
-        reason:
-            'a never-shown view should open at the same log region '
+        reason: 'a never-shown view should open at the same log region '
             'the user was reading',
       );
     });
@@ -432,8 +428,7 @@ void main() {
       expect(
         restoredOffset,
         lessThan(bottomOffset - 3000),
-        reason:
-            'after toggling back, the view must still be far from '
+        reason: 'after toggling back, the view must still be far from '
             'the bottom — it must not be yanked to the latest logs',
       );
     });
@@ -483,8 +478,7 @@ void main() {
       expect(
         (restoredRawOffset - rawOffset).abs(),
         lessThan(100),
-        reason:
-            'the raw view must be restored to the position the user '
+        reason: 'the raw view must be restored to the position the user '
             'was reading, not to the top or the bottom',
       );
     });
@@ -533,13 +527,14 @@ void main() {
       // Level colors are mapped by the parser — assert on whichever
       // ERROR/WARN lines happen to be visible after the entry auto-scroll.
       SelectableText firstVisibleLevelLine(String level) => tester.widget(
-        find
-            .byWidgetPredicate(
-              (w) =>
-                  w is SelectableText && w.data?.contains('[$level]') == true,
-            )
-            .first,
-      );
+            find
+                .byWidgetPredicate(
+                  (w) =>
+                      w is SelectableText &&
+                      w.data?.contains('[$level]') == true,
+                )
+                .first,
+          );
       expect(firstVisibleLevelLine('ERROR').style?.color, Colors.red);
       expect(firstVisibleLevelLine('WARN').style?.color, Colors.orange);
     });
@@ -589,7 +584,8 @@ void main() {
       expect(find.text('共 500 行'), findsOneWidget);
     });
 
-    testWidgets('line count handles empty content and missing trailing '
+    testWidgets(
+        'line count handles empty content and missing trailing '
         'newline', (tester) async {
       // Empty content: 0 lines.
       await tester.pumpWidget(

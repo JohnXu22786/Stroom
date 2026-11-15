@@ -282,7 +282,8 @@ void main() {
   // ==================================================================
 
   group('AppLogService — flush failure recovery', () {
-    test('SAF failure keeps entries retryable and fallback logs readable', () async {
+    test('SAF failure keeps entries retryable and fallback logs readable',
+        () async {
       const safUri = 'content://provider/tree/primary%3ADocuments';
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('backup_saf_uri', safUri);
@@ -302,17 +303,17 @@ void main() {
       final channel = const MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'writeLog') {
-              throw PlatformException(code: 'write_failed');
-            }
-            if (call.method == 'listLogs') return [fileName];
-            if (call.method == 'readLog') {
-              return safReadContent ?? existingSafContent;
-            }
-            throw MissingPluginException(
-              'Unexpected SAF method: ${call.method}',
-            );
-          });
+        if (call.method == 'writeLog') {
+          throw PlatformException(code: 'write_failed');
+        }
+        if (call.method == 'listLogs') return [fileName];
+        if (call.method == 'readLog') {
+          return safReadContent ?? existingSafContent;
+        }
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
 
       final failurePath = await _createUnwritableLogRoot('stroom_log_failure_');
       BackupLocationManager.debugAppLocalLogsRootPath = failurePath;
@@ -378,21 +379,21 @@ void main() {
       final channel = const MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'writeLog') {
-              final fileName = call.arguments['fileName'] as String;
-              writes.update(fileName, (count) => count + 1, ifAbsent: () => 1);
-              if (fileName == secondName && writes[fileName] == 1) {
-                final failureFile = File(failurePath);
-                if (await failureFile.exists()) await failureFile.delete();
-                await File(failurePath).create();
-                throw PlatformException(code: 'write_failed');
-              }
-              return null;
-            }
-            throw MissingPluginException(
-              'Unexpected SAF method: ${call.method}',
-            );
-          });
+        if (call.method == 'writeLog') {
+          final fileName = call.arguments['fileName'] as String;
+          writes.update(fileName, (count) => count + 1, ifAbsent: () => 1);
+          if (fileName == secondName && writes[fileName] == 1) {
+            final failureFile = File(failurePath);
+            if (await failureFile.exists()) await failureFile.delete();
+            await File(failurePath).create();
+            throw PlatformException(code: 'write_failed');
+          }
+          return null;
+        }
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
 
       try {
         await AppLogService.info('Test', 'First hour');
@@ -449,27 +450,27 @@ void main() {
         final channel = const MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'listLogMetadata') {
-                return [
-                  {
-                    'name': fileName,
-                    'sizeBytes': remoteSize,
-                    'modifiedAtMillis': 1,
-                  },
-                ];
-              }
-              if (call.method == 'listLogs') {
-                return deleteRequested ? <String>[] : <String>[fileName];
-              }
-              if (call.method == 'readLog') return fallbackContent;
-              if (call.method == 'deleteLog') {
-                deleteRequested = true;
-                return true;
-              }
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'listLogMetadata') {
+            return [
+              {
+                'name': fileName,
+                'sizeBytes': remoteSize,
+                'modifiedAtMillis': 1,
+              },
+            ];
+          }
+          if (call.method == 'listLogs') {
+            return deleteRequested ? <String>[] : <String>[fileName];
+          }
+          if (call.method == 'readLog') return fallbackContent;
+          if (call.method == 'deleteLog') {
+            deleteRequested = true;
+            return true;
+          }
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           final metadata = await BackupLocationManager.getLogFileMetadata();
@@ -506,20 +507,20 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'listLogMetadata') {
-                return [
-                  {
-                    'name': fileName,
-                    'sizeBytes': safContent.length,
-                    'modifiedAtMillis': 1,
-                  },
-                ];
-              }
-              if (call.method == 'readLog') return safContent;
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'listLogMetadata') {
+            return [
+              {
+                'name': fileName,
+                'sizeBytes': safContent.length,
+                'modifiedAtMillis': 1,
+              },
+            ];
+          }
+          if (call.method == 'readLog') return safContent;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           final metadata = await BackupLocationManager.getLogFileMetadata();
@@ -538,7 +539,8 @@ void main() {
       },
     );
 
-    test('buffered entries survive a flush failure and are written on retry', () async {
+    test('buffered entries survive a flush failure and are written on retry',
+        () async {
       // Create a log dir
       final logDir = await AppLogService.getLogDir();
       if (!await logDir.exists()) {
@@ -842,7 +844,8 @@ void main() {
         expect(
           files,
           isEmpty,
-          reason: 'When log directory does not exist, listLogFiles should return empty list',
+          reason:
+              'When log directory does not exist, listLogFiles should return empty list',
         );
 
         // Cleanup
@@ -1024,29 +1027,29 @@ void main() {
         const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, (call) async {
-              if (call.method == 'listLogMetadata') {
-                return [
-                  {'name': firstName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
-                  {'name': secondName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
-                ];
-              }
-              if (call.method == 'deleteLog') {
-                deleteCalls.add(call.arguments['fileName'] as String);
-                return false;
-              }
-              if (call.method == 'readLog') {
-                final requestedName = call.arguments['fileName'] as String;
-                if (requestedName == firstName) {
-                  return List.filled(100, 'x').join();
-                }
-                if (requestedName == secondName) {
-                  return List.filled(100, 'y').join();
-                }
-              }
-              throw MissingPluginException(
-                'Unexpected SAF method: ${call.method}',
-              );
-            });
+          if (call.method == 'listLogMetadata') {
+            return [
+              {'name': firstName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
+              {'name': secondName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
+            ];
+          }
+          if (call.method == 'deleteLog') {
+            deleteCalls.add(call.arguments['fileName'] as String);
+            return false;
+          }
+          if (call.method == 'readLog') {
+            final requestedName = call.arguments['fileName'] as String;
+            if (requestedName == firstName) {
+              return List.filled(100, 'x').join();
+            }
+            if (requestedName == secondName) {
+              return List.filled(100, 'y').join();
+            }
+          }
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
 
         try {
           await AppLogService.updatePolicy(
@@ -1115,7 +1118,8 @@ void main() {
       if (await logDir.exists()) await logDir.delete(recursive: true);
     });
 
-    test('readLogFile handles yesterday log when no today log exists', () async {
+    test('readLogFile handles yesterday log when no today log exists',
+        () async {
       final logDir = await AppLogService.getLogDir();
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
@@ -1138,7 +1142,8 @@ void main() {
       expect(
         content,
         isNotNull,
-        reason: 'Yesterday log should be readable even when today log does not exist',
+        reason:
+            'Yesterday log should be readable even when today log does not exist',
       );
 
       // Cleanup

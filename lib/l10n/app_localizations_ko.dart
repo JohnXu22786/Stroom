@@ -10250,8 +10250,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appLogDelete => '삭제';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      '삭제 여부를 확인할 수 없습니다.';
+  String get appLogDeleteUnconfirmed => '삭제 여부를 확인할 수 없습니다.';
 
   @override
   String get appLogConfirmDeleteTitle => '삭제 확인';
@@ -21912,8 +21911,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get appLogDelete => '삭제';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      '삭제 여부를 확인할 수 없습니다.';
+  String get appLogDeleteUnconfirmed => '삭제 여부를 확인할 수 없습니다.';
 
   @override
   String get appLogConfirmDeleteTitle => '삭제 확인';

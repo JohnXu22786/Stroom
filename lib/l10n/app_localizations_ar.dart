@@ -10640,8 +10640,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appLogDelete => 'حذف';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      'تعذر تأكيد الحذف.';
+  String get appLogDeleteUnconfirmed => 'تعذر تأكيد الحذف.';
 
   @override
   String get appLogConfirmDeleteTitle => 'تأكيد الحذف';
@@ -22735,8 +22734,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get appLogDelete => 'حذف';
 
   @override
-  String get appLogDeleteUnconfirmed =>
-      'تعذر تأكيد الحذف.';
+  String get appLogDeleteUnconfirmed => 'تعذر تأكيد الحذف.';
 
   @override
   String get appLogConfirmDeleteTitle => 'تأكيد الحذف';
