@@ -170,6 +170,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (!mounted) return;
 
       final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        throw const FormatException('Camera returned an empty image');
+      }
       final hash = computeImageHash(bytes);
       const format = 'jpg';
       final fileName = '$hash.$format';
