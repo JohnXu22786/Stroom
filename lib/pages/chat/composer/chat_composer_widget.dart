@@ -379,6 +379,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Detect conversation change: save draft for old conversation,
     // then restore draft for the new one
     if (oldWidget.conversationId != widget.conversationId) {
+      // In edit mode the page clears the edit session asynchronously, so this
+      // branch does not restore a draft (which normally advances the draft
+      // generation). Still invalidate imports from the previous conversation
+      // immediately, including if the user switches away and back before an
+      // import finishes.
+      if (oldWidget.editingMessageId != null) {
+        _pendingAttachmentDraftGeneration++;
+      }
       // The warning refers to the previous conversation's messages — a
       // stale pill would be misleading after switching conversations.
       _disarmEditWarning();

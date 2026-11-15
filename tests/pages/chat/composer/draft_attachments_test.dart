@@ -16,6 +16,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/attachment_storage.dart';
 
 /// 测试用 PathProvider：把"应用文档目录"指向临时目录，让
@@ -149,6 +150,8 @@ void main() {
   late Directory tmpRoot;
 
   setUp(() {
+    AppLogService.reset();
+    AppLogService.disableFileLogging();
     tmpRoot = Directory.systemTemp.createTempSync('stroom_draft_att_test_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
   });
@@ -159,6 +162,7 @@ void main() {
     } catch (_) {
       // 非关键清理
     }
+    AppLogService.reset();
   });
 
   group('对话附件草稿', () {
@@ -187,9 +191,6 @@ void main() {
             'old-chat.txt',
             Uint8List.fromList([1, 2, 3]),
           );
-          // Let the async logging call at the start of saveFile resume before
-          // waiting for the fake path provider to report its blocked lookup.
-          await Future<void>.delayed(Duration.zero);
           await pathProvider.started.future;
         });
 
@@ -242,7 +243,6 @@ void main() {
             'late-edit.txt',
             Uint8List.fromList([4, 5, 6]),
           );
-          await Future<void>.delayed(Duration.zero);
           await editPathProvider.started.future;
         });
 
@@ -282,6 +282,62 @@ void main() {
               : <FileSystemEntity>[],
           isEmpty,
           reason: 'the stale edit-session import file should be deleted',
+        );
+      },
+    );
+
+    testWidgets(
+      'edit import stays stale after switching away and back to its conversation',
+      (tester) async {
+        final container = _buildContainer();
+        final key = GlobalKey<ChatComposerWidgetState>();
+        final pathProvider = _BlockingPathProviderPlatform(tmpRoot.path);
+        PathProviderPlatform.instance = pathProvider;
+        final originalAttachment = readyImage(
+          id: 'edit-att',
+          hash: 'hash-edit',
+        )..conversationId = 'conv-1';
+
+        Widget editingComposer(String conversationId) => _composer(
+              container: container,
+              key: key,
+              conversationId: conversationId,
+              editingMessageId: 'edit-message',
+              editingMessageText: 'edited text',
+              editingMessageAttachments: [originalAttachment],
+              onSend: (text, atts) {},
+            );
+
+        await tester.pumpWidget(editingComposer('conv-1'));
+
+        late Future<void> pendingImport;
+        await tester.runAsync(() async {
+          pendingImport = key.currentState!.addPendingAttachmentForTesting(
+            'late-edit.txt',
+            Uint8List.fromList([4, 5, 6]),
+          );
+          await pathProvider.started.future;
+        });
+
+        await tester.pumpWidget(editingComposer('conv-2'));
+        await tester.pumpWidget(editingComposer('conv-1'));
+        await tester.pump();
+
+        pathProvider.release.complete();
+        await tester.runAsync(() => pendingImport);
+        await tester.pump();
+
+        expect(
+            find.byKey(const ValueKey('pending_att_edit-att')), findsOneWidget);
+        expect(find.text('late-edit.txt'), findsNothing);
+        final attachmentFiles = Directory('${tmpRoot.path}/attachments');
+        expect(
+          attachmentFiles.existsSync()
+              ? attachmentFiles.listSync()
+              : <FileSystemEntity>[],
+          isEmpty,
+          reason:
+              'the stale edit import file should be deleted after rejection',
         );
       },
     );
