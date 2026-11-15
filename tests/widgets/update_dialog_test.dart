@@ -125,14 +125,23 @@ void main() {
         size: const Size(390, 844),
       );
 
-      final dialogRect = tester.getRect(find.byType(AlertDialog));
+      final secondaryActionsRow = find
+          .ancestor(
+            of: find.text('Skip this version'),
+            matching: find.byType(Row),
+          )
+          .first;
       final primaryAction = find.ancestor(
         of: find.text('Download in browser'),
         matching: find.byType(FilledButton),
       );
       final primaryRect = tester.getRect(primaryAction);
-      expect(primaryRect.width, greaterThanOrEqualTo(dialogRect.width * 0.8));
-      expect(primaryRect.bottom, lessThanOrEqualTo(dialogRect.bottom));
+      final actionContentWidth = tester.getSize(secondaryActionsRow).width;
+      expect(primaryRect.width, closeTo(actionContentWidth, 0.1));
+      expect(
+        primaryRect.bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(AlertDialog)).bottom),
+      );
 
       await tester.tap(find.text('Remind me later'));
       await tester.pumpAndSettle();
