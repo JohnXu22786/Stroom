@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
+import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 
 /// Pumps a ChatPage with a single seeded conversation, mirroring
@@ -47,6 +49,75 @@ Widget _appFor({
 }
 
 void main() {
+  testWidgets(
+    'switching to an existing temporary conversation does not replay its glow',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final first = Conversation(
+        id: 'c-first',
+        title: 'First',
+        isTemporary: true,
+        temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 40)),
+      )..temporaryExpiryRevision = 1;
+      final second = Conversation(
+        id: 'c-second',
+        title: 'Second',
+        isTemporary: true,
+        temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 20)),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            final notifier = ConversationsNotifier(ref);
+            notifier.state = [first, second];
+            return notifier;
+          }),
+          activeConversationIdProvider.overrideWith((ref) => first.id),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+          chatStreamManagerProvider.overrideWith(
+            (ref) => ChatStreamManager(null),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: ChatPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      container.read(activeConversationIdProvider.notifier).state = second.id;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+
+      final capsule = tester.widget<Container>(
+        find.descendant(
+          of: find.byType(TemporaryCountdownCapsule),
+          matching: find.byType(Container),
+        ),
+      );
+      expect((capsule.decoration as BoxDecoration).boxShadow, isNull);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
   testWidgets(
       'top bar toggles temporary mode on the current conversation '
       'and shows the countdown capsule', (tester) async {

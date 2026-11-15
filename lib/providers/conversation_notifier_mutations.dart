@@ -5,6 +5,15 @@ part of 'conversation_provider.dart';
 // inline code.
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
+void _markTemporaryConversationUpdated(
+  Conversation conversation,
+  DateTime changedAt,
+) {
+  conversation.updatedAt = changedAt.isAfter(conversation.updatedAt)
+      ? changedAt
+      : conversation.updatedAt.add(const Duration(microseconds: 1));
+}
+
 extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   List<Conversation> _restoreDeletedConversationOrder(
     List<Conversation> original,
@@ -355,7 +364,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         c.temporaryExpiresAt = null;
         c.temporaryPausedRemainingMilliseconds = null;
       }
-      c.updatedAt = DateTime.now();
+      _markTemporaryConversationUpdated(c, DateTime.now());
       return c;
     }).toList();
     _syncTemporaryTimer();
@@ -367,7 +376,14 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (!mounted) return;
     final now = DateTime.now();
     state = state.map((conversation) {
-      if (conversation.id == id) conversation.pauseTemporaryExpiry(now);
+      if (conversation.id == id) {
+        final wasPaused = conversation.temporaryPausedRemainingMilliseconds;
+        conversation.pauseTemporaryExpiry(now);
+        if (wasPaused == null &&
+            conversation.temporaryPausedRemainingMilliseconds != null) {
+          _markTemporaryConversationUpdated(conversation, now);
+        }
+      }
       return conversation;
     }).toList();
     await _persistNow();
@@ -383,7 +399,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final now = DateTime.now();
     state = state.map((conversation) {
       if (conversation.id == id) {
+        final wasPaused = conversation.temporaryPausedRemainingMilliseconds;
         conversation.resumeTemporaryExpiry(now, successful: successful);
+        if (wasPaused != null) {
+          _markTemporaryConversationUpdated(conversation, now);
+        }
       }
       return conversation;
     }).toList();
@@ -406,6 +426,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       if (conversation.isTemporary &&
           conversation.temporaryPausedRemainingMilliseconds != null) {
         conversation.resumeTemporaryExpiry(resumedAt, successful: false);
+        _markTemporaryConversationUpdated(conversation, resumedAt);
         changed = true;
       }
       return conversation;
@@ -620,17 +641,19 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (!state.any((conversation) => conversation.id == conversationId)) {
       return;
     }
-    final updatedAt = DateTime.now();
-    checkpoint['updatedAt'] = updatedAt.toIso8601String();
+    final checkpointTime = DateTime.now();
+    DateTime? checkpointUpdatedAt;
     state = state.map((conversation) {
       if (conversation.id != conversationId) return conversation;
-      conversation.updatedAt = updatedAt;
+      _markTemporaryConversationUpdated(conversation, checkpointTime);
+      checkpointUpdatedAt = conversation.updatedAt;
       return conversation;
     }).toList();
     final conversation = state
         .where((conversation) => conversation.id == conversationId)
         .firstOrNull;
     if (conversation != null) {
+      checkpoint['updatedAt'] = checkpointUpdatedAt!.toIso8601String();
       checkpoint['conversationCreatedAt'] =
           conversation.createdAt.toIso8601String();
       checkpoint['isTemporary'] = conversation.isTemporary;

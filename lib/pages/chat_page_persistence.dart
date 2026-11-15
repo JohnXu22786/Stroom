@@ -283,6 +283,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     ConversationsNotifier? temporaryCountdownNotifier;
     var countdownPaused = false;
     var countdownResolved = false;
+    var pendingSendReserved = false;
     if (convId != null &&
         ref.read(streamingConversationsProvider).contains(convId)) {
       return null;
@@ -292,6 +293,23 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     // _streams insertion inside manager.startStreaming.
     if (convId != null && _pendingSendConvIds.contains(convId)) return null;
     try {
+      if (convId != null) {
+        _pendingSendConvIds.add(convId);
+        pendingSendReserved = true;
+        final conversationsNotifier = ref.read(conversationsProvider.notifier);
+        temporaryCountdownNotifier = conversationsNotifier;
+        final temporaryConversation = ref
+            .read(conversationsProvider)
+            .where(
+              (conversation) =>
+                  conversation.id == convId && conversation.isTemporary,
+            )
+            .firstOrNull;
+        if (temporaryConversation != null) {
+          countdownPaused = true;
+          await conversationsNotifier.pauseTemporaryCountdown(convId);
+        }
+      }
       await AppLogService.info(
         'ChatPage',
         '发送消息, convId=$convId, text长度=${text.length}, '
@@ -307,8 +325,11 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // 登记在 convId 解析**之后**（含新建对话路径）：否则无活跃对话
       // 时两次极速回车都不会被 pending 拦截，第二条消息已入库却在
       // _startStreaming 的流式守卫处被静默丢弃（孤儿消息）。
-      if (_pendingSendConvIds.contains(convId)) return null;
-      _pendingSendConvIds.add(convId);
+      if (!pendingSendReserved) {
+        if (_pendingSendConvIds.contains(convId)) return null;
+        _pendingSendConvIds.add(convId);
+        pendingSendReserved = true;
+      }
 
       final temporaryConversation = ref
           .read(conversationsProvider)
@@ -319,7 +340,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           .firstOrNull;
       final conversationsNotifier = ref.read(conversationsProvider.notifier);
       temporaryCountdownNotifier = conversationsNotifier;
-      if (temporaryConversation != null) {
+      if (temporaryConversation != null && !countdownPaused) {
         countdownPaused = true;
         await conversationsNotifier.pauseTemporaryCountdown(convId);
       }

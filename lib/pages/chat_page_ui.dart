@@ -698,6 +698,7 @@ extension _ChatPageUiExt on _ChatPageState {
                   // 临时对话倒计时胶囊（标题前）
                   if (temporaryExpiresAt != null)
                     TemporaryCountdownCapsule(
+                      key: ValueKey(conversation!.id),
                       expiresAt: temporaryExpiresAt,
                       pausedRemainingMilliseconds: temporaryPausedRemaining,
                       animationKey: conversation!.temporaryExpiryRevision,

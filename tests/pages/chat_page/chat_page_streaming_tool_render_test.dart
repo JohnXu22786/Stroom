@@ -68,6 +68,7 @@ class _HangingStreamManager extends ChatStreamManager {
 Widget _buildTestApp(
   _HangingStreamManager manager, {
   List<ChatMessage> history = const [],
+  DateTime? temporaryExpiresAt,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -82,6 +83,8 @@ Widget _buildTestApp(
             createdAt: DateTime(2026, 1, 1),
             updatedAt: DateTime(2026, 1, 1),
             messages: history,
+            isTemporary: temporaryExpiresAt != null,
+            temporaryExpiresAt: temporaryExpiresAt,
           ),
         ];
         return notifier;
@@ -235,6 +238,7 @@ void main() {
     testWidgets('retry restores the old tail after the attempt is stopped',
         (tester) async {
       final manager = _HangingStreamManager();
+      final originalExpiry = DateTime.now().add(const Duration(minutes: 40));
       final history = [
         ChatMessage(role: 'user', content: 'Question', id: 'u-retry'),
         ChatMessage(role: 'assistant', content: 'Old answer', id: 'a-retry'),
@@ -242,7 +246,13 @@ void main() {
         ChatMessage(role: 'assistant', content: 'Later answer', id: 'a-tail'),
       ];
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
-      await tester.pumpWidget(_buildTestApp(manager, history: history));
+      await tester.pumpWidget(
+        _buildTestApp(
+          manager,
+          history: history,
+          temporaryExpiresAt: originalExpiry,
+        ),
+      );
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -258,6 +268,16 @@ void main() {
       expect(find.text('Later question'), findsNothing);
       expect(find.text('Later answer'), findsNothing);
       expect(manager.pending, hasLength(1));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+      );
+      expect(
+        container
+            .read(conversationsProvider)
+            .single
+            .temporaryPausedRemainingMilliseconds,
+        isNotNull,
+      );
 
       final stopped = ChatMessage(
         role: 'assistant',
@@ -280,6 +300,18 @@ void main() {
       expect(find.text('Old answer'), findsOneWidget);
       expect(find.text('Later question'), findsOneWidget);
       expect(find.text('Later answer'), findsOneWidget);
+      final restoredConversation = container.read(conversationsProvider).single;
+      expect(
+        restoredConversation.temporaryPausedRemainingMilliseconds,
+        isNull,
+      );
+      expect(
+        restoredConversation.temporaryExpiresAt!
+            .difference(DateTime.now())
+            .inMinutes,
+        greaterThanOrEqualTo(39),
+      );
+      await tester.pumpWidget(const SizedBox());
       await _flushPendingTimers(tester);
     });
 

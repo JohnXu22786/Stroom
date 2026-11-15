@@ -108,9 +108,12 @@ void main() {
       );
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
+      final priorUpdatedAt =
+          container.read(conversationsProvider).single.updatedAt;
 
       await notifier.pauseTemporaryCountdown('c1');
       final conv = container.read(conversationsProvider).single;
+      expect(conv.updatedAt.isAfter(priorUpdatedAt), isTrue);
       expect(conv.temporaryPausedRemainingMilliseconds, 0);
       expect(
         Conversation.fromMap(conv.toMap()).temporaryPausedRemainingMilliseconds,
@@ -441,6 +444,9 @@ void main() {
           expiresAt: DateTime.now().subtract(const Duration(minutes: 2)),
         ).toMap()
           ..['temporaryPausedRemainingMilliseconds'] = 28 * 1000;
+        final pausedUpdatedAt = DateTime.parse(
+          pausedConversation['updatedAt'] as String,
+        );
         SharedPreferences.setMockInitialValues({
           'conversations': jsonEncode([pausedConversation]),
         });
@@ -451,6 +457,7 @@ void main() {
 
         final restored = container.read(conversationsProvider).single;
         expect(restored.temporaryPausedRemainingMilliseconds, isNull);
+        expect(restored.updatedAt.isAfter(pausedUpdatedAt), isTrue);
         final remaining = restored.temporaryExpiresAt!.difference(
           DateTime.now(),
         );
