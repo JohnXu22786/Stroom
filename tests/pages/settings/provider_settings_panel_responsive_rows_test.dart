@@ -56,7 +56,7 @@ void main() {
       await tester.tap(find.text('Open provider settings'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Parameter settings'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Fallback method'), findsOneWidget);
       expect(find.text('Preprocessing method'), findsOneWidget);
