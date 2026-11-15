@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 /// A Text-compatible label that reveals values clipped by a finite line slot.
 /// Single-line values move horizontally; clipped multi-line values move
@@ -22,8 +23,8 @@ class ConstrainedText extends StatefulWidget {
     this.semanticsLabel,
     this.selectionColor,
     this.useNaturalWidthLayout = false,
-  })  : speed = 24,
-        marqueeTextAlign = null;
+  }) : speed = 24,
+       marqueeTextAlign = null;
 
   const ConstrainedText.home({
     super.key,
@@ -35,14 +36,14 @@ class ConstrainedText extends StatefulWidget {
     this.overflow = TextOverflow.ellipsis,
     this.softWrap = true,
     this.marqueeTextAlign,
-  })  : data = text,
-        strutStyle = null,
-        textDirection = null,
-        locale = null,
-        textScaler = null,
-        semanticsLabel = null,
-        selectionColor = null,
-        useNaturalWidthLayout = false;
+  }) : data = text,
+       strutStyle = null,
+       textDirection = null,
+       locale = null,
+       textScaler = null,
+       semanticsLabel = null,
+       selectionColor = null,
+       useNaturalWidthLayout = false;
 
   final String data;
   final double speed;
@@ -158,7 +159,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
     TextAlign textAlign,
     bool allowMotion,
   ) {
-    final measurementChanged = width != _measuredWidth ||
+    final measurementChanged =
+        width != _measuredWidth ||
         direction != _measuredDirection ||
         scaler != _measuredScaler ||
         style != _measuredStyle ||
@@ -174,7 +176,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
       final previousOverflow = _overflow;
       final maxLines = widget.maxLines ?? 1;
       final singleLine = maxLines == 1 || widget.softWrap == false;
-      final vertical = (widget.maxLines != null && widget.maxLines! > 1) ||
+      final vertical =
+          (widget.maxLines != null && widget.maxLines! > 1) ||
           (widget.maxLines != null &&
               widget.data.contains('\n') &&
               widget.softWrap != false);
@@ -292,8 +295,9 @@ class _ConstrainedTextState extends State<ConstrainedText>
 
   void _startAnimation() {
     if (_animating || !_motionAllowed || _overflow <= 0) return;
-    final travel =
-        math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
+    final travel = math
+        .max(1, (_overflow / widget.speed * 1000).round())
+        .toInt();
     _controller.duration = Duration(milliseconds: travel);
     _position = Tween<double>(begin: 0, end: 1).animate(_controller);
     _controller.forward(from: 0);
@@ -302,19 +306,19 @@ class _ConstrainedTextState extends State<ConstrainedText>
   }
 
   Widget _original() => Text(
-        widget.data,
-        style: widget.style,
-        strutStyle: widget.strutStyle,
-        textAlign: widget.textAlign,
-        textDirection: widget.textDirection,
-        locale: widget.locale,
-        softWrap: widget.softWrap,
-        overflow: widget.overflow,
-        textScaler: widget.textScaler,
-        maxLines: widget.maxLines,
-        semanticsLabel: widget.semanticsLabel,
-        selectionColor: widget.selectionColor,
-      );
+    widget.data,
+    style: widget.style,
+    strutStyle: widget.strutStyle,
+    textAlign: widget.textAlign,
+    textDirection: widget.textDirection,
+    locale: widget.locale,
+    softWrap: widget.softWrap,
+    overflow: widget.overflow,
+    textScaler: widget.textScaler,
+    maxLines: widget.maxLines,
+    semanticsLabel: widget.semanticsLabel,
+    selectionColor: widget.selectionColor,
+  );
 
   @override
   void dispose() {
@@ -333,7 +337,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final textAlign =
         widget.textAlign ?? defaultTextStyle.textAlign ?? TextAlign.start;
     final locale = widget.locale ?? Localizations.maybeLocaleOf(context);
-    final animateable = (widget.maxLines != null || widget.softWrap == false) &&
+    final animateable =
+        (widget.maxLines != null || widget.softWrap == false) &&
         widget.maxLines != 0;
     if (!animateable) return _original();
     final measuredLayout = LayoutBuilder(
@@ -385,10 +390,11 @@ class _ConstrainedTextState extends State<ConstrainedText>
                   final horizontalOffset = _vertical
                       ? 0.0
                       : direction == TextDirection.ltr
-                          ? -_overflow * progress
-                          : -_overflow * (1 - progress);
-                  final verticalOffset =
-                      _vertical ? -_overflow * progress : 0.0;
+                      ? -_overflow * progress
+                      : -_overflow * (1 - progress);
+                  final verticalOffset = _vertical
+                      ? -_overflow * progress
+                      : 0.0;
                   return Transform.translate(
                     offset: Offset(horizontalOffset, verticalOffset),
                     child: child,
@@ -402,24 +408,36 @@ class _ConstrainedTextState extends State<ConstrainedText>
     );
     final isDropdownItem =
         context.findAncestorWidgetOfExactType<DropdownMenuItem<dynamic>>() !=
-            null;
+        null;
     final isInputDecorator =
         context.findAncestorWidgetOfExactType<InputDecorator>() != null;
-    if (widget.useNaturalWidthLayout || isDropdownItem || isInputDecorator) {
-      return measuredLayout;
-    }
-    return CustomSingleChildLayout(
-      delegate: _ConstrainedTextLayoutDelegate(
-        data: widget.data,
-        maxLines: widget.maxLines ?? 1,
-        style: style,
-        strutStyle: widget.strutStyle,
-        textAlign: textAlign,
-        textDirection: direction,
-        locale: locale,
-        textScaler: scaler,
-      ),
-      child: measuredLayout,
+    final layout =
+        widget.useNaturalWidthLayout || isDropdownItem || isInputDecorator
+        ? measuredLayout
+        : CustomSingleChildLayout(
+            delegate: _ConstrainedTextLayoutDelegate(
+              data: widget.data,
+              maxLines: widget.maxLines ?? 1,
+              style: style,
+              strutStyle: widget.strutStyle,
+              textAlign: textAlign,
+              textDirection: direction,
+              locale: locale,
+              textScaler: scaler,
+            ),
+            child: measuredLayout,
+          );
+    return _ConstrainedTextIntrinsicLayout(
+      data: widget.data,
+      style: style,
+      strutStyle: widget.strutStyle,
+      textAlign: textAlign,
+      textDirection: direction,
+      locale: locale,
+      textScaler: scaler,
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
+      child: layout,
     );
   }
 }
@@ -446,22 +464,23 @@ class _ConstrainedTextLayoutDelegate extends SingleChildLayoutDelegate {
   final TextScaler textScaler;
 
   TextPainter _painter({int? lines, String? ellipsis}) => TextPainter(
-        text: TextSpan(text: data, style: style),
-        textDirection: textDirection,
-        textScaler: textScaler,
-        locale: locale,
-        strutStyle: strutStyle,
-        textAlign: textAlign,
-        maxLines: lines,
-        ellipsis: ellipsis,
-      );
+    text: TextSpan(text: data, style: style),
+    textDirection: textDirection,
+    textScaler: textScaler,
+    locale: locale,
+    strutStyle: strutStyle,
+    textAlign: textAlign,
+    maxLines: lines,
+    ellipsis: ellipsis,
+  );
 
   @override
   Size getSize(BoxConstraints constraints) {
     final intrinsic = _painter()..layout();
     final preferredWidth = intrinsic.maxIntrinsicWidth;
-    final width =
-        constraints.maxWidth.isFinite ? constraints.maxWidth : preferredWidth;
+    final width = constraints.maxWidth.isFinite
+        ? constraints.maxWidth
+        : preferredWidth;
     final bounded = _painter(lines: maxLines, ellipsis: '…')
       ..layout(maxWidth: width);
     return constraints.constrain(
@@ -483,4 +502,183 @@ class _ConstrainedTextLayoutDelegate extends SingleChildLayoutDelegate {
       textDirection != oldDelegate.textDirection ||
       locale != oldDelegate.locale ||
       textScaler != oldDelegate.textScaler;
+}
+
+class _ConstrainedTextIntrinsicLayout extends SingleChildRenderObjectWidget {
+  const _ConstrainedTextIntrinsicLayout({
+    required this.data,
+    required this.style,
+    required this.strutStyle,
+    required this.textAlign,
+    required this.textDirection,
+    required this.locale,
+    required this.textScaler,
+    required this.maxLines,
+    required this.overflow,
+    required super.child,
+  });
+
+  final String data;
+  final TextStyle style;
+  final StrutStyle? strutStyle;
+  final TextAlign textAlign;
+  final TextDirection textDirection;
+  final Locale? locale;
+  final TextScaler textScaler;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderConstrainedTextIntrinsicLayout(
+        data: data,
+        style: style,
+        strutStyle: strutStyle,
+        textAlign: textAlign,
+        textDirection: textDirection,
+        locale: locale,
+        textScaler: textScaler,
+        maxLines: maxLines,
+        overflow: overflow,
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderConstrainedTextIntrinsicLayout renderObject,
+  ) {
+    renderObject.updateText(
+      data: data,
+      style: style,
+      strutStyle: strutStyle,
+      textAlign: textAlign,
+      textDirection: textDirection,
+      locale: locale,
+      textScaler: textScaler,
+      maxLines: maxLines,
+      overflow: overflow,
+    );
+  }
+}
+
+class _RenderConstrainedTextIntrinsicLayout extends RenderProxyBox {
+  _RenderConstrainedTextIntrinsicLayout({
+    required this._data,
+    required this._style,
+    required this._strutStyle,
+    required this._textAlign,
+    required this._textDirection,
+    required this._locale,
+    required this._textScaler,
+    required this._maxLines,
+    required this._overflow,
+  });
+
+  String _data;
+  TextStyle _style;
+  StrutStyle? _strutStyle;
+  TextAlign _textAlign;
+  TextDirection _textDirection;
+  Locale? _locale;
+  TextScaler _textScaler;
+  int? _maxLines;
+  TextOverflow? _overflow;
+
+  void updateText({
+    required String data,
+    required TextStyle style,
+    required StrutStyle? strutStyle,
+    required TextAlign textAlign,
+    required TextDirection textDirection,
+    required Locale? locale,
+    required TextScaler textScaler,
+    required int? maxLines,
+    required TextOverflow? overflow,
+  }) {
+    if (_data == data &&
+        _style == style &&
+        _strutStyle == strutStyle &&
+        _textAlign == textAlign &&
+        _textDirection == textDirection &&
+        _locale == locale &&
+        _textScaler == textScaler &&
+        _maxLines == maxLines &&
+        _overflow == overflow) {
+      return;
+    }
+    _data = data;
+    _style = style;
+    _strutStyle = strutStyle;
+    _textAlign = textAlign;
+    _textDirection = textDirection;
+    _locale = locale;
+    _textScaler = textScaler;
+    _maxLines = maxLines;
+    _overflow = overflow;
+    markNeedsLayout();
+  }
+
+  TextPainter _painter() => TextPainter(
+    text: TextSpan(text: _data, style: _style),
+    textDirection: _textDirection,
+    textScaler: _textScaler,
+    locale: _locale,
+    strutStyle: _strutStyle,
+    textAlign: _textAlign,
+    maxLines: _maxLines,
+    ellipsis: _overflow == TextOverflow.ellipsis ? '…' : null,
+  );
+
+  double _intrinsicWidth(double height, {required bool minimum}) {
+    final painter = _painter()..layout();
+    return minimum ? painter.minIntrinsicWidth : painter.maxIntrinsicWidth;
+  }
+
+  double _intrinsicHeight(double width) {
+    final painter = _painter()
+      ..layout(maxWidth: width.isFinite ? width : double.infinity);
+    return painter.height;
+  }
+
+  double? _baseline(double width, TextBaseline baseline) {
+    final painter = _painter()
+      ..layout(maxWidth: width.isFinite ? width : double.infinity);
+    return painter.computeDistanceToActualBaseline(baseline);
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      _intrinsicWidth(height, minimum: true);
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      _intrinsicWidth(height, minimum: false);
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _intrinsicHeight(width);
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _intrinsicHeight(width);
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      _baseline(size.width, baseline);
+
+  @override
+  double? computeDryBaseline(
+    BoxConstraints constraints,
+    TextBaseline baseline,
+  ) {
+    final drySize = computeDryLayout(constraints);
+    return _baseline(drySize.width, baseline);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final width = constraints.maxWidth;
+    final painter = _painter()
+      ..layout(maxWidth: width.isFinite ? width : double.infinity);
+    final preferredWidth = painter.didExceedMaxLines ? width : painter.width;
+    return constraints.constrain(Size(preferredWidth, painter.height));
+  }
 }
