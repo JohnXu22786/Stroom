@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +33,15 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 void main() {
   late Directory root;
   late PathProviderPlatform previousPathProvider;
+  final storageFiles = <String, List<int>>{};
+  var nextStorageFileId = 0;
+
+  Future<String> saveEditedFileInMemory(
+      String fileName, Uint8List bytes) async {
+    final path = 'temp_edited/test_${nextStorageFileId++}_$fileName';
+    storageFiles[path] = bytes;
+    return path;
+  }
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -41,6 +51,22 @@ void main() {
     await Directory('${root.path}/tmp').create(recursive: true);
     await Directory('${root.path}/attachments').create(recursive: true);
     AttachmentStorage.resetOverridesForTesting();
+    storageFiles.clear();
+    nextStorageFileId = 0;
+    AttachmentStorage.saveFileOverrideForTesting = (fileName, bytes) async {
+      final path = 'attachments/test_${nextStorageFileId++}_$fileName';
+      storageFiles[path] = bytes;
+      return path;
+    };
+    AttachmentStorage.saveEditedFileOverrideForTesting = saveEditedFileInMemory;
+    AttachmentStorage.readFileOverrideForTesting = (path) async {
+      final bytes = storageFiles[path];
+      return bytes == null ? null : Uint8List.fromList(bytes);
+    };
+    AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+      storageFiles.remove(path);
+      return true;
+    };
   });
 
   tearDown(() async {
@@ -124,9 +150,7 @@ void main() {
   }
 
   Future<void> removeFile(String storagePath) async {
-    final name = storagePath.split('/').last;
-    final file = File('${root.path}/attachments/$name');
-    if (await file.exists()) await file.delete();
+    storageFiles.remove(storagePath);
   }
 
   testWidgets(
@@ -165,17 +189,13 @@ void main() {
       finishCleanup.complete();
       await tester.runAsync(() => edit);
 
-      final files = await tester.runAsync(
-            () => Directory('${root.path}/attachments').list().toList(),
-          ) ??
-          const <FileSystemEntity>[];
       expect(
-        files,
+        storageFiles.keys,
         hasLength(1),
         reason: 'removal must clean up the saved edit file',
       );
       expect(
-        files.single.path,
+        storageFiles.keys.single,
         endsWith(otherOriginal.storagePath.split('/').last),
       );
     },
@@ -252,8 +272,7 @@ void main() {
       AttachmentStorage.saveEditedFileOverrideForTesting =
           (fileName, bytes) async {
         final index = saveCount++;
-        final savedPath = await AttachmentStorage.saveFile(fileName, bytes);
-        savedPaths[index] = 'temp_edited/${savedPath.split('/').last}';
+        savedPaths[index] = await saveEditedFileInMemory(fileName, bytes);
         if (savedPaths.every((path) => path != null) &&
             !bothSaved.isCompleted) {
           bothSaved.complete();
@@ -286,6 +305,73 @@ void main() {
         ),
         isNull,
         reason: 'a superseded overlapping edit must clean up its saved file',
+      );
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(savedPaths[1]!),
+        ),
+        editedBytes,
+      );
+    },
+  );
+
+  testWidgets(
+    'a newer overlapping edit wins when the older save finishes first',
+    (tester) async {
+      await mountComposer(tester);
+      final original = await addImage(tester, 'edited');
+      final editedBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+      );
+      final savedPaths = List<String?>.filled(2, null);
+      final releaseSave = List.generate(2, (_) => Completer<void>());
+      final bothSaved = Completer<void>();
+      var saveCount = 0;
+      AttachmentStorage.saveEditedFileOverrideForTesting =
+          (fileName, bytes) async {
+        final index = saveCount++;
+        savedPaths[index] = await saveEditedFileInMemory(fileName, bytes);
+        if (savedPaths.every((path) => path != null) &&
+            !bothSaved.isCompleted) {
+          bothSaved.complete();
+        }
+        await releaseSave[index].future;
+        return savedPaths[index]!;
+      };
+
+      late Future<void> olderEdit;
+      late Future<void> newerEdit;
+      await tester.runAsync(() async {
+        olderEdit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        newerEdit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await bothSaved.future;
+      });
+
+      releaseSave[0].complete();
+      await tester.runAsync(() => olderEdit);
+      expect(
+        composerKey
+            .currentState!.pendingAttachmentsForTesting.single.storagePath,
+        original.storagePath,
+        reason:
+            'an older request must not publish while a newer save is pending',
+      );
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(savedPaths[0]!),
+        ),
+        isNull,
+        reason: 'the superseded older save must be deleted',
+      );
+
+      releaseSave[1].complete();
+      await tester.runAsync(() => newerEdit);
+      expect(
+        composerKey
+            .currentState!.pendingAttachmentsForTesting.single.storagePath,
+        savedPaths[1],
       );
       expect(
         await tester.runAsync(
@@ -414,10 +500,10 @@ void main() {
       );
       AttachmentStorage.saveEditedFileOverrideForTesting =
           (fileName, bytes) async {
-        savedPath = await AttachmentStorage.saveFile(fileName, bytes);
+        savedPath = await saveEditedFileInMemory(fileName, bytes);
         if (!saveStarted.isCompleted) saveStarted.complete();
         await finishSave.future;
-        return 'temp_edited/${savedPath!.split('/').last}';
+        return savedPath!;
       };
 
       late Future<void> edit;
@@ -430,12 +516,8 @@ void main() {
       finishSave.complete();
       await tester.runAsync(() => edit);
 
-      final files = await tester.runAsync(
-            () => Directory('${root.path}/attachments').list().toList(),
-          ) ??
-          const <FileSystemEntity>[];
       expect(
-        files,
+        storageFiles.keys,
         hasLength(1),
         reason: 'only the original attachment should remain',
       );
@@ -530,8 +612,7 @@ void main() {
       String? savedEditedPath;
       AttachmentStorage.saveEditedFileOverrideForTesting =
           (fileName, bytes) async {
-        final savedPath = await AttachmentStorage.saveFile(fileName, bytes);
-        savedEditedPath = 'temp_edited/${savedPath.split('/').last}';
+        savedEditedPath = await saveEditedFileInMemory(fileName, bytes);
         if (!saveStarted.isCompleted) saveStarted.complete();
         await finishSave.future;
         return savedEditedPath!;

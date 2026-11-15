@@ -25,10 +25,14 @@ class AttachmentStorage {
   static Future<bool> Function(String)? deleteFileOverrideForTesting;
 
   @visibleForTesting
+  static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
+
+  @visibleForTesting
   static void resetOverridesForTesting() {
     saveFileOverrideForTesting = null;
     saveEditedFileOverrideForTesting = null;
     deleteFileOverrideForTesting = null;
+    readFileOverrideForTesting = null;
   }
 
   @visibleForTesting
@@ -128,6 +132,9 @@ class AttachmentStorage {
   }
 
   static Future<Uint8List?> readFile(String storagePath) async {
+    final override = readFileOverrideForTesting;
+    if (override != null) return override(storagePath);
+
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {

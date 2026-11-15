@@ -144,6 +144,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
   int _pendingAttachmentDraftGeneration = 0;
+  int _pendingAttachmentEditRequestId = 0;
+  final Map<String, int> _pendingAttachmentEditRequests = {};
 
   @visibleForTesting
   Future<void> addPendingAttachmentForTesting(

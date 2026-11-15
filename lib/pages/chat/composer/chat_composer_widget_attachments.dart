@@ -380,6 +380,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   void _removePendingAttachment(int index) {
     final att = _pendingAttachments[index];
     _pendingImageBytes.remove(att.id);
+    _pendingAttachmentEditRequests.remove(att.id);
     // 磁盘压缩缓存清理时机：
     // - 普通模式（非编辑）：待发附件已被移除、无人引用，立即清理。
     // - 编辑模式 + 本次新加的附件：与普通发送一致，立即清理。
@@ -526,6 +527,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (index >= _pendingAttachments.length) return;
     final oldAtt = _pendingAttachments[index];
     final editSessionGeneration = _pendingAttachmentDraftGeneration;
+    final editRequestId = ++_pendingAttachmentEditRequestId;
+    _pendingAttachmentEditRequests[oldAtt.id] = editRequestId;
 
     try {
       // 编辑后的文件存入附件存储目录（与未编辑附件同一位置），
@@ -553,20 +556,21 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       );
 
       // The attachment may have been removed, reordered, superseded by a
-      // second edit, or the composer disposed while the file was being
-      // written. Publish only if its id still points to the captured file
-      // version; otherwise the new file has no owner and must be cleaned up.
+      // newer edit request, or the composer disposed while the file was
+      // being written. Publish only if this is still the latest request for
+      // the attachment; otherwise its file has no owner and must be cleaned up.
       final currentIndex = mounted
           ? _pendingAttachments
               .indexWhere((attachment) => attachment.id == oldAtt.id)
           : -1;
       if (currentIndex < 0 ||
           editSessionGeneration != _pendingAttachmentDraftGeneration ||
-          _pendingAttachments[currentIndex].storagePath != oldAtt.storagePath ||
-          _pendingAttachments[currentIndex].hash != oldAtt.hash) {
+          _pendingAttachmentEditRequests[oldAtt.id] != editRequestId) {
         await _deleteTempFile(tempStoragePath);
         return;
       }
+
+      final replacedAtt = _pendingAttachments[currentIndex];
 
       // Commit the new file reference before awaiting old-file cleanup.
       // If the attachment is removed during cleanup, its removal handler now
@@ -582,39 +586,41 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       // 清理旧文件：普通模式的附件不再被消息引用；编辑模式只保留原
       // 消息仍引用的源路径。按 hash 共享的压缩缓存则等确定重发后再清。
       if (widget.editingMessageId == null) {
-        if (oldAtt.storagePath.startsWith('temp_edited/')) {
-          await _deleteTempFile(oldAtt.storagePath);
+        if (replacedAtt.storagePath.startsWith('temp_edited/')) {
+          await _deleteTempFile(replacedAtt.storagePath);
         } else {
           try {
-            await AttachmentStorage.deleteFile(oldAtt.storagePath);
+            await AttachmentStorage.deleteFile(replacedAtt.storagePath);
           } catch (_) {
             // Non-fatal cleanup
           }
         }
         // 同 hash 的新附件继续使用这份缓存，不要在等待它的预压缩完成后
         // 再将它删除。
-        if (oldAtt.hash != updatedAtt.hash) {
-          await _deleteCompressedCacheAfterPreCompress(oldAtt);
+        if (replacedAtt.hash != updatedAtt.hash) {
+          await _deleteCompressedCacheAfterPreCompress(replacedAtt);
         }
       } else {
         final isOriginalEditFile = widget.editingMessageAttachments?.any(
-              (a) => a.id == oldAtt.id && a.storagePath == oldAtt.storagePath,
+              (a) =>
+                  a.id == replacedAtt.id &&
+                  a.storagePath == replacedAtt.storagePath,
             ) ??
             false;
         final originalEditUsesHash = widget.editingMessageAttachments?.any(
-              (a) => a.hash == oldAtt.hash,
+              (a) => a.hash == replacedAtt.hash,
             ) ??
             false;
         if (!isOriginalEditFile &&
-            oldAtt.storagePath.startsWith('temp_edited/')) {
-          await _deleteTempFile(oldAtt.storagePath);
+            replacedAtt.storagePath.startsWith('temp_edited/')) {
+          await _deleteTempFile(replacedAtt.storagePath);
         }
         if (isOriginalEditFile || originalEditUsesHash) {
-          if (oldAtt.hash != updatedAtt.hash) {
-            _removedEditAttachments.add(oldAtt);
+          if (replacedAtt.hash != updatedAtt.hash) {
+            _removedEditAttachments.add(replacedAtt);
           }
-        } else if (oldAtt.hash != updatedAtt.hash) {
-          await _deleteCompressedCacheAfterPreCompress(oldAtt);
+        } else if (replacedAtt.hash != updatedAtt.hash) {
+          await _deleteCompressedCacheAfterPreCompress(replacedAtt);
         }
       }
     } catch (e) {
