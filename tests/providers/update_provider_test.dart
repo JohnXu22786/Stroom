@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Directory, File;
 
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show
@@ -157,6 +158,37 @@ String _githubReleases(List<(String, bool, String, String)> releases) {
 }
 
 void main() {
+  group('ZIP self-update extraction', () {
+    test('rejects archive entries that escape the extraction directory',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final outsideFile = File('${tempDir.path}/outside.txt');
+      final absoluteFile = File('${tempDir.path}/outside_absolute.txt');
+      final trailingSpaceFile = File('${tempDir.path}/outside_trailing_space.txt');
+      final zipFile = File('${tempDir.path}/update.zip');
+
+      for (final entryName in [
+        '../outside.txt',
+        absoluteFile.path,
+        '.. /outside_trailing_space.txt',
+      ]) {
+        final archive = Archive()
+          ..addFile(ArchiveFile(entryName, 6, utf8.encode('escape')));
+        await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+        await expectLater(
+          UpdateNotifier().extractZipForTesting(zipFile.path, outputDir.path),
+          throwsA(isA<FormatException>()),
+        );
+      }
+      expect(await outsideFile.exists(), isFalse);
+      expect(await absoluteFile.exists(), isFalse);
+      expect(await trailingSpaceFile.exists(), isFalse);
+    });
+  });
+
   group('Version', () {
     test('parse standard semver "0.2.12"', () {
       final v = Version.parse('0.2.12');
