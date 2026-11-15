@@ -125,18 +125,18 @@ void main() {
         size: const Size(390, 844),
       );
 
-      final secondaryActionsRow = find
-          .ancestor(
-            of: find.text('Skip this version'),
-            matching: find.byType(Row),
-          )
-          .first;
       final primaryAction = find.ancestor(
         of: find.text('Update now'),
         matching: find.byType(FilledButton),
       );
+      final actionArea = find
+          .ancestor(
+            of: primaryAction,
+            matching: find.byType(OverflowBar),
+          )
+          .first;
       final primaryRect = tester.getRect(primaryAction);
-      final actionContentWidth = tester.getSize(secondaryActionsRow).width;
+      final actionContentWidth = tester.getSize(actionArea).width;
       expect(primaryRect.width, closeTo(actionContentWidth, 0.1));
       expect(
         primaryRect.bottom,
