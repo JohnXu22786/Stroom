@@ -2400,7 +2400,7 @@ class BackupService {
           stagedEntries.add((
             subDir: subDir,
             fileName: fileName,
-            bytes: Uint8List.fromList(entry.value),
+            bytes: entry.value,
           ));
         },
         deferAnkiMigrationMarkerInvalidation: true,
