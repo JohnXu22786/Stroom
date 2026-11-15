@@ -194,7 +194,13 @@ class _StartupAppState extends ConsumerState<StartupApp>
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
               const SizedBox(width: 8),
-              Text(l10n.startupMigrationTitle),
+              Expanded(
+                child: ConstrainedText(
+                  l10n.startupMigrationTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: Text(l10n.startupMigrationBody),

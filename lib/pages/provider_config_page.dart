@@ -1284,7 +1284,7 @@ class _McpConfigCard extends StatelessWidget {
                         if (mcpDescription != null &&
                             mcpDescription!.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text(
+                          ConstrainedText(
                             mcpDescription!,
                             style: TextStyle(
                               fontSize: 11,

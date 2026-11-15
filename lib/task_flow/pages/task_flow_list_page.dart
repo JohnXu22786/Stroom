@@ -245,7 +245,7 @@ class TaskFlowListPage extends ConsumerWidget {
                     ),
                     if (defs.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
+                      ConstrainedText(
                         defs,
                         style: TextStyle(
                           fontSize: 11,

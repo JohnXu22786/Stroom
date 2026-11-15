@@ -3,8 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// A Text-compatible label that reveals its full value when a single-line slot
-/// clips it. It leaves text that fits untouched.
+/// A Text-compatible label that reveals values clipped by a finite line slot.
+/// Single-line values move horizontally; clipped multi-line values move
+/// vertically without changing their wrapping. Text that fits stays untouched.
 class ConstrainedText extends StatefulWidget {
   const ConstrainedText(
     this.data, {
@@ -136,6 +137,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
       _measuredAlign = textAlign;
       final previousOverflow = _overflow;
       final maxLines = widget.maxLines ?? 1;
+      final singleLine = maxLines == 1 || widget.softWrap == false;
       final vertical = (widget.maxLines != null && widget.maxLines! > 1) ||
           (widget.maxLines != null &&
               widget.data.contains('\n') &&
@@ -150,43 +152,36 @@ class _ConstrainedTextState extends State<ConstrainedText>
         maxLines: maxLines,
         ellipsis: '…',
       )..layout(maxWidth: width);
+      final natural = TextPainter(
+        text: TextSpan(text: widget.data, style: style),
+        textDirection: direction,
+        textScaler: scaler,
+        locale: widget.locale ?? locale,
+        strutStyle: widget.strutStyle,
+        textAlign: textAlign,
+        maxLines: singleLine ? maxLines : null,
+      )..layout(maxWidth: singleLine ? double.infinity : width);
+      final horizontallyClipped = singleLine && natural.width > width + 0.01;
       _overflow = 0;
-      if (current.didExceedMaxLines) {
-        final natural = TextPainter(
+      if (vertical && current.didExceedMaxLines) {
+        final fullWrapped = TextPainter(
           text: TextSpan(text: widget.data, style: style),
           textDirection: direction,
           textScaler: scaler,
           locale: widget.locale ?? locale,
           strutStyle: widget.strutStyle,
           textAlign: textAlign,
-          maxLines: vertical ? null : maxLines,
-        )..layout(maxWidth: vertical ? width : double.infinity);
-        if (vertical) {
-          _vertical = true;
-          _textWidth = width;
-          _textHeight = current.height;
-          _overflow = math.max(0, natural.height - current.height);
-        } else if (!natural.didExceedMaxLines && natural.width > width) {
-          var low = width;
-          var high = natural.width;
-          for (var i = 0; i < 20; i++) {
-            final middle = (low + high) / 2;
-            final candidate = TextPainter(
-              text: TextSpan(text: widget.data, style: style),
-              textDirection: direction,
-              textScaler: scaler,
-              locale: widget.locale ?? locale,
-              strutStyle: widget.strutStyle,
-              textAlign: textAlign,
-              maxLines: maxLines,
-            )..layout(maxWidth: middle);
-            if (candidate.didExceedMaxLines) {
-              low = middle;
-            } else {
-              high = middle;
-            }
-          }
-          final complete = TextPainter(
+        )..layout(maxWidth: width);
+        _vertical = true;
+        _textWidth = width;
+        _textHeight = current.height;
+        _overflow = math.max(0, fullWrapped.height - current.height);
+      } else if (horizontallyClipped) {
+        var low = width;
+        var high = natural.width;
+        for (var i = 0; i < 20; i++) {
+          final middle = (low + high) / 2;
+          final candidate = TextPainter(
             text: TextSpan(text: widget.data, style: style),
             textDirection: direction,
             textScaler: scaler,
@@ -194,12 +189,26 @@ class _ConstrainedTextState extends State<ConstrainedText>
             strutStyle: widget.strutStyle,
             textAlign: textAlign,
             maxLines: maxLines,
-          )..layout(maxWidth: high);
-          _textWidth = high;
-          _textHeight = complete.height;
-          _overflow = math.max(0, high - width);
-          _vertical = false;
+          )..layout(maxWidth: middle);
+          if (candidate.didExceedMaxLines) {
+            low = middle;
+          } else {
+            high = middle;
+          }
         }
+        final complete = TextPainter(
+          text: TextSpan(text: widget.data, style: style),
+          textDirection: direction,
+          textScaler: scaler,
+          locale: widget.locale ?? locale,
+          strutStyle: widget.strutStyle,
+          textAlign: textAlign,
+          maxLines: maxLines,
+        )..layout(maxWidth: high);
+        _textWidth = high;
+        _textHeight = complete.height;
+        _overflow = math.max(0, high - width);
+        _vertical = false;
       } else {
         _vertical = false;
       }

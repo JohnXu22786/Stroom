@@ -4,6 +4,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/tool_call.dart';
 import '../../services/context_manager.dart'
     show kCompactedToolResultPlaceholder;
+import '../constrained_text.dart';
 
 /// 工具调用卡片。
 ///
@@ -101,7 +102,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   // Flexible + ellipsis：长工具名（如 MCP 工具）在收起态
                   // 单行省略、不溢出、不换行；展开态允许换行完整显示。
                   Flexible(
-                    child: Text(
+                    child: ConstrainedText(
                       data.name,
                       maxLines: _showDetails ? null : 1,
                       overflow: TextOverflow.ellipsis,
