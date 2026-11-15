@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
+
 import '../config/default_rules.dart';
 import 'download_manager_shared.dart';
 
@@ -23,8 +25,11 @@ class DownloadManager {
   static bool _reserveLegacyPartial(String? path) {
     if (path == null) return false;
     final canUsePartial = !_activeLegacyPartialUsers.containsKey(path);
-    _activeLegacyPartialUsers.update(path, (users) => users + 1,
-        ifAbsent: () => 1);
+    _activeLegacyPartialUsers.update(
+      path,
+      (users) => users + 1,
+      ifAbsent: () => 1,
+    );
     return canUsePartial;
   }
 
@@ -48,18 +53,15 @@ class DownloadManager {
   }
 
   static String _reserveOutputPath(String outputPath) {
-    if (_activeDownloadPaths.add(outputPath)) return outputPath;
-
     final directory = p.dirname(outputPath);
     final extension = p.extension(outputPath);
     final baseName = p.basenameWithoutExtension(outputPath);
+    var candidate = outputPath;
     var suffix = 1;
-    late String candidate;
-    do {
+    while (_activeDownloadPaths.contains(candidate) || _pathExists(candidate)) {
       candidate = p.join(directory, '$baseName ($suffix)$extension');
       suffix++;
-    } while (
-        _activeDownloadPaths.contains(candidate) || _pathExists(candidate));
+    }
     _activeDownloadPaths.add(candidate);
     return candidate;
   }
@@ -70,12 +72,15 @@ class DownloadManager {
   /// [url] 目标 URL
   /// [headers] 自定义 HTTP 头
   /// 返回 `true` 表示服务器支持范围请求（可续传）。
-  static Future<bool> checkServerResumeSupport(String url,
-      {Map<String, String>? headers}) async {
+  static Future<bool> checkServerResumeSupport(
+    String url, {
+    Map<String, String>? headers,
+  }) async {
     final dio = Dio();
     try {
-      final mergedHeaders =
-          Map<String, String>.from(DefaultRules.defaultHeaders);
+      final mergedHeaders = Map<String, String>.from(
+        DefaultRules.defaultHeaders,
+      );
       if (headers != null) mergedHeaders.addAll(headers);
       final response = await dio.head(
         url,
@@ -147,8 +152,10 @@ class DownloadManager {
     String taskId = '',
   }) async {
     final requestedOutputPath = p.join(saveDir, fileName);
+    final sameNameDownloadIsActive = _activeDownloadPaths.contains(
+      requestedOutputPath,
+    );
     final outputPath = _reserveOutputPath(requestedOutputPath);
-    final sameNameDownloadIsActive = outputPath != requestedOutputPath;
     final taskSuffix =
         base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
     final tempPath = taskId.isEmpty
@@ -196,8 +203,9 @@ class DownloadManager {
     cancelToken?.whenCancel.then((_) => dio.close());
 
     try {
-      final mergedHeaders =
-          Map<String, String>.from(DefaultRules.defaultHeaders);
+      final mergedHeaders = Map<String, String>.from(
+        DefaultRules.defaultHeaders,
+      );
       if (headers != null) mergedHeaders.addAll(headers);
       if (startByte > 0) {
         mergedHeaders['Range'] = 'bytes=$startByte-';
@@ -255,10 +263,8 @@ class DownloadManager {
           await raf.close();
         }
 
-        // Rename temp to final
-        if (await File(outputPath).exists()) {
-          await File(outputPath).delete();
-        }
+        // The output path was reserved before the request, so publication
+        // never deletes a file that existed before this download.
         await file.rename(outputPath);
         if (canUseExistingPartial && existingPath != tempPath) {
           try {
@@ -270,7 +276,8 @@ class DownloadManager {
       } catch (e) {
         if (kIsWeb) {
           debugPrint(
-              '[DownloadManager] File write failed (expected on web): $e');
+            '[DownloadManager] File write failed (expected on web): $e',
+          );
           // Return temp path or output path as best-effort
           return tempPath;
         }
@@ -373,9 +380,9 @@ class DownloadManager {
       final savedSegments = saved?['completedSegments'];
       if (savedSegments is List) {
         completedSegments.addAll(
-          savedSegments
-              .whereType<int>()
-              .where((index) => index >= 0 && index < total),
+          savedSegments.whereType<int>().where(
+                (index) => index >= 0 && index < total,
+              ),
         );
         debugPrint(
           '[DownloadManager] Restored progress: ${completedSegments.length}/$total',

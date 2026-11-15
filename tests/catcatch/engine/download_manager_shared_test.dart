@@ -88,14 +88,16 @@ void main() {
     );
   });
 
-  test('retries a ranged stream failure without correcting unreported bytes',
-      () async {
-    await verifyRangeRetry(
-      rejectedContentRange: 'bytes 2-4/10',
-      rejectedBody: 'cd',
-      rejectByStreamError: true,
-    );
-  });
+  test(
+    'retries a ranged stream failure without correcting unreported bytes',
+    () async {
+      await verifyRangeRetry(
+        rejectedContentRange: 'bytes 2-4/10',
+        rejectedBody: 'cd',
+        rejectByStreamError: true,
+      );
+    },
+  );
 
   test('confines progress files for traversal task IDs', () async {
     const taskId = '../../catcatch_progress_escape_test';
@@ -197,6 +199,37 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test('preserves an existing single-download output path', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.write('new download');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('existing-file-');
+    final existing = File(p.join(directory.path, 'download.bin'))
+      ..writeAsStringSync('keep existing');
+    final occupiedAlternate = File(p.join(directory.path, 'download (1).bin'))
+      ..writeAsStringSync('also keep');
+    final url = 'http://${server.address.address}:${server.port}/file';
+    try {
+      final outputPath = await DownloadManager.downloadFile(
+        url: url,
+        saveDir: directory.path,
+        fileName: 'download.bin',
+      );
+
+      expect(outputPath, p.join(directory.path, 'download (2).bin'));
+      expect(await existing.readAsString(), 'keep existing');
+      expect(await occupiedAlternate.readAsString(), 'also keep');
+      expect(await File(outputPath).readAsString(), 'new download');
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('isolates concurrent downloads with the same output filename', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final serverDone = server.listen((request) async {
@@ -330,6 +363,35 @@ void main() {
 
       expect(cookiesByPath['/playlist-host.ts'], 'host_a=session_a');
       expect(cookiesByPath['/cdn-host.ts'], 'host_b=session_b');
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('preserves an existing segmented-download output path', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.write(request.uri.pathSegments.last);
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('existing-merge-');
+    final outputPath = p.join(directory.path, 'merged.ts');
+    final existing = File(outputPath)..writeAsStringSync('keep merged output');
+    final occupiedAlternate = Directory(p.join(directory.path, 'merged (1).ts'))
+      ..createSync();
+    final origin = 'http://${server.address.address}:${server.port}';
+    try {
+      final resolvedPath = await DownloadManager.downloadSegmentsAndMerge(
+        segmentUrls: ['$origin/first.ts', '$origin/second.ts'],
+        outputPath: outputPath,
+      );
+
+      expect(resolvedPath, p.join(directory.path, 'merged (2).ts'));
+      expect(await existing.readAsString(), 'keep merged output');
+      expect(await occupiedAlternate.exists(), isTrue);
+      expect(await File(resolvedPath).readAsString(), 'first.tssecond.ts');
     } finally {
       await serverDone.cancel();
       await server.close(force: true);
