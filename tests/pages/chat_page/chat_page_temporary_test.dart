@@ -33,15 +33,16 @@ Widget _appFor({
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
     child: const MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: ChatPage()),
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: ChatPage(),
+    ),
   );
 }
 
@@ -51,51 +52,66 @@ void main() {
       'and shows the countdown capsule', (tester) async {
     await tester.pumpWidget(_appFor(activeId: 'c-main', convTitle: '主对话'));
     await tester.pumpAndSettle();
+    expect(find.text('发送消息以开始对话。'), findsOneWidget);
 
     // 关闭态：空心气泡图标、无打勾、无倒计时胶囊。
-    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
-    // 点击按钮开启。
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    // Cancelling the explanation must leave temporary mode disabled.
+    await tester.tap(find.byIcon(Icons.timer_outlined));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('一小时后删除'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
+
+    // Confirm the lifecycle explanation before enabling.
+    await tester.tap(find.byIcon(Icons.timer_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启临时模式').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     // 开启态：气泡 + 打勾图标、标题前出现倒计时胶囊。
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
+    expect(find.widgetWithIcon(IconButton, Icons.timer), findsOneWidget);
+    expect(find.widgetWithIcon(IconButton, Icons.timer_outlined), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsOneWidget);
+    expect(find.text('临时'), findsOneWidget);
     expect(find.text('60:00'), findsOneWidget);
 
     // 再点一次关闭。
-    await tester.tap(find.byIcon(Icons.mark_chat_read_outlined));
+    expect(find.byTooltip('保留对话'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.timer));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
     // 卸载页面释放 notifier 的周期性临时对话计时器。
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('top-bar temp toggle is disabled without an active conversation',
-      (tester) async {
-    // activeId 指向列表中不存在的对话 → currentConversation 为 null。
-    await tester.pumpWidget(_appFor(
-      activeId: 'missing',
-      convTitle: '主对话',
-      convId: 'other',
-    ));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'top-bar temp toggle is disabled without an active conversation',
+    (tester) async {
+      // activeId 指向列表中不存在的对话 → currentConversation 为 null。
+      await tester.pumpWidget(
+        _appFor(activeId: 'missing', convTitle: '主对话', convId: 'other'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('请选择或新建对话以开始聊天。'), findsOneWidget);
 
-    final button = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.chat_bubble_outline),
-    );
-    expect(button.onPressed, isNull);
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
-    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
-  });
+      final button = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.timer_outlined),
+      );
+      expect(button.onPressed, isNull);
+      expect(find.byIcon(Icons.timer), findsNothing);
+      expect(find.byType(TemporaryCountdownCapsule), findsNothing);
+    },
+  );
 }

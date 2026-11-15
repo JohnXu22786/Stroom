@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
+
 import '../config/default_rules.dart';
 import '../../services/storage_service.dart';
+import 'task_progress_path.dart';
 
 final Map<String, Completer<void>> pauseTokens = {};
 
@@ -15,7 +18,7 @@ Future<String> progressPath(String taskId) async {
   if (!await progDir.exists()) {
     await progDir.create(recursive: true);
   }
-  return p.join(progDir.path, '${taskId}_dl_progress.json');
+  return p.join(progDir.path, taskProgressFileName(taskId));
 }
 
 Future<void> saveSegmentProgress(
@@ -67,7 +70,7 @@ Future<void> downloadSingleSegment({
   required Semaphore semaphore,
   CancelToken? cancelToken,
   required Map<int, String> errors,
-  required void Function(int index) onSegmentComplete,
+  required Future<void> Function(int index) onSegmentComplete,
 
   /// Byte-granularity progress: called with the chunk size after each
   /// chunk is written. The caller aggregates this into a total so
@@ -148,7 +151,7 @@ Future<void> downloadSingleSegment({
             return;
           }
 
-          onSegmentComplete(index);
+          await onSegmentComplete(index);
           return;
         } finally {
           dio.close();

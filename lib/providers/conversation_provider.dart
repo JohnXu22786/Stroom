@@ -192,6 +192,11 @@ class Conversation {
   /// unread only until the user opens that conversation.
   String? lastReadMessageId;
 
+  /// Explicit unread state set from the conversation list. This is separate
+  /// from [lastReadMessageId] because legacy records without that marker are
+  /// interpreted as read during migration.
+  bool isManuallyUnread;
+
   /// 最近一次请求的实际输入 token 数（来自 API 返回的 usage，非估算）。
   /// 用于标题栏下方的上下文显示与压缩触发判断。null = 尚无计量。
   int? lastInputTokens;
@@ -240,6 +245,7 @@ class Conversation {
     this.lastUsedModelId,
     this.lastUsedProviderName,
     this.lastReadMessageId,
+    this.isManuallyUnread = false,
     this.lastInputTokens,
     this.lastOutputTokens,
     this.totalCost = 0,
@@ -288,6 +294,7 @@ class Conversation {
         if (lastUsedProviderName != null && lastUsedProviderName!.isNotEmpty)
           'lastUsedProviderName': lastUsedProviderName,
         if (lastReadMessageId != null) 'lastReadMessageId': lastReadMessageId,
+        if (isManuallyUnread) 'isManuallyUnread': true,
         if (lastInputTokens != null) 'lastInputTokens': lastInputTokens,
         if (lastOutputTokens != null) 'lastOutputTokens': lastOutputTokens,
         if (totalCost > 0) 'totalCost': totalCost,
@@ -392,6 +399,7 @@ class Conversation {
     final lastUsedIdRaw = map['lastUsedModelId'];
     final lastUsedProviderRaw = map['lastUsedProviderName'];
     final lastReadMessageIdRaw = map['lastReadMessageId'];
+    final isManuallyUnreadRaw = map['isManuallyUnread'];
     var lastReadMessageId =
         lastReadMessageIdRaw is String ? lastReadMessageIdRaw : null;
     if (lastReadMessageIdRaw is! String) {
@@ -460,6 +468,7 @@ class Conversation {
       lastUsedProviderName:
           lastUsedProviderRaw is String ? lastUsedProviderRaw : null,
       lastReadMessageId: lastReadMessageId,
+      isManuallyUnread: isManuallyUnreadRaw is bool && isManuallyUnreadRaw,
       lastInputTokens: lastInputRaw is num ? lastInputRaw.toInt() : null,
       lastOutputTokens: lastOutputRaw is num ? lastOutputRaw.toInt() : null,
       totalCost:

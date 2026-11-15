@@ -2539,11 +2539,74 @@ abstract class AppLocalizations {
   /// **'Temporary conversation'**
   String get conversationTemporary;
 
+  /// Text used to enable temporary mode from a conversation menu.
+  String get conversationSetTemporary;
+
   /// No description provided for @conversationCloseTemporary.
   ///
   /// In en, this message translates to:
   /// **'Close temporary conversation'**
   String get conversationCloseTemporary;
+
+  /// No description provided for @conversationKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep conversation'**
+  String get conversationKeep;
+
+  /// No description provided for @conversationTemporaryStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary'**
+  String get conversationTemporaryStatus;
+
+  /// No description provided for @conversationTemporaryWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Expiring soon'**
+  String get conversationTemporaryWarning;
+
+  /// No description provided for @conversationTemporaryExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.'**
+  String get conversationTemporaryExplanation;
+
+  /// No description provided for @conversationEnableTemporary.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable temporary mode'**
+  String get conversationEnableTemporary;
+
+  /// No description provided for @chatLoadingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading conversation…'**
+  String get chatLoadingConversation;
+
+  /// No description provided for @chatEmptyConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Start the conversation by sending a message.'**
+  String get chatEmptyConversation;
+
+  /// No description provided for @chatNoActiveConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose or create a conversation to start chatting.'**
+  String get chatNoActiveConversation;
+
+  /// No description provided for @chatConversationLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this conversation.'**
+  String get chatConversationLoadError;
+
+  /// No description provided for @chatRetryLoadConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatRetryLoadConversation;
 
   /// No description provided for @taskListTitle.
   ///
@@ -5482,6 +5545,12 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Rename'**
+  /// Mark a conversation as unread.
+  String get topicItemMarkUnread;
+
+  /// Mark a conversation as read.
+  String get topicItemMarkRead;
+
   String get topicItemRename;
 
   /// No description provided for @topicItemAutoName.
@@ -6335,6 +6404,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Subfolders'**
   String get folderPickerSubfolders;
+
+  /// No description provided for @folderPickerNoFolders.
+  ///
+  /// In en, this message translates to:
+  /// **'No folders'**
+  String get folderPickerNoFolders;
 
   /// No description provided for @folderPickerExistingFolders.
   ///
@@ -19616,6 +19691,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Maximum upload size must be a positive number.'**
   String get providerMaxUploadSizePositive;
+
+  /// Explains how to repair an invalid stored OCR temperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.'**
+  String get ocrSamplingTemperatureOutOfRange;
+
+  /// Explains how to repair an invalid stored OCR top-P value.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.'**
+  String get ocrSamplingTopPOutOfRange;
+
+  /// Explains why an invalid enabled OCR sampling setting must be repaired before saving.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust each out-of-range sampling slider or turn it off before saving.'**
+  String get ocrSamplingSliderRepairRequired;
 }
 
 class _AppLocalizationsDelegate

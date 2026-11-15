@@ -1080,6 +1080,26 @@ bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
 
+bool _isLocalizedOcrPageFailureLabel(
+  String value,
+  AppLocalizations strings,
+) {
+  const indexMarker = '7391846250';
+  for (final template in [
+    strings.bgTaskOcrPageFailed(indexMarker),
+    strings.bgTaskOcrPageIncomplete(indexMarker),
+  ]) {
+    final markerOffset = template.indexOf(indexMarker);
+    if (markerOffset < 0) continue;
+    final prefix = template.substring(0, markerOffset);
+    final suffix = template.substring(markerOffset + indexMarker.length);
+    if (!value.startsWith(prefix) || !value.endsWith(suffix)) continue;
+    final index = value.substring(prefix.length, value.length - suffix.length);
+    if (RegExp(r'^\d+$').hasMatch(index)) return true;
+  }
+  return false;
+}
+
 bool _hasOcrErrorLocalizationCredentialCollision(
   Iterable<String> credentialValues,
 ) {
@@ -1088,13 +1108,18 @@ bool _hasOcrErrorLocalizationCredentialCollision(
   return AppLocalizations.supportedLocales.any((locale) {
     final strings = lookupAppLocalizations(locale);
     return [
-      '${strings.unifiedTaskOcrFailed}: ',
-      strings.bgTaskOcrError(''),
-      strings.bgTaskOcrSaveError(''),
-      strings.bgTaskOcrIncompleteError(''),
-      strings.bgTaskOcrErrorDetailsHidden,
-      strings.bgTaskErrorDetailsHidden,
-    ].any((label) => _legacyOcrTextContainsCredential(label, values));
+          '${strings.unifiedTaskOcrFailed}: ',
+          strings.bgTaskOcrError(''),
+          strings.bgTaskOcrSaveError(''),
+          strings.bgTaskOcrIncompleteError(''),
+          strings.bgTaskOcrErrorDetailsHidden,
+          strings.bgTaskErrorDetailsHidden,
+        ].any((label) => _legacyOcrTextContainsCredential(label, values)) ||
+        AppLocalizations.supportedLocales.any(
+            (locale) => values.any((value) => _isLocalizedOcrPageFailureLabel(
+                  value,
+                  lookupAppLocalizations(locale),
+                )));
   });
 }
 
@@ -3943,6 +3968,18 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   yield* valuesFrom(retryData);
 }
 
+Iterable<String> _credentialValuesFromOcrTaskRow(
+  Map<dynamic, dynamic> taskRow,
+) sync* {
+  for (final entry in taskRow.entries) {
+    if (_isOcrCredentialField(entry.key) &&
+        entry.value is String &&
+        (entry.value as String).trim().isNotEmpty) {
+      yield entry.value as String;
+    }
+  }
+}
+
 const _knownSkippedOcrTaskFields = <String>{
   'id',
   'type',
@@ -4753,6 +4790,9 @@ class BackgroundTask {
                 rawRetryData,
               ).toList(growable: false)
             : const <String>[];
+    final rowCredentialValues = type == BackgroundTaskType.ocr
+        ? _credentialValuesFromOcrTaskRow(map).toList(growable: false)
+        : const <String>[];
     return BackgroundTask._(
       id: map['id'] as String,
       type: type,
@@ -4781,10 +4821,17 @@ class BackgroundTask {
       downloadedFilePath: map['downloadedFilePath'] as String?,
       rawRequest: map['rawRequest'] as Map<String, dynamic>?,
       rawResponse: map['rawResponse'] as Map<String, dynamic>?,
-      retryData: _retryDataFromTaskMap(map),
+      retryData: _retryDataFromTaskMap(
+        map,
+        additionalCredentialValues: rowCredentialValues,
+      ),
       retryDataAlreadySanitized: true,
       ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
-      ocrCredentialValuesForSanitization: retryCredentialValues,
+      ocrDiagnosticCredentialValues: rowCredentialValues,
+      ocrCredentialValuesForSanitization: {
+        ...retryCredentialValues,
+        ...rowCredentialValues,
+      },
       hasOcrErrorLocalizationCredentialCollision:
           map['hasOcrErrorLocalizationCredentialCollision'] as bool? ?? false,
     );

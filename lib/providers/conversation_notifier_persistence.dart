@@ -1641,6 +1641,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               lastUsedModelName: c.lastUsedModelName,
               lastUsedModelId: c.lastUsedModelId,
               lastUsedProviderName: c.lastUsedProviderName,
+              lastReadMessageId: c.lastReadMessageId,
+              isManuallyUnread: c.isManuallyUnread,
               lastInputTokens: c.lastInputTokens,
               lastOutputTokens: c.lastOutputTokens,
               totalCost: c.totalCost,

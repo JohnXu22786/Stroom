@@ -1443,7 +1443,41 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationTemporary => '임시 대화';
 
   @override
+  String get conversationSetTemporary => '임시 대화로 설정';
+
+  @override
   String get conversationCloseTemporary => '임시 대화 닫기';
+
+  @override
+  String get conversationKeep => '대화 유지';
+
+  @override
+  String get conversationTemporaryStatus => '임시';
+
+  @override
+  String get conversationTemporaryWarning => '곧 만료';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '이 대화는 1시간 후 삭제됩니다. 메시지를 보내면 타이머가 다시 시작됩니다. 임시 모드를 끄면 대화가 보존됩니다.';
+
+  @override
+  String get conversationEnableTemporary => '임시 모드 사용';
+
+  @override
+  String get chatLoadingConversation => '대화 불러오는 중…';
+
+  @override
+  String get chatEmptyConversation => '메시지를 보내 대화를 시작하세요.';
+
+  @override
+  String get chatNoActiveConversation => '대화를 시작하려면 대화를 선택하거나 새로 만드세요.';
+
+  @override
+  String get chatConversationLoadError => '대화를 불러오지 못했습니다.';
+
+  @override
+  String get chatRetryLoadConversation => '다시 시도';
 
   @override
   String get taskListTitle => '작업 목록';
@@ -3156,6 +3190,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get topicItemPin => '고정';
 
   @override
+  @override
+  String get topicItemMarkUnread => '읽지 않음으로 표시';
+
+  @override
+  String get topicItemMarkRead => '읽음으로 표시';
+
   String get topicItemRename => '이름 변경';
 
   @override
@@ -3669,6 +3709,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => '하위 폴더';
+
+  @override
+  String get folderPickerNoFolders => '폴더가 없습니다';
 
   @override
   String get folderPickerExistingFolders => '기존 폴더';
@@ -11614,6 +11657,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get providerMaxUploadSizePositive => '최대 업로드 크기는 양수여야 합니다.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '저장된 온도 값이 0–2 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '저장된 top-P 값이 0–1 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.';
 }
 
 /// The translations for Korean, as used in Republic of Korea (`ko_KR`).
@@ -13054,7 +13109,41 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get conversationTemporary => '임시 대화';
 
   @override
+  String get conversationSetTemporary => '임시 대화로 설정';
+
+  @override
   String get conversationCloseTemporary => '임시 대화 닫기';
+
+  @override
+  String get conversationKeep => '대화 유지';
+
+  @override
+  String get conversationTemporaryStatus => '임시';
+
+  @override
+  String get conversationTemporaryWarning => '곧 만료';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '이 대화는 1시간 후 삭제됩니다. 메시지를 보내면 타이머가 다시 시작됩니다. 임시 모드를 끄면 대화가 보존됩니다.';
+
+  @override
+  String get conversationEnableTemporary => '임시 모드 사용';
+
+  @override
+  String get chatLoadingConversation => '대화 불러오는 중…';
+
+  @override
+  String get chatEmptyConversation => '메시지를 보내 대화를 시작하세요.';
+
+  @override
+  String get chatNoActiveConversation => '대화를 시작하려면 대화를 선택하거나 새로 만드세요.';
+
+  @override
+  String get chatConversationLoadError => '대화를 불러오지 못했습니다.';
+
+  @override
+  String get chatRetryLoadConversation => '다시 시도';
 
   @override
   String get taskListTitle => '작업 목록';
@@ -14767,6 +14856,12 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get topicItemPin => '고정';
 
   @override
+  @override
+  String get topicItemMarkUnread => '읽지 않음으로 표시';
+
+  @override
+  String get topicItemMarkRead => '읽음으로 표시';
+
   String get topicItemRename => '이름 변경';
 
   @override

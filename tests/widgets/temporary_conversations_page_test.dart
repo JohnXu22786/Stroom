@@ -43,14 +43,14 @@ void main() {
   testWidgets(
       'temporary conversation shows countdown capsule and '
       'checked-bubble leading icon', (tester) async {
-    await tester.pumpWidget(_testApp([
-      _conv('temp-1', isTemporary: true),
-      _conv('normal-1'),
-    ]));
+    await tester.pumpWidget(
+      _testApp([_conv('temp-1', isTemporary: true), _conv('normal-1')]),
+    );
     await tester.pump();
 
     // 倒计时胶囊（MM:SS）出现在临时对话条目前。
     expect(find.text('60:00'), findsOneWidget);
+    expect(find.text('临时'), findsOneWidget);
     // 临时对话左侧图标变为"气泡 + 打勾"（非 drag handle）。
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
     // 普通对话仍保留拖拽把手。
@@ -59,10 +59,14 @@ void main() {
     // 菜单开启项文案随状态变化。
     expect(find.text('对话temp-1'), findsOneWidget);
     expect(find.text('对话normal-1'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    expect(find.text('保留对话'), findsOneWidget);
   });
 
-  testWidgets('three-dot menu can enable temporary mode on a conversation',
-      (tester) async {
+  testWidgets('three-dot menu can enable temporary mode on a conversation', (
+    tester,
+  ) async {
     await tester.pumpWidget(_testApp([_conv('target-1'), _conv('other-1')]));
     await tester.pump();
 
@@ -72,9 +76,12 @@ void main() {
     // 打开 target-1 的更多菜单（取第一个 more_vert）。
     await tester.tap(find.byIcon(Icons.more_vert).first);
     await tester.pumpAndSettle();
-    expect(find.text('临时对话'), findsOneWidget);
+    expect(find.text('设为临时对话'), findsOneWidget);
 
-    await tester.tap(find.text('临时对话'));
+    await tester.tap(find.text('设为临时对话'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('一小时后删除'), findsOneWidget);
+    await tester.tap(find.text('开启临时模式').last);
     // 菜单关闭动画 + 状态变更重建。
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

@@ -26,7 +26,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinese-simplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinese_simplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -37,11 +37,11 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\stroom.exe"; Tasks: desktop
 
 [CustomMessages]
 english.CreateDesktopIcon=Create a desktop shortcut
-chinese-simplified.CreateDesktopIcon=创建桌面快捷方式
+chinese_simplified.CreateDesktopIcon=创建桌面快捷方式
 english.ShortcutsGroup=Shortcuts:
-chinese-simplified.ShortcutsGroup=快捷方式：
+chinese_simplified.ShortcutsGroup=快捷方式：
 english.LaunchStroom=Launch Stroom
-chinese-simplified.LaunchStroom=运行 Stroom
+chinese_simplified.LaunchStroom=运行 Stroom
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:ShortcutsGroup}"

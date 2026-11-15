@@ -1483,7 +1483,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationTemporary => 'Temporary conversation';
 
   @override
+  String get conversationSetTemporary => 'Set as temporary conversation';
+
+  @override
   String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get conversationKeep => 'Keep conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporary';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiring soon';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.';
+
+  @override
+  String get conversationEnableTemporary => 'Enable temporary mode';
+
+  @override
+  String get chatLoadingConversation => 'Loading conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Start the conversation by sending a message.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choose or create a conversation to start chatting.';
+
+  @override
+  String get chatConversationLoadError => 'Could not load this conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Retry';
 
   @override
   String get taskListTitle => 'Task list';
@@ -3240,6 +3276,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get topicItemPin => 'Pin';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Mark as unread';
+
+  @override
+  String get topicItemMarkRead => 'Mark as read';
+
   String get topicItemRename => 'Rename';
 
   @override
@@ -3760,6 +3802,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => 'Subfolders';
+
+  @override
+  String get folderPickerNoFolders => 'No folders';
 
   @override
   String get folderPickerExistingFolders => 'Existing folders';
@@ -11932,6 +11977,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'Maximum upload size must be a positive number.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Adjust each out-of-range sampling slider or turn it off before saving.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -13412,7 +13469,43 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get conversationTemporary => 'Temporary conversation';
 
   @override
+  String get conversationSetTemporary => 'Set as temporary conversation';
+
+  @override
   String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get conversationKeep => 'Keep conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporary';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiring soon';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.';
+
+  @override
+  String get conversationEnableTemporary => 'Enable temporary mode';
+
+  @override
+  String get chatLoadingConversation => 'Loading conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Start the conversation by sending a message.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choose or create a conversation to start chatting.';
+
+  @override
+  String get chatConversationLoadError => 'Could not load this conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Retry';
 
   @override
   String get taskListTitle => 'Task list';
@@ -15169,6 +15262,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get topicItemPin => 'Pin';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Mark as unread';
+
+  @override
+  String get topicItemMarkRead => 'Mark as read';
+
   String get topicItemRename => 'Rename';
 
   @override

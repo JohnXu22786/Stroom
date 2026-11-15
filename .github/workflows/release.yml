@@ -151,6 +151,7 @@ jobs:
           $version = "${{ needs.prepare-version.outputs.app_version }}"
           (Get-Content "windows\installer.iss") -replace '0\.2\.14', $version | Set-Content "windows\installer.iss"
           choco install innosetup --no-progress -y
+          Copy-Item "windows\installer-languages\ChineseSimplified.isl" "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl" -Force
           mkdir artifacts -Force
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows\installer.iss"
       - uses: softprops/action-gh-release@v2

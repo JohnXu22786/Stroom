@@ -1502,7 +1502,44 @@ class AppLocalizationsDe extends AppLocalizations {
   String get conversationTemporary => 'Temporäres Gespräch';
 
   @override
+  String get conversationSetTemporary => 'Als temporäres Gespräch festlegen';
+
+  @override
   String get conversationCloseTemporary => 'Temporäres Gespräch schließen';
+
+  @override
+  String get conversationKeep => 'Gespräch behalten';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporär';
+
+  @override
+  String get conversationTemporaryWarning => 'Läuft bald ab';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Dieses Gespräch wird nach einer Stunde gelöscht. Jede Nachricht startet den Timer neu. Schalte den temporären Modus aus, um das Gespräch zu behalten.';
+
+  @override
+  String get conversationEnableTemporary => 'Temporären Modus aktivieren';
+
+  @override
+  String get chatLoadingConversation => 'Gespräch wird geladen…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Sende eine Nachricht, um das Gespräch zu beginnen.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Wähle ein Gespräch aus oder erstelle eines, um zu chatten.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Dieses Gespräch konnte nicht geladen werden.';
+
+  @override
+  String get chatRetryLoadConversation => 'Erneut versuchen';
 
   @override
   String get taskListTitle => 'Aufgabenliste';
@@ -3286,6 +3323,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get topicItemPin => 'Anheften';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Als ungelesen markieren';
+
+  @override
+  String get topicItemMarkRead => 'Als gelesen markieren';
+
   String get topicItemRename => 'Umbenennen';
 
   @override
@@ -3808,6 +3851,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => 'Unterordner';
+
+  @override
+  String get folderPickerNoFolders => 'Keine Ordner';
 
   @override
   String get folderPickerExistingFolders => 'Vorhandene Ordner';
@@ -12096,6 +12142,18 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'Die maximale Uploadgröße muss eine positive Zahl sein.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Der gespeicherte Temperaturwert liegt außerhalb von 0–2. Passe den Regler an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Der gespeicherte top-P-Wert liegt außerhalb von 0–1. Passe den Regler an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.';
 }
 
 /// The translations for German, as used in Germany (`de_DE`).
@@ -13595,7 +13653,44 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get conversationTemporary => 'Temporäres Gespräch';
 
   @override
+  String get conversationSetTemporary => 'Als temporäres Gespräch festlegen';
+
+  @override
   String get conversationCloseTemporary => 'Temporäres Gespräch schließen';
+
+  @override
+  String get conversationKeep => 'Gespräch behalten';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporär';
+
+  @override
+  String get conversationTemporaryWarning => 'Läuft bald ab';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Dieses Gespräch wird nach einer Stunde gelöscht. Jede Nachricht startet den Timer neu. Schalte den temporären Modus aus, um das Gespräch zu behalten.';
+
+  @override
+  String get conversationEnableTemporary => 'Temporären Modus aktivieren';
+
+  @override
+  String get chatLoadingConversation => 'Gespräch wird geladen…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Sende eine Nachricht, um das Gespräch zu beginnen.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Wähle ein Gespräch aus oder erstelle eines, um zu chatten.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Dieses Gespräch konnte nicht geladen werden.';
+
+  @override
+  String get chatRetryLoadConversation => 'Erneut versuchen';
 
   @override
   String get taskListTitle => 'Aufgabenliste';
@@ -15379,6 +15474,12 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get topicItemPin => 'Anheften';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Als ungelesen markieren';
+
+  @override
+  String get topicItemMarkRead => 'Als gelesen markieren';
+
   String get topicItemRename => 'Umbenennen';
 
   @override

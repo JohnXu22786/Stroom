@@ -1,11 +1,53 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stroom/catcatch/config/default_rules.dart';
+import 'package:stroom/catcatch/engine/download_manager_shared.dart';
 import 'package:stroom/catcatch/engine/download_manager.dart';
+import 'package:stroom/services/storage_service.dart';
 
 void main() {
+  test('confines progress files for traversal task IDs', () async {
+    const taskId = '../../catcatch_progress_escape_test';
+    final appDir = await AppStorage.directory;
+    final expectedOutsideFile = File(
+      p.join(appDir, 'catcatch_progress_escape_test_dl_progress.json'),
+    )..writeAsStringSync('keep');
+    try {
+      await saveSegmentProgress(taskId, {'completed': 3});
+
+      final savedPath = await progressPath(taskId);
+      final progressDir = p.join(appDir, 'catcatch', '.progress');
+      expect(p.isWithin(progressDir, savedPath), isTrue);
+      expect(
+        p.basename(await progressPath('legacy.task')),
+        'legacy.task_dl_progress.json',
+      );
+      expect(p.basename(await progressPath('旧任务')), '旧任务_dl_progress.json');
+      expect(
+        p.basename(await progressPath('a/b')),
+        isNot(p.basename(await progressPath('a%2Fb'))),
+      );
+      final firstWindowsUnsafe =
+          p.basename(await progressPath('\u0000/')).toLowerCase();
+      final secondWindowsUnsafe =
+          p.basename(await progressPath('h/')).toLowerCase();
+      expect(firstWindowsUnsafe, isNot(secondWindowsUnsafe));
+      expect(await expectedOutsideFile.readAsString(), 'keep');
+      expect(jsonDecode(await File(savedPath).readAsString()), {
+        'completed': 3,
+      });
+    } finally {
+      if (await expectedOutsideFile.exists()) {
+        await expectedOutsideFile.delete();
+      }
+    }
+  });
+
   test(
     'propagates a failed response stream instead of returning a temp path',
     () async {
@@ -293,6 +335,84 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test(
+    'resumes only segments completed before an interrupted playlist',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final origin = 'http://${server.address.address}:${server.port}';
+      final firstSegmentStarted = Completer<void>();
+      final releaseFirstSegment = Completer<void>();
+      var firstSegmentRequests = 0;
+      var secondSegmentRequests = 0;
+      final serverDone = server.listen((request) async {
+        if (request.uri.path == '/first.ts' && firstSegmentRequests++ == 0) {
+          request.response.write('partial-');
+          await request.response.flush();
+          if (!firstSegmentStarted.isCompleted) firstSegmentStarted.complete();
+          await releaseFirstSegment.future;
+          return;
+        }
+        if (request.uri.path == '/second.ts') secondSegmentRequests++;
+
+        request.response.write(
+          request.uri.path == '/first.ts'
+              ? 'first-complete'
+              : 'second-complete',
+        );
+        await request.response.close();
+      });
+      final directory = await Directory.systemTemp.createTemp(
+        'playlist-resume-',
+      );
+      const taskId = 'out-of-order-playlist-resume-test';
+      final outputPath = '${directory.path}/merged.ts';
+      final cancelToken = CancelToken();
+      final completedOutOfOrder = Completer<void>();
+      try {
+        final initialDownload = DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/first.ts', '$origin/second.ts'],
+          outputPath: outputPath,
+          concurrency: 2,
+          taskId: taskId,
+          cancelToken: cancelToken,
+          onProgress: (completed, total, progress) {
+            if (completed == 1 && !completedOutOfOrder.isCompleted) {
+              completedOutOfOrder.complete();
+            }
+          },
+        );
+
+        await firstSegmentStarted.future;
+        await completedOutOfOrder.future;
+        cancelToken.cancel('simulate app interruption');
+        await expectLater(initialDownload, throwsA(anything));
+
+        final savedProgress = await DownloadManager.loadProgress(taskId);
+        expect(savedProgress?['completedSegments'], [1]);
+        final firstRequestsBeforeResume = firstSegmentRequests;
+
+        final resumedPath = await DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/first.ts', '$origin/second.ts'],
+          outputPath: outputPath,
+          concurrency: 2,
+          taskId: taskId,
+        );
+
+        expect(
+          await File(resumedPath).readAsString(),
+          'first-completesecond-complete',
+        );
+        expect(firstSegmentRequests, greaterThan(firstRequestsBeforeResume));
+        expect(secondSegmentRequests, 1);
+      } finally {
+        if (!releaseFirstSegment.isCompleted) releaseFirstSegment.complete();
+        await serverDone.cancel();
+        await server.close(force: true);
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 
   test('releases a playlist output reservation when cancelled', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

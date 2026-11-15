@@ -415,7 +415,18 @@
   "actionRename": "重命名",
   "conversationAutoRename": "自动命名",
   "conversationTemporary": "临时对话",
+  "conversationSetTemporary": "设为临时对话",
   "conversationCloseTemporary": "关闭临时对话",
+  "conversationKeep": "保留对话",
+  "conversationTemporaryStatus": "临时",
+  "conversationTemporaryWarning": "即将过期",
+  "conversationTemporaryExplanation": "此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。",
+  "conversationEnableTemporary": "开启临时模式",
+  "chatLoadingConversation": "正在加载对话…",
+  "chatEmptyConversation": "发送消息以开始对话。",
+  "chatNoActiveConversation": "请选择或新建对话以开始聊天。",
+  "chatConversationLoadError": "无法加载此对话。",
+  "chatRetryLoadConversation": "重试",
   "taskListTitle": "任务列表",
   "taskListEmpty": "暂无任务",
   "unifiedTaskListTabAll": "全部",
@@ -1192,6 +1203,8 @@
   "topicItemNew": "新话题",
   "topicItemUnpin": "取消置顶",
   "topicItemPin": "置顶",
+  "topicItemMarkUnread": "标记为未读",
+  "topicItemMarkRead": "标记为已读",
   "topicItemRename": "重命名",
   "topicItemAutoName": "自动命名",
   "topicItemDelete": "删除",
@@ -1340,6 +1353,7 @@
   "folderPickerRoot": "根目录",
   "folderPickerCurrentFolder": "当前文件夹",
   "folderPickerSubfolders": "子文件夹",
+  "folderPickerNoFolders": "没有文件夹",
   "folderPickerExistingFolders": "现有文件夹",
   "folderPickerCreateNew": "创建新文件夹",
   "folderPickerFolderNameHint": "输入文件夹名称",
@@ -7086,5 +7100,11 @@
         "type": "int"
       }
     }
-  }
+  },
+  "ocrSamplingTemperatureOutOfRange": "已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
 }

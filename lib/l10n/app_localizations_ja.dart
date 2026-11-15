@@ -1429,7 +1429,41 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationTemporary => '一時的な会話';
 
   @override
+  String get conversationSetTemporary => '一時的な会話に設定';
+
+  @override
   String get conversationCloseTemporary => '一時的な会話を閉じる';
+
+  @override
+  String get conversationKeep => '会話を保持';
+
+  @override
+  String get conversationTemporaryStatus => '一時';
+
+  @override
+  String get conversationTemporaryWarning => 'まもなく期限切れ';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'この会話は1時間後に削除されます。メッセージを送信するとタイマーがリセットされます。一時モードをオフにすると会話を保持できます。';
+
+  @override
+  String get conversationEnableTemporary => '一時モードを有効にする';
+
+  @override
+  String get chatLoadingConversation => '会話を読み込み中…';
+
+  @override
+  String get chatEmptyConversation => 'メッセージを送信して会話を始めましょう。';
+
+  @override
+  String get chatNoActiveConversation => '会話を選択または作成して、チャットを始めましょう。';
+
+  @override
+  String get chatConversationLoadError => 'この会話を読み込めませんでした。';
+
+  @override
+  String get chatRetryLoadConversation => '再試行';
 
   @override
   String get taskListTitle => 'タスクリスト';
@@ -3153,6 +3187,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get topicItemPin => 'ピン';
 
   @override
+  @override
+  String get topicItemMarkUnread => '未読にする';
+
+  @override
+  String get topicItemMarkRead => '既読にする';
+
   String get topicItemRename => '名前の変更';
 
   @override
@@ -3666,6 +3706,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => 'サブフォルダー';
+
+  @override
+  String get folderPickerNoFolders => 'フォルダーはありません';
 
   @override
   String get folderPickerExistingFolders => '既存のフォルダー';
@@ -11624,6 +11667,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get providerMaxUploadSizePositive => '最大アップロードサイズは正の数である必要があります。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '保存された温度が 0～2 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '保存された top-P が 0～1 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。';
 }
 
 /// The translations for Japanese, as used in Japan (`ja_JP`).
@@ -13050,7 +13105,41 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get conversationTemporary => '一時的な会話';
 
   @override
+  String get conversationSetTemporary => '一時的な会話に設定';
+
+  @override
   String get conversationCloseTemporary => '一時的な会話を閉じる';
+
+  @override
+  String get conversationKeep => '会話を保持';
+
+  @override
+  String get conversationTemporaryStatus => '一時';
+
+  @override
+  String get conversationTemporaryWarning => 'まもなく期限切れ';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'この会話は1時間後に削除されます。メッセージを送信するとタイマーがリセットされます。一時モードをオフにすると会話を保持できます。';
+
+  @override
+  String get conversationEnableTemporary => '一時モードを有効にする';
+
+  @override
+  String get chatLoadingConversation => '会話を読み込み中…';
+
+  @override
+  String get chatEmptyConversation => 'メッセージを送信して会話を始めましょう。';
+
+  @override
+  String get chatNoActiveConversation => '会話を選択または作成して、チャットを始めましょう。';
+
+  @override
+  String get chatConversationLoadError => 'この会話を読み込めませんでした。';
+
+  @override
+  String get chatRetryLoadConversation => '再試行';
 
   @override
   String get taskListTitle => 'タスクリスト';
@@ -14774,6 +14863,12 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get topicItemPin => 'ピン';
 
   @override
+  @override
+  String get topicItemMarkUnread => '未読にする';
+
+  @override
+  String get topicItemMarkRead => '既読にする';
+
   String get topicItemRename => '名前の変更';
 
   @override

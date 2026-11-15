@@ -36,6 +36,7 @@ void main() {
           },
           addRecord: (_) async => throw failure,
           loadRecords: () async => [],
+          fileExists: (name) async => files.containsKey(name),
           deleteFile: (name) async {
             files.remove(name);
           },
@@ -63,6 +64,7 @@ void main() {
         },
         addRecord: (_) async {},
         loadRecords: () async => [],
+        fileExists: (name) async => files.containsKey(name),
         deleteFile: (name) async {
           files.remove(name);
         },
@@ -132,6 +134,38 @@ void main() {
 
       expect(files[candidate.textStoragePath], text);
       expect(files[candidate.storageFileName], audio);
+    },
+  );
+
+  test(
+    'failed publication restores a pre-existing audio destination',
+    () async {
+      final candidate = record();
+      final originalAudio = Uint8List.fromList([9, 8, 7]);
+      final files = <String, Uint8List>{
+        candidate.storageFileName: originalAudio,
+      };
+
+      await expectLater(
+        writeTtsAudioAndPublish(
+          candidate,
+          audio,
+          null,
+          writeFile: (name, bytes) async {
+            files[name] = Uint8List.fromList(bytes);
+          },
+          addRecord: (_) async => throw StateError('record insert failed'),
+          loadRecords: () async => [],
+          readFile: (name) async => files[name],
+          fileExists: (name) async => files.containsKey(name),
+          deleteFile: (name) async {
+            files.remove(name);
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(files[candidate.storageFileName], originalAudio);
     },
   );
 
