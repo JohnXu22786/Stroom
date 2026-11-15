@@ -142,8 +142,11 @@ void main() {
         return true;
       };
 
-      final edit = composerKey.currentState!
-          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      late Future<void> edit;
+      await tester.runAsync(() async {
+        edit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      });
       await tester.runAsync(() => cleanupStarted.future);
       await tester.tap(
         find.descendant(
@@ -191,8 +194,11 @@ void main() {
         return true;
       };
 
-      final edit = composerKey.currentState!
-          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      late Future<void> edit;
+      await tester.runAsync(() async {
+        edit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      });
       await tester.runAsync(() => cleanupStarted.future);
       final gesture = await tester.startGesture(
         tester.getCenter(
@@ -249,10 +255,14 @@ void main() {
         return savedPaths[index]!;
       };
 
-      final firstEdit = composerKey.currentState!
-          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-      final secondEdit = composerKey.currentState!
-          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      late Future<void> firstEdit;
+      late Future<void> secondEdit;
+      await tester.runAsync(() async {
+        firstEdit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        secondEdit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      });
       await tester.runAsync(() => bothSaved.future);
 
       releaseSave[1].complete();
@@ -403,8 +413,11 @@ void main() {
         return 'temp_edited/${savedPath!.split('/').last}';
       };
 
-      final edit = composerKey.currentState!
-          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      late Future<void> edit;
+      await tester.runAsync(() async {
+        edit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      });
       await tester.runAsync(() => saveStarted.future);
       await tester.pumpWidget(const SizedBox.shrink());
       finishSave.complete();
