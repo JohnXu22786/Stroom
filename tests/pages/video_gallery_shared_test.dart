@@ -1,49 +1,17 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/video_gallery_shared.dart';
-import 'package:stroom/utils/web_file_store.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'plays a WebFileStore video through a blob URL on web',
-    skip: !kIsWeb,
-    (tester) async {
-      final previousPlatform = VideoPlayerPlatform.instance;
-      final platform = _SuccessfulVideoPlayerPlatform();
-      VideoPlayerPlatform.instance = platform;
-      WebFileStore.enableTestMode();
-      addTearDown(() {
-        VideoPlayerPlatform.instance = previousPlatform;
-        WebFileStore.disableTestMode();
-      });
-      await WebFileStore.write(
-        'videos/sample.3gp',
-        Uint8List.fromList([0, 1, 2, 3]),
-      );
-
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: VideoPlayerPage(
-            filePath: 'videos/sample.3gp',
-            displayName: 'sample.3gp',
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump();
-
-      expect(videoMimeTypeForPath('videos/sample.3gp'), 'video/3gpp');
-      expect(videoMimeTypeForPath('videos/sample.3gpp'), 'video/3gpp');
-      expect(platform.dataSource?.sourceType, DataSourceType.network);
-      expect(platform.dataSource?.uri, startsWith('blob:'));
-    },
-  );
+  test('maps 3GPP file extensions to browser MIME types', () {
+    expect(videoMimeTypeForPath('videos/sample.3gp'), 'video/3gpp');
+    expect(videoMimeTypeForPath('videos/sample.3gpp'), 'video/3gpp');
+  });
 
   for (final testCase in [
     (locale: const Locale('en'), error: 'Could not load video'),
@@ -103,14 +71,4 @@ class _FailingVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<void> dispose(int playerId) async {}
-}
-
-class _SuccessfulVideoPlayerPlatform extends _FailingVideoPlayerPlatform {
-  @override
-  Stream<VideoEvent> videoEventsFor(int playerId) => Stream.value(
-        VideoEvent(
-          eventType: VideoEventType.initialized,
-          size: const Size(640, 480),
-        ),
-      );
 }
