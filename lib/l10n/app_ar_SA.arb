@@ -6069,6 +6069,7 @@
   "appLogWillBeCreated": "تُنشأ السجلات أثناء تشغيل التطبيق",
   "appLogExport": "تصدير",
   "appLogDelete": "حذف",
+  "appLogDeleteUnconfirmed": "تعذر تأكيد الحذف.",
   "appLogConfirmDeleteTitle": "تأكيد الحذف",
   "appLogConfirmDeleteMessage": "هل تريد حذف ملف السجل \"{fileName}\"؟",
   "@appLogConfirmDeleteMessage": {

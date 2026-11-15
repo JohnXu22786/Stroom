@@ -2895,6 +2895,7 @@
   "appLogWillBeCreated": "Los registros se generan mientras la aplicación se está ejecutando.",
   "appLogExport": "Exportar",
   "appLogDelete": "Borrar",
+  "appLogDeleteUnconfirmed": "No se pudo confirmar la eliminación.",
   "appLogConfirmDeleteTitle": "Confirmar eliminación",
   "appLogConfirmDeleteMessage": "¿Eliminar el archivo de registro \"{fileName}\"?",
   "appLogCancel": "Cancelar",

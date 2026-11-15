@@ -6072,6 +6072,7 @@
   "appLogWillBeCreated": "앱이 실행 중일 때 로그가 생성됩니다",
   "appLogExport": "내보내기",
   "appLogDelete": "삭제",
+  "appLogDeleteUnconfirmed": "삭제 여부를 확인할 수 없습니다.",
   "appLogConfirmDeleteTitle": "삭제 확인",
   "appLogConfirmDeleteMessage": "로그 파일 ‘{fileName}’을(를) 삭제하시겠습니까?",
   "@appLogConfirmDeleteMessage": {

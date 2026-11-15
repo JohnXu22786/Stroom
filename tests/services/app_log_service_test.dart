@@ -67,13 +67,19 @@ void main() {
       final hourStr =
           '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
       final logFile = File('${logDir.path}/app_$hourStr.log');
-      expect(await logFile.exists(), isFalse,
-          reason: 'Log should NOT be written to file before flush()');
+      expect(
+        await logFile.exists(),
+        isFalse,
+        reason: 'Log should NOT be written to file before flush()',
+      );
 
       // After flush, the file should exist with content
       await AppLogService.flush();
-      expect(await logFile.exists(), isTrue,
-          reason: 'Log should be written to file after flush()');
+      expect(
+        await logFile.exists(),
+        isTrue,
+        reason: 'Log should be written to file after flush()',
+      );
       final content = await logFile.readAsString();
       expect(content, contains('Buffered message'));
 
@@ -92,8 +98,11 @@ void main() {
       final hourStr =
           '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
       final logFile = File('${logDir.path}/app_$hourStr.log');
-      expect(await logFile.exists(), isFalse,
-          reason: 'No file before flush with multiple buffered entries');
+      expect(
+        await logFile.exists(),
+        isFalse,
+        reason: 'No file before flush with multiple buffered entries',
+      );
 
       await AppLogService.flush();
       expect(await logFile.exists(), isTrue);
@@ -165,14 +174,20 @@ void main() {
       final hourStr =
           '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
       final expectedFile = File('${logDir.path}/app_$hourStr.log');
-      expect(await expectedFile.exists(), isTrue,
-          reason: 'Hourly log file should exist at app_YYYY-MM-DD-HH.log path');
+      expect(
+        await expectedFile.exists(),
+        isTrue,
+        reason: 'Hourly log file should exist at app_YYYY-MM-DD-HH.log path',
+      );
 
       // Old day-based filename should NOT exist
       final dayStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
       final oldStyleFile = File('${logDir.path}/app_$dayStr.log');
-      expect(await oldStyleFile.exists(), isFalse,
-          reason: 'Old day-based filename should not be used anymore');
+      expect(
+        await oldStyleFile.exists(),
+        isFalse,
+        reason: 'Old day-based filename should not be used anymore',
+      );
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -186,8 +201,11 @@ void main() {
       final now = DateTime.now();
       final hourStr =
           '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
-      expect(files, contains('app_$hourStr.log'),
-          reason: 'listLogFiles should include app_YYYY-MM-DD-HH.log');
+      expect(
+        files,
+        contains('app_$hourStr.log'),
+        reason: 'listLogFiles should include app_YYYY-MM-DD-HH.log',
+      );
 
       // Cleanup
       final logDir = await AppLogService.getLogDir();
@@ -237,16 +255,22 @@ void main() {
       await AppLogService.flush();
 
       final newLogDir = await AppLogService.getLogDir();
-      expect(await newLogDir.exists(), isTrue,
-          reason: 'Should work after reset');
+      expect(
+        await newLogDir.exists(),
+        isTrue,
+        reason: 'Should work after reset',
+      );
       final today = DateTime.now();
       final dateStr =
           '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${newLogDir.path}/app_$dateStr.log');
       final content = await logFile.readAsString();
       expect(content, contains('Post-reset message'));
-      expect(content, isNot(contains('Pre-reset message')),
-          reason: 'Pre-reset message should not appear after reset');
+      expect(
+        content,
+        isNot(contains('Pre-reset message')),
+        reason: 'Pre-reset message should not appear after reset',
+      );
 
       // Cleanup
       await newLogDir.delete(recursive: true);
@@ -258,8 +282,7 @@ void main() {
   // ==================================================================
 
   group('AppLogService — flush failure recovery', () {
-    test('SAF failure keeps entries retryable and fallback logs readable',
-        () async {
+    test('SAF failure keeps entries retryable and fallback logs readable', () async {
       const safUri = 'content://provider/tree/primary%3ADocuments';
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('backup_saf_uri', safUri);
@@ -279,19 +302,19 @@ void main() {
       final channel = const MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'writeLog') {
-          throw PlatformException(code: 'write_failed');
-        }
-        if (call.method == 'listLogs') return [fileName];
-        if (call.method == 'readLog') {
-          return safReadContent ?? existingSafContent;
-        }
-        throw MissingPluginException('Unexpected SAF method: ${call.method}');
-      });
+            if (call.method == 'writeLog') {
+              throw PlatformException(code: 'write_failed');
+            }
+            if (call.method == 'listLogs') return [fileName];
+            if (call.method == 'readLog') {
+              return safReadContent ?? existingSafContent;
+            }
+            throw MissingPluginException(
+              'Unexpected SAF method: ${call.method}',
+            );
+          });
 
-      final failurePath = await _createUnwritableLogRoot(
-        'stroom_log_failure_',
-      );
+      final failurePath = await _createUnwritableLogRoot('stroom_log_failure_');
       BackupLocationManager.debugAppLocalLogsRootPath = failurePath;
       BackupLocationManager.debugPendingLogRootPath = failurePath;
       try {
@@ -306,8 +329,10 @@ void main() {
         final content = await BackupLocationManager.readLogContent(fileName);
         expect(content, contains('Existing SAF entry'));
         expect(content, contains('SAF retry entry'));
-        expect(content!.indexOf('Existing SAF entry'),
-            lessThan(content.indexOf('SAF retry entry')));
+        expect(
+          content!.indexOf('Existing SAF entry'),
+          lessThan(content.indexOf('SAF retry entry')),
+        );
 
         final localFile = File('$failurePath/$fileName');
         safReadContent = '$existingSafContent${await localFile.readAsString()}';
@@ -353,19 +378,21 @@ void main() {
       final channel = const MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'writeLog') {
-          final fileName = call.arguments['fileName'] as String;
-          writes.update(fileName, (count) => count + 1, ifAbsent: () => 1);
-          if (fileName == secondName && writes[fileName] == 1) {
-            final failureFile = File(failurePath);
-            if (await failureFile.exists()) await failureFile.delete();
-            await File(failurePath).create();
-            throw PlatformException(code: 'write_failed');
-          }
-          return null;
-        }
-        throw MissingPluginException('Unexpected SAF method: ${call.method}');
-      });
+            if (call.method == 'writeLog') {
+              final fileName = call.arguments['fileName'] as String;
+              writes.update(fileName, (count) => count + 1, ifAbsent: () => 1);
+              if (fileName == secondName && writes[fileName] == 1) {
+                final failureFile = File(failurePath);
+                if (await failureFile.exists()) await failureFile.delete();
+                await File(failurePath).create();
+                throw PlatformException(code: 'write_failed');
+              }
+              return null;
+            }
+            throw MissingPluginException(
+              'Unexpected SAF method: ${call.method}',
+            );
+          });
 
       try {
         await AppLogService.info('Test', 'First hour');
@@ -381,10 +408,16 @@ void main() {
         await _makeLogRootWritable(failurePath);
         await AppLogService.flush();
 
-        expect(writes[firstName], 1,
-            reason: 'A completed hour must not be appended again on retry');
-        expect(writes[secondName], 2,
-            reason: 'The failed hour must remain buffered for retry');
+        expect(
+          writes[firstName],
+          1,
+          reason: 'A completed hour must not be appended again on retry',
+        );
+        expect(
+          writes[secondName],
+          2,
+          reason: 'The failed hour must remain buffered for retry',
+        );
       } finally {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, null);
@@ -396,51 +429,116 @@ void main() {
       }
     });
 
-    test('fallback logs are included in metadata and deleted with the log',
-        () async {
-      const safUri = 'content://provider/tree/primary%3ADocuments';
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('backup_saf_uri', safUri);
-      BackupLocationManager.debugIsAndroidOverride = true;
-      const fileName = 'app_2026-01-01-10.log';
-      final remoteSize = 11;
-      final localFile = File(
-        '${BackupLocationManager.testLogRoot}/$fileName',
-      );
-      await localFile.parent.create(recursive: true);
-      await localFile.writeAsString('Local fallback');
+    test(
+      'fallback logs are included in metadata and deleted with the log',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const fallbackContent = 'Local fallback';
+        final remoteSize = fallbackContent.length;
+        final localFile = File(
+          '${BackupLocationManager.testLogRoot}/$fileName',
+        );
+        await localFile.parent.create(recursive: true);
+        await localFile.writeAsString(fallbackContent);
 
-      final channel = const MethodChannel('com.johntsui.stroom/saf');
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'listLogMetadata') {
-          return [
-            {
-              'name': fileName,
-              'sizeBytes': remoteSize,
-              'modifiedAtMillis': 1,
-            },
-          ];
-        }
-        if (call.method == 'deleteLog') return true;
-        throw MissingPluginException('Unexpected SAF method: ${call.method}');
-      });
-
-      try {
-        final metadata = await BackupLocationManager.getLogFileMetadata();
-        final file = metadata.singleWhere((entry) => entry.name == fileName);
-        expect(file.sizeBytes, remoteSize + 'Local fallback'.length);
-        expect(await BackupLocationManager.deleteLogFile(fileName), isTrue);
-        expect(await localFile.exists(), isFalse);
-      } finally {
+        var deleteRequested = false;
+        final channel = const MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null);
-        BackupLocationManager.debugIsAndroidOverride = null;
-      }
-    });
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'listLogMetadata') {
+                return [
+                  {
+                    'name': fileName,
+                    'sizeBytes': remoteSize,
+                    'modifiedAtMillis': 1,
+                  },
+                ];
+              }
+              if (call.method == 'listLogs') {
+                return deleteRequested ? <String>[] : <String>[fileName];
+              }
+              if (call.method == 'readLog') return fallbackContent;
+              if (call.method == 'deleteLog') {
+                deleteRequested = true;
+                return true;
+              }
+              throw MissingPluginException(
+                'Unexpected SAF method: ${call.method}',
+              );
+            });
 
-    test('buffered entries survive a flush failure and are written on retry',
-        () async {
+        try {
+          final metadata = await BackupLocationManager.getLogFileMetadata();
+          final file = metadata.singleWhere((entry) => entry.name == fileName);
+          expect(file.sizeBytes, remoteSize);
+          expect(await BackupLocationManager.deleteLogFile(fileName), isTrue);
+          expect(await localFile.exists(), isFalse);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+        }
+      },
+    );
+
+    test(
+      'metadata counts merged SAF and partial fallback log content',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const safContent =
+            '[2026-01-01 10:00:00.000001] [INFO] [Test] Earlier entry\n';
+        const fallbackContent =
+            '[2026-01-01 10:00:00.000002] [INFO] [Test] New entry\n';
+        final logRoot = Directory(BackupLocationManager.testLogRoot);
+        if (await logRoot.exists()) await logRoot.delete(recursive: true);
+        final fallbackFile = File('${logRoot.path}/$fileName');
+        await fallbackFile.parent.create(recursive: true);
+        await fallbackFile.writeAsString(fallbackContent);
+
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'listLogMetadata') {
+                return [
+                  {
+                    'name': fileName,
+                    'sizeBytes': safContent.length,
+                    'modifiedAtMillis': 1,
+                  },
+                ];
+              }
+              if (call.method == 'readLog') return safContent;
+              throw MissingPluginException(
+                'Unexpected SAF method: ${call.method}',
+              );
+            });
+
+        try {
+          final metadata = await BackupLocationManager.getLogFileMetadata();
+          final file = metadata.singleWhere((entry) => entry.name == fileName);
+          expect(
+            file.sizeBytes,
+            ('$safContent$fallbackContent').length,
+            reason: 'Metadata must reflect the merged readable log content',
+          );
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          await fallbackFile.parent.delete(recursive: true);
+        }
+      },
+    );
+
+    test('buffered entries survive a flush failure and are written on retry', () async {
       // Create a log dir
       final logDir = await AppLogService.getLogDir();
       if (!await logDir.exists()) {
@@ -485,12 +583,18 @@ void main() {
       final dateStr =
           '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${logDir.path}/app_$dateStr.log');
-      expect(await logFile.exists(), isTrue,
-          reason: 'File should exist after successful retry flush');
+      expect(
+        await logFile.exists(),
+        isTrue,
+        reason: 'File should exist after successful retry flush',
+      );
       final content = await logFile.readAsString();
       expect(content, contains('Entry A'));
-      expect(content, contains('Entry B'),
-          reason: 'Both entries should survive a failed flush');
+      expect(
+        content,
+        contains('Entry B'),
+        reason: 'Both entries should survive a failed flush',
+      );
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -523,10 +627,16 @@ void main() {
       expect(content, contains('Concurrent A'));
       expect(content, contains('Concurrent B'));
       // No duplicates — each entry should appear exactly once
-      expect('Concurrent A'.allMatches(content).length, equals(1),
-          reason: 'Entry A should appear exactly once (no duplicate)');
-      expect('Concurrent B'.allMatches(content).length, equals(1),
-          reason: 'Entry B should appear exactly once (no duplicate)');
+      expect(
+        'Concurrent A'.allMatches(content).length,
+        equals(1),
+        reason: 'Entry A should appear exactly once (no duplicate)',
+      );
+      expect(
+        'Concurrent B'.allMatches(content).length,
+        equals(1),
+        reason: 'Entry B should appear exactly once (no duplicate)',
+      );
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -549,8 +659,11 @@ void main() {
       final dateStr =
           '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${logDir.path}/app_$dateStr.log');
-      expect(await logFile.exists(), isTrue,
-          reason: 'Log file should exist at expected path');
+      expect(
+        await logFile.exists(),
+        isTrue,
+        reason: 'Log file should exist at expected path',
+      );
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -567,8 +680,11 @@ void main() {
           .whereType<File>()
           .where((f) => f.path.endsWith('.log'))
           .toList();
-      expect(logFiles.length, equals(1),
-          reason: 'Messages on same hour should go to one file');
+      expect(
+        logFiles.length,
+        equals(1),
+        reason: 'Messages on same hour should go to one file',
+      );
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -580,6 +696,34 @@ void main() {
   // ==================================================================
 
   group('AppLogService — log content format', () {
+    test(
+      'clock rollback keeps wall time and sequence distinguishes entries',
+      () async {
+        final logDir = await AppLogService.getLogDir();
+        final later = DateTime(2025, 4, 10, 13, 45, 0, 123, 456);
+        AppLogService.debugTimestampOverride = later;
+        await AppLogService.info('Clock', 'first');
+        await AppLogService.info('Clock', 'first');
+
+        final earlier = DateTime(2025, 4, 10, 12, 15, 0, 7, 8);
+        AppLogService.debugTimestampOverride = earlier;
+        await AppLogService.info('Clock', 'after rollback');
+        await AppLogService.flush();
+
+        final laterFile = File('${logDir.path}/app_2025-04-10-13.log');
+        final earlierFile = File('${logDir.path}/app_2025-04-10-12.log');
+        final laterContent = await laterFile.readAsString();
+        final earlierContent = await earlierFile.readAsString();
+        expect(laterContent, contains('[2025-04-10 13:45:00.123456]'));
+        expect(laterContent, contains('[seq:1] first'));
+        expect(laterContent, contains('[seq:2] first'));
+        expect(earlierContent, contains('[2025-04-10 12:15:00.007008]'));
+        expect(earlierContent, contains('[seq:3] after rollback'));
+
+        await logDir.delete(recursive: true);
+      },
+    );
+
     test('log entry contains timestamp, level, source, and message', () async {
       await AppLogService.info('TestSource', 'Hello world');
       await AppLogService.flush();
@@ -589,8 +733,11 @@ void main() {
       expect(content, contains('[INFO]'));
       expect(content, contains('[TestSource]'));
       expect(content, contains('Hello world'));
-      expect(content, contains(RegExp(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}')),
-          reason: 'Should contain ISO-like timestamp');
+      expect(
+        content,
+        contains(RegExp(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}')),
+        reason: 'Should contain ISO-like timestamp',
+      );
 
       // Cleanup
       final logDir = await AppLogService.getLogDir();
@@ -681,23 +828,27 @@ void main() {
       expect(content, isNull);
     });
 
-    test('listLogFiles returns empty list when directory does not exist',
-        () async {
-      final logDir = await AppLogService.getLogDir();
-      // Delete dir if it exists from previous tests
-      if (await logDir.exists()) {
-        await logDir.delete(recursive: true);
-      }
-      AppLogService.clearLogDirCache();
+    test(
+      'listLogFiles returns empty list when directory does not exist',
+      () async {
+        final logDir = await AppLogService.getLogDir();
+        // Delete dir if it exists from previous tests
+        if (await logDir.exists()) {
+          await logDir.delete(recursive: true);
+        }
+        AppLogService.clearLogDirCache();
 
-      final files = await AppLogService.listLogFiles();
-      expect(files, isEmpty,
-          reason:
-              'When log directory does not exist, listLogFiles should return empty list');
+        final files = await AppLogService.listLogFiles();
+        expect(
+          files,
+          isEmpty,
+          reason: 'When log directory does not exist, listLogFiles should return empty list',
+        );
 
-      // Cleanup
-      AppLogService.clearLogDirCache();
-    });
+        // Cleanup
+        AppLogService.clearLogDirCache();
+      },
+    );
 
     test('readLogFile returns null for empty log file', () async {
       final logDir = await AppLogService.getLogDir();
@@ -711,11 +862,17 @@ void main() {
       final content = await AppLogService.readLogFile('app_empty_test.log');
       // An empty file should return empty string, not null
       // (the file exists, it's just empty)
-      expect(content, isNotNull,
-          reason:
-              'readLogFile should not return null for an existing but empty file');
-      expect(content, isEmpty,
-          reason: 'An empty file should return empty string, not null');
+      expect(
+        content,
+        isNotNull,
+        reason:
+            'readLogFile should not return null for an existing but empty file',
+      );
+      expect(
+        content,
+        isEmpty,
+        reason: 'An empty file should return empty string, not null',
+      );
 
       // Cleanup
       await emptyFile.delete();
@@ -739,10 +896,16 @@ void main() {
 
       AppLogService.clearLogDirCache();
       final files = await AppLogService.listLogFiles();
-      expect(files.every((f) => f.endsWith('.log')), isTrue,
-          reason: 'listLogFiles should only return .log files');
-      expect(files.any((f) => f == 'readme.txt'), isFalse,
-          reason: 'Non-log files should be filtered out');
+      expect(
+        files.every((f) => f.endsWith('.log')),
+        isTrue,
+        reason: 'listLogFiles should only return .log files',
+      );
+      expect(
+        files.any((f) => f == 'readme.txt'),
+        isFalse,
+        reason: 'Non-log files should be filtered out',
+      );
 
       // Cleanup
       await nonLogFile.delete();
@@ -761,8 +924,11 @@ void main() {
       final dir1 = await AppLogService.getLogDir();
       final dir2 = await AppLogService.getLogDir();
 
-      expect(dir1.path, equals(dir2.path),
-          reason: 'Repeated calls should return same directory');
+      expect(
+        dir1.path,
+        equals(dir2.path),
+        reason: 'Repeated calls should return same directory',
+      );
 
       // Cleanup
       if (await dir1.exists()) await dir1.delete(recursive: true);
@@ -804,20 +970,29 @@ void main() {
       await AppLogService.cleanupOldLogs();
 
       // Old file (17 days) should be deleted
-      expect(await oldFile.exists(), isFalse,
-          reason: 'Logs older than 15 days should be deleted');
+      expect(
+        await oldFile.exists(),
+        isFalse,
+        reason: 'Logs older than 15 days should be deleted',
+      );
 
       // Recent file (14 days) should be kept
-      expect(await recentFile.exists(), isTrue,
-          reason: 'Logs within 15 days should be kept');
+      expect(
+        await recentFile.exists(),
+        isTrue,
+        reason: 'Logs within 15 days should be kept',
+      );
 
       // Today's file should be kept
       final today = DateTime.now();
       final todayStr =
           '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final todayFile = File('${logDir.path}/app_$todayStr.log');
-      expect(await todayFile.exists(), isTrue,
-          reason: 'Today log should be kept');
+      expect(
+        await todayFile.exists(),
+        isTrue,
+        reason: 'Today log should be kept',
+      );
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -827,55 +1002,71 @@ void main() {
       await AppLogService.cleanupOldLogs(); // Should not throw
     });
 
-    test('storage cap cleanup stops after local fallback size is removed',
-        () async {
-      const safUri = 'content://provider/tree/primary%3ADocuments';
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('backup_saf_uri', safUri);
-      BackupLocationManager.debugIsAndroidOverride = true;
+    test(
+      'storage cap cleanup stops after local fallback size is removed',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
 
-      const firstName = 'app_2026-10-01-10.log';
-      const secondName = 'app_2026-10-01-11.log';
-      final logRoot = Directory(BackupLocationManager.testLogRoot);
-      if (await logRoot.exists()) await logRoot.delete(recursive: true);
-      await logRoot.create(recursive: true);
-      final firstFile = File('${logRoot.path}/$firstName');
-      final secondFile = File('${logRoot.path}/$secondName');
-      await firstFile.writeAsString(List.filled(100, 'x').join());
-      await secondFile.writeAsString(List.filled(100, 'y').join());
+        const firstName = 'app_2026-10-01-10.log';
+        const secondName = 'app_2026-10-01-11.log';
+        final logRoot = Directory(BackupLocationManager.testLogRoot);
+        if (await logRoot.exists()) await logRoot.delete(recursive: true);
+        await logRoot.create(recursive: true);
+        final firstFile = File('${logRoot.path}/$firstName');
+        final secondFile = File('${logRoot.path}/$secondName');
+        await firstFile.writeAsString(List.filled(100, 'x').join());
+        await secondFile.writeAsString(List.filled(100, 'y').join());
 
-      final deleteCalls = <String>[];
-      const channel = MethodChannel('com.johntsui.stroom/saf');
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'listLogMetadata') {
-          return [
-            {'name': firstName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
-            {'name': secondName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
-          ];
-        }
-        if (call.method == 'deleteLog') {
-          deleteCalls.add(call.arguments['fileName'] as String);
-          return false;
-        }
-        throw MissingPluginException('Unexpected SAF method: ${call.method}');
-      });
-
-      try {
-        await AppLogService.updatePolicy(
-          const AppLogPolicy(retentionDays: 3650, maxStorageBytes: 200),
-        );
-
-        expect(deleteCalls, [firstName]);
-        expect(await firstFile.exists(), isFalse);
-        expect(await secondFile.exists(), isTrue,
-            reason: 'Cleanup should stop when refreshed metadata is under cap');
-      } finally {
+        final deleteCalls = <String>[];
+        const channel = MethodChannel('com.johntsui.stroom/saf');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null);
-        BackupLocationManager.debugIsAndroidOverride = null;
-      }
-    });
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'listLogMetadata') {
+                return [
+                  {'name': firstName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
+                  {'name': secondName, 'sizeBytes': 1, 'modifiedAtMillis': 1},
+                ];
+              }
+              if (call.method == 'deleteLog') {
+                deleteCalls.add(call.arguments['fileName'] as String);
+                return false;
+              }
+              if (call.method == 'readLog') {
+                final requestedName = call.arguments['fileName'] as String;
+                if (requestedName == firstName) {
+                  return List.filled(100, 'x').join();
+                }
+                if (requestedName == secondName) {
+                  return List.filled(100, 'y').join();
+                }
+              }
+              throw MissingPluginException(
+                'Unexpected SAF method: ${call.method}',
+              );
+            });
+
+        try {
+          await AppLogService.updatePolicy(
+            const AppLogPolicy(retentionDays: 3650, maxStorageBytes: 150),
+          );
+
+          expect(deleteCalls, [firstName]);
+          expect(await firstFile.exists(), isFalse);
+          expect(
+            await secondFile.exists(),
+            isTrue,
+            reason: 'Cleanup should stop when refreshed metadata is under cap',
+          );
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+        }
+      },
+    );
   });
 
   // ==================================================================
@@ -894,8 +1085,9 @@ void main() {
       final yDateStr =
           '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}-${_pad(yesterday.hour)}';
       final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
-      await yesterdayFile
-          .writeAsString('[yesterday] [INFO] [Test] Yesterday log\n');
+      await yesterdayFile.writeAsString(
+        '[yesterday] [INFO] [Test] Yesterday log\n',
+      );
 
       // Create today's log as well
       await AppLogService.info('Test', 'Today log');
@@ -903,13 +1095,19 @@ void main() {
 
       AppLogService.clearLogDirCache();
       final files = await AppLogService.listLogFiles();
-      expect(files, contains('app_$yDateStr.log'),
-          reason: 'Yesterday log file should appear in file list');
+      expect(
+        files,
+        contains('app_$yDateStr.log'),
+        reason: 'Yesterday log file should appear in file list',
+      );
 
       // Read yesterday's log
       final content = await AppLogService.readLogFile('app_$yDateStr.log');
-      expect(content, isNotNull,
-          reason: 'Yesterday\'s log file should be readable by filename');
+      expect(
+        content,
+        isNotNull,
+        reason: 'Yesterday\'s log file should be readable by filename',
+      );
       expect(content, contains('Yesterday log'));
 
       // Cleanup
@@ -917,8 +1115,7 @@ void main() {
       if (await logDir.exists()) await logDir.delete(recursive: true);
     });
 
-    test('readLogFile handles yesterday log when no today log exists',
-        () async {
+    test('readLogFile handles yesterday log when no today log exists', () async {
       final logDir = await AppLogService.getLogDir();
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
@@ -929,17 +1126,20 @@ void main() {
       final yDateStr =
           '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}-${_pad(yesterday.hour)}';
       final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
-      await yesterdayFile
-          .writeAsString('[yesterday] [INFO] [Test] Only yesterday\n');
+      await yesterdayFile.writeAsString(
+        '[yesterday] [INFO] [Test] Only yesterday\n',
+      );
 
       AppLogService.clearLogDirCache();
       final files = await AppLogService.listLogFiles();
       expect(files, contains('app_$yDateStr.log'));
 
       final content = await AppLogService.readLogFile('app_$yDateStr.log');
-      expect(content, isNotNull,
-          reason:
-              'Yesterday log should be readable even when today log does not exist');
+      expect(
+        content,
+        isNotNull,
+        reason: 'Yesterday log should be readable even when today log does not exist',
+      );
 
       // Cleanup
       AppLogService.clearLogDirCache();
@@ -961,8 +1161,11 @@ void main() {
       final laDateStr =
           '${longAgo.year}-${_pad(longAgo.month)}-${_pad(longAgo.day)}-${_pad(longAgo.hour)}';
       final content = await AppLogService.readLogFile('app_$laDateStr.log');
-      expect(content, isNull,
-          reason: 'Non-existent previous day log should return null');
+      expect(
+        content,
+        isNull,
+        reason: 'Non-existent previous day log should return null',
+      );
 
       // Cleanup
       AppLogService.clearLogDirCache();
@@ -975,29 +1178,37 @@ void main() {
   // ==================================================================
 
   group('AppLogService — sequential list and read consistency', () {
-    test('listLogFiles and readLogFile remain reliable on repeated calls',
-        () async {
-      // Write a log
-      await AppLogService.info('Test', 'Consistency check');
-      await AppLogService.flush();
+    test(
+      'listLogFiles and readLogFile remain reliable on repeated calls',
+      () async {
+        // Write a log
+        await AppLogService.info('Test', 'Consistency check');
+        await AppLogService.flush();
 
-      // List and read multiple times — should always work
-      for (int i = 0; i < 5; i++) {
-        final files = await AppLogService.listLogFiles();
-        expect(files, isNotEmpty,
-            reason: 'Files should be available on attempt $i');
+        // List and read multiple times — should always work
+        for (int i = 0; i < 5; i++) {
+          final files = await AppLogService.listLogFiles();
+          expect(
+            files,
+            isNotEmpty,
+            reason: 'Files should be available on attempt $i',
+          );
 
-        final content = await AppLogService.readLogFile(files.first);
-        expect(content, isNotNull,
-            reason: 'File should be readable on attempt $i');
-        expect(content, contains('Consistency check'));
-      }
+          final content = await AppLogService.readLogFile(files.first);
+          expect(
+            content,
+            isNotNull,
+            reason: 'File should be readable on attempt $i',
+          );
+          expect(content, contains('Consistency check'));
+        }
 
-      // Cleanup
-      final logDir = await AppLogService.getLogDir();
-      if (await logDir.exists()) await logDir.delete(recursive: true);
-      AppLogService.clearLogDirCache();
-    });
+        // Cleanup
+        final logDir = await AppLogService.getLogDir();
+        if (await logDir.exists()) await logDir.delete(recursive: true);
+        AppLogService.clearLogDirCache();
+      },
+    );
   });
 
   // ==================================================================

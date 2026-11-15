@@ -10711,6 +10711,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get appLogDelete => 'Borrar';
 
   @override
+  String get appLogDeleteUnconfirmed =>
+      'No se pudo confirmar la eliminación.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirmar eliminación';
 
   @override
@@ -22884,6 +22888,10 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get appLogDelete => 'Borrar';
+
+  @override
+  String get appLogDeleteUnconfirmed =>
+      'No se pudo confirmar la eliminación.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirmar eliminación';

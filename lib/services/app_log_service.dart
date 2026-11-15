@@ -69,13 +69,13 @@ class AppLogPolicy {
     LogLevel? minimumLevel,
     int? maxStorageBytes,
     bool unlimitedStorage = false,
-  }) =>
-      AppLogPolicy(
-        retentionDays: retentionDays ?? this.retentionDays,
-        minimumLevel: minimumLevel ?? this.minimumLevel,
-        maxStorageBytes:
-            unlimitedStorage ? null : maxStorageBytes ?? this.maxStorageBytes,
-      );
+  }) => AppLogPolicy(
+    retentionDays: retentionDays ?? this.retentionDays,
+    minimumLevel: minimumLevel ?? this.minimumLevel,
+    maxStorageBytes: unlimitedStorage
+        ? null
+        : maxStorageBytes ?? this.maxStorageBytes,
+  );
 }
 
 /// Aggregate log storage information for the settings UI.
@@ -96,12 +96,14 @@ class _LogFileInfo {
 /// 内存中的日志条目。
 class _LogEntry {
   final DateTime timestamp;
+  final int sequence;
   final LogLevel level;
   final String source;
   final String message;
 
   _LogEntry({
     required this.timestamp,
+    required this.sequence,
     required this.level,
     required this.source,
     required this.message,
@@ -251,7 +253,7 @@ class AppLogService {
 
   /// Keeps distinct log entries distinguishable when multiple writes occur
   /// during the same clock tick.
-  static int _lastLogTimestampMicros = 0;
+  static int _nextLogSequence = 0;
 
   /// 定时刷入计时器（每 10 秒）。
   static Timer? _flushTimer;
@@ -318,14 +320,11 @@ class AppLogService {
     if (level.severity < _policy.minimumLevel.severity) return;
 
     final timestamp = debugTimestampOverride ?? DateTime.now();
-    final timestampMicros = timestamp.microsecondsSinceEpoch;
-    final uniqueTimestampMicros = timestampMicros > _lastLogTimestampMicros
-        ? timestampMicros
-        : _lastLogTimestampMicros + 1;
-    _lastLogTimestampMicros = uniqueTimestampMicros;
+    final sequence = ++_nextLogSequence;
     _buffer.add(
       _LogEntry(
-        timestamp: DateTime.fromMicrosecondsSinceEpoch(uniqueTimestampMicros),
+        timestamp: timestamp,
+        sequence: sequence,
         level: level,
         source: source,
         message: message,
@@ -458,19 +457,22 @@ class AppLogService {
 
   static String _serializeEntry(_LogEntry entry) {
     final ts = entry.timestamp;
-    final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+    final timestamp =
+        '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
         '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}.'
         '${ts.millisecond.toString().padLeft(3, '0')}'
         '${(ts.microsecond % 1000).toString().padLeft(3, '0')}';
     final continuationHeader = RegExp(
       r'^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{6})?\] '
-      r'\[(?:DEBUG|INFO|WARN|ERROR)\] \[[^\]\r\n]*\] ',
+      r'\[(?:DEBUG|INFO|WARN|ERROR)\] \[[^\]\r\n]*\] '
+      r'(?:\[seq:\d+\] )?',
     );
     final message = entry.message
         .split('\n')
         .map((line) => continuationHeader.hasMatch(line) ? '  $line' : line)
         .join('\n');
-    return '[$timestamp] [${entry.level.label}] [${entry.source}] $message';
+    return '[$timestamp] [${entry.level.label}] [${entry.source}] '
+        '[seq:${entry.sequence}] $message';
   }
 
   /// 等待所有待写入日志刷入文件。
@@ -487,7 +489,7 @@ class AppLogService {
     _flushTimer = null;
     _buffer.clear();
     debugTimestampOverride = null;
-    _lastLogTimestampMicros = 0;
+    _nextLogSequence = 0;
     _cachedLogDir = null;
     _policy = const AppLogPolicy();
     _policyLoad = null;
@@ -614,6 +616,19 @@ class AppLogService {
     } catch (e) {
       debugPrint('[AppLogService] 列出日志文件失败: $e');
       return [];
+    }
+  }
+
+  /// Deletes a log through the storage backend used to list and read it.
+  static Future<bool> deleteLogFile(String fileName) async {
+    try {
+      return await _deleteLogFile(
+        fileName,
+        useSaf: await _usesBackupLocationManager(),
+      );
+    } catch (e) {
+      debugPrint('[AppLogService] 删除日志文件失败 ($fileName): $e');
+      return false;
     }
   }
 
@@ -744,8 +759,8 @@ class AppLogService {
 
   static DateTime? _dateFromLogFileName(String name) {
     if (!_appLogName.hasMatch(name)) return null;
-    final dateMatch =
-        RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$').firstMatch(name);
+    final dateMatch = RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$')
+        .firstMatch(name);
     if (dateMatch == null) return null;
     try {
       final date = DateTime.parse(dateMatch.group(1)!);

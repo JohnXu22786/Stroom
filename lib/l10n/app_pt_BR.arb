@@ -6069,6 +6069,7 @@
   "appLogWillBeCreated": "Os registros são gerados enquanto o app está em execução",
   "appLogExport": "Exportar",
   "appLogDelete": "Excluir",
+  "appLogDeleteUnconfirmed": "Não foi possível confirmar a exclusão.",
   "appLogConfirmDeleteTitle": "Confirmar exclusão",
   "appLogConfirmDeleteMessage": "Excluir o arquivo de registro “{fileName}”?",
   "@appLogConfirmDeleteMessage": {

@@ -17465,6 +17465,12 @@ abstract class AppLocalizations {
   /// **'Delete'**
   String get appLogDelete;
 
+  /// No description provided for @appLogDeleteUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion could not be confirmed.'**
+  String get appLogDeleteUnconfirmed;
+
   /// No description provided for @appLogConfirmDeleteTitle.
   ///
   /// In en, this message translates to:

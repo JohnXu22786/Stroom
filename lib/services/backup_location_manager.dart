@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -117,23 +118,38 @@ class BackupLocationManager {
       final uri = await _getSavedSafUri();
       if (uri != null) {
         try {
-          final result = await _safChannel.invokeMethod<List<dynamic>>(
-              'listLogMetadata', {'uri': uri}).timeout(_safChannelTimeout);
-          safMetadata.addAll(
-            (result ?? []).whereType<Map>().map((entry) {
-              final name = entry['name'] as String?;
-              final size = entry['sizeBytes'] as int?;
-              final modified = entry['modifiedAtMillis'] as int?;
-              if (name == null || size == null) return null;
-              return LogFileMetadata(
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listLogMetadata', {'uri': uri})
+              .timeout(_safChannelTimeout);
+          if (result == null) {
+            throw StateError('SAF returned no log metadata inventory');
+          }
+          for (final entry in result) {
+            if (entry is! Map) {
+              throw const FormatException('Invalid SAF log metadata entry');
+            }
+            final name = entry['name'];
+            final size = entry['sizeBytes'];
+            final modified = entry['modifiedAtMillis'];
+            if (name is! String ||
+                size is! int ||
+                size < 0 ||
+                (modified != null && modified is! int)) {
+              throw const FormatException('Invalid SAF log metadata fields');
+            }
+            safMetadata.add(
+              LogFileMetadata(
                 name: name,
                 sizeBytes: size,
-                modifiedAt: DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
-              );
-            }).whereType<LogFileMetadata>(),
-          );
+                modifiedAt: DateTime.fromMillisecondsSinceEpoch(
+                  modified is int ? modified : 0,
+                ),
+              ),
+            );
+          }
         } catch (e) {
           debugPrint('[BackupLocationManager] SAF 日志元数据读取失败: $e');
+          rethrow;
         }
       }
       List<LogFileMetadata> fallbackMetadata = [];
@@ -142,6 +158,7 @@ class BackupLocationManager {
         fallbackMetadata = await _getAppLocalLogMetadata();
       } catch (e) {
         debugPrint('[BackupLocationManager] 读取本地日志元数据失败: $e');
+        rethrow;
       }
       try {
         pendingMetadata = await _getAppLocalLogMetadata(
@@ -149,10 +166,34 @@ class BackupLocationManager {
         );
       } catch (e) {
         debugPrint('[BackupLocationManager] 读取待处理日志元数据失败: $e');
+        rethrow;
       }
-      return _mergeLogFileMetadata(
+      final duplicateNames = <String>{};
+      final seenNames = <String>{};
+      for (final file in [
+        ...safMetadata,
+        ...fallbackMetadata,
+        ...pendingMetadata,
+      ]) {
+        if (!seenNames.add(file.name)) duplicateNames.add(file.name);
+      }
+      final mergedMetadata = _mergeLogFileMetadata(
         _mergeLogFileMetadata(safMetadata, fallbackMetadata),
         pendingMetadata,
+      );
+      if (duplicateNames.isEmpty) return mergedMetadata;
+
+      return Future.wait(
+        mergedMetadata.map((file) async {
+          if (!duplicateNames.contains(file.name)) return file;
+          final content = await readLogContent(file.name);
+          if (content == null) return file;
+          return LogFileMetadata(
+            name: file.name,
+            sizeBytes: utf8.encode(content).length,
+            modifiedAt: file.modifiedAt,
+          );
+        }),
       );
     }
 
@@ -172,7 +213,10 @@ class BackupLocationManager {
             modifiedAt: stat.modified,
           ),
         );
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[BackupLocationManager] 本地日志元数据读取失败: $e');
+        rethrow;
+      }
     }
     return result;
   }
@@ -599,11 +643,13 @@ class BackupLocationManager {
           if (uri == null) {
             throw Exception(noBackupDirectoryWriteErrorMessage);
           }
-          await _safChannel.invokeMethod<void>('writeFile', {
-            'uri': uri,
-            'fileName': relativePath,
-            'bytes': data,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('writeFile', {
+                'uri': uri,
+                'fileName': relativePath,
+                'bytes': data,
+              })
+              .timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -653,11 +699,13 @@ class BackupLocationManager {
           if (uri == null) {
             throw Exception(noBackupDirectoryWriteErrorMessage);
           }
-          await _safChannel.invokeMethod<void>('writeFileFromPath', {
-            'uri': uri,
-            'fileName': relativePath,
-            'srcPath': srcPath,
-          }).timeout(_safWriteFromPathTimeout);
+          await _safChannel
+              .invokeMethod<void>('writeFileFromPath', {
+                'uri': uri,
+                'fileName': relativePath,
+                'srcPath': srcPath,
+              })
+              .timeout(_safWriteFromPathTimeout);
           return;
         }
       } catch (e) {
@@ -704,10 +752,12 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return null;
-          final result = await _safChannel.invokeMethod<Uint8List>('readFile', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<Uint8List>('readFile', {
+                'uri': uri,
+                'fileName': relativePath,
+              })
+              .timeout(_safChannelTimeout);
           if (result != null) {
             return result;
           }
@@ -743,10 +793,12 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return;
-          await _safChannel.invokeMethod<void>('deleteFile', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('deleteFile', {
+                'uri': uri,
+                'fileName': relativePath,
+              })
+              .timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -786,11 +838,13 @@ class BackupLocationManager {
           if (uri == null) {
             throw Exception('SAF URI 未配置，无法重命名备份文件');
           }
-          await _safChannel.invokeMethod<void>('renameFile', {
-            'uri': uri,
-            'oldName': oldRelativePath,
-            'newName': newRelativePath,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('renameFile', {
+                'uri': uri,
+                'oldName': oldRelativePath,
+                'newName': newRelativePath,
+              })
+              .timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -829,8 +883,9 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return [];
-          final result = await _safChannel.invokeMethod<List<dynamic>>(
-              'listFiles', {'uri': uri}).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listFiles', {'uri': uri})
+              .timeout(_safChannelTimeout);
           if (result != null) {
             return result.cast<String>();
           }
@@ -927,12 +982,14 @@ class BackupLocationManager {
             if (written) _pendingCompleteLogContent.remove(relativePath);
             return written;
           }
-          await _safChannel.invokeMethod<void>('writeLog', {
-            'uri': uri,
-            'fileName': relativePath,
-            'content': contentToWrite,
-            'replaceExisting': hasCompletePendingContent,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('writeLog', {
+                'uri': uri,
+                'fileName': relativePath,
+                'content': contentToWrite,
+                'replaceExisting': hasCompletePendingContent,
+              })
+              .timeout(_safChannelTimeout);
           _pendingCompleteLogContent.remove(relativePath);
           if (hasCompletePendingContent) {
             await _deletePendingLogFallback(relativePath);
@@ -995,10 +1052,12 @@ class BackupLocationManager {
       } else {
         String? result;
         try {
-          result = await _safChannel.invokeMethod<String>('readLog', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
+          result = await _safChannel
+              .invokeMethod<String>('readLog', {
+                'uri': uri,
+                'fileName': relativePath,
+              })
+              .timeout(_safChannelTimeout);
         } catch (e) {
           debugPrint('[BackupLocationManager] SAF 读取日志失败: $e');
         }
@@ -1014,8 +1073,8 @@ class BackupLocationManager {
         storedContent = result == null || result.isEmpty
             ? fallback
             : fallback == null || fallback.isEmpty
-                ? result
-                : _mergeLogContent(result, fallback);
+            ? result
+            : _mergeLogContent(result, fallback);
       }
     } else {
       storedContent = await _readLogFromFile(relativePath);
@@ -1061,8 +1120,9 @@ class BackupLocationManager {
         storedFiles = fallbackFiles;
       } else {
         try {
-          final result = await _safChannel.invokeMethod<List<dynamic>>(
-              'listLogs', {'uri': uri}).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listLogs', {'uri': uri})
+              .timeout(_safChannelTimeout);
           storedFiles = {...?result?.cast<String>(), ...fallbackFiles}.toList();
         } catch (e) {
           debugPrint('[BackupLocationManager] SAF 列出日志文件失败: $e');
@@ -1108,14 +1168,17 @@ class BackupLocationManager {
             debugPrint('[BackupLocationManager] 获取待处理日志目录失败: $e');
           }
           if (uri == null) {
-            final deleted = localLogsPath != null &&
+            final deleted =
+                localLogsPath != null &&
                 await _deleteLogFromFile(relativePath, logsPath: localLogsPath);
-            final localMarkerDeleted = localLogsPath != null &&
+            final localMarkerDeleted =
+                localLogsPath != null &&
                 await _deleteLogFromFile(
                   '$relativePath$_pendingCompleteLogMarkerSuffix',
                   logsPath: localLogsPath,
                 );
-            final pendingDeleted = pendingLogsPath != null &&
+            final pendingDeleted =
+                pendingLogsPath != null &&
                 await _deleteLogFromFile(
                   relativePath,
                   logsPath: pendingLogsPath,
@@ -1124,38 +1187,48 @@ class BackupLocationManager {
             if (allDeleted) _pendingCompleteLogContent.remove(relativePath);
             return allDeleted;
           }
-          var hasLocalCopy = false;
-          for (final logsPath in [localLogsPath, pendingLogsPath]) {
-            if (logsPath != null &&
-                await File(p.join(logsPath, relativePath)).exists()) {
-              hasLocalCopy = true;
-            }
-          }
-          bool safDeleted = false;
+          var safDeleteRequested = false;
           try {
-            safDeleted = await _safChannel.invokeMethod<bool>('deleteLog', {
-                  'uri': uri,
-                  'fileName': relativePath,
-                }).timeout(_safChannelTimeout) ??
-                false;
+            safDeleteRequested =
+                await _safChannel
+                    .invokeMethod<bool>('deleteLog', {
+                      'uri': uri,
+                      'fileName': relativePath,
+                    })
+                    .timeout(_safChannelTimeout) ==
+                true;
           } catch (e) {
             debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
           }
-          final fallbackDeleted = localLogsPath != null &&
+          var safDeleted = false;
+          try {
+            final safFiles = await _safChannel
+                .invokeMethod<List<dynamic>>('listLogs', {'uri': uri})
+                .timeout(_safChannelTimeout);
+            safDeleted =
+                safDeleteRequested &&
+                safFiles != null &&
+                !safFiles.cast<String>().contains(relativePath);
+          } catch (e) {
+            // A delete response is only a request result; SAF providers can
+            // report success while retaining the document.
+            safDeleted = false;
+            debugPrint('[BackupLocationManager] 确认 SAF 日志删除状态失败: $e');
+          }
+          final fallbackDeleted =
+              localLogsPath != null &&
               await _deleteLogFromFile(relativePath, logsPath: localLogsPath);
-          final localMarkerDeleted = localLogsPath != null &&
+          final localMarkerDeleted =
+              localLogsPath != null &&
               await _deleteLogFromFile(
                 '$relativePath$_pendingCompleteLogMarkerSuffix',
                 logsPath: localLogsPath,
               );
-          final pendingDeleted = pendingLogsPath != null &&
-              await _deleteLogFromFile(
-                relativePath,
-                logsPath: pendingLogsPath,
-              );
-          final deleted = (safDeleted ||
-                  hasLocalCopy ||
-                  _pendingCompleteLogContent.containsKey(relativePath)) &&
+          final pendingDeleted =
+              pendingLogsPath != null &&
+              await _deleteLogFromFile(relativePath, logsPath: pendingLogsPath);
+          final deleted =
+              safDeleted &&
               fallbackDeleted &&
               localMarkerDeleted &&
               pendingDeleted;
@@ -1242,7 +1315,10 @@ class BackupLocationManager {
             modifiedAt: stat.modified,
           ),
         );
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[BackupLocationManager] 本地日志元数据读取失败: $e');
+        rethrow;
+      }
     }
     return result;
   }
@@ -1260,8 +1336,8 @@ class BackupLocationManager {
         final reconciledContent = existingContent == null
             ? contentToWrite
             : contentToWrite.startsWith(existingContent)
-                ? contentToWrite
-                : _mergeLogContent(existingContent, contentToWrite);
+            ? contentToWrite
+            : _mergeLogContent(existingContent, contentToWrite);
         final written = await _writeLogToFile(
           relativePath,
           reconciledContent,
@@ -1350,10 +1426,7 @@ class BackupLocationManager {
   ) async {
     final logsPath = await _getAppLocalLogsRootPath();
     final markerFile = File(
-      p.join(
-        logsPath,
-        '$relativePath$_pendingCompleteLogMarkerSuffix',
-      ),
+      p.join(logsPath, '$relativePath$_pendingCompleteLogMarkerSuffix'),
     );
     if (!await markerFile.exists()) return null;
     return _readLogFromFile(relativePath, logsPath: logsPath);
@@ -1392,18 +1465,26 @@ class BackupLocationManager {
       r'\[(?:DEBUG|INFO|WARN|ERROR)\] \[[^\]\r\n]*\] )',
       multiLine: true,
     );
-    List<({String content, DateTime? timestamp})> recordsFor(String source) =>
-        source.split(recordStart).where((content) => content.isNotEmpty).map((
-          content,
-        ) {
-          final match = RegExp(
-            r'^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d{6})?)\]',
-          ).firstMatch(content);
-          final timestamp = match == null
-              ? null
-              : DateTime.tryParse('${match.group(1)}T${match.group(2)}');
-          return (content: content, timestamp: timestamp);
-        }).toList();
+    List<({String content, DateTime? timestamp, int? sequence})> recordsFor(
+      String source,
+    ) => source.split(recordStart).where((content) => content.isNotEmpty).map((
+      content,
+    ) {
+      final match = RegExp(
+        r'^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d{6})?)\]',
+      ).firstMatch(content);
+      final timestamp = match == null
+          ? null
+          : DateTime.tryParse('${match.group(1)}T${match.group(2)}');
+      final sequenceMatch = RegExp(
+        r'^\[[^\]\r\n]+\] \[(?:DEBUG|INFO|WARN|ERROR)\] '
+        r'\[[^\]\r\n]*\] \[seq:(\d+)\] ',
+      ).firstMatch(content);
+      final sequence = sequenceMatch == null
+          ? null
+          : int.tryParse(sequenceMatch.group(1)!);
+      return (content: content, timestamp: timestamp, sequence: sequence);
+    }).toList();
 
     final firstRecords = recordsFor(first);
     final secondRecords = recordsFor(second);
@@ -1415,12 +1496,14 @@ class BackupLocationManager {
         ifAbsent: () => 1,
       );
     }
-    final records = <({String content, DateTime? timestamp, int index})>[];
+    final records =
+        <({String content, DateTime? timestamp, int? sequence, int index})>[];
     var index = 0;
     for (final record in firstRecords) {
       records.add((
         content: record.content,
         timestamp: record.timestamp,
+        sequence: record.sequence,
         index: index++,
       ));
     }
@@ -1436,6 +1519,7 @@ class BackupLocationManager {
       records.add((
         content: record.content,
         timestamp: record.timestamp,
+        sequence: record.sequence,
         index: index++,
       ));
     }
@@ -1444,6 +1528,10 @@ class BackupLocationManager {
         b.timestamp ?? DateTime(0),
       );
       if (comparison != 0) return comparison;
+      if (a.sequence != null && b.sequence != null) {
+        final sequenceComparison = a.sequence!.compareTo(b.sequence!);
+        if (sequenceComparison != 0) return sequenceComparison;
+      }
       return a.index.compareTo(b.index);
     });
     return records.map((record) => record.content).join();
@@ -1460,7 +1548,9 @@ class BackupLocationManager {
           ? file
           : LogFileMetadata(
               name: file.name,
-              sizeBytes: previous.sizeBytes + file.sizeBytes,
+              sizeBytes: previous.sizeBytes > file.sizeBytes
+                  ? previous.sizeBytes
+                  : file.sizeBytes,
               modifiedAt: previous.modifiedAt.isAfter(file.modifiedAt)
                   ? previous.modifiedAt
                   : file.modifiedAt,
@@ -1548,8 +1638,9 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return null;
-          final freeBytes = await _safChannel.invokeMethod<int>(
-              'getFreeSpace', {'uri': uri}).timeout(_safChannelTimeout);
+          final freeBytes = await _safChannel
+              .invokeMethod<int>('getFreeSpace', {'uri': uri})
+              .timeout(_safChannelTimeout);
           if (freeBytes != null && freeBytes > 0) return freeBytes;
           return null;
         }
@@ -1627,8 +1718,9 @@ class BackupLocationManager {
   /// 检查 SAF URI 是否仍可访问。
   static Future<bool> _checkSafAccess(String uri) async {
     try {
-      final result = await _safChannel.invokeMethod<bool>(
-          'checkAccess', {'uri': uri}).timeout(_safChannelTimeout);
+      final result = await _safChannel
+          .invokeMethod<bool>('checkAccess', {'uri': uri})
+          .timeout(_safChannelTimeout);
       return result ?? false;
     } catch (e) {
       debugPrint('[BackupLocationManager] SAF 访问检查失败: $e');
