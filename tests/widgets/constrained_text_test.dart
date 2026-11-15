@@ -48,4 +48,38 @@ void main() {
     expect(find.text('A deliberately long value that will scroll'),
         findsOneWidget);
   });
+
+  testWidgets('lays out safely inside dropdown items', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: DropdownButton<String>(
+              value: 'format',
+              items: [
+                DropdownMenuItem(
+                  value: 'format',
+                  child: ConstrainedText(
+                    'A short dropdown label',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

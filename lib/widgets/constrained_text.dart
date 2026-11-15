@@ -21,6 +21,7 @@ class ConstrainedText extends StatefulWidget {
     this.maxLines,
     this.semanticsLabel,
     this.selectionColor,
+    this.useNaturalWidthLayout = false,
   })  : speed = 24,
         marqueeTextAlign = null;
 
@@ -40,7 +41,8 @@ class ConstrainedText extends StatefulWidget {
         locale = null,
         textScaler = null,
         semanticsLabel = null,
-        selectionColor = null;
+        selectionColor = null,
+        useNaturalWidthLayout = false;
 
   final String data;
   final double speed;
@@ -56,6 +58,10 @@ class ConstrainedText extends StatefulWidget {
   final int? maxLines;
   final String? semanticsLabel;
   final Color? selectionColor;
+
+  /// Uses a direct LayoutBuilder for contexts such as DropdownMenuItem, where
+  /// a custom single-child layout can invalidate the parent baseline pass.
+  final bool useNaturalWidthLayout;
 
   @override
   State<ConstrainedText> createState() => _ConstrainedTextState();
@@ -330,7 +336,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final animateable = (widget.maxLines != null || widget.softWrap == false) &&
         widget.maxLines != 0;
     if (!animateable) return _original();
-    return LayoutBuilder(
+    final measuredLayout = LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         if (!width.isFinite || width <= 0) return _original();
@@ -394,5 +400,83 @@ class _ConstrainedTextState extends State<ConstrainedText>
         );
       },
     );
+    final isDropdownItem =
+        context.findAncestorWidgetOfExactType<DropdownMenuItem<dynamic>>() !=
+            null;
+    if (widget.useNaturalWidthLayout || isDropdownItem) return measuredLayout;
+    return CustomSingleChildLayout(
+      delegate: _ConstrainedTextLayoutDelegate(
+        data: widget.data,
+        maxLines: widget.maxLines ?? 1,
+        style: style,
+        strutStyle: widget.strutStyle,
+        textAlign: textAlign,
+        textDirection: direction,
+        locale: locale,
+        textScaler: scaler,
+      ),
+      child: measuredLayout,
+    );
   }
+}
+
+class _ConstrainedTextLayoutDelegate extends SingleChildLayoutDelegate {
+  const _ConstrainedTextLayoutDelegate({
+    required this.data,
+    required this.maxLines,
+    required this.style,
+    required this.strutStyle,
+    required this.textAlign,
+    required this.textDirection,
+    required this.locale,
+    required this.textScaler,
+  });
+
+  final String data;
+  final int maxLines;
+  final TextStyle style;
+  final StrutStyle? strutStyle;
+  final TextAlign textAlign;
+  final TextDirection textDirection;
+  final Locale? locale;
+  final TextScaler textScaler;
+
+  TextPainter _painter({int? lines, String? ellipsis}) => TextPainter(
+        text: TextSpan(text: data, style: style),
+        textDirection: textDirection,
+        textScaler: textScaler,
+        locale: locale,
+        strutStyle: strutStyle,
+        textAlign: textAlign,
+        maxLines: lines,
+        ellipsis: ellipsis,
+      );
+
+  @override
+  Size getSize(BoxConstraints constraints) {
+    final intrinsic = _painter()..layout();
+    final preferredWidth = intrinsic.maxIntrinsicWidth;
+    final width =
+        constraints.maxWidth.isFinite ? constraints.maxWidth : preferredWidth;
+    final bounded = _painter(lines: maxLines, ellipsis: '…')
+      ..layout(maxWidth: width);
+    return constraints.constrain(
+      Size(bounded.didExceedMaxLines ? width : bounded.width, bounded.height),
+    );
+  }
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.tight(getSize(constraints));
+
+  @override
+  bool shouldRelayout(covariant _ConstrainedTextLayoutDelegate oldDelegate) =>
+      data != oldDelegate.data ||
+      maxLines != oldDelegate.maxLines ||
+      style != oldDelegate.style ||
+      strutStyle != oldDelegate.strutStyle ||
+      textAlign != oldDelegate.textAlign ||
+      textDirection != oldDelegate.textDirection ||
+      locale != oldDelegate.locale ||
+      textScaler != oldDelegate.textScaler;
 }
