@@ -223,8 +223,8 @@ Future<void> _rollbackVideoRecord(VideoRecord record,
     // A failed refresh cannot establish that this blob has no other owners.
     return;
   }
-  if (records.any((candidate) =>
-      candidate.storageFileName == record.storageFileName)) {
+  if (records.any(
+      (candidate) => candidate.storageFileName == record.storageFileName)) {
     return;
   }
   await VideoManifest.deleteFile(record.storageFileName);
@@ -241,8 +241,8 @@ Future<void> _rollbackAudioRecord(AudioRecord record,
     // A failed refresh cannot establish that this blob has no other owners.
     return;
   }
-  if (records.any((candidate) =>
-      candidate.storageFileName == record.storageFileName)) {
+  if (records.any(
+      (candidate) => candidate.storageFileName == record.storageFileName)) {
     return;
   }
   await FileManifest.deleteFile(record.storageFileName);

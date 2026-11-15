@@ -592,9 +592,8 @@ void main() {
       () async {
     final bytes = await videoBytes(16);
     final hash = md5.convert(bytes).toString();
-    final source =
-        await File(p.join(directory.path, 'bad-replacement.mp4'))
-            .writeAsBytes(bytes);
+    final source = await File(p.join(directory.path, 'bad-replacement.mp4'))
+        .writeAsBytes(bytes);
     final storage = await Directory(p.join(directory.path, 'videos')).create();
     final target = await File(p.join(storage.path, '$hash.mp4'))
         .writeAsBytes(bytes.sublist(0, 2));
