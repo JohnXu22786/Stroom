@@ -516,48 +516,84 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                           .withValues(alpha: 0.25),
                     ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final errorColor = Theme.of(context).colorScheme.error;
+                      final errorText = GestureDetector(
+                        onTap: () =>
+                            _showErrorDetailDialog(context, widget.task.error!),
+                        child: Text(
+                          widget.task.error!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: errorColor,
+                            height: 1.4,
+                          ),
+                        ),
+                      );
+                      final hasDetails =
+                          widget.task.originalRequest != null ||
+                          widget.task.originalResponse != null;
+                      final details = hasDetails
+                          ? GestureDetector(
+                              onTap: () => _showOriginalDetailDialog(
+                                context,
+                                widget.task,
+                              ),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .unifiedTaskDetails,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: errorColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            )
+                          : null;
+
+                      final icon = Icon(
                         Icons.error_outline,
                         size: 14,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => _showErrorDetailDialog(
-                            context,
-                            widget.task.error!,
-                          ),
-                          child: Text(
-                            widget.task.error!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.error,
-                              height: 1.4,
+                        color: errorColor,
+                      );
+                      if (constraints.maxWidth < 480) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                icon,
+                                const SizedBox(width: 6),
+                                Expanded(child: errorText),
+                              ],
                             ),
-                          ),
-                        ),
-                      ),
-                      if (widget.task.originalRequest != null ||
-                          widget.task.originalResponse != null) ...[
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () =>
-                              _showOriginalDetailDialog(context, widget.task),
-                          child: Text(
-                            AppLocalizations.of(context)!.unifiedTaskDetails,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.error,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                            if (details != null)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: details,
+                                ),
+                              ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          icon,
+                          const SizedBox(width: 6),
+                          Expanded(child: errorText),
+                          if (details != null) ...[
+                            const SizedBox(width: 4),
+                            details,
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
