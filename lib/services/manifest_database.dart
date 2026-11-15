@@ -919,10 +919,13 @@ class ManifestDatabase {
   static Future<void> insertImageRecord(Map<String, dynamic> record) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-        list.add(record);
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
+          list.add(record);
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1208,10 +1211,13 @@ class ManifestDatabase {
   static Future<void> insertVideoRecord(Map<String, dynamic> record) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-        list.add(record);
-        await _saveWebData();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+          list.add(record);
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -1332,18 +1338,20 @@ class ManifestDatabase {
       {void Function()? beforeCommit}) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        beforeCommit?.call();
-        list.add(record);
-        await _saveWebData();
-        try {
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
           beforeCommit?.call();
-        } catch (_) {
-          list.remove(record);
+          list.add(record);
           await _saveWebData();
-          rethrow;
-        }
+          try {
+            beforeCommit?.call();
+          } catch (_) {
+            list.remove(record);
+            await _saveWebData();
+            rethrow;
+          }
+        });
         return;
       }
       final db = await database;
