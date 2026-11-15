@@ -63,6 +63,7 @@ void main() {
     List<Map<String, dynamic>> textRecords = const [],
     Map<String, Uint8List> files = const {},
     List<String>? dataParts,
+    Map<String, dynamic> manifestOverrides = const {},
     int version = 2,
   }) {
     final archive = Archive();
@@ -72,6 +73,7 @@ void main() {
       'appVersion': 'test',
     };
     if (dataParts != null) manifestData['dataParts'] = dataParts;
+    manifestData.addAll(manifestOverrides);
     final manifest = utf8.encode(jsonEncode(manifestData));
     archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final dbData = {
@@ -268,6 +270,23 @@ void main() {
 
       final archive = buildV2Archive(
         dataParts: ['pictures', 'settings', 'tasks'],
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': true,
+          'fileInventories': {
+            'pictures': [
+              {'path': 'pictures/first.jpg', 'size': 1},
+              {'path': 'pictures/later.jpg', 'size': 1},
+            ],
+            'tasks': [
+              {'path': 'catcatch/completed/incoming.wav', 'size': 1},
+              {
+                'path': 'task_state/task_list_last_read.json',
+                'size': utf8.encode('imported state').length,
+              },
+            ],
+          },
+        },
         files: {
           'pictures/first.jpg': Uint8List.fromList([1]),
           'task_state/task_list_last_read.json':
@@ -281,29 +300,6 @@ void main() {
           'catcatch/completed/incoming.wav': Uint8List.fromList([3]),
         },
       );
-      archive.files.removeWhere((file) => file.name == 'manifest.json');
-      final manifest = utf8.encode(jsonEncode({
-        'version': 2,
-        'createdAt': DateTime(2026).toIso8601String(),
-        'appVersion': 'test',
-        'dataParts': ['pictures', 'settings', 'tasks'],
-        'fileInventoryVersion': 1,
-        'includeMediaFiles': true,
-        'fileInventories': {
-          'pictures': [
-            {'path': 'pictures/first.jpg', 'size': 1},
-            {'path': 'pictures/later.jpg', 'size': 1},
-          ],
-          'tasks': [
-            {'path': 'catcatch/completed/incoming.wav', 'size': 1},
-            {
-              'path': 'task_state/task_list_last_read.json',
-              'size': utf8.encode('imported state').length,
-            },
-          ],
-        },
-      }));
-      archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
       final settings = utf8.encode(jsonEncode({'darkMode': false}));
       archive.addFile(ArchiveFile('settings.json', settings.length, settings));
 
