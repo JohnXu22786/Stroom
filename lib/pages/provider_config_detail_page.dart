@@ -12,6 +12,8 @@ import 'ocr_model_config_page.dart';
 import 'simple_model_config_page.dart';
 import 'provider_settings_panel.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ProviderConfigDetailPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
@@ -676,17 +678,29 @@ class _ProviderConfigDetailPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.providerDeleteModel),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.providerDeleteModel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.providerDeleteModelConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -751,7 +765,13 @@ class _ProviderConfigDetailPageState
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -792,7 +812,7 @@ class _ProviderConfigDetailPageState
                         ),
                       ),
                       if (_hostController.text.isNotEmpty)
-                        Text(
+                        ConstrainedText(
                           _hostController.text,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -822,7 +842,11 @@ class _ProviderConfigDetailPageState
             width: double.infinity,
             child: TextButton.icon(
               icon: const Icon(Icons.add),
-              label: Text(AppLocalizations.of(context)!.builtInPromptAdd),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.builtInPromptAdd,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: _addModel,
             ),
           ),

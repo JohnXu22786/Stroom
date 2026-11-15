@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart'
     show temporaryCountdownTickProvider;
+import 'constrained_text.dart';
 
 String formatTemporaryCountdown(Duration remaining) {
   final totalSeconds = remaining <= Duration.zero
@@ -48,45 +49,56 @@ class TemporaryCountdownCapsule extends ConsumerWidget {
         text,
         if (isNearExpiry) l10n.conversationTemporaryWarning,
       ].join(', '),
-      child: Container(
-        margin: const EdgeInsets.only(right: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: isDark ? 0.20 : 0.16),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: accent.withValues(alpha: 0.45)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.timer_outlined, size: 12, color: accent),
-            const SizedBox(width: 3),
-            Text(
-              l10n.conversationTemporaryStatus,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: 10,
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                color: isNearExpiry
-                    ? Theme.of(context).colorScheme.error
-                    : (isDark ? Colors.amber.shade100 : Colors.amber.shade800),
+      child: ConstrainedBox(
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
+        child: Container(
+          margin: const EdgeInsets.only(right: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: isDark ? 0.20 : 0.16),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: accent.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.timer_outlined, size: 12, color: accent),
+              const SizedBox(width: 3),
+              Flexible(
+                child: ConstrainedText(
+                  l10n.conversationTemporaryStatus,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: isNearExpiry
+                        ? Theme.of(context).colorScheme.error
+                        : (isDark
+                            ? Colors.amber.shade100
+                            : Colors.amber.shade800),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 11,
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: isNearExpiry
-                    ? Theme.of(context).colorScheme.error
-                    : (isDark ? Colors.amber.shade100 : Colors.amber.shade800),
+              const SizedBox(width: 4),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.2,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: isNearExpiry
+                      ? Theme.of(context).colorScheme.error
+                      : (isDark
+                          ? Colors.amber.shade100
+                          : Colors.amber.shade800),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

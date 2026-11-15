@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'constrained_text.dart';
+
 /// Full-screen image preview dialog with close, crop, and edit buttons.
 ///
 /// Uses [ExtendedImage] (from the `extended_image` package) for built-in
@@ -108,7 +110,7 @@ class ImagePreviewDialog extends StatelessWidget {
             bottom: 16,
             left: 16,
             right: 16,
-            child: Text(
+            child: ConstrainedText(
               fileName,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 14),

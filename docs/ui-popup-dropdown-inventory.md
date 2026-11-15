@@ -22,6 +22,7 @@ The production census found **27** `PopupMenuButton`, **1** `showMenu`, **33** l
 [`StroomMenuStyle`](../lib/widgets/stroom_menu_style.dart) is the shared source for popup and dropdown menu surfaces. It uses `surfaceContainerHigh`, transparent surface tint, 16 dp corners, and a 0.5 dp `outlineVariant` stroke at 35% alpha. The Material 3 `DropdownMenu` theme also specifies 8 dp elevation. Both light and dark app themes apply the shared popup/dropdown styling in [`application.dart`](../lib/application.dart).
 
 Legacy `DropdownButton` and `DropdownButtonFormField` do not inherit a global menu radius, so their call sites set `StroomMenuStyle.surface(context)` and `StroomMenuStyle.borderRadius`. Keep those values aligned when adding a legacy control. Flutter supplies ordinary hover, focus, disabled, and selected states. Preserve destructive-action `error` color and separate destructive actions from routine menu actions when both are present.
+Dropdown option labels and their selected display use `ConstrainedText` when they occupy a bounded single-line slot, so a clipped value can reveal its full text without changing selection or focus behavior. See the [constrained display-label rule](ui-guidelines.md#constrained-display-labels).
 
 ## Production call sites
 

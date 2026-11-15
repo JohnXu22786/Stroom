@@ -23,6 +23,8 @@ import 'mermaid_chart_page.dart';
 import 'text_preview_edit_page.dart';
 import 'text_storage_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// 文本储存区页面 - 管理文本文件，支持导入、创建、预览和导出
 class TextStoragePage extends ConsumerStatefulWidget {
   final int tabIndex;
@@ -130,8 +132,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(l10n.textStorageSkipUnsupportedFormat(format))));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.textStorageSkipUnsupportedFormat(format)),
+              ),
+            );
           }
           continue;
         }
@@ -224,8 +229,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(l10n.textStorageSaved),
-            duration: const Duration(seconds: 2)),
+          content: Text(l10n.textStorageSaved),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -238,8 +244,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final content = await TextManifest.readText(file.storagePath);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(AppLocalizations.of(context)!.textStorageLoadFailed)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.textStorageLoadFailed),
+        ),
+      );
       return;
     }
 
@@ -282,8 +291,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final content = await TextManifest.readText(file.storagePath);
       if (content == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.textStorageReadFailed)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l10n.textStorageReadFailed)));
         }
         return;
       }
@@ -426,18 +436,30 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(l10n.textStorageFolderExportTitle),
+              title: ConstrainedText(
+                l10n.textStorageFolderExportTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(l10n.textStorageWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.textStorageCancel),
+                  child: ConstrainedText(
+                    l10n.textStorageCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(l10n.textStorageDownloadZip),
+                  child: ConstrainedText(
+                    l10n.textStorageDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -649,9 +671,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                   ),
                 ),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.textStorageCreateNew,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -668,9 +692,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                   ),
                 ),
                 icon: const Icon(Icons.file_download_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.textStorageImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

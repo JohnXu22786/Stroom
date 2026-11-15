@@ -1,3 +1,5 @@
+import '../widgets/constrained_text.dart';
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -81,9 +83,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(
+        title: ConstrainedText(
           widget.displayName,
           style: const TextStyle(color: Colors.white),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
       body: Center(

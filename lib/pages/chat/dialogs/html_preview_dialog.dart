@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
 /// Full-screen dialog that renders HTML code in a completely open sandbox
@@ -218,21 +219,30 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                 children: [
                   const Spacer(),
                   // Title label
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.sizeOf(context).width * 0.75,
                     ),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      AppLocalizations.of(context)!.chatHtmlPreview,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: cs.onSurface,
-                        fontWeight: FontWeight.w500,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.85,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.chatHtmlPreview,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),

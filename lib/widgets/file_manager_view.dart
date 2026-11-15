@@ -19,6 +19,8 @@ import 'file_manager_config.dart';
 import 'file_manager_utils.dart';
 import 'folder_picker_dialog.dart';
 
+import 'constrained_text.dart';
+
 export 'file_manager_config.dart';
 
 /// 单行文本：可用宽度不足时从「开头」省略（保留末尾），
@@ -133,7 +135,7 @@ class _FrontEllipsisText extends StatelessWidget {
   }
 
   Widget _buildText(String value, TextAlign align) {
-    return Text(
+    return ConstrainedText(
       value,
       style: style,
       maxLines: 1,
@@ -598,7 +600,7 @@ class _FileManagerViewState<T extends FileRecord>
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     folderPath.isEmpty
                         ? AppLocalizations.of(context)!.fileManagerRoot
                         : widget.manifestBridge.getFolderBaseName(folderPath),
@@ -619,7 +621,7 @@ class _FileManagerViewState<T extends FileRecord>
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
-            child: Text(
+            child: ConstrainedText(
               widget.manifestBridge.getFolderBaseName(_currentFolder),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1011,7 +1013,7 @@ class _FileManagerViewState<T extends FileRecord>
                 const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
+                  child: ConstrainedText(
                     widget.manifestBridge.getFolderBaseName(folderName),
                     style: const TextStyle(
                       fontSize: 11,
@@ -1128,7 +1130,7 @@ class _FileManagerViewState<T extends FileRecord>
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
+                        child: ConstrainedText(
                           '${file.name}.${file.format}',
                           style: const TextStyle(fontSize: 10),
                           maxLines: 1,
@@ -1237,7 +1239,7 @@ class _FileManagerViewState<T extends FileRecord>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         widget.manifestBridge.getFolderBaseName(folderName),
                         style: const TextStyle(
                           fontWeight: FontWeight.w500,
@@ -1460,7 +1462,7 @@ class _FileManagerViewState<T extends FileRecord>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ConstrainedText(
                       '${file.name}.${file.format}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
@@ -1855,8 +1857,10 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_file_dialog'),
-        title: Text(
+        title: ConstrainedText(
           AppLocalizations.of(context)!.fileManagerDeleteConfirmTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: Text(
           AppLocalizations.of(context)!.fileManagerDeleteFileConfirm,
@@ -1865,14 +1869,20 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_delete_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             key: const Key('fm_delete_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.fileManagerDelete,
               style: TextStyle(color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -1976,7 +1986,11 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_selected_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerBatchDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerBatchDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!
               .fileManagerDeleteSelectedConfirm(_selectedIds.length),
@@ -1985,14 +1999,20 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_batch_delete_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             key: const Key('fm_batch_delete_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.fileManagerDelete,
               style: TextStyle(color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -2456,7 +2476,11 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_create_folder_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerCreateFolder),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerCreateFolder,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           key: const Key('fm_create_folder_input'),
           controller: _folderNameController,
@@ -2469,7 +2493,11 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_create_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           ElevatedButton(
             key: const Key('fm_create_folder_confirm_btn'),
@@ -2478,7 +2506,11 @@ class _FileManagerViewState<T extends FileRecord>
               // 避免按钮无响应让用户困惑（含空名称）
               Navigator.pop(ctx, _folderNameController.text.trim());
             },
-            child: Text(AppLocalizations.of(context)!.fileManagerCreate),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCreate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2560,7 +2592,11 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_rename_folder_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerRenameFolderTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerRenameFolderTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           key: const Key('fm_rename_folder_input'),
           controller: _renameController,
@@ -2574,7 +2610,11 @@ class _FileManagerViewState<T extends FileRecord>
           TextButton(
             key: const Key('fm_rename_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           ElevatedButton(
             key: const Key('fm_rename_folder_confirm_btn'),
@@ -2583,7 +2623,11 @@ class _FileManagerViewState<T extends FileRecord>
               // 避免按钮无响应让用户困惑（含空名称）
               Navigator.pop(ctx, _renameController.text.trim());
             },
-            child: Text(AppLocalizations.of(context)!.fileManagerRename),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerRename,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -2830,20 +2874,30 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_folder_dialog'),
-        title: Text(AppLocalizations.of(context)!.fileManagerDeleteFolderTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.fileManagerDeleteFolderTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(message),
         actions: [
           TextButton(
             key: const Key('fm_delete_folder_cancel_btn'),
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             key: const Key('fm_delete_folder_confirm_btn'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.fileManagerDelete,
               style: TextStyle(color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -2986,7 +3040,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       key: const Key('fm_rename_file_dialog'),
-      title: Text(AppLocalizations.of(context)!.fileManagerRenameFileTitle),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.fileManagerRenameFileTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3005,6 +3063,7 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                 dropdownColor: StroomMenuStyle.surface(context),
                 borderRadius: StroomMenuStyle.borderRadius,
                 key: const Key('fm_rename_file_format_dropdown'),
+                isExpanded: true,
                 initialValue: _selectedFormat,
                 decoration: InputDecoration(
                   labelText: AppLocalizations.of(context)!.fileManagerFormat,
@@ -3015,7 +3074,16 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                   ),
                 ),
                 items: widget.formatOptions
-                    .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                    .map(
+                      (f) => DropdownMenuItem(
+                        value: f,
+                        child: ConstrainedText(
+                          f,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -3031,7 +3099,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
         TextButton(
           key: const Key('fm_rename_cancel_btn'),
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.fileManagerCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.fileManagerCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         ElevatedButton(
           key: const Key('fm_rename_confirm_btn'),
@@ -3043,7 +3115,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
               _selectedFormat,
             ));
           },
-          child: Text(AppLocalizations.of(context)!.fileManagerRename),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.fileManagerRename,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

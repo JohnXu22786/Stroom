@@ -8,6 +8,8 @@ import '../l10n/app_localizations.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/text_manifest.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
 const List<String> kTextFileFormats = ['txt', 'md', 'mmd'];
 
@@ -65,7 +67,8 @@ class TextCreatePageState extends State<TextCreatePage> {
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(AppLocalizations.of(context)!.textCreateEnterTitle)),
+          content: Text(AppLocalizations.of(context)!.textCreateEnterTitle),
+        ),
       );
       return;
     }
@@ -118,8 +121,9 @@ class TextCreatePageState extends State<TextCreatePage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .textCreateSaveFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.textCreateSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -131,7 +135,11 @@ class TextCreatePageState extends State<TextCreatePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.textCreateNewTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.textCreateNewTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -169,16 +177,28 @@ class TextCreatePageState extends State<TextCreatePage> {
                   child: DropdownButtonFormField<String>(
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
+                    isExpanded: true,
                     initialValue: _selectedFormat,
                     decoration: InputDecoration(
                       labelText:
                           AppLocalizations.of(context)!.textCreateFormatLabel,
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
                     ),
                     items: kTextFileFormats
-                        .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                        .map(
+                          (f) => DropdownMenuItem(
+                            value: f,
+                            child: ConstrainedText(
+                              f,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
                       if (value != null) {
