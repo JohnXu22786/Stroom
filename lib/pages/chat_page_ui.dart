@@ -624,8 +624,17 @@ extension _ChatPageUiExt on _ChatPageState {
   Widget _buildTopBar({required String title, Conversation? conversation}) {
     final cs = Theme.of(context).colorScheme;
     final isTemporary = conversation?.isTemporary ?? false;
+    final wasTemporary = conversation == null
+        ? null
+        : _lastTemporaryModeByConversation[conversation.id];
+    if (conversation != null) {
+      _lastTemporaryModeByConversation[conversation.id] = isTemporary;
+    }
+    final activatedTemporary = isTemporary && wasTemporary == false;
     final temporaryExpiresAt =
         isTemporary ? conversation!.temporaryExpiresAt : null;
+    final temporaryPausedRemaining =
+        isTemporary ? conversation!.temporaryPausedRemainingMilliseconds : null;
     final titleText = Text(
       title,
       overflow: TextOverflow.ellipsis,
@@ -688,7 +697,13 @@ extension _ChatPageUiExt on _ChatPageState {
                 children: [
                   // 临时对话倒计时胶囊（标题前）
                   if (temporaryExpiresAt != null)
-                    TemporaryCountdownCapsule(expiresAt: temporaryExpiresAt),
+                    TemporaryCountdownCapsule(
+                      expiresAt: temporaryExpiresAt,
+                      pausedRemainingMilliseconds: temporaryPausedRemaining,
+                      animationKey: conversation!.temporaryExpiryRevision,
+                      animateOnMount: activatedTemporary,
+                      animateOnChange: true,
+                    ),
                   Flexible(child: titleWidget),
                   if (_developerMode)
                     Container(
@@ -725,16 +740,9 @@ extension _ChatPageUiExt on _ChatPageState {
                 : AppLocalizations.of(context)!.conversationTemporary,
             onPressed: conversation == null
                 ? null
-                : () async {
-                    if (!isTemporary &&
-                        !await showTemporaryConversationEnableDialog(context)) {
-                      return;
-                    }
-                    if (!context.mounted) return;
-                    ref
-                        .read(conversationsProvider.notifier)
-                        .toggleTemporary(conversation.id);
-                  },
+                : () => ref
+                    .read(conversationsProvider.notifier)
+                    .toggleTemporary(conversation.id),
           ),
           // ── Search toggle ──
           IconButton(

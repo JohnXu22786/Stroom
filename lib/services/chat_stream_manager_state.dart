@@ -48,6 +48,9 @@ class StreamResult {
   /// Whether the stream was cancelled by the user.
   final bool cancelled;
 
+  /// Whether the stream finished after an unrecovered provider/stream error.
+  final bool failed;
+
   const StreamResult({
     required this.history,
     this.assistantMessage,
@@ -59,6 +62,7 @@ class StreamResult {
     this.toolCallRoundStarts = const [],
     this.blocks = const [],
     this.cancelled = false,
+    this.failed = false,
   }) : _fullReply = fullReply;
 
   /// Whether the stream produced any content, without joining text sections.

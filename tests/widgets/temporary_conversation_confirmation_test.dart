@@ -88,7 +88,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('临时'), findsOneWidget);
+      expect(find.text('临时'), findsNothing);
       expect(find.textContaining(':'), findsOneWidget);
       final semantics = tester.getSemantics(
         find.byType(TemporaryCountdownCapsule),
@@ -96,12 +96,76 @@ void main() {
       expect(semantics.label, contains('临时对话'));
       expect(semantics.label, contains('即将过期'));
       expect(tester.takeException(), isNull);
-
-      final label = tester.widget<Text>(find.text('临时'));
-      expect(
-        label.style?.color,
-        Theme.of(tester.element(find.byType(MaterialApp))).colorScheme.error,
-      );
     },
   );
+
+  testWidgets('header countdown briefly glows on activation and reset', (
+    tester,
+  ) async {
+    var expiresAt = DateTime.now().add(const Duration(minutes: 60));
+    var animationKey = 0;
+    void Function(VoidCallback)? rebuild;
+    await tester.pumpWidget(
+      _app(
+        StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return TemporaryCountdownCapsule(
+              expiresAt: expiresAt,
+              animationKey: animationKey,
+              animateOnMount: true,
+              animateOnChange: true,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    Container capsuleContainer() => tester.widget<Container>(
+      find.descendant(
+        of: find.byType(TemporaryCountdownCapsule),
+        matching: find.byType(Container),
+      ),
+    );
+
+    expect(capsuleContainer().decoration, isA<BoxDecoration>());
+    expect(
+      (capsuleContainer().decoration as BoxDecoration).boxShadow,
+      isNotEmpty,
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect((capsuleContainer().decoration as BoxDecoration).boxShadow, isNull);
+
+    expiresAt = expiresAt.add(const Duration(hours: 1));
+    animationKey++;
+    rebuild!(() {});
+    await tester.pump();
+    expect(
+      (capsuleContainer().decoration as BoxDecoration).boxShadow,
+      isNotNull,
+    );
+  });
+
+  testWidgets('existing temporary conversation does not glow on header mount',
+      (tester) async {
+    await tester.pumpWidget(
+      _app(
+        TemporaryCountdownCapsule(
+          expiresAt: DateTime.now().add(const Duration(minutes: 20)),
+          animationKey: 0,
+          animateOnChange: true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final capsule = tester.widget<Container>(
+      find.descendant(
+        of: find.byType(TemporaryCountdownCapsule),
+        matching: find.byType(Container),
+      ),
+    );
+    expect((capsule.decoration as BoxDecoration).boxShadow, isNull);
+  });
 }

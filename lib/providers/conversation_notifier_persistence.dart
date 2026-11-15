@@ -797,12 +797,20 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             final expiry =
                 expiryRaw is String ? DateTime.tryParse(expiryRaw) : null;
             final expiryVersion = record['temporaryExpiryVersion'];
+            final pausedRemaining =
+                record['temporaryPausedRemainingMilliseconds'];
             if (conversation.isTemporary != isTemporary ||
                 conversation.temporaryExpiresAt != expiry ||
                 (expiryVersion is int &&
-                    conversation.temporaryExpiryVersion != expiryVersion)) {
+                    conversation.temporaryExpiryVersion != expiryVersion) ||
+                conversation.temporaryPausedRemainingMilliseconds !=
+                    pausedRemaining) {
               conversation.isTemporary = isTemporary;
               conversation.temporaryExpiresAt = expiry;
+              conversation.temporaryPausedRemainingMilliseconds =
+                  isTemporary && pausedRemaining is int && pausedRemaining >= 0
+                      ? pausedRemaining
+                      : null;
               if (expiryVersion is int) {
                 conversation.temporaryExpiryVersion = expiryVersion;
               }
@@ -1283,6 +1291,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         }
       }
 
+      // A process restart ends active generation. Resume persisted pauses
+      // after replaying stream checkpoints so partial replies are recovered.
+      if (_resumePausedTemporaryCountdowns(DateTime.now())) {
+        hadInMemoryMerge = true;
+      }
+
       // Auto-fix conversations with null assistantId on every load.
       // This is more reliable than the old one-time migration flag:
       // it catches conversations that were created without assistantId
@@ -1648,6 +1662,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               totalCost: c.totalCost,
               isTemporary: c.isTemporary,
               temporaryExpiresAt: c.temporaryExpiresAt,
+              temporaryPausedRemainingMilliseconds:
+                  c.temporaryPausedRemainingMilliseconds,
               temporaryExpiryVersion: c.temporaryExpiryVersion,
             ),
           )

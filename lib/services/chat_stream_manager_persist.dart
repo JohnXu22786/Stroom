@@ -41,7 +41,6 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       await ref.read(conversationsProvider.notifier).updateMessagesPeriodically(
             s.convId,
             checkpoint: checkpoint,
-            resetTemporaryCountdown: true,
           );
       s.markStreamCheckpointPersisted(checkpoint);
     } catch (e) {
@@ -63,8 +62,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
     }
     try {
       await ref.read(conversationsProvider.notifier).updateMessages(
-          convId, List<ChatMessage>.from(history),
-          resetTemporaryCountdown: true);
+          convId, List<ChatMessage>.from(history));
       final lastMsg = history.isNotEmpty ? history.last : null;
       await AppLogService.info(
           'ChatStreamManager',

@@ -47,8 +47,7 @@ Widget _appFor({
 }
 
 void main() {
-  testWidgets(
-      'top bar toggles temporary mode on the current conversation '
+  testWidgets('top bar toggles temporary mode on the current conversation '
       'and shows the countdown capsule', (tester) async {
     await tester.pumpWidget(_appFor(activeId: 'c-main', convTitle: '主对话'));
     await tester.pumpAndSettle();
@@ -59,27 +58,17 @@ void main() {
     expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
-    // Cancelling the explanation must leave temporary mode disabled.
     await tester.tap(find.byIcon(Icons.timer_outlined));
     await tester.pumpAndSettle();
-    expect(find.textContaining('一小时后删除'), findsOneWidget);
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
-    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
-
-    // Confirm the lifecycle explanation before enabling.
-    await tester.tap(find.byIcon(Icons.timer_outlined));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('开启临时模式').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('一小时后删除'), findsNothing);
 
     // 开启态：气泡 + 打勾图标、标题前出现倒计时胶囊。
     expect(find.widgetWithIcon(IconButton, Icons.timer), findsOneWidget);
     expect(find.widgetWithIcon(IconButton, Icons.timer_outlined), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsOneWidget);
-    expect(find.text('临时'), findsOneWidget);
+    expect(find.text('临时'), findsNothing);
     expect(find.text('60:00'), findsOneWidget);
 
     // 再点一次关闭。

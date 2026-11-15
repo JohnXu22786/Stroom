@@ -451,7 +451,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             ),
           // 临时对话倒计时胶囊（标题前）
           if (conv.isTemporary && conv.temporaryExpiresAt != null)
-            TemporaryCountdownCapsule(expiresAt: conv.temporaryExpiresAt!),
+            TemporaryCountdownCapsule(
+              expiresAt: conv.temporaryExpiresAt!,
+              pausedRemainingMilliseconds:
+                  conv.temporaryPausedRemainingMilliseconds,
+            ),
           Expanded(
             child: Text(
               conv.title.isEmpty
