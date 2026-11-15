@@ -15,7 +15,7 @@ void main() {
     skip: !kIsWeb,
     (tester) async {
       final previousPlatform = VideoPlayerPlatform.instance;
-      final platform = _FailingVideoPlayerPlatform();
+      final platform = _SuccessfulVideoPlayerPlatform();
       VideoPlayerPlatform.instance = platform;
       WebFileStore.enableTestMode();
       addTearDown(() {
@@ -103,4 +103,14 @@ class _FailingVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<void> dispose(int playerId) async {}
+}
+
+class _SuccessfulVideoPlayerPlatform extends _FailingVideoPlayerPlatform {
+  @override
+  Stream<VideoEvent> videoEventsFor(int playerId) => Stream.value(
+        VideoEvent(
+          eventType: VideoEventType.initialized,
+          size: const Size(640, 480),
+        ),
+      );
 }

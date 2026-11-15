@@ -312,7 +312,7 @@ jobs:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Web video playback regression in Chrome
         if: matrix.suite == 'feature-ui'
-        run: flutter test --reporter expanded --platform chrome test/pages/video_gallery_shared_test.dart
+        run: flutter test --reporter expanded --platform chrome --plain-name 'plays a WebFileStore video through a blob URL on web' test/pages/video_gallery_shared_test.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Mermaid preview loading regressions in Chrome
