@@ -738,7 +738,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se puede determinar el recuento de imágenes originales';
 
   @override
-  String get ocrConfirmClear => 'Confirmar claro';
+  String get ocrConfirmClear => 'Confirmar borrado';
 
   @override
   String get ocrRetryUnavailableConfirmClear =>
@@ -12915,7 +12915,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       'No se puede determinar el recuento de imágenes originales';
 
   @override
-  String get ocrConfirmClear => 'Confirmar claro';
+  String get ocrConfirmClear => 'Confirmar borrado';
 
   @override
   String get ocrRetryUnavailableConfirmClear =>
