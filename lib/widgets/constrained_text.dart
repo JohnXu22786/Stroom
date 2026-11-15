@@ -342,7 +342,24 @@ class _ConstrainedTextState extends State<ConstrainedText>
               child: ClipRect(
                 child: AnimatedBuilder(
                   animation: _controller,
-                  builder: (context, _) {
+                  child: SizedBox(
+                    width: _vertical ? width : _textWidth,
+                    child: Text(
+                      widget.data,
+                      style: style,
+                      strutStyle: widget.strutStyle,
+                      textAlign: widget.marqueeTextAlign ?? textAlign,
+                      textDirection: direction,
+                      locale: locale,
+                      softWrap: _vertical,
+                      overflow: TextOverflow.clip,
+                      textScaler: scaler,
+                      maxLines: _vertical ? null : widget.maxLines ?? 1,
+                      semanticsLabel: widget.semanticsLabel,
+                      selectionColor: widget.selectionColor,
+                    ),
+                  ),
+                  builder: (context, child) {
                     final progress = _position.value;
                     final horizontalOffset = _vertical
                         ? 0.0
@@ -351,21 +368,9 @@ class _ConstrainedTextState extends State<ConstrainedText>
                             : -_overflow * (1 - progress);
                     final verticalOffset =
                         _vertical ? -_overflow * progress : 0.0;
-                    final painter = TextPainter(
-                      text: TextSpan(text: widget.data, style: style),
-                      textDirection: direction,
-                      textScaler: scaler,
-                      locale: locale,
-                      strutStyle: widget.strutStyle,
-                      textAlign: widget.marqueeTextAlign ?? textAlign,
-                      maxLines: _vertical ? null : widget.maxLines ?? 1,
-                    )..layout(maxWidth: _vertical ? width : _textWidth);
-                    return CustomPaint(
-                      size: Size(width, _textHeight),
-                      painter: _ConstrainedTextPainter(
-                        painter,
-                        Offset(horizontalOffset, verticalOffset),
-                      ),
+                    return Transform.translate(
+                      offset: Offset(horizontalOffset, verticalOffset),
+                      child: child,
                     );
                   },
                 ),
@@ -437,17 +442,4 @@ class _ConstrainedTextLayoutDelegate extends SingleChildLayoutDelegate {
       textDirection != oldDelegate.textDirection ||
       locale != oldDelegate.locale ||
       textScaler != oldDelegate.textScaler;
-}
-
-class _ConstrainedTextPainter extends CustomPainter {
-  const _ConstrainedTextPainter(this.textPainter, this.offset);
-  final TextPainter textPainter;
-  final Offset offset;
-
-  @override
-  void paint(Canvas canvas, Size size) => textPainter.paint(canvas, offset);
-
-  @override
-  bool shouldRepaint(covariant _ConstrainedTextPainter oldDelegate) =>
-      offset != oldDelegate.offset || textPainter != oldDelegate.textPainter;
 }
