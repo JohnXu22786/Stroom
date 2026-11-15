@@ -775,6 +775,7 @@
   "chatErrorDetailResponseHeaders": "Response Headers",
   "chatErrorDetailResponseBody": "Response Body",
   "chatErrorDetailEmpty": "No detail data available",
+  "chatErrorDetailViewFullContent": "View full content",
   "chatAudioPreviewClose": "Close",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

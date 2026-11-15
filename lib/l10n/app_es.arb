@@ -580,6 +580,7 @@
   "chatErrorDetailResponseHeaders": "Encabezados de respuesta",
   "chatErrorDetailResponseBody": "Cuerpo de respuesta",
   "chatErrorDetailEmpty": "No hay datos detallados disponibles",
+  "chatErrorDetailViewFullContent": "Ver contenido completo",
   "chatAudioPreviewClose": "Cerrar",
   "chatPreviewClose": "Cerrar vista previa",
   "actionBack": "Atrás",

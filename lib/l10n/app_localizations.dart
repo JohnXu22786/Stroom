@@ -3605,6 +3605,9 @@ abstract class AppLocalizations {
   /// **'No detail data available'**
   String get chatErrorDetailEmpty;
 
+  /// View the full value of a long request-body field.
+  String get chatErrorDetailViewFullContent;
+
   /// No description provided for @chatAudioPreviewClose.
   ///
   /// In en, this message translates to:

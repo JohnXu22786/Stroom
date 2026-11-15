@@ -1,6 +1,10 @@
+import 'dart:convert';
+
+import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import '../utils/format_chat_error.dart';
+import '../../../utils/data_sanitizer.dart';
 import '../../../utils/ocr_diagnostics.dart';
 
 /// Represents a selectable data section within the detail dialog.
@@ -391,7 +395,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               color: isDark ? Colors.black : Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: _buildValueDisplay(section.value, isDark),
+            child: _buildValueDisplay(
+              section.value,
+              isDark,
+              isRequestBody: section.id == 'request_body',
+            ),
           ),
         ],
       ),
@@ -399,13 +407,155 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
   }
 
   /// Builds the display widget for a section value.
-  Widget _buildValueDisplay(dynamic value, bool isDark) {
+  Widget _buildValueDisplay(
+    dynamic value,
+    bool isDark, {
+    bool isRequestBody = false,
+  }) {
+    if (isRequestBody) {
+      return _buildJsonValue(DataSanitizer.sanitizeForDisplay(value), r'$', 0);
+    }
     return SelectableText(
       formatErrorValueForDisplay(value),
       style: TextStyle(
         fontFamily: 'monospace',
         fontSize: 12,
         color: isDark ? Colors.grey[300] : Colors.grey[800],
+      ),
+    );
+  }
+
+  Widget _buildJsonValue(
+    dynamic value,
+    String path,
+    int depth, {
+    String? key,
+    bool comma = false,
+  }) {
+    final indent = '  ' * depth;
+    final prefix = key == null ? indent : '$indent${jsonEncode(key)}: ';
+    if (value is Map) {
+      final entries = value.entries.toList();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$prefix{', style: _jsonStyle),
+          for (var i = 0; i < entries.length; i++)
+            _buildJsonValue(
+              entries[i].value,
+              _childPath(path, entries[i].key.toString()),
+              depth + 1,
+              key: entries[i].key.toString(),
+              comma: i < entries.length - 1,
+            ),
+          Text('$indent}${comma ? ',' : ''}', style: _jsonStyle),
+        ],
+      );
+    }
+    if (value is List) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$prefix[', style: _jsonStyle),
+          for (var i = 0; i < value.length; i++)
+            _buildJsonValue(
+              value[i],
+              '$path[$i]',
+              depth + 1,
+              comma: i < value.length - 1,
+            ),
+          Text('$indent]${comma ? ',' : ''}', style: _jsonStyle),
+        ],
+      );
+    }
+
+    if (value is String && value.characters.length > 80) {
+      final characters = value.characters;
+      final preview = jsonEncode(
+        '${characters.take(40)}…${characters.skip(characters.length - 40)}',
+      );
+      final l10n = AppLocalizations.of(context)!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$prefix$preview${comma ? ',' : ''}', style: _jsonStyle),
+          Padding(
+            padding: EdgeInsets.only(left: (depth * 16).toDouble()),
+            child: Semantics(
+              button: true,
+              label: '${l10n.chatErrorDetailViewFullContent}: $path',
+              child: TextButton.icon(
+                onPressed: () => _showFullContentDialog(value, path),
+                icon: const Icon(Icons.open_in_full, size: 16),
+                label: Text(l10n.chatErrorDetailViewFullContent),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Text(
+      '$prefix${jsonEncode(value)}${comma ? ',' : ''}',
+      style: _jsonStyle,
+    );
+  }
+
+  String _childPath(String path, String key) {
+    if (RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(key)) {
+      return '$path.$key';
+    }
+    return '$path[${jsonEncode(key)}]';
+  }
+
+  TextStyle get _jsonStyle {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 12,
+      color: isDark ? Colors.grey[300] : Colors.grey[800],
+    );
+  }
+
+  void _showFullContentDialog(String value, String path) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 640,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(path, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: SelectableText(value, style: _jsonStyle),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l10n.actionClose),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

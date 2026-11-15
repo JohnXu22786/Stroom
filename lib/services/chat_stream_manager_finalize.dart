@@ -49,7 +49,10 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (reqBody != null) rawRequestCapture['body'] = reqBody;
       }
       if (rawRequestCapture != null) {
-        rawRequestCapture = ChatMessage.compactRawRequest(rawRequestCapture);
+        rawRequestCapture = ChatMessage.compactRawRequest(
+          rawRequestCapture,
+          compactText: false,
+        );
       }
       snappedChatService?.releaseLastRequestBody(reqBody);
       state.requestBodySnapshot = null;

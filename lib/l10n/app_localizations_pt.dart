@@ -2139,6 +2139,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get chatErrorDetailEmpty => 'Nenhum dado detalhado disponível';
 
   @override
+  String get chatErrorDetailViewFullContent => 'Ver conteúdo completo';
+
+  @override
   String get chatAudioPreviewClose => 'Fechar';
 
   @override

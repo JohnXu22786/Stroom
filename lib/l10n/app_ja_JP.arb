@@ -580,6 +580,7 @@
   "chatErrorDetailResponseHeaders": "応答ヘッダー",
   "chatErrorDetailResponseBody": "応答本文",
   "chatErrorDetailEmpty": "詳細なデータはありません",
+  "chatErrorDetailViewFullContent": "全文を表示",
   "chatAudioPreviewClose": "閉じる",
   "chatPreviewClose": "プレビューを閉じる",
   "actionBack": "戻る",

@@ -775,6 +775,7 @@
   "chatErrorDetailResponseHeaders": "响应标头",
   "chatErrorDetailResponseBody": "响应正文",
   "chatErrorDetailEmpty": "暂无详细信息",
+  "chatErrorDetailViewFullContent": "查看完整内容",
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

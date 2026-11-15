@@ -775,6 +775,7 @@
   "chatErrorDetailResponseHeaders": "En-têtes de la réponse",
   "chatErrorDetailResponseBody": "Corps de la réponse",
   "chatErrorDetailEmpty": "Aucune donnée détaillée disponible",
+  "chatErrorDetailViewFullContent": "Voir le contenu complet",
   "chatAudioPreviewClose": "Fermer",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

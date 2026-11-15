@@ -775,6 +775,7 @@
   "chatErrorDetailResponseHeaders": "ترويسات الاستجابة",
   "chatErrorDetailResponseBody": "نص الاستجابة",
   "chatErrorDetailEmpty": "لا تتوفر بيانات تفصيلية",
+  "chatErrorDetailViewFullContent": "عرض المحتوى كاملاً",
   "chatAudioPreviewClose": "إغلاق",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

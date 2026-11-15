@@ -1,3 +1,4 @@
+import 'package:characters/characters.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 
@@ -260,194 +261,36 @@ class ChatMessage {
     }
   }
 
-  /// Compact historical chat content in a captured request before retaining it
-  /// with a message. Raw requests are diagnostics only; chat history is restored
-  /// from the protocol-neutral message list, so older request messages can be
-  /// represented by a marker while the current user input remains inspectable.
-  static Map<String, dynamic> compactRawRequest(Map<String, dynamic> raw) {
-    final body = raw['body'];
-    if (body is! Map) return Map<String, dynamic>.from(raw);
-    final messages = body['messages'];
-    if (messages is! List) return Map<String, dynamic>.from(raw);
+  /// Sanitize and compact a captured request body for in-memory display or
+  /// persistence. In-memory captures keep ordinary text intact; serialized
+  /// copies use independent head/tail previews to limit history size.
+  static Map<String, dynamic> compactRawRequest(
+    Map<String, dynamic> raw, {
+    bool compactText = true,
+  }) {
+    // Sanitize before previewing so encoded image/audio/document payloads
+    // cannot leak their leading or trailing bytes through a text preview.
+    final serializable = _sanitizeJsonValue(raw);
+    final sanitized = DataSanitizer.sanitizeForDisplay(serializable);
+    if (sanitized is! Map) return <String, dynamic>{};
+    if (!compactText) return Map<String, dynamic>.from(sanitized);
+    return Map<String, dynamic>.from(_previewLongStrings(sanitized));
+  }
 
-    // Tool loops append protocol messages after the original conversation.
-    // The newest user message without tool-result blocks is the current input
-    // (Anthropic encodes tool results as user messages too).
-    var currentUserMessage = -1;
-    for (var i = 0; i < messages.length; i++) {
-      final message = messages[i];
-      if (message is Map &&
-          message['role'] == 'user' &&
-          !_hasToolResult(message)) {
-        currentUserMessage = i;
-      }
+  static dynamic _previewLongStrings(dynamic value) {
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          if (entry.key is String)
+            (entry.key as String): _previewLongStrings(entry.value),
+      };
     }
-    if (currentUserMessage < 0) return Map<String, dynamic>.from(raw);
+    if (value is List) return value.map(_previewLongStrings).toList();
+    if (value is! String) return value;
 
-    final compactMessages = <dynamic>[];
-    for (var i = 0; i < messages.length; i++) {
-      final message = messages[i];
-      if (message is! Map || message['role'] == 'system') {
-        compactMessages.add(message);
-        continue;
-      }
-
-      if (i > currentUserMessage) {
-        compactMessages.add(_compactGeneratedRawMessage(message));
-        continue;
-      }
-      if (i == currentUserMessage) {
-        compactMessages.add(_compactCurrentRawUserMessage(message));
-        continue;
-      }
-      if (message['content'] == null && message['reasoning_content'] == null) {
-        compactMessages.add(message);
-        continue;
-      }
-
-      final compactMessage = Map<String, dynamic>.from(message);
-      if (message['content'] != null) {
-        compactMessage['content'] = '[previous message content omitted]';
-      }
-      if (message['reasoning_content'] != null) {
-        compactMessage['reasoning_content'] =
-            '[previous message reasoning omitted]';
-      }
-      compactMessages.add(compactMessage);
-    }
-
-    return <String, dynamic>{
-      ...raw,
-      'body': <String, dynamic>{
-        ...Map<String, dynamic>.from(body),
-        'messages': compactMessages,
-      },
-    };
-  }
-
-  /// Keep the newest user text and attachment metadata in raw diagnostics while
-  /// dropping encoded attachment bytes from the in-memory copy retained on the
-  /// assistant message. The provider request body and canonical attachments are
-  /// separate objects and remain untouched.
-  static Map _compactCurrentRawUserMessage(Map message) {
-    final content = message['content'];
-    if (content is! List) return message;
-
-    final compactContent = content.map((part) {
-      if (part is! Map) return part;
-      switch (part['type']) {
-        case 'image_url':
-          return _compactRawPayloadInPart(part, 'image_url', 'url');
-        case 'video_url':
-          return _compactRawPayloadInPart(part, 'video_url', 'url');
-        case 'input_audio':
-          return _compactRawPayloadInPart(part, 'input_audio', 'data');
-        case 'image':
-        case 'document':
-          final source = part['source'];
-          if (source is! Map || source['type'] != 'base64') return part;
-          return _compactRawPayloadInPart(part, 'source', 'data');
-        case 'file':
-          return _compactRawPayloadInPart(part, 'file', 'file_data');
-        default:
-          return part;
-      }
-    }).toList();
-    return <dynamic, dynamic>{...message, 'content': compactContent};
-  }
-
-  static Map _compactRawPayloadInPart(
-    Map part,
-    String containerKey,
-    String payloadKey,
-  ) {
-    final container = part[containerKey];
-    if (container is! Map) return part;
-    final payload = container[payloadKey];
-    if (payload is! String) return part;
-    // compactRawRequest also runs during serialization and deserialization.
-    // Keep the original size in the marker instead of counting that marker as
-    // a new data URI payload on each pass.
-    if (payload.contains('[base64 data:')) return part;
-    final compactContainer = <dynamic, dynamic>{
-      ...container,
-      payloadKey: DataSanitizer.sanitizeBase64String(payload),
-    };
-    return <dynamic, dynamic>{...part, containerKey: compactContainer};
-  }
-
-  /// Keep protocol metadata from tool-loop messages while dropping their
-  /// generated payloads. These messages are diagnostics only; the rendered
-  /// assistant response and tool-call data are persisted separately.
-  static Map _compactGeneratedRawMessage(Map message) {
-    final role = message['role'];
-    if (role == 'assistant') {
-      final compactMessage = Map.from(message);
-      final content = message['content'];
-      if (content is String) {
-        compactMessage['content'] = '[generated assistant content omitted]';
-      } else if (content is List) {
-        compactMessage['content'] = content.map((part) {
-          if (part is! Map ||
-              (part['type'] != 'text' &&
-                  part['type'] != 'thinking' &&
-                  part['type'] != 'reasoning')) {
-            return part;
-          }
-          final textKey = part.containsKey('text')
-              ? 'text'
-              : part.containsKey('thinking')
-                  ? 'thinking'
-                  : 'reasoning';
-          if (part[textKey] == null) return part;
-          return <dynamic, dynamic>{
-            ...part,
-            textKey: '[generated assistant content omitted]',
-          };
-        }).toList();
-      }
-      if (message['reasoning_content'] != null) {
-        compactMessage['reasoning_content'] =
-            '[generated assistant reasoning omitted]';
-      }
-      return compactMessage;
-    }
-
-    if (role == 'tool' || role == 'function') {
-      return _compactToolResultMessage(message);
-    }
-    if (role == 'user' && _hasToolResult(message)) {
-      final compactMessage = Map.from(message);
-      final content = message['content'] as List;
-      compactMessage['content'] = content.map((part) {
-        if (part is! Map || part['type'] != 'tool_result') return part;
-        return _compactToolResultBlock(part);
-      }).toList();
-      return compactMessage;
-    }
-    return message;
-  }
-
-  static Map _compactToolResultMessage(Map message) {
-    if (message['content'] == null) return message;
-    return <dynamic, dynamic>{
-      ...message,
-      'content': '[tool result content omitted]',
-    };
-  }
-
-  static Map _compactToolResultBlock(Map block) {
-    if (block['content'] == null) return block;
-    return <dynamic, dynamic>{
-      ...block,
-      'content': '[tool result content omitted]',
-    };
-  }
-
-  static bool _hasToolResult(Map message) {
-    final content = message['content'];
-    return content is List &&
-        content.any((part) => part is Map && part['type'] == 'tool_result');
+    final characters = value.characters;
+    if (characters.length <= 80) return value;
+    return '${characters.take(40)}…${characters.skip(characters.length - 40)}';
   }
 
   /// Recursively sanitize a single value for JSON serialization.

@@ -2050,6 +2050,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatErrorDetailEmpty => '詳細なデータはありません';
 
   @override
+  String get chatErrorDetailViewFullContent => '全文を表示';
+
+  @override
   String get chatAudioPreviewClose => '閉じる';
 
   @override

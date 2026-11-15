@@ -2150,6 +2150,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatErrorDetailEmpty => 'No hay datos detallados disponibles';
 
   @override
+  String get chatErrorDetailViewFullContent => 'Ver contenido completo';
+
+  @override
   String get chatAudioPreviewClose => 'Cerrar';
 
   @override

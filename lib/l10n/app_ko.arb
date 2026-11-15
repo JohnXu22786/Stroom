@@ -778,6 +778,7 @@
   "chatErrorDetailResponseHeaders": "응답 헤더",
   "chatErrorDetailResponseBody": "응답 본문",
   "chatErrorDetailEmpty": "사용할 수 있는 세부 정보가 없습니다",
+  "chatErrorDetailViewFullContent": "전체 내용 보기",
   "chatAudioPreviewClose": "닫기",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

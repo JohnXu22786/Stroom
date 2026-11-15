@@ -1989,6 +1989,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatErrorDetailEmpty => '暂无详细信息';
 
   @override
+  String get chatErrorDetailViewFullContent => '查看完整内容';
+
+  @override
   String get chatAudioPreviewClose => '关闭';
 
   @override
