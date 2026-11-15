@@ -137,7 +137,8 @@ void main() {
               ];
               return notifier;
             }),
-            activeConversationIdProvider.overrideWith((ref) => 'conversation-a'),
+            activeConversationIdProvider
+                .overrideWith((ref) => 'conversation-a'),
             providerEntriesProvider.overrideWith((ref) {
               return ProviderEntriesNotifier();
             }),
