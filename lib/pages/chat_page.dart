@@ -349,6 +349,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void>? _pendingSearchScroll;
 
   bool _developerMode = false;
+  final Map<String, bool> _lastTemporaryModeByConversation = {};
   final Map<String, bool> _expandedErrors = {};
 
   // ── Edit mode state ──

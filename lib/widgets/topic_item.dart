@@ -141,6 +141,8 @@ class TopicItem extends StatelessWidget {
                             topic.temporaryExpiresAt != null)
                           TemporaryCountdownCapsule(
                             expiresAt: topic.temporaryExpiresAt!,
+                            pausedRemainingMilliseconds:
+                                topic.temporaryPausedRemainingMilliseconds,
                           ),
                         Expanded(
                           child: Text(

@@ -282,6 +282,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           toolCallRoundStarts: state.toolCallRoundStarts,
         ),
         cancelled: wasCancelled,
+        failed: hadStreamError,
       );
     } catch (e, s) {
       debugPrint('[ChatStreamManager] 结果构造失败: $e\n$s');
@@ -289,6 +290,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         history: List.from(state.history),
         fullReply: fullReply ?? finalTextChunks.join(),
         cancelled: wasCancelled,
+        failed: hadStreamError,
       );
     }
 

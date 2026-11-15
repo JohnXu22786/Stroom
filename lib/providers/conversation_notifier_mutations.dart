@@ -5,6 +5,15 @@ part of 'conversation_provider.dart';
 // inline code.
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
+void _markTemporaryConversationUpdated(
+  Conversation conversation,
+  DateTime changedAt,
+) {
+  conversation.updatedAt = changedAt.isAfter(conversation.updatedAt)
+      ? changedAt
+      : conversation.updatedAt.add(const Duration(microseconds: 1));
+}
+
 extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   List<Conversation> _restoreDeletedConversationOrder(
     List<Conversation> original,
@@ -353,12 +362,76 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         c.resetTemporaryExpiry(DateTime.now());
       } else {
         c.temporaryExpiresAt = null;
+        c.temporaryPausedRemainingMilliseconds = null;
       }
-      c.updatedAt = DateTime.now();
+      _markTemporaryConversationUpdated(c, DateTime.now());
       return c;
     }).toList();
     _syncTemporaryTimer();
     await _persist();
+  }
+
+  /// Freezes the current one-hour countdown while a reply is being generated.
+  Future<void> pauseTemporaryCountdown(String id) async {
+    if (!mounted) return;
+    final now = DateTime.now();
+    state = state.map((conversation) {
+      if (conversation.id == id) {
+        final wasPaused = conversation.temporaryPausedRemainingMilliseconds;
+        conversation.pauseTemporaryExpiry(now);
+        if (wasPaused == null &&
+            conversation.temporaryPausedRemainingMilliseconds != null) {
+          _markTemporaryConversationUpdated(conversation, now);
+        }
+      }
+      return conversation;
+    }).toList();
+    await _persistNow();
+  }
+
+  /// Restarts the hour after a successful reply, or restores the time left
+  /// before sending when generation is cancelled or fails.
+  Future<void> finishTemporaryCountdown(
+    String id, {
+    required bool successful,
+  }) async {
+    if (!mounted) return;
+    final now = DateTime.now();
+    state = state.map((conversation) {
+      if (conversation.id == id) {
+        final wasPaused = conversation.temporaryPausedRemainingMilliseconds;
+        conversation.resumeTemporaryExpiry(now, successful: successful);
+        if (wasPaused != null) {
+          _markTemporaryConversationUpdated(conversation, now);
+        }
+      }
+      return conversation;
+    }).toList();
+    await _persistNow();
+  }
+
+  /// A process restart ends any in-flight generation. Continue paused
+  /// conversations from their persisted remaining time after stream replay.
+  @visibleForTesting
+  Future<void> resumePausedTemporaryCountdownsAfterRestart() async {
+    if (!mounted) return;
+    if (_resumePausedTemporaryCountdowns(DateTime.now())) {
+      await _persistNow();
+    }
+  }
+
+  bool _resumePausedTemporaryCountdowns(DateTime resumedAt) {
+    var changed = false;
+    state = state.map((conversation) {
+      if (conversation.isTemporary &&
+          conversation.temporaryPausedRemainingMilliseconds != null) {
+        conversation.resumeTemporaryExpiry(resumedAt, successful: false);
+        _markTemporaryConversationUpdated(conversation, resumedAt);
+        changed = true;
+      }
+      return conversation;
+    }).toList();
+    return changed;
   }
 
   /// Reorders a conversation from [oldIndex] to [newIndex] in the list.
@@ -442,12 +515,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Replaces the message list of a conversation (e.g. after sending or
   /// loading a different conversation).
   ///
-  /// [resetTemporaryCountdown] 仅由"产生对话"路径（发送/流式持久化）置
-  /// true：临时对话的 1 小时倒计时只在这些事件上重置。切换对话前的
-  /// 存档保存、编辑截断、删除消息等非产生事件不得重置（否则会无意中
-  /// 延长临时对话的生命周期）。
-  Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) async {
+  Future<void> updateMessages(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) async {
     if (!mounted) return;
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
@@ -477,8 +548,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
               .intersection(removedIds.toSet());
 
       final previousMessages = List<ChatMessage>.from(current.messages);
-      _replaceMessages(conversationId, messages,
-          resetTemporaryCountdown: resetTemporaryCountdown);
+      _replaceMessages(conversationId, messages);
       if (removedIds.isNotEmpty) {
         _addPendingMessageDeletions(conversationId, removedIds);
         try {
@@ -526,8 +596,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
               (_pendingMessageDeletionIds[conversationId]
                       ?.containsAll(removedIds) ??
                   false)) {
-            _replaceMessages(conversationId, previousMessages,
-                resetTemporaryCountdown: false);
+            _replaceMessages(conversationId, previousMessages);
             try {
               await _appendMessageRestorations(conversationId, removedIds);
             } catch (restoreError) {
@@ -556,8 +625,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         }
       }
     } else {
-      _replaceMessages(conversationId, messages,
-          resetTemporaryCountdown: resetTemporaryCountdown);
+      _replaceMessages(conversationId, messages);
     }
     if (!mounted) return;
     await _persistNow();
@@ -566,26 +634,26 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Queues a supersedable periodic stream checkpoint journal entry.
   /// Consecutive checkpoints share one queued persistence task; explicit
   /// writes remain ordering barriers in the normal persistence path.
-  Future<void> updateMessagesPeriodically(String conversationId,
-      {required Map<String, dynamic> checkpoint,
-      bool resetTemporaryCountdown = false}) async {
+  Future<void> updateMessagesPeriodically(
+    String conversationId, {
+    required Map<String, dynamic> checkpoint,
+  }) async {
     if (!state.any((conversation) => conversation.id == conversationId)) {
       return;
     }
-    final updatedAt = DateTime.now();
-    checkpoint['updatedAt'] = updatedAt.toIso8601String();
+    final checkpointTime = DateTime.now();
+    DateTime? checkpointUpdatedAt;
     state = state.map((conversation) {
       if (conversation.id != conversationId) return conversation;
-      conversation.updatedAt = updatedAt;
-      if (resetTemporaryCountdown && conversation.isTemporary) {
-        conversation.resetTemporaryExpiry(updatedAt);
-      }
+      _markTemporaryConversationUpdated(conversation, checkpointTime);
+      checkpointUpdatedAt = conversation.updatedAt;
       return conversation;
     }).toList();
     final conversation = state
         .where((conversation) => conversation.id == conversationId)
         .firstOrNull;
     if (conversation != null) {
+      checkpoint['updatedAt'] = checkpointUpdatedAt!.toIso8601String();
       checkpoint['conversationCreatedAt'] =
           conversation.createdAt.toIso8601String();
       checkpoint['isTemporary'] = conversation.isTemporary;
@@ -593,6 +661,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           conversation.temporaryExpiresAt?.toIso8601String();
       checkpoint['temporaryExpiryVersion'] =
           conversation.temporaryExpiryVersion;
+      checkpoint['temporaryPausedRemainingMilliseconds'] =
+          conversation.temporaryPausedRemainingMilliseconds;
       if (checkpoint['baseSnapshotPending'] == true) {
         checkpoint['baseConversation'] = conversation.toMap();
       }
@@ -608,16 +678,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     return _persistNowChecked();
   }
 
-  void _replaceMessages(String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) {
+  void _replaceMessages(String conversationId, List<ChatMessage> messages) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
       c.updatedAt = DateTime.now();
-      // 临时对话：每次产生对话（发送/流式持久化）都重置 1 小时倒计时。
-      if (resetTemporaryCountdown && c.isTemporary) {
-        c.resetTemporaryExpiry(c.updatedAt);
-      }
       // Derive title from the conversation overview if title is empty.
       if (c.title.isEmpty && messages.isNotEmpty) {
         final firstUser = messages.firstWhere(
