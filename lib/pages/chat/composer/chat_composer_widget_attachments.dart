@@ -568,14 +568,19 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 等旧 hash 在途的预压缩完成后删除，防止它复活旧缓存。
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
       } else if (widget.editingMessageAttachments?.any(
-            (a) => a.id == oldAtt.id,
+            (a) => a.id == oldAtt.id && a.storagePath == oldAtt.storagePath,
           ) ??
           false) {
         // 编辑模式 + 原消息附件被编辑：旧字节缓存同样推迟到确定重发
         // 时清理（可能取消编辑，原消息仍引用旧字节）。
         _removedEditAttachments.add(oldAtt);
       } else {
-        // 编辑模式 + 本次新加附件被编辑：与普通发送一致，立即清理。
+        // 编辑模式下的替换文件已不再被引用（包括同一附件的上一次
+        // 编辑产物）：立即删除文件和缓存。原消息引用的源文件路径在上
+        // 一个分支保留。
+        if (oldAtt.storagePath.startsWith('temp_edited/')) {
+          await _deleteTempFile(oldAtt.storagePath);
+        }
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
       }
     } catch (e) {

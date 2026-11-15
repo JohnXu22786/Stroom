@@ -248,11 +248,25 @@ void main() {
           composerKey.currentState!.pendingAttachmentsForTesting.single;
       expect(editedOriginal.storagePath, startsWith('temp_edited/'));
 
-      final addedOriginal = await addImage(tester, 'new-image');
       await tester.runAsync(
         () => composerKey.currentState!
-            .updatePendingAttachmentAfterEditForTesting(1, editedBytes),
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
       );
+      final latestEditedOriginal =
+          composerKey.currentState!.pendingAttachmentsForTesting.single;
+      expect(
+          latestEditedOriginal.storagePath, isNot(editedOriginal.storagePath));
+      expect(
+        await AttachmentStorage.readFile(editedOriginal.storagePath),
+        isNull,
+        reason: 'a superseded edit replacement must be deleted',
+      );
+
+      final addedOriginal = await addImage(tester, 'new-image');
+      await tester.runAsync(() async {
+        await composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(1, editedBytes);
+      });
       final editedAdded = composerKey.currentState!.pendingAttachmentsForTesting
           .singleWhere((attachment) => attachment.id == addedOriginal.id);
       expect(editedAdded.storagePath, startsWith('temp_edited/'));
@@ -282,6 +296,12 @@ void main() {
         await AttachmentStorage.readFile(editedOriginal.storagePath),
         isNull,
         reason: 'a removed original edit replacement must not be orphaned',
+      );
+      expect(
+        await AttachmentStorage.readFile(latestEditedOriginal.storagePath),
+        isNull,
+        reason:
+            'the current original edit replacement must be deleted on removal',
       );
       expect(
         await AttachmentStorage.readFile(editedAdded.storagePath),
