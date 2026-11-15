@@ -306,6 +306,11 @@ void main() {
           isEmpty,
           reason: 'the stale edit-session import file should be deleted',
         );
+
+        // didUpdateWidget saves the prior conversation after the frame; let
+        // its debounced provider persistence timer finish before test teardown.
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pump();
       },
     );
 
@@ -442,6 +447,10 @@ void main() {
         isEmpty,
         reason: 'the stale picker result file should be deleted',
       );
+
+      // Switching conversations schedules a debounced draft persistence write.
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
     });
 
     testWidgets('恢复：initialDraftAttachments 进入 pending，发送时载荷直接可用', (
