@@ -180,8 +180,16 @@ class MainActivity : FlutterActivity() {
                     val uriStr = call.argument<String>("uri")
                     val fileName = call.argument<String>("fileName")
                     val content = call.argument<String>("content")
+                    val replaceExisting =
+                        call.argument<Boolean>("replaceExisting") ?: false
                     if (uriStr != null && fileName != null && content != null) {
-                        writeLogToSaf(uriStr, fileName, content, result)
+                        writeLogToSaf(
+                            uriStr,
+                            fileName,
+                            content,
+                            replaceExisting,
+                            result
+                        )
                     } else {
                         result.error("INVALID_ARGS", "日志参数不完整", null)
                     }
@@ -573,6 +581,7 @@ class MainActivity : FlutterActivity() {
         uriStr: String,
         fileName: String,
         content: String,
+        replaceExisting: Boolean,
         result: MethodChannel.Result
     ) {
         var existingFile: DocumentFile? = null
@@ -603,7 +612,8 @@ class MainActivity : FlutterActivity() {
             }
 
             // 拼接完整内容
-            val combinedContent = existingContent + content
+            val combinedContent =
+                if (replaceExisting) content else existingContent + content
             combinedContentForFallback = combinedContent
 
             // 安全写入：先写临时文件，成功后删除旧文件并重命名

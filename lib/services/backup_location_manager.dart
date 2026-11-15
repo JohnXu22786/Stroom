@@ -45,6 +45,11 @@ class BackupLocationManager {
 
   static bool get _isAndroid => debugIsAndroidOverride ?? Platform.isAndroid;
 
+  static final Map<String, String> _pendingCompleteLogContent = {};
+
+  static void debugClearPendingCompleteLogContent() =>
+      _pendingCompleteLogContent.clear();
+
   static String? _testBackupRoot;
   static String? _testLogRoot;
 
@@ -73,12 +78,14 @@ class BackupLocationManager {
   }
 
   /// Android SAF 专用 MethodChannel。
-  static const MethodChannel _safChannel =
-      MethodChannel('com.johntsui.stroom/saf');
+  static const MethodChannel _safChannel = MethodChannel(
+    'com.johntsui.stroom/saf',
+  );
 
   /// iOS 存储信息专用 MethodChannel（AppDelegate 侧实现）。
-  static const MethodChannel _iosStorageChannel =
-      MethodChannel('com.johntsui.stroom/storage');
+  static const MethodChannel _iosStorageChannel = MethodChannel(
+    'com.johntsui.stroom/storage',
+  );
 
   /// SAF 通道调用超时：原生侧卡死（主线程忙/ANR 窗口）时，
   /// 启动路径上的存储检查/备份写入不能被永久阻塞（见
@@ -98,23 +105,22 @@ class BackupLocationManager {
       final uri = await _getSavedSafUri();
       if (uri != null) {
         try {
-          final result = await _safChannel.invokeMethod<List<dynamic>>(
-              'listLogMetadata', {'uri': uri}).timeout(_safChannelTimeout);
-          safMetadata.addAll((result ?? [])
-              .whereType<Map>()
-              .map((entry) {
-                final name = entry['name'] as String?;
-                final size = entry['sizeBytes'] as int?;
-                final modified = entry['modifiedAtMillis'] as int?;
-                if (name == null || size == null) return null;
-                return LogFileMetadata(
-                  name: name,
-                  sizeBytes: size,
-                  modifiedAt:
-                      DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
-                );
-              })
-              .whereType<LogFileMetadata>());
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listLogMetadata', {'uri': uri})
+              .timeout(_safChannelTimeout);
+          safMetadata.addAll(
+            (result ?? []).whereType<Map>().map((entry) {
+              final name = entry['name'] as String?;
+              final size = entry['sizeBytes'] as int?;
+              final modified = entry['modifiedAtMillis'] as int?;
+              if (name == null || size == null) return null;
+              return LogFileMetadata(
+                name: name,
+                sizeBytes: size,
+                modifiedAt: DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
+              );
+            }).whereType<LogFileMetadata>(),
+          );
         } catch (e) {
           debugPrint('[BackupLocationManager] SAF 日志元数据读取失败: $e');
         }
@@ -134,11 +140,13 @@ class BackupLocationManager {
       if (entry is! File || !entry.path.endsWith('.log')) continue;
       try {
         final stat = await entry.stat();
-        result.add(LogFileMetadata(
-          name: p.basename(entry.path),
-          sizeBytes: stat.size,
-          modifiedAt: stat.modified,
-        ));
+        result.add(
+          LogFileMetadata(
+            name: p.basename(entry.path),
+            sizeBytes: stat.size,
+            modifiedAt: stat.modified,
+          ),
+        );
       } catch (_) {}
     }
     return result;
@@ -271,7 +279,8 @@ class BackupLocationManager {
       }
     } catch (e) {
       debugPrint(
-          '[BackupLocationManager] getDisplayPath 检查 macOS/Linux 失败: $e');
+        '[BackupLocationManager] getDisplayPath 检查 macOS/Linux 失败: $e',
+      );
     }
 
     // iOS
@@ -392,8 +401,10 @@ class BackupLocationManager {
           // 验证已保存的路径是否为有效文档路径（非根目录）
           // 防止之前错误授权了根目录后，启动时跳过授权弹窗
           if (!isValidBackupPath(uri)) {
-            debugPrint('[BackupLocationManager] 已保存的 SAF URI 无效（根目录）'
-                '，需要重新授权: $uri');
+            debugPrint(
+              '[BackupLocationManager] 已保存的 SAF URI 无效（根目录）'
+              '，需要重新授权: $uri',
+            );
             await _clearSafUri();
             return false;
           }
@@ -493,8 +504,10 @@ class BackupLocationManager {
 
             // 验证选择的路径是否为有效的文档路径（非根目录）
             if (!isValidBackupPath(uri)) {
-              debugPrint('[BackupLocationManager] 用户选择了无效路径(根目录)'
-                  '，需要重新授权: $uri');
+              debugPrint(
+                '[BackupLocationManager] 用户选择了无效路径(根目录)'
+                '，需要重新授权: $uri',
+              );
               return false;
             }
 
@@ -507,8 +520,10 @@ class BackupLocationManager {
             if (accessible) {
               debugPrint('[BackupLocationManager] SAF 授权成功: $uri');
             } else {
-              debugPrint('[BackupLocationManager] SAF URI 已保存但 test check 失败，'
-                  '不清理 URI（可能是暂时性问题）');
+              debugPrint(
+                '[BackupLocationManager] SAF URI 已保存但 test check 失败，'
+                '不清理 URI（可能是暂时性问题）',
+              );
               // URI 已通过 SAF 选择器合法获得并固化，不应因暂时性
               // test check 失败而清除。"反复弹窗" 的根本原因就在这里：
               // 之前会 clearSafUri()，导致用户授权后又被要求重新授权。
@@ -521,7 +536,8 @@ class BackupLocationManager {
         }
       } catch (e) {
         debugPrint(
-            '[BackupLocationManager] requestStorageAccess 检查 Android 失败: $e');
+          '[BackupLocationManager] requestStorageAccess 检查 Android 失败: $e',
+        );
       }
     }
 
@@ -542,7 +558,9 @@ class BackupLocationManager {
   ///
   /// [relativePath] 是相对于备份根目录的路径（如 backup_xxx.zip）。
   static Future<void> writeBackupFile(
-      String relativePath, Uint8List data) async {
+    String relativePath,
+    Uint8List data,
+  ) async {
     debugPrint('[BackupLocationManager] 写入备份文件: $relativePath');
     if (kIsWeb) {
       throw UnsupportedError('Web 平台不支持本地文件写入');
@@ -556,11 +574,13 @@ class BackupLocationManager {
           if (uri == null) {
             throw Exception(noBackupDirectoryWriteErrorMessage);
           }
-          await _safChannel.invokeMethod<void>('writeFile', {
-            'uri': uri,
-            'fileName': relativePath,
-            'bytes': data,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('writeFile', {
+                'uri': uri,
+                'fileName': relativePath,
+                'bytes': data,
+              })
+              .timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -594,7 +614,9 @@ class BackupLocationManager {
   /// 传输会触发 TransactionTooLargeException 导致应用崩溃。
   /// 非 SAF 平台直接复制文件（dart:io 原生复制，同样不经过 Dart 内存）。
   static Future<void> writeBackupFileFromPath(
-      String relativePath, String srcPath) async {
+    String relativePath,
+    String srcPath,
+  ) async {
     debugPrint('[BackupLocationManager] 写入备份文件(流式): $relativePath <- $srcPath');
     if (kIsWeb) {
       throw UnsupportedError('Web 平台不支持本地文件写入');
@@ -608,11 +630,13 @@ class BackupLocationManager {
           if (uri == null) {
             throw Exception(noBackupDirectoryWriteErrorMessage);
           }
-          await _safChannel.invokeMethod<void>('writeFileFromPath', {
-            'uri': uri,
-            'fileName': relativePath,
-            'srcPath': srcPath,
-          }).timeout(_safWriteFromPathTimeout);
+          await _safChannel
+              .invokeMethod<void>('writeFileFromPath', {
+                'uri': uri,
+                'fileName': relativePath,
+                'srcPath': srcPath,
+              })
+              .timeout(_safWriteFromPathTimeout);
           return;
         }
       } catch (e) {
@@ -659,10 +683,12 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return null;
-          final result = await _safChannel.invokeMethod<Uint8List>('readFile', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<Uint8List>('readFile', {
+                'uri': uri,
+                'fileName': relativePath,
+              })
+              .timeout(_safChannelTimeout);
           if (result != null) {
             return result;
           }
@@ -698,10 +724,12 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return;
-          await _safChannel.invokeMethod<void>('deleteFile', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('deleteFile', {
+                'uri': uri,
+                'fileName': relativePath,
+              })
+              .timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -725,9 +753,12 @@ class BackupLocationManager {
 
   /// 重命名备份文件（如 .tmp → .zip）。
   static Future<void> renameBackupFile(
-      String oldRelativePath, String newRelativePath) async {
+    String oldRelativePath,
+    String newRelativePath,
+  ) async {
     debugPrint(
-        '[BackupLocationManager] 重命名备份文件: $oldRelativePath -> $newRelativePath');
+      '[BackupLocationManager] 重命名备份文件: $oldRelativePath -> $newRelativePath',
+    );
     if (kIsWeb) return;
 
     // Android SAF
@@ -738,11 +769,13 @@ class BackupLocationManager {
           if (uri == null) {
             throw Exception('SAF URI 未配置，无法重命名备份文件');
           }
-          await _safChannel.invokeMethod<void>('renameFile', {
-            'uri': uri,
-            'oldName': oldRelativePath,
-            'newName': newRelativePath,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('renameFile', {
+                'uri': uri,
+                'oldName': oldRelativePath,
+                'newName': newRelativePath,
+              })
+              .timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -764,7 +797,8 @@ class BackupLocationManager {
       }
     } catch (e) {
       debugPrint(
-          '[BackupLocationManager] 重命名备份文件失败: $oldRelativePath -> $newRelativePath: $e');
+        '[BackupLocationManager] 重命名备份文件失败: $oldRelativePath -> $newRelativePath: $e',
+      );
       rethrow;
     }
   }
@@ -780,8 +814,9 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return [];
-          final result = await _safChannel.invokeMethod<List<dynamic>>(
-              'listFiles', {'uri': uri}).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listFiles', {'uri': uri})
+              .timeout(_safChannelTimeout);
           if (result != null) {
             return result.cast<String>();
           }
@@ -819,29 +854,45 @@ class BackupLocationManager {
   /// Android SAF 模式会通过 MethodChannel 操作 Stroom/Logs 目录；
   /// 其他平台直接使用 dart:io 写入。
   static Future<bool> writeLogContent(
-      String relativePath, String content) async {
+    String relativePath,
+    String content,
+  ) async {
     if (kIsWeb) return false;
 
     // Android SAF
     if (!kIsWeb) {
+      final pendingContent = _pendingCompleteLogContent[relativePath];
+      final contentToWrite = pendingContent == null
+          ? content
+          : _mergeLogContent(pendingContent, content);
       try {
         if (_isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
             // SAF is unavailable; preserve logs in app-local storage.
-            debugPrint('[BackupLocationManager] SAF URI 未配置，'
-                '日志将写入应用本地目录');
-            return await _writeLogToFile(
-              relativePath,
-              content,
-              logsPath: await _getAppLocalLogsRootPath(),
+            debugPrint(
+              '[BackupLocationManager] SAF URI 未配置，'
+              '日志将写入应用本地目录',
             );
+            final written = pendingContent == null
+                ? await _writeLogToFile(
+                    relativePath,
+                    content,
+                    logsPath: await _getAppLocalLogsRootPath(),
+                  )
+                : await _writeCompleteLogFallback(relativePath, contentToWrite);
+            if (written) _pendingCompleteLogContent.remove(relativePath);
+            return written;
           }
-          await _safChannel.invokeMethod<void>('writeLog', {
-            'uri': uri,
-            'fileName': relativePath,
-            'content': content,
-          }).timeout(_safChannelTimeout);
+          await _safChannel
+              .invokeMethod<void>('writeLog', {
+                'uri': uri,
+                'fileName': relativePath,
+                'content': contentToWrite,
+                'replaceExisting': pendingContent != null,
+              })
+              .timeout(_safChannelTimeout);
+          _pendingCompleteLogContent.remove(relativePath);
           return true;
         }
       } catch (e) {
@@ -852,31 +903,30 @@ class BackupLocationManager {
             e.code == 'LOG_TARGET_REMOVED' &&
             e.details is String) {
           try {
-            final logsPath = await _getAppLocalLogsRootPath();
-            final fallbackFile = File(p.join(logsPath, relativePath));
-            final existingContent = await fallbackFile.exists()
-                ? await fallbackFile.readAsString()
-                : null;
-            final reconciledContent = existingContent == null
+            final completeContent = pendingContent == null
                 ? e.details as String
-                : _mergeLogContent(existingContent, e.details as String);
-            return await _writeLogToFile(
+                : _mergeLogContent(pendingContent, e.details as String);
+            _pendingCompleteLogContent[relativePath] = completeContent;
+            final written = await _writeCompleteLogFallback(
               relativePath,
-              reconciledContent,
-              logsPath: logsPath,
-              replaceContent: true,
+              completeContent,
             );
+            if (written) _pendingCompleteLogContent.remove(relativePath);
+            return written;
           } catch (fallbackError) {
-            debugPrint(
-                '[BackupLocationManager] SAF 完整日志回退失败: $fallbackError');
+            debugPrint('[BackupLocationManager] SAF 完整日志回退失败: $fallbackError');
             return false;
           }
         }
-        return await _writeLogToFile(
-          relativePath,
-          content,
-          logsPath: await _getAppLocalLogsRootPath(),
-        );
+        final written = pendingContent == null
+            ? await _writeLogToFile(
+                relativePath,
+                content,
+                logsPath: await _getAppLocalLogsRootPath(),
+              )
+            : await _writeCompleteLogFallback(relativePath, contentToWrite);
+        if (written) _pendingCompleteLogContent.remove(relativePath);
+        return written;
       }
     }
 
@@ -902,10 +952,12 @@ class BackupLocationManager {
               logsPath: await _getAppLocalLogsRootPath(),
             );
           }
-          final result = await _safChannel.invokeMethod<String>('readLog', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<String>('readLog', {
+                'uri': uri,
+                'fileName': relativePath,
+              })
+              .timeout(_safChannelTimeout);
           final fallback = await _readLogFromFile(
             relativePath,
             logsPath: await _getAppLocalLogsRootPath(),
@@ -943,8 +995,9 @@ class BackupLocationManager {
               logsPath: await _getAppLocalLogsRootPath(),
             );
           }
-          final result = await _safChannel.invokeMethod<List<dynamic>>(
-              'listLogs', {'uri': uri}).timeout(_safChannelTimeout);
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listLogs', {'uri': uri})
+              .timeout(_safChannelTimeout);
           if (result != null) {
             final fallback = await _listLogFilesFromDir(
               logsPath: await _getAppLocalLogsRootPath(),
@@ -986,10 +1039,13 @@ class BackupLocationManager {
           }
           bool safDeleted = false;
           try {
-            safDeleted = await _safChannel.invokeMethod<bool>('deleteLog', {
-                  'uri': uri,
-                  'fileName': relativePath,
-                }).timeout(_safChannelTimeout) ??
+            safDeleted =
+                await _safChannel
+                    .invokeMethod<bool>('deleteLog', {
+                      'uri': uri,
+                      'fileName': relativePath,
+                    })
+                    .timeout(_safChannelTimeout) ??
                 false;
           } catch (e) {
             debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
@@ -1055,14 +1111,41 @@ class BackupLocationManager {
       if (entry is! File || !entry.path.endsWith('.log')) continue;
       try {
         final stat = await entry.stat();
-        result.add(LogFileMetadata(
-          name: p.basename(entry.path),
-          sizeBytes: stat.size,
-          modifiedAt: stat.modified,
-        ));
+        result.add(
+          LogFileMetadata(
+            name: p.basename(entry.path),
+            sizeBytes: stat.size,
+            modifiedAt: stat.modified,
+          ),
+        );
       } catch (_) {}
     }
     return result;
+  }
+
+  static Future<bool> _writeCompleteLogFallback(
+    String relativePath,
+    String content,
+  ) async {
+    try {
+      final logsPath = await _getAppLocalLogsRootPath();
+      final fallbackFile = File(p.join(logsPath, relativePath));
+      final existingContent = await fallbackFile.exists()
+          ? await fallbackFile.readAsString()
+          : null;
+      final reconciledContent = existingContent == null
+          ? content
+          : _mergeLogContent(existingContent, content);
+      return await _writeLogToFile(
+        relativePath,
+        reconciledContent,
+        logsPath: logsPath,
+        replaceContent: true,
+      );
+    } catch (e) {
+      debugPrint('[BackupLocationManager] SAF 完整日志回退失败: $e');
+      return false;
+    }
   }
 
   static String _mergeLogContent(String first, String second) {
@@ -1071,19 +1154,16 @@ class BackupLocationManager {
       multiLine: true,
     );
     List<({String content, DateTime? timestamp})> recordsFor(String source) =>
-        source
-            .split(recordStart)
-            .where((content) => content.isNotEmpty)
-            .map((content) {
-              final match = RegExp(
-                r'^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]',
-              ).firstMatch(content);
-              final timestamp = match == null
-                  ? null
-                  : DateTime.tryParse('${match.group(1)}T${match.group(2)}');
-              return (content: content, timestamp: timestamp);
-            })
-            .toList();
+        source.split(recordStart).where((content) => content.isNotEmpty).map((
+          content,
+        ) {
+          final match = RegExp(r'^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]')
+              .firstMatch(content);
+          final timestamp = match == null
+              ? null
+              : DateTime.tryParse('${match.group(1)}T${match.group(2)}');
+          return (content: content, timestamp: timestamp);
+        }).toList();
 
     final firstRecords = recordsFor(first);
     final secondRecords = recordsFor(second);
@@ -1117,8 +1197,9 @@ class BackupLocationManager {
       ));
     }
     records.sort((a, b) {
-      final comparison =
-          (a.timestamp ?? DateTime(0)).compareTo(b.timestamp ?? DateTime(0));
+      final comparison = (a.timestamp ?? DateTime(0)).compareTo(
+        b.timestamp ?? DateTime(0),
+      );
       if (comparison != 0) return comparison;
       return a.index.compareTo(b.index);
     });
@@ -1224,10 +1305,9 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return null;
-          final freeBytes =
-              await _safChannel.invokeMethod<int>('getFreeSpace', {
-            'uri': uri,
-          }).timeout(_safChannelTimeout);
+          final freeBytes = await _safChannel
+              .invokeMethod<int>('getFreeSpace', {'uri': uri})
+              .timeout(_safChannelTimeout);
           if (freeBytes != null && freeBytes > 0) return freeBytes;
           return null;
         }
@@ -1305,8 +1385,9 @@ class BackupLocationManager {
   /// 检查 SAF URI 是否仍可访问。
   static Future<bool> _checkSafAccess(String uri) async {
     try {
-      final result = await _safChannel.invokeMethod<bool>(
-          'checkAccess', {'uri': uri}).timeout(_safChannelTimeout);
+      final result = await _safChannel
+          .invokeMethod<bool>('checkAccess', {'uri': uri})
+          .timeout(_safChannelTimeout);
       return result ?? false;
     } catch (e) {
       debugPrint('[BackupLocationManager] SAF 访问检查失败: $e');

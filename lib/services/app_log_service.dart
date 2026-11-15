@@ -69,13 +69,13 @@ class AppLogPolicy {
     LogLevel? minimumLevel,
     int? maxStorageBytes,
     bool unlimitedStorage = false,
-  }) =>
-      AppLogPolicy(
-        retentionDays: retentionDays ?? this.retentionDays,
-        minimumLevel: minimumLevel ?? this.minimumLevel,
-        maxStorageBytes:
-            unlimitedStorage ? null : maxStorageBytes ?? this.maxStorageBytes,
-      );
+  }) => AppLogPolicy(
+    retentionDays: retentionDays ?? this.retentionDays,
+    minimumLevel: minimumLevel ?? this.minimumLevel,
+    maxStorageBytes: unlimitedStorage
+        ? null
+        : maxStorageBytes ?? this.maxStorageBytes,
+  );
 }
 
 /// Aggregate log storage information for the settings UI.
@@ -381,8 +381,7 @@ class AppLogService {
   }
 
   /// SAF 模式刷入：通过 BackupLocationManager 写入日志到 SAF 目录。
-  static Future<List<_LogEntry>> _flushViaSaf(
-      List<_LogEntry> entries) async {
+  static Future<List<_LogEntry>> _flushViaSaf(List<_LogEntry> entries) async {
     // 按小时分组 (YYYY-MM-DD-HH)
     final byHour = <String, List<_LogEntry>>{};
     for (final entry in entries) {
@@ -401,10 +400,12 @@ class AppLogService {
       final sb = StringBuffer();
       for (final e in hourEntries) {
         final ts = e.timestamp;
-        final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+        final timestamp =
+            '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
             '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
         sb.writeln(
-            '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+          '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}',
+        );
       }
 
       try {
@@ -445,10 +446,12 @@ class AppLogService {
       final sb = StringBuffer();
       for (final e in hourEntries) {
         final ts = e.timestamp;
-        final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+        final timestamp =
+            '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
             '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
         sb.writeln(
-            '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+          '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}',
+        );
       }
 
       await logFile.writeAsString(sb.toString(), mode: FileMode.append);
@@ -628,8 +631,10 @@ class AppLogService {
           final file = File(filePath);
           if (await file.exists()) {
             final fileSize = await file.length();
-            debugPrint('[AppLogService] 文件存在，大小: $fileSize 字节,'
-                ' 路径: $filePath');
+            debugPrint(
+              '[AppLogService] 文件存在，大小: $fileSize 字节,'
+              ' 路径: $filePath',
+            );
           }
         }
       } catch (_) {
@@ -708,8 +713,9 @@ class AppLogService {
   /// Read current log usage for the settings UI.
   static Future<AppLogStorageUsage> getStorageUsage() async {
     if (kIsWeb) return const AppLogStorageUsage(fileCount: 0, bytes: 0);
-    final files =
-        await _getLogFileInfo(useSaf: await _usesBackupLocationManager());
+    final files = await _getLogFileInfo(
+      useSaf: await _usesBackupLocationManager(),
+    );
     return AppLogStorageUsage(
       fileCount: files.length,
       bytes: files.fold<int>(0, (sum, file) => sum + file.sizeBytes),
@@ -722,8 +728,8 @@ class AppLogService {
 
   static DateTime? _dateFromLogFileName(String name) {
     if (!_appLogName.hasMatch(name)) return null;
-    final dateMatch =
-        RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$').firstMatch(name);
+    final dateMatch = RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$')
+        .firstMatch(name);
     if (dateMatch == null) return null;
     try {
       final date = DateTime.parse(dateMatch.group(1)!);
