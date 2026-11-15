@@ -167,7 +167,9 @@ class FlowBlockCard extends ConsumerWidget {
           ),
           child: Icon(def.icon, size: 18, color: def.color),
         );
-        if (constraints.maxWidth < 480) {
+        final useStackedHeader = constraints.maxWidth < 320 ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.3;
+        if (useStackedHeader) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -230,8 +232,9 @@ class FlowBlockCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // On phones, give the copy its own row so it can use the
-                  // card width instead of competing with the controls.
+                  // Keep the compact one-row header on regular phone and
+                  // tablet widths. Stack only when the card is very narrow or
+                  // larger text needs the extra room.
                   cardHeader,
                   const SizedBox(height: 8),
 

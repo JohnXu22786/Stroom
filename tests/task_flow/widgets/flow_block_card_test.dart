@@ -7,7 +7,7 @@ import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 
 void main() {
-  testWidgets('phone block title gets a full row above action controls', (
+  testWidgets('regular phone keeps the compact inline block header', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -18,7 +18,20 @@ void main() {
     final title = tester.getRect(find.text('1. Audio Separation'));
     final temporaryOutput = tester.getRect(find.byType(Checkbox));
 
-    expect(title.width, greaterThan(180));
+    expect((title.center.dy - temporaryOutput.center.dy).abs(), lessThan(20));
+  });
+
+  testWidgets('very narrow phone stacks the title above action controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_cardAtWidth(288));
+    await tester.pumpAndSettle();
+
+    final title = tester.getRect(find.text('1. Audio Separation'));
+    final temporaryOutput = tester.getRect(find.byType(Checkbox));
+
     expect(title.bottom, lessThan(temporaryOutput.top));
   });
 
