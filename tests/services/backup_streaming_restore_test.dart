@@ -226,6 +226,125 @@ void main() {
     },
   );
 
+  test(
+    'restoreFromBytes keeps selected data unchanged when a later binary write fails',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final originalFile = Uint8List.fromList(utf8.encode('existing image'));
+      final originalTaskMedia =
+          Uint8List.fromList(utf8.encode('existing task media'));
+      await writeBackupFile('pictures', 'existing.jpg', originalFile);
+      await writeBackupFile(
+        'catcatch/completed',
+        'existing.wav',
+        originalTaskMedia,
+      );
+      final originalTaskState =
+          Uint8List.fromList(utf8.encode('original state'));
+      await writeBackupFile('', 'task_list_last_read.json', originalTaskState);
+      await ManifestDatabase.insertImageRecord({
+        'id': 'existing',
+        'name': 'existing',
+        'hash': 'existing',
+        'format': 'jpg',
+        'created_at': DateTime(2026).millisecondsSinceEpoch,
+        'size': originalFile.length,
+        'folder': '',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('darkMode', true);
+
+      final archive = buildV2Archive(
+        dataParts: ['pictures', 'settings', 'tasks'],
+        files: {
+          'pictures/first.jpg': Uint8List.fromList([1]),
+          'task_state/task_list_last_read.json':
+              Uint8List.fromList(utf8.encode('imported state')),
+          'pictures/later.jpg': Uint8List.fromList([2]),
+          'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+          'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+          'catcatch/completed/incoming.wav': Uint8List.fromList([3]),
+        },
+      );
+      archive.files.removeWhere((file) => file.name == 'manifest.json');
+      final manifest = utf8.encode(jsonEncode({
+        'version': 2,
+        'createdAt': DateTime(2026).toIso8601String(),
+        'appVersion': 'test',
+        'dataParts': ['pictures', 'settings', 'tasks'],
+        'fileInventoryVersion': 1,
+        'includeMediaFiles': true,
+        'fileInventories': {
+          'pictures': [
+            {'path': 'pictures/first.jpg', 'size': 1},
+            {'path': 'pictures/later.jpg', 'size': 1},
+          ],
+          'tasks': [
+            {'path': 'catcatch/completed/incoming.wav', 'size': 1},
+            {
+              'path': 'task_state/task_list_last_read.json',
+              'size': utf8.encode('imported state').length,
+            },
+          ],
+        },
+      }));
+      archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+
+      var injected = false;
+      BackupService.beforeRestoreBinaryPublishForTesting = (entryIndex) {
+        if (entryIndex == 2 && !injected) {
+          injected = true;
+          throw StateError('injected restore publish failure');
+        }
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      await expectLater(
+        BackupService.restoreFromBytesForTest(
+          Uint8List.fromList(ZipEncoder().encode(archive)),
+          selection: selection,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(injected, isTrue);
+      expect(await readBackupFile('pictures', 'existing.jpg'), originalFile);
+      expect(
+        await readBackupFile('catcatch/completed', 'existing.wav'),
+        originalTaskMedia,
+      );
+      expect(
+        await readBackupFile('', 'task_list_last_read.json'),
+        originalTaskState,
+      );
+      expect(await readBackupFile('pictures', 'first.jpg'), isNull);
+      expect(await readBackupFile('pictures', 'later.jpg'), isNull);
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records, hasLength(1));
+      expect(records.single['id'], 'existing');
+      expect(prefs.getBool('darkMode'), isTrue);
+    },
+  );
+
   // ==================================================================
   // deflate 压缩条目（旧备份默认压缩格式）
   // ==================================================================
