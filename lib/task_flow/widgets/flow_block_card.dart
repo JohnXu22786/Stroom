@@ -95,6 +95,130 @@ class FlowBlockCard extends ConsumerWidget {
       return true;
     }).toList();
 
+    final headerTitle = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$index. $localizedBlockLabel',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
+        Text(
+          def.typeKey.name,
+          style: TextStyle(
+            fontSize: 10,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+    final headerControls = <Widget>[
+      if (!readOnly &&
+          !isLast &&
+          hasFileOutput(block) &&
+          onTemporaryOutputChanged != null)
+        Tooltip(
+          message: strings.taskFlowUiTemporaryFileHint,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Checkbox(
+                value: temporaryOutput,
+                onChanged: (value) {
+                  if (value != null) {
+                    onTemporaryOutputChanged!(value);
+                  }
+                },
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              Text(
+                strings.taskFlowUiTemporary,
+                style: TextStyle(fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+      // Settings button (hidden in readOnly)
+      if (!readOnly)
+        IconButton(
+          icon: Icon(
+            Icons.settings,
+            size: 16,
+            color: cs.primary,
+          ),
+          onPressed: onSettings ?? onTap,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 28,
+          ),
+          tooltip: strings.taskFlowUiSetParameters,
+        ),
+      // Replace button (hidden in readOnly)
+      if (!readOnly)
+        IconButton(
+          icon: Icon(
+            Icons.swap_horiz,
+            size: 16,
+            color: cs.primary,
+          ),
+          onPressed: onReplace,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 28,
+          ),
+          tooltip: strings.taskFlowUiReplaceBlock,
+        ),
+      if (!readOnly) _buildMenu(context),
+    ];
+    final cardHeader = LayoutBuilder(
+      builder: (context, constraints) {
+        final icon = Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: def.color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(def.icon, size: 18, color: def.color),
+        );
+        if (constraints.maxWidth < 480) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 10),
+                  Expanded(child: headerTitle),
+                ],
+              ),
+              if (headerControls.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: headerControls,
+                ),
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            icon,
+            const SizedBox(width: 10),
+            Expanded(child: headerTitle),
+            ...headerControls,
+          ],
+        );
+      },
+    );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -126,107 +250,9 @@ class FlowBlockCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header: icon + label + index
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: def.color.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(def.icon, size: 18, color: def.color),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$index. $localizedBlockLabel',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            Text(
-                              def.typeKey.name,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!readOnly &&
-                          !isLast &&
-                          hasFileOutput(block) &&
-                          onTemporaryOutputChanged != null)
-                        Tooltip(
-                          message: AppLocalizations.of(context)!
-                              .taskFlowUiTemporaryFileHint,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Checkbox(
-                                value: temporaryOutput,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    onTemporaryOutputChanged!(value);
-                                  }
-                                },
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              Text(
-                                AppLocalizations.of(context)!
-                                    .taskFlowUiTemporary,
-                                style: TextStyle(fontSize: 10),
-                              ),
-                            ],
-                          ),
-                        ),
-                      // Settings button (hidden in readOnly)
-                      if (!readOnly)
-                        IconButton(
-                          icon: Icon(
-                            Icons.settings,
-                            size: 16,
-                            color: cs.primary,
-                          ),
-                          onPressed: onSettings ?? onTap,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          tooltip: AppLocalizations.of(context)!
-                              .taskFlowUiSetParameters,
-                        ),
-                      // Replace button (hidden in readOnly)
-                      if (!readOnly)
-                        IconButton(
-                          icon: Icon(
-                            Icons.swap_horiz,
-                            size: 16,
-                            color: cs.primary,
-                          ),
-                          onPressed: onReplace,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          tooltip: AppLocalizations.of(context)!
-                              .taskFlowUiReplaceBlock,
-                        ),
-                      if (!readOnly) _buildMenu(context),
-                    ],
-                  ),
+                  // On phones, give the copy its own row so it can use the
+                  // card width instead of competing with the controls.
+                  cardHeader,
                   const SizedBox(height: 8),
 
                   // I/O type indicators

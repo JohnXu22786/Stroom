@@ -7,6 +7,33 @@ import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 
 void main() {
+  testWidgets('phone block title gets a full row above action controls',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_cardAtWidth(358));
+    await tester.pumpAndSettle();
+
+    final title = tester.getRect(find.text('1. Audio Separation'));
+    final temporaryOutput = tester.getRect(find.byType(Checkbox));
+
+    expect(title.width, greaterThan(180));
+    expect(title.bottom, lessThan(temporaryOutput.top));
+  });
+
+  testWidgets('tablet block title and action controls stay in one row',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_cardAtWidth(768));
+    await tester.pumpAndSettle();
+
+    final title = tester.getRect(find.text('1. Audio Separation'));
+    final temporaryOutput = tester.getRect(find.byType(Checkbox));
+
+    expect((title.center.dy - temporaryOutput.center.dy).abs(), lessThan(20));
+  });
+
   testWidgets('menu exposes duplicate and movement with disabled boundary',
       (tester) async {
     var duplicates = 0;
@@ -78,3 +105,33 @@ void main() {
     expect(removed, isTrue);
   });
 }
+
+Widget _cardAtWidth(double width) => ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: width,
+              child: FlowBlockCard(
+                block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+                index: 1,
+                isFirst: true,
+                isLast: false,
+                onTemporaryOutputChanged: (_) {},
+                onSettings: () {},
+                onReplace: () {},
+                onDelete: () {},
+                onDuplicate: () {},
+                onMoveUp: () {},
+                onMoveDown: () {},
+                onInsertBefore: () {},
+                onInsertAfter: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
