@@ -114,7 +114,7 @@ void main() {
             'A long release note that needs a readable scrolling area. ',
           ).join(),
           downloadUrl:
-              'https://github.com/JohnXu22786/Stroom/releases/tag/v0.5.5',
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.5.5/Stroom.apk',
           updateAvailable: true,
         ),
       );
@@ -132,7 +132,7 @@ void main() {
           )
           .first;
       final primaryAction = find.ancestor(
-        of: find.text('Download in browser'),
+        of: find.text('Update now'),
         matching: find.byType(FilledButton),
       );
       final primaryRect = tester.getRect(primaryAction);
