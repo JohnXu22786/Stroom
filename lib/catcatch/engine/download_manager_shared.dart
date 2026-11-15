@@ -72,9 +72,9 @@ Future<void> downloadSingleSegment({
   required Map<int, String> errors,
   required Future<void> Function(int index) onSegmentComplete,
 
-  /// Byte-granularity progress: called with the chunk size after each
-  /// chunk is written. The caller aggregates this into a total so
-  /// stall detection sees progress even when percent stays flat.
+  /// Byte-granularity progress: called with each chunk size after it is
+  /// written. A negative correction removes bytes from a rejected ranged
+  /// response after its streamed byte count is found to be invalid.
   void Function(int delta)? onBytesDelta,
   String taskId = '',
 }) async {
@@ -128,12 +128,12 @@ Future<void> downloadSingleSegment({
             _validateRangeResponse(response, rangeStart, rangeLength);
           }
 
+          var receivedBytes = 0;
           try {
             final file = File(partPath);
             final raf = await file.open(mode: FileMode.write);
             try {
               final stream = response.data.stream as Stream<List<int>>;
-              var receivedBytes = 0;
               await for (final chunk in stream) {
                 if (taskId.isNotEmpty) {
                   final pauseCompleter = pauseTokens[taskId];
@@ -155,6 +155,9 @@ Future<void> downloadSingleSegment({
               await raf.close();
             }
           } catch (e) {
+            if (isRangeRequest && receivedBytes > 0) {
+              onBytesDelta?.call(-receivedBytes);
+            }
             if (retries < DefaultRules.maxRetriesPerSegment) {
               retries++;
               continue;

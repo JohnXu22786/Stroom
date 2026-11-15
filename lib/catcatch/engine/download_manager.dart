@@ -412,9 +412,9 @@ class DownloadManager {
     final semaphore = Semaphore(concurrency);
     final futures = <Future<void>>[];
     var progressWrite = Future<void>.value();
-    // Total bytes across all segments (monotonic; no awaits inside the
-    // accumulation, so the single-threaded event loop keeps it atomic).
-    // Seeded above from restored parts.
+    // Accumulated bytes across restored parts and current segment attempts.
+    // Rejected ranged attempts correct the byte count when their part is
+    // discarded.
 
     for (int i = 0; i < total; i++) {
       if (completedSegments.contains(i)) continue;

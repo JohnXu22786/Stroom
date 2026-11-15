@@ -14,6 +14,8 @@ void main() {
   Future<void> verifyRangeRetry({
     required String rejectedContentRange,
     required String rejectedBody,
+    bool rejectByStreamError = false,
+    bool expectByteCorrection = false,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     var requests = 0;
@@ -26,12 +28,21 @@ void main() {
         HttpHeaders.contentRangeHeader,
         requests == 1 ? rejectedContentRange : 'bytes 2-4/10',
       );
+      if (requests == 1 && rejectByStreamError) {
+        request.response.contentLength = 3;
+      }
       request.response.write(requests == 1 ? rejectedBody : 'cde');
-      await request.response.close();
+      try {
+        await request.response.close();
+      } catch (_) {
+        // A deliberately truncated Content-Length closes the first stream
+        // with an error so the downloader exercises its retry path.
+      }
     });
     final directory = await Directory.systemTemp.createTemp('range-retry-');
     final partFiles = <String?>[null];
     final errors = <int, String>{};
+    final byteDeltas = <int>[];
     var completedSegments = 0;
     try {
       await downloadSingleSegment(
@@ -44,6 +55,7 @@ void main() {
         semaphore: Semaphore(1),
         errors: errors,
         onSegmentComplete: (_) async => completedSegments++,
+        onBytesDelta: byteDeltas.add,
       );
 
       expect(requestedRange, 'bytes=2-4');
@@ -51,6 +63,9 @@ void main() {
       expect(errors, isEmpty);
       expect(completedSegments, 1);
       expect(await File(partFiles.single!).readAsString(), 'cde');
+      expect(byteDeltas.where((delta) => delta > 0), isNotEmpty);
+      expect(byteDeltas.any((delta) => delta < 0), expectByteCorrection);
+      expect(byteDeltas.fold<int>(0, (total, delta) => total + delta), 3);
     } finally {
       await serverDone.cancel();
       await server.close(force: true);
@@ -69,6 +84,16 @@ void main() {
     await verifyRangeRetry(
       rejectedContentRange: 'bytes 2-4/10',
       rejectedBody: 'cd',
+      expectByteCorrection: true,
+    );
+  });
+
+  test('corrects progress after a ranged stream fails mid-response', () async {
+    await verifyRangeRetry(
+      rejectedContentRange: 'bytes 2-4/10',
+      rejectedBody: 'cd',
+      rejectByStreamError: true,
+      expectByteCorrection: true,
     );
   });
 
