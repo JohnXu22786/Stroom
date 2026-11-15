@@ -2064,12 +2064,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[중간 내용 생략]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => '저장된 요청에는 미리보기만 있으며 생략된 텍스트는 보존되지 않았습니다.';
-
-  @override
   String get chatAudioPreviewClose => '닫기';
 
   @override

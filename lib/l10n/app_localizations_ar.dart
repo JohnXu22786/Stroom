@@ -2168,12 +2168,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[تم حذف المحتوى الأوسط]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => 'هذا الطلب المحفوظ يحتوي على معاينة فقط؛ لم يتم الاحتفاظ بالنص المحذوف.';
-
-  @override
   String get chatAudioPreviewClose => 'إغلاق';
 
   @override

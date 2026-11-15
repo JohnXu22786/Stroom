@@ -776,8 +776,6 @@
   "chatErrorDetailResponseBody": "Response Body",
   "chatErrorDetailEmpty": "No detail data available",
   "chatErrorDetailOmittedContentMarker": "[middle content omitted, {count} characters]",
-  "chatErrorDetailOmittedContentUnknown": "[middle content omitted]",
-  "chatErrorDetailSavedPreviewNotice": "This saved request contains only a preview; the omitted text was not retained.",
   "@chatErrorDetailOmittedContentMarker": {
     "description": "Clickable marker for omitted text in a Request Body preview",
     "placeholders": {

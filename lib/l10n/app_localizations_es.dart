@@ -2155,12 +2155,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[contenido intermedio omitido]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => 'La solicitud guardada solo contiene una vista previa; no se conservó el texto omitido.';
-
-  @override
   String get chatAudioPreviewClose => 'Cerrar';
 
   @override

@@ -2123,12 +2123,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[middle content omitted]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => 'This saved request contains only a preview; the omitted text was not retained.';
-
-  @override
   String get chatAudioPreviewClose => 'Close';
 
   @override
@@ -14113,6 +14107,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Close';

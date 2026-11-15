@@ -581,8 +581,6 @@
   "chatErrorDetailResponseBody": "応答本文",
   "chatErrorDetailEmpty": "詳細なデータはありません",
   "chatErrorDetailOmittedContentMarker": "[中間を{count}文字省略]",
-  "chatErrorDetailOmittedContentUnknown": "[中間を省略]",
-  "chatErrorDetailSavedPreviewNotice": "保存されたリクエストにはプレビューのみが含まれ、省略されたテキストは保存されていません。",
   "@chatErrorDetailOmittedContentMarker": {
     "description": "Clickable marker for omitted text in a Request Body preview",
     "placeholders": {

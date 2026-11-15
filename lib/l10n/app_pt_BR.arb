@@ -776,8 +776,6 @@
   "chatErrorDetailResponseBody": "Corpo da resposta",
   "chatErrorDetailEmpty": "Nenhum dado detalhado disponível",
   "chatErrorDetailOmittedContentMarker": "[conteúdo do meio omitido, {count} caracteres]",
-  "chatErrorDetailOmittedContentUnknown": "[conteúdo do meio omitido]",
-  "chatErrorDetailSavedPreviewNotice": "Esta solicitação salva contém apenas uma prévia; o texto omitido não foi mantido.",
   "@chatErrorDetailOmittedContentMarker": {
     "description": "Clickable marker for omitted text in a Request Body preview",
     "placeholders": {

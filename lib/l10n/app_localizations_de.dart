@@ -2149,12 +2149,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[mittlerer Inhalt ausgelassen]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => 'Diese gespeicherte Anfrage enthält nur eine Vorschau; der ausgelassene Text wurde nicht gespeichert.';
-
-  @override
   String get chatAudioPreviewClose => 'Schließen';
 
   @override

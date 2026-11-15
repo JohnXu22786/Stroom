@@ -3608,11 +3608,6 @@ abstract class AppLocalizations {
   /// Clickable marker for omitted text in a Request Body preview.
   String chatErrorDetailOmittedContentMarker(int count);
 
-  /// Marker shown when older saved text was already shortened.
-  String get chatErrorDetailOmittedContentUnknown;
-
-  /// Explains that a saved request contains a preview rather than full text.
-  String get chatErrorDetailSavedPreviewNotice;
 
   /// No description provided for @chatAudioPreviewClose.
   ///

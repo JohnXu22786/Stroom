@@ -4,7 +4,6 @@ import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
-import '../../../models/chat_message.dart';
 import '../utils/format_chat_error.dart';
 import '../../../utils/data_sanitizer.dart';
 import '../../../utils/ocr_diagnostics.dart';
@@ -491,78 +490,64 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       );
     }
 
-    final decodedPreview = ChatMessage.decodeRequestBodyPreview(value);
-    final textValue = decodedPreview?.fullText ?? value;
-    if (textValue is String &&
-        (decodedPreview?.isSavedPreview == true ||
-            textValue.characters.length > 80)) {
-      final characters = textValue.characters;
+    if (value is String && value.characters.length > 80) {
+      final characters = value.characters;
       final l10n = AppLocalizations.of(context)!;
-      final first = decodedPreview?.first ?? characters.take(40).toString();
-      final last = decodedPreview?.last ??
-          characters.skip(characters.length - 40).toString();
-      final omittedCount = decodedPreview?.isSavedPreview == true
-          ? decodedPreview!.omittedCharacters
-          : characters.length - 80;
-      final marker = omittedCount == null
-          ? l10n.chatErrorDetailOmittedContentUnknown
-          : l10n.chatErrorDetailOmittedContentMarker(omittedCount);
-      final isSavedPreview = decodedPreview?.isSavedPreview == true;
-      final fullAvailableText =
-          isSavedPreview ? '$first$marker$last' : textValue;
-      final colors = Theme.of(context).colorScheme;
-      return RichText(
-        text: TextSpan(
-          style: _jsonStyle,
-          children: [
-            TextSpan(text: prefix),
-            TextSpan(text: '"${_escapeJsonFragment(first)}'),
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: Semantics(
-                button: true,
-                label:
-                    '$marker${isSavedPreview ? ', ${l10n.chatErrorDetailSavedPreviewNotice}' : ''}, $path',
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    onTap: () => _showFullContentDialog(
-                      fullAvailableText,
-                      path,
-                      isSavedPreview: isSavedPreview,
-                    ),
-                    mouseCursor: SystemMouseCursors.click,
-                    borderRadius: BorderRadius.circular(3),
-                    hoverColor: colors.primary.withValues(alpha: 0.08),
-                    focusColor: colors.primary.withValues(alpha: 0.16),
-                    child: Ink(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: colors.primaryContainer,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        marker,
-                        style: _jsonStyle.copyWith(
-                          color: colors.primary,
-                          decoration: TextDecoration.underline,
-                          decorationStyle: TextDecorationStyle.dashed,
+      final omittedCount = characters.length - 80;
+      final marker = l10n.chatErrorDetailOmittedContentMarker(omittedCount);
+      if (omittedCount > marker.characters.length) {
+        final first = characters.take(40).toString();
+        final last = characters.skip(characters.length - 40).toString();
+        final colors = Theme.of(context).colorScheme;
+        return RichText(
+          text: TextSpan(
+            style: _jsonStyle,
+            children: [
+              TextSpan(text: prefix),
+              TextSpan(text: '"${_escapeJsonFragment(first)}'),
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: Semantics(
+                  button: true,
+                  label: '$marker, $path',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      onTap: () => _showFullContentDialog(value, path),
+                      mouseCursor: SystemMouseCursors.click,
+                      borderRadius: BorderRadius.circular(3),
+                      hoverColor: colors.primary.withValues(alpha: 0.08),
+                      focusColor: colors.primary.withValues(alpha: 0.16),
+                      child: Ink(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: colors.primaryContainer,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          marker,
+                          style: _jsonStyle.copyWith(
+                            color: colors.primary,
+                            decoration: TextDecoration.underline,
+                            decorationStyle: TextDecorationStyle.dashed,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            TextSpan(text: '${_escapeJsonFragment(last)}"${comma ? ',' : ''}'),
-          ],
-        ),
-      );
+              TextSpan(
+                  text: '${_escapeJsonFragment(last)}"${comma ? ',' : ''}'),
+            ],
+          ),
+        );
+      }
     }
 
     return Text(
-      '$prefix${jsonEncode(textValue)}${comma ? ',' : ''}',
+      '$prefix${jsonEncode(value)}${comma ? ',' : ''}',
       style: _jsonStyle,
     );
   }
@@ -588,11 +573,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     );
   }
 
-  void _showFullContentDialog(
-    String value,
-    String path, {
-    bool isSavedPreview = false,
-  }) {
+  void _showFullContentDialog(String value, String path) {
     final l10n = AppLocalizations.of(context)!;
     showDialog<void>(
       context: context,
@@ -640,21 +621,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isSavedPreview) ...[
-                          Text(
-                            l10n.chatErrorDetailSavedPreviewNotice,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        SelectableText(value, style: _jsonStyle),
-                      ],
+                      children: [SelectableText(value, style: _jsonStyle)],
                     ),
                   ),
                 ),

@@ -776,8 +776,6 @@
   "chatErrorDetailResponseBody": "نص الاستجابة",
   "chatErrorDetailEmpty": "لا تتوفر بيانات تفصيلية",
   "chatErrorDetailOmittedContentMarker": "[تم إخفاء {count} حرفًا من الوسط]",
-  "chatErrorDetailOmittedContentUnknown": "[تم حذف المحتوى الأوسط]",
-  "chatErrorDetailSavedPreviewNotice": "هذا الطلب المحفوظ يحتوي على معاينة فقط؛ لم يتم الاحتفاظ بالنص المحذوف.",
   "@chatErrorDetailOmittedContentMarker": {
     "description": "Clickable marker for omitted text in a Request Body preview",
     "placeholders": {

@@ -2158,12 +2158,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[contenu central omis]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => 'Cette requête enregistrée ne contient qu’un aperçu ; le texte omis n’a pas été conservé.';
-
-  @override
   String get chatAudioPreviewClose => 'Fermer';
 
   @override

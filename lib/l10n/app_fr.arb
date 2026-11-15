@@ -776,8 +776,6 @@
   "chatErrorDetailResponseBody": "Corps de la réponse",
   "chatErrorDetailEmpty": "Aucune donnée détaillée disponible",
   "chatErrorDetailOmittedContentMarker": "[contenu central omis, {count} caractères]",
-  "chatErrorDetailOmittedContentUnknown": "[contenu central omis]",
-  "chatErrorDetailSavedPreviewNotice": "Cette requête enregistrée ne contient qu’un aperçu ; le texte omis n’a pas été conservé.",
   "@chatErrorDetailOmittedContentMarker": {
     "description": "Clickable marker for omitted text in a Request Body preview",
     "placeholders": {

@@ -2144,12 +2144,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[conteúdo do meio omitido]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => 'Esta solicitação salva contém apenas uma prévia; o texto omitido não foi mantido.';
-
-  @override
   String get chatAudioPreviewClose => 'Fechar';
 
   @override

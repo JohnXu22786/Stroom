@@ -1994,12 +1994,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[中间内容已省略]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => '此保存的请求仅包含预览，省略的文本未被保留。';
-
-  @override
   String get chatAudioPreviewClose => '关闭';
 
   @override

@@ -2055,12 +2055,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get chatErrorDetailOmittedContentUnknown => '[中間を省略]';
-
-  @override
-  String get chatErrorDetailSavedPreviewNotice => '保存されたリクエストにはプレビューのみが含まれ、省略されたテキストは保存されていません。';
-
-  @override
   String get chatAudioPreviewClose => '閉じる';
 
   @override
