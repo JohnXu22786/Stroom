@@ -135,32 +135,32 @@ void main() {
 }
 
 Widget _cardAtWidth(double width, {ThemeData? theme}) => ProviderScope(
-  child: MaterialApp(
-    theme: theme,
-    locale: const Locale('en', 'US'),
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    home: Scaffold(
-      body: Center(
-        child: SizedBox(
-          width: width,
-          child: FlowBlockCard(
-            block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
-            index: 1,
-            isFirst: true,
-            isLast: false,
-            onTemporaryOutputChanged: (_) {},
-            onSettings: () {},
-            onReplace: () {},
-            onDelete: () {},
-            onDuplicate: () {},
-            onMoveUp: () {},
-            onMoveDown: () {},
-            onInsertBefore: () {},
-            onInsertAfter: () {},
+      child: MaterialApp(
+        theme: theme,
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: width,
+              child: FlowBlockCard(
+                block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+                index: 1,
+                isFirst: true,
+                isLast: false,
+                onTemporaryOutputChanged: (_) {},
+                onSettings: () {},
+                onReplace: () {},
+                onDelete: () {},
+                onDuplicate: () {},
+                onMoveUp: () {},
+                onMoveDown: () {},
+                onInsertBefore: () {},
+                onInsertAfter: () {},
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  ),
-);
+    );

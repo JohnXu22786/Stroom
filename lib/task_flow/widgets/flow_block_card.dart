@@ -217,8 +217,8 @@ class FlowBlockCard extends ConsumerWidget {
               color: validationMessage != null
                   ? cs.error
                   : selected
-                  ? cs.primary
-                  : def.color.withValues(alpha: 0.4),
+                      ? cs.primary
+                      : def.color.withValues(alpha: 0.4),
               width: selected ? 2 : 1,
             ),
           ),
@@ -313,9 +313,9 @@ class FlowBlockCard extends ConsumerWidget {
                     child: Text(
                       readOnly
                           ? AppLocalizations.of(context)!
-                                .taskFlowUiViewParameters
+                              .taskFlowUiViewParameters
                           : AppLocalizations.of(context)!
-                                .taskFlowUiTapSetParameters,
+                              .taskFlowUiTapSetParameters,
                       style: TextStyle(
                         fontSize: 9,
                         color: cs.primary.withValues(alpha: 0.6),
@@ -454,9 +454,10 @@ class FlowBlockCard extends ConsumerWidget {
     int action,
     String label,
     VoidCallback? callback,
-  ) => PopupMenuItem(
-    value: action,
-    enabled: callback != null,
-    child: Text(label),
-  );
+  ) =>
+      PopupMenuItem(
+        value: action,
+        enabled: callback != null,
+        child: Text(label),
+      );
 }
