@@ -77,6 +77,7 @@ void main() {
 
     await tester.tap(details);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     final strings = AppLocalizations.of(
       tester.element(find.byType(SynthesisTaskCard)),
     )!;

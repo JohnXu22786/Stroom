@@ -643,7 +643,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           children: [
             Icon(Icons.code, color: Colors.orange, size: 20),
             SizedBox(width: 8),
-            Text(AppLocalizations.of(context)!.unifiedTaskRawRequestResponse),
+            Expanded(
+              child: Text(
+                AppLocalizations.of(context)!.unifiedTaskRawRequestResponse,
+              ),
+            ),
           ],
         ),
         content: SizedBox(
