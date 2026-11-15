@@ -2410,10 +2410,10 @@ class BackupService {
     final rollbackBytes = skipRollbackSnapshot
         ? null
         : await _buildBackupBytes(selection: restoreSelection);
-    final webStoreSnapshot = skipRollbackSnapshot ||
-            !(kIsWeb || WebFileStore.isTestMode)
-        ? null
-        : await _snapshotSelectedWebStoreFiles(restoreSelection);
+    final webStoreSnapshot =
+        skipRollbackSnapshot || !(kIsWeb || WebFileStore.isTestMode)
+            ? null
+            : await _snapshotSelectedWebStoreFiles(restoreSelection);
     try {
       // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
       // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
@@ -2466,15 +2466,13 @@ class BackupService {
           validateRestoredDataBeforeVersionCommit: deferVersionCommit,
         );
       }
+      if (restoreSelection.ankiData && !skipAnkiMigrationMarkerInvalidation) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       await _restoreBrowserCookiesAfterDataRestore(
         restoreSelection,
         metadata.browserCookiesData,
       );
-      if (restoreSelection.ankiData && !skipAnkiMigrationMarkerInvalidation) {
-        await _invalidateAnkiSyncMetadataMigrationMarker();
-      }
-      onProgress?.call(1.0);
-      return metadata.skippedLabels;
     } catch (restoreError, restoreStackTrace) {
       if (rollbackBytes != null) {
         final publishHook = beforeRestoreBinaryPublishForTesting;
@@ -2521,6 +2519,8 @@ class BackupService {
       }
       Error.throwWithStackTrace(restoreError, restoreStackTrace);
     }
+    onProgress?.call(1.0);
+    return metadata.skippedLabels;
   }
 
   // ================================================================
