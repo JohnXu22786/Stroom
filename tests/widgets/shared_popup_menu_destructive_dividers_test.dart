@@ -137,6 +137,7 @@ void main() {
             onPinToggle: () {},
             onRename: () {},
             onAutoRename: () {},
+            onReadStateToggle: () {},
             onSelectionToggle: () {},
           ),
         ),

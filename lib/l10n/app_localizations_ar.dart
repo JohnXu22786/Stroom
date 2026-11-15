@@ -3317,6 +3317,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get topicItemPin => 'تثبيت';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'وضع علامة كغير مقروءة';
+
+  @override
+  String get topicItemMarkRead => 'وضع علامة كمقروءة';
+
   String get topicItemRename => 'إعادة تسمية';
 
   @override
@@ -15410,6 +15416,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get topicItemPin => 'تثبيت';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'وضع علامة كغير مقروءة';
+
+  @override
+  String get topicItemMarkRead => 'وضع علامة كمقروءة';
+
   String get topicItemRename => 'إعادة تسمية';
 
   @override

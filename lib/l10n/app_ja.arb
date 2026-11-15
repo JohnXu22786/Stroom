@@ -902,6 +902,8 @@
   "topicItemNew": "新しいトピック",
   "topicItemUnpin": "固定を解除する",
   "topicItemPin": "ピン",
+  "topicItemMarkUnread": "未読にする",
+  "topicItemMarkRead": "既読にする",
   "topicItemRename": "名前の変更",
   "topicItemAutoName": "自動名前",
   "topicItemDelete": "消去",

@@ -3106,6 +3106,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get topicItemPin => '置顶';
 
   @override
+  @override
+  String get topicItemMarkUnread => '标记为未读';
+
+  @override
+  String get topicItemMarkRead => '标记为已读';
+
   String get topicItemRename => '重命名';
 
   @override
@@ -14452,6 +14458,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get topicItemPin => '置顶';
 
   @override
+  @override
+  String get topicItemMarkUnread => '标记为未读';
+
+  @override
+  String get topicItemMarkRead => '标记为已读';
+
   String get topicItemRename => '重命名';
 
   @override

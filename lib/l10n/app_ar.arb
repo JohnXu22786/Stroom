@@ -1205,6 +1205,8 @@
   "topicItemNew": "موضوع جديد",
   "topicItemUnpin": "إلغاء التثبيت",
   "topicItemPin": "تثبيت",
+  "topicItemMarkUnread": "وضع علامة كغير مقروءة",
+  "topicItemMarkRead": "وضع علامة كمقروءة",
   "topicItemRename": "إعادة تسمية",
   "topicItemAutoName": "تسمية تلقائية",
   "topicItemDelete": "حذف",

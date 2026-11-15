@@ -20,6 +20,7 @@ class TopicItem extends StatelessWidget {
   final VoidCallback onPinToggle;
   final VoidCallback onRename;
   final VoidCallback onAutoRename;
+  final VoidCallback onReadStateToggle;
   final VoidCallback onSelectionToggle;
   final VoidCallback? onTemporaryToggle;
 
@@ -37,6 +38,7 @@ class TopicItem extends StatelessWidget {
     required this.onPinToggle,
     required this.onRename,
     required this.onAutoRename,
+    required this.onReadStateToggle,
     required this.onSelectionToggle,
     this.onTemporaryToggle,
   });
@@ -213,6 +215,9 @@ class TopicItem extends StatelessWidget {
                       ),
                       onSelected: (value) async {
                         switch (value) {
+                          case 'read_state':
+                            onReadStateToggle();
+                            break;
                           case 'rename':
                             onRename();
                             break;
@@ -238,6 +243,30 @@ class TopicItem extends StatelessWidget {
                         }
                       },
                       itemBuilder: (ctx) => [
+                        PopupMenuItem(
+                          value: 'read_state',
+                          child: Row(
+                            children: [
+                              Icon(
+                                isUnread
+                                    ? Icons.mark_email_read_outlined
+                                    : Icons.mark_email_unread_outlined,
+                                size: 20,
+                                color: isUnread
+                                    ? Color.lerp(cs.primary, Colors.green, 0.55)
+                                    : cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                isUnread
+                                    ? AppLocalizations.of(context)!
+                                        .topicItemMarkRead
+                                    : AppLocalizations.of(context)!
+                                        .topicItemMarkUnread,
+                              ),
+                            ],
+                          ),
+                        ),
                         PopupMenuItem(
                           value: 'rename',
                           child: Text(

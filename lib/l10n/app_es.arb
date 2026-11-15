@@ -902,6 +902,8 @@
   "topicItemNew": "Nuevo tema",
   "topicItemUnpin": "Desprender",
   "topicItemPin": "Alfiler",
+  "topicItemMarkUnread": "Marcar como no leído",
+  "topicItemMarkRead": "Marcar como leído",
   "topicItemRename": "Rebautizar",
   "topicItemAutoName": "Nombre automático",
   "topicItemDelete": "Borrar",

@@ -3190,6 +3190,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get topicItemPin => '고정';
 
   @override
+  @override
+  String get topicItemMarkUnread => '읽지 않음으로 표시';
+
+  @override
+  String get topicItemMarkRead => '읽음으로 표시';
+
   String get topicItemRename => '이름 변경';
 
   @override
@@ -14850,6 +14856,12 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get topicItemPin => '고정';
 
   @override
+  @override
+  String get topicItemMarkUnread => '읽지 않음으로 표시';
+
+  @override
+  String get topicItemMarkRead => '읽음으로 표시';
+
   String get topicItemRename => '이름 변경';
 
   @override

@@ -1203,6 +1203,8 @@
   "topicItemNew": "新话题",
   "topicItemUnpin": "取消置顶",
   "topicItemPin": "置顶",
+  "topicItemMarkUnread": "标记为未读",
+  "topicItemMarkRead": "标记为已读",
   "topicItemRename": "重命名",
   "topicItemAutoName": "自动命名",
   "topicItemDelete": "删除",
