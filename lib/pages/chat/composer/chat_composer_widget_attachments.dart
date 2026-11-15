@@ -525,6 +525,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // attachment that is still in use.
     if (index >= _pendingAttachments.length) return;
     final oldAtt = _pendingAttachments[index];
+    final editSessionGeneration = _pendingAttachmentDraftGeneration;
 
     try {
       // 编辑后的文件存入附件存储目录（与未编辑附件同一位置），
@@ -560,6 +561,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
               .indexWhere((attachment) => attachment.id == oldAtt.id)
           : -1;
       if (currentIndex < 0 ||
+          editSessionGeneration != _pendingAttachmentDraftGeneration ||
           _pendingAttachments[currentIndex].storagePath != oldAtt.storagePath ||
           _pendingAttachments[currentIndex].hash != oldAtt.hash) {
         await _deleteTempFile(tempStoragePath);

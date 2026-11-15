@@ -503,4 +503,69 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'a canceled edit cannot commit into a reopened session for the same message',
+    (tester) async {
+      final sourceBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+      );
+      final sourcePath = await tester.runAsync(
+        () => AttachmentStorage.saveFile('source.png', sourceBytes),
+      );
+      final source = Attachment(
+        id: 'source-image',
+        fileName: 'source.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'source-hash',
+        storagePath: sourcePath!,
+        fileSize: sourceBytes.length,
+        base64Data: base64Encode(sourceBytes),
+      );
+      await mountComposer(tester, editingAttachment: source);
+
+      final saveStarted = Completer<void>();
+      final finishSave = Completer<void>();
+      String? savedEditedPath;
+      AttachmentStorage.saveEditedFileOverrideForTesting =
+          (fileName, bytes) async {
+        final savedPath = await AttachmentStorage.saveFile(fileName, bytes);
+        savedEditedPath = 'temp_edited/${savedPath.split('/').last}';
+        if (!saveStarted.isCompleted) saveStarted.complete();
+        await finishSave.future;
+        return savedEditedPath!;
+      };
+      final editedBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+      );
+
+      late Future<void> edit;
+      await tester.runAsync(() async {
+        edit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      });
+      await tester.runAsync(() => saveStarted.future);
+
+      await pumpComposer(tester);
+      await pumpComposer(tester, editingAttachment: source);
+      finishSave.complete();
+      await tester.runAsync(() => edit);
+
+      expect(
+        composerKey
+            .currentState!.pendingAttachmentsForTesting.single.storagePath,
+        source.storagePath,
+        reason:
+            'the canceled save must not replace an attachment in a new edit session',
+      );
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(savedEditedPath!),
+        ),
+        isNull,
+        reason: 'the stale save file must be removed',
+      );
+    },
+  );
 }
