@@ -46,20 +46,20 @@ Widget createTestApp({
       builder: mediaQuerySize == null
           ? null
           : (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
-                child: child!,
-              ),
+              data: MediaQuery.of(context).copyWith(size: mediaQuerySize),
+              child: child!,
+            ),
       home: AssistantSelectionPage(),
     ),
   );
 }
 
 Widget _localizedAssistantSelectionApp() => MaterialApp(
-      locale: const Locale('zh', 'CN'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: const AssistantSelectionPage(),
-    );
+  locale: const Locale('zh', 'CN'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: const AssistantSelectionPage(),
+);
 
 BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
   final context = tester.element(find.byType(AssistantSelectionPage));
@@ -146,8 +146,8 @@ void main() {
         await tester.pumpAndSettle();
 
         final dialogContext = tester.element(find.byType(AlertDialog));
-        final expectedSeed =
-            AppLocalizations.of(dialogContext)!.assistantDefaultPrompt;
+        final expectedSeed = AppLocalizations.of(dialogContext)!
+            .assistantDefaultPrompt;
         expect(
           find.byWidgetPredicate(
             (widget) =>
@@ -336,9 +336,7 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              size: const Size(740, 360),
-            ),
+            data: MediaQuery.of(context).copyWith(size: const Size(740, 360)),
             child: child!,
           ),
           home: Scaffold(
@@ -458,8 +456,7 @@ void main() {
       },
     );
 
-    testWidgets(
-        'edit dialog on a very short window falls back to a scrollable '
+    testWidgets('edit dialog on a very short window falls back to a scrollable '
         'layout without overflow', (tester) async {
       // Short window: the fixed rows + expanded prompt would overflow, so
       // the editor must switch to its scrollable fallback layout.
@@ -494,8 +491,7 @@ void main() {
       expect(find.text('保存'), findsOneWidget);
     });
 
-    testWidgets(
-        'large text scale on a medium window also uses the fallback '
+    testWidgets('large text scale on a medium window also uses the fallback '
         'layout (scaled threshold)', (tester) async {
       // 560dp window is above the unscaled fill threshold (540), but with
       // system font scaling 2.0 the fixed rows would overflow the fill
@@ -677,16 +673,18 @@ void main() {
         final container = ProviderScope.containerOf(
           tester.element(find.byType(AssistantSelectionPage)),
         );
-        final order =
-            container.read(assistantProvider).map((a) => a.name).toList();
+        final order = container
+            .read(assistantProvider)
+            .map((a) => a.name)
+            .toList();
         expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
 
         // 顺序持久化：prefs 里保存的是重排后的顺序
         final prefs = await SharedPreferences.getInstance();
         final json = prefs.getString('assistants');
         expect(json, isNotNull);
-        final decoded =
-            (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
+        final decoded = (jsonDecode(json!) as List)
+            .cast<Map<String, dynamic>>();
         expect((decoded.first['name'] as String), '助手乙');
       },
     );
@@ -763,6 +761,57 @@ void main() {
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
+    testWidgets('import tab opens the existing remote assistant flow', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('导入助手'));
+      await tester.pumpAndSettle();
+      expect(find.text('连接远程助手目录，或通过助手文件 URL 导入。'), findsOneWidget);
+      expect(find.text('连接目录或导入文件'), findsOneWidget);
+
+      await tester.tap(find.text('连接目录或导入文件'));
+      await tester.pumpAndSettle();
+      expect(find.text('接入远程助手'), findsOneWidget);
+      expect(find.text('目录清单或助手文件 URL'), findsOneWidget);
+    });
+
+    testWidgets('source tabs fit a narrow mobile viewport', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+
+      expect(find.text('内置助手'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('导入助手'));
+      await tester.pumpAndSettle();
+      expect(find.text('连接目录或导入文件'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('浏览可直接使用的内置助手，点击条目可预览后再添加。'), findsOneWidget);
+    });
+
     testWidgets('market cards have no text editing fields', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -835,19 +884,19 @@ void main() {
 
       // The detail panel is shown (with its import button), and the
       // market dialog is still open underneath — nothing imported yet
-      expect(find.text('添加助手'), findsOneWidget);
-      expect(find.text('助手市场'), findsOneWidget);
+      expect(find.text('添加助手'), findsNWidgets(2));
       // The detail panel lets the user review the prompt text
       expect(find.text(firstPrompt.prompt), findsOneWidget);
 
       // Close the detail panel without importing
       await tester.tap(find.byIcon(Icons.close).last);
       await tester.pumpAndSettle();
-      expect(find.text('添加助手'), findsNothing);
+      expect(find.text('添加助手'), findsOneWidget);
 
       // Close the market dialog and verify nothing was added to the grid
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
+      expect(find.text('添加助手'), findsNothing);
       expect(find.text('助手1'), findsOneWidget);
       expect(find.text(firstPrompt.name), findsNothing);
     });
@@ -875,11 +924,11 @@ void main() {
         await tester.pumpAndSettle();
 
         // Import from the detail panel
-        await tester.tap(find.text('添加助手'));
+        await tester.tap(find.widgetWithText(FilledButton, '添加助手'));
         await tester.pumpAndSettle();
 
         // Both dialogs should be closed and the new assistant appears
-        expect(find.text('助手市场'), findsNothing);
+        expect(find.text('添加助手'), findsNothing);
         expect(find.text(firstPrompt.name), findsOneWidget);
       },
     );
@@ -903,7 +952,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dialog should be closed and the new assistant should appear
-      expect(find.text('助手市场'), findsNothing);
+      expect(find.text('添加助手'), findsNothing);
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
@@ -945,7 +994,6 @@ void main() {
           .read(assistantProvider)
           .where((a) => a.name == firstPrompt.name);
       expect(imported.length, 1);
-      expect(find.text('助手市场'), findsNothing);
       expect(find.text('添加助手'), findsNothing);
       // The selection page is still on screen
       expect(find.text('选择助手'), findsOneWidget);
@@ -971,7 +1019,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dialog should be closed
-      expect(find.text('助手市场'), findsNothing);
+      expect(find.text('添加助手'), findsNothing);
       // Original assistant should still be there
       expect(find.text('现有助手'), findsOneWidget);
     });
@@ -1341,8 +1389,7 @@ void main() {
       expect(settings.maxToolOutputChars, 5000, reason: '非法输入不落库：保存的必是生效值');
     });
 
-    testWidgets(
-        '从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
+    testWidgets('从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
         'tab 显示全关但新话题全开的误导）', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -1427,8 +1474,7 @@ void main() {
       expect(find.textContaining('已启用 0 /'), findsOneWidget);
     });
 
-    testWidgets(
-        '默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
+    testWidgets('默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
         '保存后自动清除失效记录', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -1476,8 +1522,7 @@ void main() {
       expect(assistant.defaultModelName, isNull);
     });
 
-    testWidgets(
-        '同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
+    testWidgets('同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
         '重复 value 崩溃', (tester) async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
@@ -1669,8 +1714,7 @@ void main() {
       expect(assistant.defaultToolNames, isNot(contains('todowrite')));
     });
 
-    testWidgets(
-        '默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
+    testWidgets('默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
         '排序，而不是按供应商配置的添加顺序', (tester) async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
@@ -1722,11 +1766,13 @@ void main() {
 
       // 已保存顺序中的模型按保存顺序排在前，未保存的模型按原顺序追加在末尾：
       // 期望 claude → gpt-4o → gemini（而非配置添加顺序 gpt-4o → claude → gemini）。
-      final claudeY =
-          tester.getCenter(find.text('claude-3.5-sonnet | OpenAI')).dy;
+      final claudeY = tester
+          .getCenter(find.text('claude-3.5-sonnet | OpenAI'))
+          .dy;
       final gptY = tester.getCenter(find.text('gpt-4o | OpenAI')).dy;
-      final geminiY =
-          tester.getCenter(find.text('gemini-2.0-flash | OpenAI')).dy;
+      final geminiY = tester
+          .getCenter(find.text('gemini-2.0-flash | OpenAI'))
+          .dy;
       expect(
         claudeY,
         lessThan(gptY),
@@ -1735,8 +1781,7 @@ void main() {
       expect(gptY, lessThan(geminiY), reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
     });
 
-    testWidgets(
-        'saving the dialog without touching 默认设置 keeps defaults '
+    testWidgets('saving the dialog without touching 默认设置 keeps defaults '
         'unconfigured', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -1773,7 +1818,8 @@ void main() {
       expect(
         assistant.defaultToolNames,
         isNull,
-        reason: '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
+        reason:
+            '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
             '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭',
       );
     });

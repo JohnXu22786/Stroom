@@ -24,14 +24,17 @@ void main() {
     });
 
     test('ARB resources have matching keys and valid JSON', () {
-      final files = Directory('lib/l10n')
-          .listSync()
-          .whereType<File>()
-          .map((file) => file.path)
-          .where((path) =>
-              path.startsWith('lib/l10n/app_') && path.endsWith('.arb'))
-          .toList()
-        ..sort();
+      final files =
+          Directory('lib/l10n')
+              .listSync()
+              .whereType<File>()
+              .map((file) => file.path)
+              .where(
+                (path) =>
+                    path.startsWith('lib/l10n/app_') && path.endsWith('.arb'),
+              )
+              .toList()
+            ..sort();
       final resources = files
           .map((path) => jsonDecode(File(path).readAsStringSync()) as Map)
           .toList();
@@ -233,28 +236,32 @@ void main() {
       }
 
       await pumpMarket(const Locale('en', 'US'));
-      expect(find.text('Assistant Market'), findsOneWidget);
+      expect(find.text('Add assistant'), findsOneWidget);
+      expect(find.text('Built-in'), findsOneWidget);
+      expect(find.text('Import'), findsOneWidget);
       expect(find.text('General Assistant'), findsOneWidget);
       expect(
         find.text(
-          'Imported prompts become regular assistants that you can edit freely.',
+          'Browse ready-to-use assistants. Tap one to preview it before adding.',
         ),
         findsOneWidget,
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await pumpMarket(const Locale('zh', 'CN'));
-      expect(find.text('助手市场'), findsOneWidget);
+      expect(find.text('添加助手'), findsOneWidget);
+      expect(find.text('内置助手'), findsOneWidget);
+      expect(find.text('导入助手'), findsOneWidget);
       expect(find.text('通用助手'), findsOneWidget);
-      expect(find.text('选择后将添加为普通助手，之后可自由编辑'), findsOneWidget);
+      expect(find.text('浏览可直接使用的内置助手，点击条目可预览后再添加。'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await pumpMarket(const Locale('de', 'DE'));
-      expect(find.text('Assistenten-Marktplatz'), findsOneWidget);
+      expect(find.text('Assistent hinzufügen'), findsOneWidget);
       expect(find.text('Allgemeiner Assistent'), findsOneWidget);
       expect(
         find.text(
-          'Importierte Prompts werden zu regulären Assistenten, die du frei bearbeiten kannst.',
+          'Durchsuche fertige Assistenten und sieh sie dir vor dem Hinzufügen an.',
         ),
         findsOneWidget,
       );
@@ -267,10 +274,10 @@ class _PromptMarketLauncher extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-        body: TextButton(
-          key: const Key('open-market'),
-          onPressed: () => showBuiltInPromptSelector(context, ref),
-          child: const Text('Open'),
-        ),
-      );
+    body: TextButton(
+      key: const Key('open-market'),
+      onPressed: () => showBuiltInPromptSelector(context, ref),
+      child: const Text('Open'),
+    ),
+  );
 }

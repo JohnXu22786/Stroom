@@ -199,6 +199,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get builtInPromptMarketTitle => 'Asistente de Mercado';
 
   @override
+  String get assistantAddTitle => 'Añadir asistente';
+
+  @override
+  String get assistantBuiltInTab => 'Integrados';
+
+  @override
+  String get assistantImportTab => 'Importar';
+
+  @override
+  String get assistantBuiltInHint =>
+      'Explora asistentes listos para usar y previsualízalos antes de añadirlos.';
+
+  @override
+  String get assistantImportHint =>
+      'Conecta un catálogo remoto o importa un archivo de asistente desde su URL.';
+
+  @override
+  String get assistantImportAction => 'Conectar catálogo o importar archivo';
+
+  @override
   String get builtInPromptClose => 'Cerrar';
 
   @override
@@ -474,7 +494,8 @@ class AppLocalizationsEs extends AppLocalizations {
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Preservar texto sin fórmulas y representar fórmulas matemáticas en LaTeX; use \$...\$ para fórmulas en línea y \$\$...\$\$ para fórmulas de visualización. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrDefaultImagesOnly => "Predeterminado (sin instrucción personalizada; se usa la indicación OCR predeterminada)";
+  String get ocrDefaultImagesOnly =>
+      'Predeterminado (sin instrucción personalizada; se usa la indicación OCR predeterminada)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -548,7 +569,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      "Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguna, no se añade ninguna instrucción personalizada; se sigue usando la indicación OCR predeterminada.";
+      'Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguna, no se añade ninguna instrucción personalizada; se sigue usando la indicación OCR predeterminada.';
 
   @override
   String get ocrInstructionManageEmpty => 'Aún no hay instrucciones';
@@ -3335,12 +3356,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get topicItemPin => 'Alfiler';
 
   @override
-  @override
   String get topicItemMarkUnread => 'Marcar como no leído';
 
   @override
   String get topicItemMarkRead => 'Marcar como leído';
 
+  @override
   String get topicItemRename => 'Rebautizar';
 
   @override
@@ -12394,6 +12415,26 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get builtInPromptMarketTitle => 'Asistente de Mercado';
 
   @override
+  String get assistantAddTitle => 'Añadir asistente';
+
+  @override
+  String get assistantBuiltInTab => 'Integrados';
+
+  @override
+  String get assistantImportTab => 'Importar';
+
+  @override
+  String get assistantBuiltInHint =>
+      'Explora asistentes listos para usar y previsualízalos antes de añadirlos.';
+
+  @override
+  String get assistantImportHint =>
+      'Conecta un catálogo remoto o importa un archivo de asistente desde su URL.';
+
+  @override
+  String get assistantImportAction => 'Conectar catálogo o importar archivo';
+
+  @override
   String get builtInPromptClose => 'Cerrar';
 
   @override
@@ -12669,7 +12710,8 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Preservar texto sin fórmulas y representar fórmulas matemáticas en LaTeX; use \$...\$ para fórmulas en línea y \$\$...\$\$ para fórmulas de visualización. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrDefaultImagesOnly => "Predeterminado (sin instrucción personalizada; se usa la indicación OCR predeterminada)";
+  String get ocrDefaultImagesOnly =>
+      'Predeterminado (sin instrucción personalizada; se usa la indicación OCR predeterminada)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12743,7 +12785,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get ocrInstructionManageGuidance =>
-      "Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguna, no se añade ninguna instrucción personalizada; se sigue usando la indicación OCR predeterminada.";
+      'Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguna, no se añade ninguna instrucción personalizada; se sigue usando la indicación OCR predeterminada.';
 
   @override
   String get ocrInstructionManageEmpty => 'Aún no hay instrucciones';
@@ -13772,6 +13814,10 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       '¿Está seguro de que desea borrar todas las tareas fallidas?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '¿Seguro que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.';
 
@@ -14343,6 +14389,11 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get chatErrorDetailEmpty => 'No hay datos detallados disponibles';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[se omitieron $count caracteres intermedios]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Cerrar';
@@ -15521,12 +15572,12 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get topicItemPin => 'Alfiler';
 
   @override
-  @override
   String get topicItemMarkUnread => 'Marcar como no leído';
 
   @override
   String get topicItemMarkRead => 'Marcar como leído';
 
+  @override
   String get topicItemRename => 'Rebautizar';
 
   @override
@@ -16050,6 +16101,9 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get folderPickerSubfolders => 'Subcarpetas';
+
+  @override
+  String get folderPickerNoFolders => 'No hay carpetas';
 
   @override
   String get folderPickerExistingFolders => 'Carpetas existentes';
@@ -18675,19 +18729,20 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get providerBuiltinBadge => 'Incorporado';
 
   @override
-  String get providerBuiltinTtsName => 'Proveedor de TTS';
+  String get providerBuiltinTtsName => 'TTS (Texto a voz)';
 
   @override
-  String get providerBuiltinLlmName => 'Proveedor de Maestría en Derecho';
+  String get providerBuiltinLlmName => 'LLM (Modelo de lenguaje grande)';
 
   @override
-  String get providerBuiltinOcrName => 'Proveedor de OCR';
+  String get providerBuiltinOcrName =>
+      'OCR (Reconocimiento óptico de caracteres)';
 
   @override
-  String get providerBuiltinAsrName => 'Proveedor de reconocimiento de voz';
+  String get providerBuiltinAsrName => 'STT (Voz a texto)';
 
   @override
-  String get providerBuiltinMcpName => 'Proveedor MCP';
+  String get providerBuiltinMcpName => 'MCP (Protocolo de contexto de modelo)';
 
   @override
   String get providerBuiltinSearchGroupName => 'Buscar';
@@ -22210,6 +22265,11 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'El JSON de la solicitud OCR ocupa $encodedBytes bytes y supera el límite configurado de $budgetBytes bytes.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'Error de OCR: $details';
   }
@@ -22978,6 +23038,99 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get appLogCopyDone => 'Copié todo el contenido del registro.';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Tarea en segundo plano';
@@ -24271,4 +24424,16 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   @override
   String get providerMaxUploadSizePositive =>
       'El tamaño máximo de carga debe ser un número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
 }
