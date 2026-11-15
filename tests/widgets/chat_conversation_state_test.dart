@@ -21,6 +21,39 @@ Widget _app(ChatConversationState state, {VoidCallback? onRetry}) =>
 
 void main() {
   testWidgets(
+    'loading indicator remains square when the chat viewport is narrow',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const Scaffold(
+            body: SizedBox(
+              width: 320,
+              height: 96,
+              child: ChatConversationStateView(
+                state: ChatConversationState.loading,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final indicatorSize = tester.getSize(
+        find.byType(CircularProgressIndicator),
+      );
+      expect(indicatorSize.width, indicatorSize.height);
+      expect(indicatorSize.width, lessThanOrEqualTo(40));
+    },
+  );
+
+  testWidgets(
     'loading, empty, no-conversation and failed states are distinct',
     (tester) async {
       await tester.pumpWidget(_app(ChatConversationState.loading));
