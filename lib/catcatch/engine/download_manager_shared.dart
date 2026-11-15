@@ -94,8 +94,9 @@ Future<void> downloadSingleSegment({
         final dio = Dio();
         cancelToken?.whenCancel.then((_) => dio.close());
         try {
-          final mergedHeaders =
-              Map<String, String>.from(DefaultRules.defaultHeaders);
+          final mergedHeaders = Map<String, String>.from(
+            DefaultRules.defaultHeaders,
+          );
           if (headers != null) mergedHeaders.addAll(headers);
           if (rangeStart != null && rangeLength != null) {
             mergedHeaders[HttpHeaders.rangeHeader] =
@@ -205,8 +206,7 @@ void _validateRangeResponse(
     throw DioException(
       requestOptions: response.requestOptions,
       response: response,
-      message:
-          'Invalid Content-Range for requested bytes $start-$end: '
+      message: 'Invalid Content-Range for requested bytes $start-$end: '
           '${contentRange ?? '<missing>'}',
     );
   }
