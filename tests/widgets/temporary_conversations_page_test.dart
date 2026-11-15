@@ -15,9 +15,8 @@ Conversation _conv(String id, {bool isTemporary = false}) {
     id: id,
     title: '对话$id',
     isTemporary: isTemporary,
-    temporaryExpiresAt: isTemporary
-        ? DateTime.now().add(kTemporaryConversationDuration)
-        : null,
+    temporaryExpiresAt:
+        isTemporary ? DateTime.now().add(kTemporaryConversationDuration) : null,
   );
 }
 
@@ -41,7 +40,8 @@ Widget _testApp(List<Conversation> conversations) {
 }
 
 void main() {
-  testWidgets('temporary conversation shows countdown capsule and '
+  testWidgets(
+      'temporary conversation shows countdown capsule and '
       'checked-bubble leading icon', (tester) async {
     await tester.pumpWidget(
       _testApp([_conv('temp-1', isTemporary: true), _conv('normal-1')]),

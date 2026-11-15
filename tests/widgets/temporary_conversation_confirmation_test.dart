@@ -123,11 +123,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
 
     Container capsuleContainer() => tester.widget<Container>(
-      find.descendant(
-        of: find.byType(TemporaryCountdownCapsule),
-        matching: find.byType(Container),
-      ),
-    );
+          find.descendant(
+            of: find.byType(TemporaryCountdownCapsule),
+            matching: find.byType(Container),
+          ),
+        );
 
     expect(capsuleContainer().decoration, isA<BoxDecoration>());
     expect(

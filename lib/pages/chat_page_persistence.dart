@@ -310,10 +310,13 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       if (_pendingSendConvIds.contains(convId)) return null;
       _pendingSendConvIds.add(convId);
 
-      final temporaryConversation = ref.read(conversationsProvider).where(
+      final temporaryConversation = ref
+          .read(conversationsProvider)
+          .where(
             (conversation) =>
                 conversation.id == convId && conversation.isTemporary,
-          ).firstOrNull;
+          )
+          .firstOrNull;
       final conversationsNotifier = ref.read(conversationsProvider.notifier);
       temporaryCountdownNotifier = conversationsNotifier;
       if (temporaryConversation != null) {
@@ -350,8 +353,8 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           .firstOrNull;
       final capturedTemporaryState =
           temporaryConversation == null || activeTemporaryConversation == null
-          ? null
-          : activeTemporaryConversation.toMap();
+              ? null
+              : activeTemporaryConversation.toMap();
 
       final userMsgId = 'u${DateTime.now().microsecondsSinceEpoch}';
 
