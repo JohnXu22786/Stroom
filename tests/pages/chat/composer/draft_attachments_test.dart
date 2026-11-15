@@ -33,22 +33,42 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
   Future<String> getTemporaryPath() async => root;
 }
 
-class _BlockingPathProviderPlatform extends PathProviderPlatform {
-  _BlockingPathProviderPlatform(this.root);
-
-  final String root;
+class _AttachmentSaveGate {
   final started = Completer<void>();
   final release = Completer<void>();
+}
 
-  @override
-  Future<String> getApplicationDocumentsPath() async {
-    if (!started.isCompleted) started.complete();
-    await release.future;
-    return root;
+class _ControlledAttachmentStorage {
+  _ControlledAttachmentStorage(this.root);
+
+  final String root;
+  final List<_AttachmentSaveGate> _saveGates = [];
+  int _nextFileId = 0;
+
+  _AttachmentSaveGate blockNextSave() {
+    final gate = _AttachmentSaveGate();
+    _saveGates.add(gate);
+    return gate;
   }
 
-  @override
-  Future<String> getTemporaryPath() async => root;
+  Future<String> saveFile(String fileName, Uint8List bytes) async {
+    final gate = _saveGates.removeAt(0);
+    gate.started.complete();
+    await gate.release.future;
+
+    final storagePath = 'attachments/test_import_${_nextFileId++}.bin';
+    final file = File('$root/$storagePath');
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes);
+    return storagePath;
+  }
+
+  Future<bool> deleteFile(String storagePath) async {
+    final file = File('$root/$storagePath');
+    if (!await file.exists()) return false;
+    await file.delete();
+    return true;
+  }
 }
 
 void _dummyOnStop() {}
@@ -150,6 +170,7 @@ void main() {
   late Directory tmpRoot;
 
   setUp(() {
+    AttachmentStorage.resetOverridesForTesting();
     AppLogService.reset();
     AppLogService.disableFileLogging();
     tmpRoot = Directory.systemTemp.createTempSync('stroom_draft_att_test_');
@@ -163,6 +184,7 @@ void main() {
       // 非关键清理
     }
     AppLogService.reset();
+    AttachmentStorage.resetOverridesForTesting();
   });
 
   group('对话附件草稿', () {
@@ -171,8 +193,10 @@ void main() {
       (tester) async {
         final container = _buildContainer();
         final key = GlobalKey<ChatComposerWidgetState>();
-        final pathProvider = _BlockingPathProviderPlatform(tmpRoot.path);
-        PathProviderPlatform.instance = pathProvider;
+        final storage = _ControlledAttachmentStorage(tmpRoot.path);
+        AttachmentStorage.saveFileOverrideForTesting = storage.saveFile;
+        AttachmentStorage.deleteFileOverrideForTesting = storage.deleteFile;
+        final firstSave = storage.blockNextSave();
         final attB = readyImage(id: 'att-b', hash: 'hash-b')
           ..conversationId = 'conv-2';
 
@@ -191,7 +215,7 @@ void main() {
             'old-chat.txt',
             Uint8List.fromList([1, 2, 3]),
           );
-          await pathProvider.started.future;
+          await firstSave.started.future;
         });
 
         await tester.pumpWidget(
@@ -205,7 +229,7 @@ void main() {
         );
         await tester.pump();
 
-        pathProvider.release.complete();
+        firstSave.release.complete();
         await tester.runAsync(() => pendingImport);
         await tester.pump();
 
@@ -235,15 +259,14 @@ void main() {
               'the stale import file should be deleted after it is rejected',
         );
 
-        final editPathProvider = _BlockingPathProviderPlatform(tmpRoot.path);
-        PathProviderPlatform.instance = editPathProvider;
+        final editSave = storage.blockNextSave();
         late Future<void> pendingEditImport;
         await tester.runAsync(() async {
           pendingEditImport = key.currentState!.addPendingAttachmentForTesting(
             'late-edit.txt',
             Uint8List.fromList([4, 5, 6]),
           );
-          await editPathProvider.started.future;
+          await editSave.started.future;
         });
 
         final originalEditAttachment = readyImage(
@@ -263,7 +286,7 @@ void main() {
         );
         await tester.pump();
 
-        editPathProvider.release.complete();
+        editSave.release.complete();
         await tester.runAsync(() => pendingEditImport);
         await tester.pump();
 
@@ -291,8 +314,10 @@ void main() {
       (tester) async {
         final container = _buildContainer();
         final key = GlobalKey<ChatComposerWidgetState>();
-        final pathProvider = _BlockingPathProviderPlatform(tmpRoot.path);
-        PathProviderPlatform.instance = pathProvider;
+        final storage = _ControlledAttachmentStorage(tmpRoot.path);
+        AttachmentStorage.saveFileOverrideForTesting = storage.saveFile;
+        AttachmentStorage.deleteFileOverrideForTesting = storage.deleteFile;
+        final save = storage.blockNextSave();
         final originalAttachment = readyImage(
           id: 'edit-att',
           hash: 'hash-edit',
@@ -316,14 +341,14 @@ void main() {
             'late-edit.txt',
             Uint8List.fromList([4, 5, 6]),
           );
-          await pathProvider.started.future;
+          await save.started.future;
         });
 
         await tester.pumpWidget(editingComposer('conv-2'));
         await tester.pumpWidget(editingComposer('conv-1'));
         await tester.pump();
 
-        pathProvider.release.complete();
+        save.release.complete();
         await tester.runAsync(() => pendingImport);
         await tester.pump();
 
@@ -347,6 +372,10 @@ void main() {
     ) async {
       final container = _buildContainer();
       final key = GlobalKey<ChatComposerWidgetState>();
+      final storage = _ControlledAttachmentStorage(tmpRoot.path);
+      AttachmentStorage.saveFileOverrideForTesting = storage.saveFile;
+      AttachmentStorage.deleteFileOverrideForTesting = storage.deleteFile;
+      final save = storage.blockNextSave();
       final attB = readyImage(id: 'att-b', hash: 'hash-b')
         ..conversationId = 'conv-2';
 
@@ -360,11 +389,14 @@ void main() {
       );
 
       final selectedBytes = Completer<Uint8List>();
-      final pendingImport =
-          key.currentState!.addPendingAttachmentAfterPickerForTesting(
-        'picked-in-conv-1.txt',
-        selectedBytes.future,
-      );
+      late Future<void> pendingImport;
+      await tester.runAsync(() async {
+        pendingImport =
+            key.currentState!.addPendingAttachmentAfterPickerForTesting(
+          'picked-in-conv-1.txt',
+          selectedBytes.future,
+        );
+      });
 
       await tester.pumpWidget(
         _composer(
@@ -377,7 +409,12 @@ void main() {
       );
       await tester.pump();
 
-      selectedBytes.complete(Uint8List.fromList([7, 8, 9]));
+      await tester.runAsync(() async {
+        selectedBytes.complete(Uint8List.fromList([7, 8, 9]));
+        await save.started.future;
+      });
+
+      save.release.complete();
       await tester.runAsync(() => pendingImport);
       await tester.pump();
 
