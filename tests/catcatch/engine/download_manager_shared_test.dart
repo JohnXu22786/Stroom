@@ -11,6 +11,92 @@ import 'package:stroom/catcatch/engine/download_manager.dart';
 import 'package:stroom/services/storage_service.dart';
 
 void main() {
+  Future<void> verifyRangeRetry({
+    required String rejectedContentRange,
+    required String rejectedBody,
+    bool rejectByStreamError = false,
+    bool expectByteCorrection = false,
+  }) async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requests = 0;
+    String? requestedRange;
+    final serverDone = server.listen((request) async {
+      requests++;
+      requestedRange = request.headers.value(HttpHeaders.rangeHeader);
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers.set(
+        HttpHeaders.contentRangeHeader,
+        requests == 1 ? rejectedContentRange : 'bytes 2-4/10',
+      );
+      if (requests == 1 && rejectByStreamError) {
+        request.response.contentLength = 3;
+      }
+      request.response.write(requests == 1 ? rejectedBody : 'cde');
+      try {
+        await request.response.close();
+      } catch (_) {
+        // A deliberately truncated Content-Length closes the first stream
+        // with an error so the downloader exercises its retry path.
+      }
+    });
+    final directory = await Directory.systemTemp.createTemp('range-retry-');
+    final partFiles = <String?>[null];
+    final errors = <int, String>{};
+    final byteDeltas = <int>[];
+    var completedSegments = 0;
+    try {
+      await downloadSingleSegment(
+        index: 0,
+        url: 'http://${server.address.address}:${server.port}/segment',
+        rangeStart: 2,
+        rangeLength: 3,
+        tempDir: directory.path,
+        partFiles: partFiles,
+        semaphore: Semaphore(1),
+        errors: errors,
+        onSegmentComplete: (_) async => completedSegments++,
+        onBytesDelta: byteDeltas.add,
+      );
+
+      expect(requestedRange, 'bytes=2-4');
+      expect(requests, 2);
+      expect(errors, isEmpty);
+      expect(completedSegments, 1);
+      expect(await File(partFiles.single!).readAsString(), 'cde');
+      expect(byteDeltas.where((delta) => delta > 0), isNotEmpty);
+      expect(byteDeltas.any((delta) => delta < 0), expectByteCorrection);
+      expect(byteDeltas.fold<int>(0, (total, delta) => total + delta), 3);
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  }
+
+  test('retries ranged responses with a mismatched Content-Range', () async {
+    await verifyRangeRetry(
+      rejectedContentRange: 'bytes 1-3/10',
+      rejectedBody: 'bcd',
+    );
+  });
+
+  test('retries ranged responses with a short body', () async {
+    await verifyRangeRetry(
+      rejectedContentRange: 'bytes 2-4/10',
+      rejectedBody: 'cd',
+      expectByteCorrection: true,
+    );
+  });
+
+  test('retries a ranged stream failure without correcting unreported bytes',
+      () async {
+    await verifyRangeRetry(
+      rejectedContentRange: 'bytes 2-4/10',
+      rejectedBody: 'cd',
+      rejectByStreamError: true,
+    );
+  });
+
   test('confines progress files for traversal task IDs', () async {
     const taskId = '../../catcatch_progress_escape_test';
     final appDir = await AppStorage.directory;
@@ -265,6 +351,12 @@ void main() {
           _ => 'abcdefg',
         };
         request.response.statusCode = range == null ? HttpStatus.ok : 206;
+        if (range != null) {
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes ${range == 'bytes=2-4' ? '2-4' : '5-6'}/7',
+          );
+        }
         request.response.write(bytes);
         await request.response.close();
       });
