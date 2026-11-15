@@ -8,6 +8,8 @@ import '../utils/format_chat_error.dart';
 import '../../../utils/data_sanitizer.dart';
 import '../../../utils/ocr_diagnostics.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 /// Represents a selectable data section within the detail dialog.
 class _DataSection {
   final String id;
@@ -117,7 +119,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text(AppLocalizations.of(context)!.actionClose),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.actionClose,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ),

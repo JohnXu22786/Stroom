@@ -19,6 +19,8 @@ import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
 import 'task_utils.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// Card for a task flow execution in the unified task list.
 ///
 /// Watches the execution provider DIRECTLY (not via parent prop) so
@@ -149,7 +151,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                               ),
                             ),
                             Flexible(
-                              child: Text(
+                              child: ConstrainedText(
                                 execution.flowName,
                                 style: TextStyle(
                                   fontSize: 14,
@@ -353,7 +355,11 @@ class _ExpandedContent extends ConsumerWidget {
                           .pauseExecution(executionId),
                     ),
                     icon: const Icon(Icons.pause, size: 18),
-                    label: Text(strings.taskFlowCardPause),
+                    label: ConstrainedText(
+                      strings.taskFlowCardPause,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 if (restoreReady && (execution?.canResume ?? false))
                   TextButton.icon(
@@ -364,10 +370,12 @@ class _ExpandedContent extends ConsumerWidget {
                           .resumeExecution(executionId),
                     ),
                     icon: const Icon(Icons.play_arrow, size: 18),
-                    label: Text(
+                    label: ConstrainedText(
                       executionStatus == FlowExecutionStatus.paused
                           ? strings.taskFlowCardResume
                           : strings.taskFlowCardResumeInterrupted,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 if (restoreReady &&
@@ -384,7 +392,11 @@ class _ExpandedContent extends ConsumerWidget {
                           .cancelExecution(executionId),
                     ),
                     icon: const Icon(Icons.stop, size: 18),
-                    label: Text(strings.taskFlowCardCancelFlow),
+                    label: ConstrainedText(
+                      strings.taskFlowCardCancelFlow,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 if (restoreReady &&
                     [
@@ -395,9 +407,11 @@ class _ExpandedContent extends ConsumerWidget {
                   TextButton.icon(
                     onPressed: () => _confirmRetry(context, ref),
                     icon: Icon(Icons.refresh, size: 18, color: cs.primary),
-                    label: Text(
+                    label: ConstrainedText(
                       strings.taskFlowCardRetry,
                       style: TextStyle(fontSize: 13, color: cs.primary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -413,7 +427,11 @@ class _ExpandedContent extends ConsumerWidget {
                           .cancelBatch(execution.batchId!),
                     ),
                     icon: const Icon(Icons.stop, size: 18),
-                    label: Text(strings.taskFlowCardCancelBatch),
+                    label: ConstrainedText(
+                      strings.taskFlowCardCancelBatch,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 TextButton.icon(
                   onPressed: restoreReady
@@ -424,12 +442,14 @@ class _ExpandedContent extends ConsumerWidget {
                     size: 18,
                     color: Theme.of(context).colorScheme.error,
                   ),
-                  label: Text(
+                  label: ConstrainedText(
                     strings.taskFlowCardDelete,
                     style: TextStyle(
                       fontSize: 13,
                       color: Theme.of(context).colorScheme.error,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -467,7 +487,11 @@ class _ExpandedContent extends ConsumerWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.taskFlowCardRetryFlow),
+        title: ConstrainedText(
+          strings.taskFlowCardRetryFlow,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           execution.snapshot == null
               ? strings.taskFlowCardNoSnapshot
@@ -476,7 +500,11 @@ class _ExpandedContent extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.taskFlowCardCancel),
+            child: ConstrainedText(
+              strings.taskFlowCardCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (execution.snapshot != null)
             TextButton(
@@ -484,7 +512,11 @@ class _ExpandedContent extends ConsumerWidget {
                 Navigator.pop(ctx);
                 _retry(context, ref, execution, useLatest: true);
               },
-              child: Text(strings.taskFlowCardRunLatest),
+              child: ConstrainedText(
+                strings.taskFlowCardRunLatest,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           FilledButton(
             onPressed: () {
@@ -496,10 +528,12 @@ class _ExpandedContent extends ConsumerWidget {
                 useLatest: execution.snapshot == null,
               );
             },
-            child: Text(
+            child: ConstrainedText(
               execution.snapshot == null
                   ? strings.taskFlowCardRetry
                   : strings.taskFlowCardRetryOriginal,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -572,7 +606,11 @@ class _ExpandedContent extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.taskFlowCardDeleteRecord),
+        title: ConstrainedText(
+          strings.taskFlowCardDeleteRecord,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           cancelsBatch
               ? strings.taskFlowCardDeleteBatchConfirm
@@ -585,7 +623,11 @@ class _ExpandedContent extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.taskFlowCardCancel),
+            child: ConstrainedText(
+              strings.taskFlowCardCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () async {
@@ -666,9 +708,11 @@ class _ExpandedContent extends ConsumerWidget {
                 }
               }
             },
-            child: Text(
+            child: ConstrainedText(
               strings.taskFlowCardConfirm,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

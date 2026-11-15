@@ -27,6 +27,8 @@ import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'gallery_viewer_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 class GalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
@@ -544,18 +546,30 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(strings.galleryFolderExportTitle),
+              title: ConstrainedText(
+                strings.galleryFolderExportTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(strings.galleryWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(strings.actionCancel),
+                  child: ConstrainedText(
+                    strings.actionCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(strings.galleryDownloadZip),
+                  child: ConstrainedText(
+                    strings.galleryDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -739,9 +753,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryTakePhoto,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -758,9 +774,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

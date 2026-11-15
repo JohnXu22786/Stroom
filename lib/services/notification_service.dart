@@ -10,6 +10,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../providers/locale_provider.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Notification settings keys
 // ============================================================================
@@ -407,18 +409,13 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
                     : Colors.white.withValues(alpha: 0.6),
                 border: Border.all(
-                  color: Colors.white.withValues(
-                    alpha: isDark ? 0.15 : 0.5,
-                  ),
+                  color: Colors.white.withValues(alpha: isDark ? 0.15 : 0.5),
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -455,7 +452,7 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
+                        ConstrainedText(
                           widget.payload.title,
                           style: TextStyle(
                             color: fg.withValues(alpha: 0.7),
