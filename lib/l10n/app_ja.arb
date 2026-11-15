@@ -986,7 +986,7 @@
   "fileManagerBackRoot": "ルートに戻る",
   "fileManagerBackFolder": "戻る: {name}",
   "fileManagerMultiSelect": "複数選択",
-  "fileManagerOpen": "開ける",
+  "fileManagerOpen": "開く",
   "fileManagerPreview": "プレビュー",
   "fileManagerFolderAndFilesCount": "{files} ファイル、{folders} サブフォルダー",
   "fileManagerSubfoldersCount": "{count} サブフォルダー",

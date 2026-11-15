@@ -1554,11 +1554,11 @@ class _FileManagerViewState<T extends FileRecord>
         ),
       ),
       PopupMenuItem(
-        value: 'preview',
+        value: 'open',
         child: ListTile(
-          key: Key('fm_file_menu_preview'),
-          leading: Icon(Icons.visibility, size: 20),
-          title: Text(AppLocalizations.of(context)!.fileManagerPreview),
+          key: Key('fm_file_menu_open'),
+          leading: Icon(Icons.open_in_new, size: 20),
+          title: Text(AppLocalizations.of(context)!.fileManagerOpen),
           dense: true,
           contentPadding: EdgeInsets.zero,
         ),
@@ -1622,7 +1622,7 @@ class _FileManagerViewState<T extends FileRecord>
     switch (value) {
       case 'multiSelect':
         _enterSelectionMode(file.id);
-      case 'preview':
+      case 'open':
         widget.config.onFileTap(file);
       case 'rename':
         _renameFile(file.id, file.name, file.format);
