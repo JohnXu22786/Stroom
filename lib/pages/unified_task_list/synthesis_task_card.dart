@@ -531,8 +531,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                           ),
                         ),
                       );
-                      final hasDetails =
-                          widget.task.originalRequest != null ||
+                      final hasDetails = widget.task.originalRequest != null ||
                           widget.task.originalResponse != null;
                       final details = hasDetails
                           ? GestureDetector(
