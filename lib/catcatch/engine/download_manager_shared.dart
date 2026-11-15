@@ -123,12 +123,16 @@ Future<void> downloadSingleSegment({
               message: 'HTTP ${response.statusCode}',
             );
           }
+          if (isRangeRequest) {
+            _validateRangeResponse(response, rangeStart, rangeLength);
+          }
 
           try {
             final file = File(partPath);
             final raf = await file.open(mode: FileMode.write);
             try {
               final stream = response.data.stream as Stream<List<int>>;
+              var receivedBytes = 0;
               await for (final chunk in stream) {
                 if (taskId.isNotEmpty) {
                   final pauseCompleter = pauseTokens[taskId];
@@ -137,7 +141,14 @@ Future<void> downloadSingleSegment({
                   }
                 }
                 await raf.writeFrom(chunk);
+                receivedBytes += chunk.length;
                 onBytesDelta?.call(chunk.length);
+              }
+              if (isRangeRequest && receivedBytes != rangeLength) {
+                throw StateError(
+                  'Expected $rangeLength bytes for range starting at '
+                  '$rangeStart, received $receivedBytes',
+                );
               }
             } finally {
               await raf.close();
@@ -168,6 +179,36 @@ Future<void> downloadSingleSegment({
     }
   } finally {
     semaphore.release();
+  }
+}
+
+void _validateRangeResponse(
+  Response<dynamic> response,
+  int? rangeStart,
+  int? rangeLength,
+) {
+  final start = rangeStart!;
+  final length = rangeLength!;
+  final end = start + length - 1;
+  final contentRange = response.headers.value(HttpHeaders.contentRangeHeader);
+  final match = RegExp(
+    r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$',
+    caseSensitive: false,
+  ).firstMatch(contentRange?.trim() ?? '');
+  final responseStart = int.tryParse(match?.group(1) ?? '');
+  final responseEnd = int.tryParse(match?.group(2) ?? '');
+  final total = int.tryParse(match?.group(3) ?? '');
+
+  if (responseStart != start ||
+      responseEnd != end ||
+      (match?.group(3) != '*' && (total == null || total <= end))) {
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      message:
+          'Invalid Content-Range for requested bytes $start-$end: '
+          '${contentRange ?? '<missing>'}',
+    );
   }
 }
 
