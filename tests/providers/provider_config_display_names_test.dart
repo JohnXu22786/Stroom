@@ -9,14 +9,22 @@ void main() {
     'localizes built-in provider and group names without changing custom names',
     () {
       final entries = [
-        ProviderEntry(id: 'builtin_tts', type: 'tts', name: 'TTS供应商'),
-        ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
-        ProviderEntry(id: 'migrated_llm', type: 'llm', name: 'LLM供应商'),
-        ProviderEntry(id: 'builtin_ocr', type: 'ocr', name: '云石'),
-        ProviderEntry(id: 'builtin_asr', type: 'asr', name: '语音识别供应商'),
-        ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP供应商'),
-        ProviderEntry(id: 'builtin_tts', type: 'tts', name: 'My Speech Setup'),
+        ProviderEntry(
+          id: 'builtin_tts',
+          type: 'tts',
+          name: 'Unexpected speech',
+        ),
+        ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'Unexpected model'),
+        ProviderEntry(id: 'migrated_llm', type: 'llm', name: 'Migrated model'),
+        ProviderEntry(id: 'builtin_ocr', type: 'ocr', name: 'Unexpected OCR'),
+        ProviderEntry(
+          id: 'builtin_asr',
+          type: 'asr',
+          name: 'Unexpected speech input',
+        ),
+        ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'Unexpected MCP'),
         ProviderEntry(id: 'custom', type: 'tts', name: 'My Custom Provider'),
+        ProviderEntry(id: 'builtin_tts', type: 'llm', name: 'Mismatched type'),
       ];
       const groups = [
         McpProviderGroup(
@@ -56,8 +64,8 @@ void main() {
           'MCP（模型上下文协议）',
         ],
       );
-      expect(providerEntryDisplayName(entries[6], en), 'My Speech Setup');
-      expect(providerEntryDisplayName(entries[7], en), 'My Custom Provider');
+      expect(providerEntryDisplayName(entries[6], en), 'My Custom Provider');
+      expect(providerEntryDisplayName(entries[7], en), 'Mismatched type');
 
       expect(groups.take(2).map((group) => mcpGroupDisplayName(group, en)), [
         'Search',
