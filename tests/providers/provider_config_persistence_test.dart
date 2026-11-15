@@ -78,6 +78,46 @@ void main() {
       // 回退默认预置，应用仍可正常使用。
       expect(notifier.state.entries, isNotEmpty);
     });
+
+    test('mixed valid and corrupt entries are backed up before persistence',
+        () async {
+      final original = jsonEncode([
+        {
+          'id': 'valid_llm',
+          'type': 'llm',
+          'name': 'LLM供应商',
+          'configs': [],
+        },
+        {
+          'id': 'corrupt_provider',
+          'type': 'llm',
+          'name': 'Corrupt provider',
+          'configs': 'invalid configs',
+          'apiKey': 'recover-me',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'provider_entries': original});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      await notifier.addFirst(
+        ProviderEntry(id: 'new_provider', type: 'llm', name: 'New provider'),
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      final corruptKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, hasLength(1));
+      expect(prefs.getString(corruptKeys.single), original);
+      expect(
+        (jsonDecode(prefs.getString('provider_entries')!) as List)
+            .whereType<Map>()
+            .any((entry) => entry['id'] == 'new_provider'),
+        isTrue,
+      );
+    });
   });
 
   group('built-in provider display localization', () {
