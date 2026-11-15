@@ -53,14 +53,19 @@ class IOTypeIndicator extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(
-            isInput
-                ? strings.taskFlowUiInputLabel(localizedType)
-                : strings.taskFlowUiOutputLabel(labelOverride ?? localizedType),
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              isInput
+                  ? strings.taskFlowUiInputLabel(localizedType)
+                  : strings.taskFlowUiOutputLabel(
+                      labelOverride ?? localizedType,
+                    ),
+              softWrap: true,
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
