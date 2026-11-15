@@ -6483,20 +6483,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get providerBuiltinBadge => 'Incorporado';
 
   @override
-  String get providerBuiltinTtsName => 'TTS (Texto a voz)';
+  String get providerBuiltinTtsName => 'Proveedor de TTS';
 
   @override
-  String get providerBuiltinLlmName => 'LLM (Modelo de lenguaje grande)';
+  String get providerBuiltinLlmName => 'Proveedor de Maestría en Derecho';
 
   @override
-  String get providerBuiltinOcrName =>
-      'OCR (Reconocimiento óptico de caracteres)';
+  String get providerBuiltinOcrName => 'Proveedor de OCR';
 
   @override
-  String get providerBuiltinAsrName => 'STT (Voz a texto)';
+  String get providerBuiltinAsrName => 'Proveedor de reconocimiento de voz';
 
   @override
-  String get providerBuiltinMcpName => 'MCP (Protocolo de contexto de modelo)';
+  String get providerBuiltinMcpName => 'Proveedor MCP';
 
   @override
   String get providerBuiltinSearchGroupName => 'Buscar';
@@ -18664,20 +18663,19 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get providerBuiltinBadge => 'Incorporado';
 
   @override
-  String get providerBuiltinTtsName => 'TTS (Texto a voz)';
+  String get providerBuiltinTtsName => 'Proveedor de TTS';
 
   @override
-  String get providerBuiltinLlmName => 'LLM (Modelo de lenguaje grande)';
+  String get providerBuiltinLlmName => 'Proveedor de Maestría en Derecho';
 
   @override
-  String get providerBuiltinOcrName =>
-      'OCR (Reconocimiento óptico de caracteres)';
+  String get providerBuiltinOcrName => 'Proveedor de OCR';
 
   @override
-  String get providerBuiltinAsrName => 'STT (Voz a texto)';
+  String get providerBuiltinAsrName => 'Proveedor de reconocimiento de voz';
 
   @override
-  String get providerBuiltinMcpName => 'MCP (Protocolo de contexto de modelo)';
+  String get providerBuiltinMcpName => 'Proveedor MCP';
 
   @override
   String get providerBuiltinSearchGroupName => 'Buscar';
