@@ -55,8 +55,11 @@ void main() {
       );
       await tester.tap(find.text('Open provider settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(Tab).last);
-      await tester.pump(const Duration(seconds: 1));
+      final tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBar)),
+      );
+      tabController.animateTo(1);
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('Fallback method'), findsOneWidget);
       expect(find.text('Preprocessing method'), findsOneWidget);
