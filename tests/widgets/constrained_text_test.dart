@@ -20,6 +20,7 @@ void main() {
     );
 
     expect(find.text('Short label'), findsOneWidget);
+    expect(tester.getSize(find.byType(ConstrainedText)).width, lessThan(240));
   });
 
   testWidgets('keeps clipped text discoverable while it scrolls', (

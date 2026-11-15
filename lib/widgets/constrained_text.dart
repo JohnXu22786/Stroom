@@ -71,6 +71,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
   Timer? _startTimer;
   Timer? _endpointTimer;
   double _overflow = 0;
+  double _layoutWidth = 0;
   double _textWidth = 0;
   double _textHeight = 0;
   bool _vertical = false;
@@ -181,6 +182,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         maxLines: maxLines,
         ellipsis: '…',
       )..layout(maxWidth: width);
+      _layoutWidth = current.didExceedMaxLines ? width : current.width;
       final natural = TextPainter(
         text: TextSpan(text: widget.data, style: style),
         textDirection: direction,
@@ -345,7 +347,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         if (_overflow <= 0 ||
             MediaQuery.disableAnimationsOf(context) ||
             !TickerMode.valuesOf(context).enabled) {
-          return _original();
+          return SizedBox(width: _layoutWidth, child: _original());
         }
         return Semantics(
           label: widget.semanticsLabel ?? widget.data,
