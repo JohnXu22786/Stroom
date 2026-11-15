@@ -299,9 +299,9 @@ jobs:
       - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'feature-ui'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'feature-ui'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
@@ -311,7 +311,7 @@ jobs:
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Web video playback regression in Chrome
-        if: matrix.suite == 'feature-ui'
+        if: matrix.suite == 'built-in-components'
         run: flutter test --reporter expanded --platform chrome test/pages/video_gallery_web_source_test.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
