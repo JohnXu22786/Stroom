@@ -274,10 +274,10 @@ void main() {
         await tester.pumpAndSettle();
 
         // ASR should be migrated in and displayed
-        expect(find.text('TTS供应商'), findsOneWidget);
-        expect(find.text('LLM供应商'), findsOneWidget);
-        expect(find.text('OCR供应商'), findsOneWidget);
-        expect(find.text('音频转写供应商'), findsOneWidget);
+        expect(find.text('TTS（文本转语音）'), findsOneWidget);
+        expect(find.text('LLM（大语言模型）'), findsOneWidget);
+        expect(find.text('OCR（光学字符识别）'), findsOneWidget);
+        expect(find.text('STT（语音转文本）'), findsOneWidget);
       },
     );
   });
@@ -304,9 +304,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // OCR should be migrated in and displayed
-      expect(find.text('TTS供应商'), findsOneWidget);
-      expect(find.text('LLM供应商'), findsOneWidget);
-      expect(find.text('OCR供应商'), findsOneWidget);
+      expect(find.text('TTS（文本转语音）'), findsOneWidget);
+      expect(find.text('LLM（大语言模型）'), findsOneWidget);
+      expect(find.text('OCR（光学字符识别）'), findsOneWidget);
     });
   });
 

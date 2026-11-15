@@ -6227,19 +6227,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get providerBuiltinBadge => '기본 제공';
 
   @override
-  String get providerBuiltinTtsName => 'TTS 제공업체';
+  String get providerBuiltinTtsName => 'TTS (텍스트 음성 변환)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM 제공업체';
+  String get providerBuiltinLlmName => 'LLM (대규모 언어 모델)';
 
   @override
-  String get providerBuiltinOcrName => 'OCR 제공업체';
+  String get providerBuiltinOcrName => 'OCR (광학 문자 인식)';
 
   @override
-  String get providerBuiltinAsrName => '음성 인식 제공업체';
+  String get providerBuiltinAsrName => 'STT (음성 텍스트 변환)';
 
   @override
-  String get providerBuiltinMcpName => 'MCP 제공업체';
+  String get providerBuiltinMcpName => 'MCP (모델 컨텍스트 프로토콜)';
 
   @override
   String get providerBuiltinSearchGroupName => '검색';
@@ -17890,19 +17890,19 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get providerBuiltinBadge => '기본 제공';
 
   @override
-  String get providerBuiltinTtsName => 'TTS 제공업체';
+  String get providerBuiltinTtsName => 'TTS (텍스트 음성 변환)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM 제공업체';
+  String get providerBuiltinLlmName => 'LLM (대규모 언어 모델)';
 
   @override
-  String get providerBuiltinOcrName => 'OCR 제공업체';
+  String get providerBuiltinOcrName => 'OCR (광학 문자 인식)';
 
   @override
-  String get providerBuiltinAsrName => '음성 인식 제공업체';
+  String get providerBuiltinAsrName => 'STT (음성 텍스트 변환)';
 
   @override
-  String get providerBuiltinMcpName => 'MCP 제공업체';
+  String get providerBuiltinMcpName => 'MCP (모델 컨텍스트 프로토콜)';
 
   @override
   String get providerBuiltinSearchGroupName => '검색';

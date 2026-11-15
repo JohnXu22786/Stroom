@@ -3264,11 +3264,11 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "مدمج",
-  "providerBuiltinTtsName": "موفّر تحويل النص إلى كلام",
-  "providerBuiltinLlmName": "موفّر LLM",
-  "providerBuiltinOcrName": "موفّر OCR",
-  "providerBuiltinAsrName": "موفّر التعرّف على الكلام",
-  "providerBuiltinMcpName": "موفّر MCP",
+  "providerBuiltinTtsName": "TTS (تحويل النص إلى كلام)",
+  "providerBuiltinLlmName": "LLM (نموذج لغوي كبير)",
+  "providerBuiltinOcrName": "OCR (التعرّف الضوئي على الحروف)",
+  "providerBuiltinAsrName": "STT (تحويل الكلام إلى نص)",
+  "providerBuiltinMcpName": "MCP (بروتوكول سياق النموذج)",
   "providerBuiltinSearchGroupName": "بحث",
   "providerBuiltinMcpServicesGroupName": "خدمات MCP أخرى",
   "@providerBuiltinBadge": {

@@ -6085,19 +6085,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerBuiltinBadge => '内置';
 
   @override
-  String get providerBuiltinTtsName => 'TTS供应商';
+  String get providerBuiltinTtsName => 'TTS（文本转语音）';
 
   @override
-  String get providerBuiltinLlmName => 'LLM供应商';
+  String get providerBuiltinLlmName => 'LLM（大语言模型）';
 
   @override
-  String get providerBuiltinOcrName => 'OCR供应商';
+  String get providerBuiltinOcrName => 'OCR（光学字符识别）';
 
   @override
-  String get providerBuiltinAsrName => '音频转写供应商';
+  String get providerBuiltinAsrName => 'STT（语音转文本）';
 
   @override
-  String get providerBuiltinMcpName => 'MCP供应商';
+  String get providerBuiltinMcpName => 'MCP（模型上下文协议）';
 
   @override
   String get providerBuiltinSearchGroupName => '搜索';
@@ -17434,19 +17434,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerBuiltinBadge => '内置';
 
   @override
-  String get providerBuiltinTtsName => 'TTS供应商';
+  String get providerBuiltinTtsName => 'TTS（文本转语音）';
 
   @override
-  String get providerBuiltinLlmName => 'LLM供应商';
+  String get providerBuiltinLlmName => 'LLM（大语言模型）';
 
   @override
-  String get providerBuiltinOcrName => 'OCR供应商';
+  String get providerBuiltinOcrName => 'OCR（光学字符识别）';
 
   @override
-  String get providerBuiltinAsrName => '音频转写供应商';
+  String get providerBuiltinAsrName => 'STT（语音转文本）';
 
   @override
-  String get providerBuiltinMcpName => 'MCP供应商';
+  String get providerBuiltinMcpName => 'MCP（模型上下文协议）';
 
   @override
   String get providerBuiltinSearchGroupName => '搜索';
