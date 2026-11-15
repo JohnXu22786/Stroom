@@ -627,8 +627,12 @@ class MainActivity : FlutterActivity() {
             existingFile = targetFile
 
             // 拼接完整内容
-            val combinedContent =
-                if (replaceExisting) content else existingContent + content
+            val combinedContent = when {
+                replaceExisting -> content
+                // The channel may time out after the atomic publish. A retry
+                // of that same batch must not append it a second time.
+                else -> LogContentAppend.append(existingContent, content)
+            }
             combinedContentForFallback = combinedContent
 
             if (!cleanupIncompleteLogTemps(logsDir, fileName)) {
@@ -1105,7 +1109,15 @@ class MainActivity : FlutterActivity() {
                 candidate.name == fileName ||
                     candidate.name?.startsWith("$fileName.tmp_") == true
             }
-            val deleteRequestsSucceeded = files.all { it.delete() }
+            var deleteRequestsSucceeded = true
+            files.forEach { candidate ->
+                try {
+                    if (!candidate.delete()) deleteRequestsSucceeded = false
+                } catch (e: Exception) {
+                    deleteRequestsSucceeded = false
+                    Log.w(TAG, "SAF: 删除日志条目失败 ${candidate.name}", e)
+                }
+            }
             val matchingFilesRemain = logsDir.listFiles().any { candidate ->
                 candidate.name == fileName ||
                     candidate.name?.startsWith("$fileName.tmp_") == true

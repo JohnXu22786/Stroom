@@ -225,6 +225,7 @@ class _LogViewerPageState extends State<LogViewerPage>
     } catch (e) {
       deleteError = e;
     }
+    if (!mounted) return;
     await _loadLogFiles();
     await _loadPolicyAndUsage();
     if (!mounted) return;

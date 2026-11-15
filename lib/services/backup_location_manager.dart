@@ -115,6 +115,8 @@ class BackupLocationManager {
     if (kIsWeb) return [];
     if (_isAndroid) {
       final safMetadata = <LogFileMetadata>[];
+      Object? safMetadataError;
+      StackTrace? safMetadataStackTrace;
       final uri = await _getSavedSafUri();
       if (uri != null) {
         try {
@@ -146,9 +148,11 @@ class BackupLocationManager {
               ),
             );
           }
-        } catch (e) {
+        } catch (e, stackTrace) {
           debugPrint('[BackupLocationManager] SAF 日志元数据读取失败: $e');
-          rethrow;
+          safMetadata.clear();
+          safMetadataError = e;
+          safMetadataStackTrace = stackTrace;
         }
       }
       List<LogFileMetadata> fallbackMetadata = [];
@@ -166,6 +170,11 @@ class BackupLocationManager {
       } catch (e) {
         debugPrint('[BackupLocationManager] 读取待处理日志元数据失败: $e');
         rethrow;
+      }
+      if (safMetadataError != null &&
+          fallbackMetadata.isEmpty &&
+          pendingMetadata.isEmpty) {
+        Error.throwWithStackTrace(safMetadataError, safMetadataStackTrace!);
       }
       final duplicateNames = <String>{};
       final seenNames = <String>{};
@@ -921,27 +930,53 @@ class BackupLocationManager {
       final inMemoryPending = _pendingCompleteLogContent[relativePath];
       String? durablePending;
       String? localCompletePending;
+      String? localPending;
+      var durablePendingIsComplete = false;
       if (_isAndroid) {
         try {
+          final pendingLogsPath = await _getPendingLogRootPath();
           durablePending = await _readLogFromFile(
             relativePath,
-            logsPath: await _getPendingLogRootPath(),
+            logsPath: pendingLogsPath,
           );
           if (durablePending?.isEmpty ?? false) durablePending = null;
+          durablePendingIsComplete = await File(
+            p.join(
+              pendingLogsPath,
+              '$relativePath$_pendingCompleteLogMarkerSuffix',
+            ),
+          ).exists();
         } catch (e) {
           debugPrint('[BackupLocationManager] 读取待处理日志回退失败: $e');
         }
         try {
-          localCompletePending = await _readAppLocalCompleteLogFallback(
+          final localLogsPath = await _getAppLocalLogsRootPath();
+          localPending = await _readLogFromFile(
             relativePath,
+            logsPath: localLogsPath,
           );
+          if (localPending?.isEmpty ?? false) localPending = null;
+          final localMarkerExists = await File(
+            p.join(
+              localLogsPath,
+              '$relativePath$_pendingCompleteLogMarkerSuffix',
+            ),
+          ).exists();
+          if (localMarkerExists) {
+            localCompletePending = localPending;
+            localPending = null;
+          }
         } catch (e) {
           debugPrint('[BackupLocationManager] 读取本地待处理日志回退失败: $e');
         }
       }
+      final partialPendingContent = _mergeOptionalLogContents([
+        if (!durablePendingIsComplete) durablePending,
+        localPending,
+      ]);
       String? pendingContent;
       for (final candidate in [
-        durablePending,
+        if (durablePendingIsComplete) durablePending,
         localCompletePending,
         inMemoryPending,
       ]) {
@@ -952,9 +987,11 @@ class BackupLocationManager {
       }
       final hasCompletePendingContent =
           pendingContent != null && pendingContent.isNotEmpty;
-      final contentToWrite = !hasCompletePendingContent
-          ? content
-          : _mergeLogContent(pendingContent, content);
+      final contentToWrite = _mergeOptionalLogContents([
+        pendingContent,
+        partialPendingContent,
+        content,
+      ])!;
       try {
         if (_isAndroid) {
           final uri = await _getSavedSafUri();
@@ -977,7 +1014,9 @@ class BackupLocationManager {
             'replaceExisting': hasCompletePendingContent,
           }).timeout(_safChannelTimeout);
           _pendingCompleteLogContent.remove(relativePath);
-          if (hasCompletePendingContent) {
+          if (durablePending != null ||
+              localPending != null ||
+              hasCompletePendingContent) {
             await _deletePendingLogFallback(relativePath);
             await _deleteAppLocalLogFallback(relativePath);
           }
@@ -989,9 +1028,11 @@ class BackupLocationManager {
         // app-local directory and report whether the batch was persisted.
         if (e is PlatformException && e.details is String) {
           try {
-            final completeContent = pendingContent == null
-                ? e.details as String
-                : _mergeLogContent(pendingContent, e.details as String);
+            final completeContent = _mergeOptionalLogContents([
+              pendingContent,
+              partialPendingContent,
+              e.details as String,
+            ])!;
             _pendingCompleteLogContent[relativePath] = completeContent;
             final written = await _writeCompleteLogFallback(
               relativePath,
@@ -1163,7 +1204,15 @@ class BackupLocationManager {
                   relativePath,
                   logsPath: pendingLogsPath,
                 );
-            final allDeleted = deleted && localMarkerDeleted && pendingDeleted;
+            final pendingMarkerDeleted = pendingLogsPath != null &&
+                await _deleteLogFromFile(
+                  '$relativePath$_pendingCompleteLogMarkerSuffix',
+                  logsPath: pendingLogsPath,
+                );
+            final allDeleted = deleted &&
+                localMarkerDeleted &&
+                pendingDeleted &&
+                pendingMarkerDeleted;
             if (allDeleted) _pendingCompleteLogContent.remove(relativePath);
             return allDeleted;
           }
@@ -1200,10 +1249,16 @@ class BackupLocationManager {
               );
           final pendingDeleted = pendingLogsPath != null &&
               await _deleteLogFromFile(relativePath, logsPath: pendingLogsPath);
+          final pendingMarkerDeleted = pendingLogsPath != null &&
+              await _deleteLogFromFile(
+                '$relativePath$_pendingCompleteLogMarkerSuffix',
+                logsPath: pendingLogsPath,
+              );
           final deleted = safDeleted &&
               fallbackDeleted &&
               localMarkerDeleted &&
-              pendingDeleted;
+              pendingDeleted &&
+              pendingMarkerDeleted;
           if (deleted) _pendingCompleteLogContent.remove(relativePath);
           return deleted;
         }
@@ -1359,7 +1414,21 @@ class BackupLocationManager {
     }
     if (pendingLogsPath != null && pendingLogsPath != localLogsPath) {
       final pendingContent = await writeAt(pendingLogsPath, durableContent);
-      if (pendingContent != null) return true;
+      if (pendingContent != null) {
+        try {
+          final markerFile = File(
+            p.join(
+              pendingLogsPath,
+              '$relativePath$_pendingCompleteLogMarkerSuffix',
+            ),
+          );
+          await markerFile.parent.create(recursive: true);
+          await markerFile.writeAsString('complete');
+          return true;
+        } catch (e) {
+          debugPrint('[BackupLocationManager] 标记待处理日志失败: $e');
+        }
+      }
     }
     return (pendingLogsPath != null && pendingLogsPath == localLogsPath
             ? persistedLocally
@@ -1369,10 +1438,14 @@ class BackupLocationManager {
 
   static Future<void> _deletePendingLogFallback(String relativePath) async {
     try {
-      final pendingFile = File(
-        p.join(await _getPendingLogRootPath(), relativePath),
-      );
-      if (await pendingFile.exists()) await pendingFile.delete();
+      final pendingLogsPath = await _getPendingLogRootPath();
+      for (final path in [
+        relativePath,
+        '$relativePath$_pendingCompleteLogMarkerSuffix',
+      ]) {
+        final pendingFile = File(p.join(pendingLogsPath, path));
+        if (await pendingFile.exists()) await pendingFile.delete();
+      }
     } catch (e) {
       debugPrint('[BackupLocationManager] 清理待处理日志回退失败: $e');
     }
@@ -1391,17 +1464,6 @@ class BackupLocationManager {
     } catch (e) {
       debugPrint('[BackupLocationManager] 清理本地日志回退失败: $e');
     }
-  }
-
-  static Future<String?> _readAppLocalCompleteLogFallback(
-    String relativePath,
-  ) async {
-    final logsPath = await _getAppLocalLogsRootPath();
-    final markerFile = File(
-      p.join(logsPath, '$relativePath$_pendingCompleteLogMarkerSuffix'),
-    );
-    if (!await markerFile.exists()) return null;
-    return _readLogFromFile(relativePath, logsPath: logsPath);
   }
 
   static Future<bool> _writeLogFallback(
@@ -1508,6 +1570,15 @@ class BackupLocationManager {
       return a.index.compareTo(b.index);
     });
     return records.map((record) => record.content).join();
+  }
+
+  static String? _mergeOptionalLogContents(Iterable<String?> contents) {
+    String? merged;
+    for (final content in contents) {
+      if (content == null || content.isEmpty) continue;
+      merged = merged == null ? content : _mergeLogContent(merged, content);
+    }
+    return merged;
   }
 
   static List<LogFileMetadata> _mergeLogFileMetadata(

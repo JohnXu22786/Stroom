@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -85,6 +86,8 @@ void main() {
       final logRoot = await Directory.systemTemp.createTemp('log_viewer_');
       final fallbackLog = File('${logRoot.path}/$fileName');
       await fallbackLog.writeAsString('fallback log');
+      final remainingLog = File('${logRoot.path}/app_2026-01-01-11.log');
+      await remainingLog.writeAsString('remaining log');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'backup_saf_uri',
@@ -128,6 +131,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(await fallbackLog.exists(), isFalse);
+      expect(await remainingLog.exists(), isTrue);
       expect(find.text(fileName), findsNothing);
     });
 
@@ -139,6 +143,8 @@ void main() {
       final logRoot = await Directory.systemTemp.createTemp('log_viewer_');
       final fallbackLog = File('${logRoot.path}/$fileName');
       await fallbackLog.writeAsString('fallback log');
+      final remainingLog = File('${logRoot.path}/app_2026-01-01-11.log');
+      await remainingLog.writeAsString('remaining log');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'backup_saf_uri',
@@ -187,8 +193,76 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(await fallbackLog.exists(), isFalse);
+      expect(await remainingLog.exists(), isTrue);
       expect(find.text(fileName), findsNothing);
       expect(find.text('无法确认删除结果。'), findsOneWidget);
+    });
+
+    testWidgets('does not refresh after the page is disposed during deletion', (
+      tester,
+    ) async {
+      const fileName = 'app_2026-01-01-10.log';
+      const safChannel = MethodChannel('com.johntsui.stroom/saf');
+      final deleteCompleter = Completer<bool>();
+      var deleteStarted = false;
+      final logRoot = await Directory.systemTemp.createTemp('log_viewer_');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'backup_saf_uri',
+        'content://provider/tree/documents',
+      );
+      BackupLocationManager.debugIsAndroidOverride = true;
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        safChannel,
+        (call) async {
+          if (call.method == 'listLogs') return [fileName];
+          if (call.method == 'listLogMetadata') {
+            return <Map<String, Object>>[];
+          }
+          if (call.method == 'deleteLog') {
+            deleteStarted = true;
+            return deleteCompleter.future;
+          }
+          throw MissingPluginException('Unexpected SAF method: ${call.method}');
+        },
+      );
+      addTearDown(() async {
+        if (!deleteCompleter.isCompleted) deleteCompleter.complete(false);
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          safChannel,
+          null,
+        );
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await logRoot.delete(recursive: true);
+      });
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogViewerPage(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      for (var attempt = 0; attempt < 5 && !deleteStarted; attempt++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(deleteStarted, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      deleteCompleter.complete(false);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets(
