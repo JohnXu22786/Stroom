@@ -149,6 +149,102 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('very narrow phones stack all actions without wrapping', (
+      tester,
+    ) async {
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          latestVersion: 'v0.5.5',
+          releaseNotes: List.filled(
+            20,
+            'A long release note with a URL that needs a readable scrolling area. ',
+          ).join(),
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.5.5/Stroom.apk',
+          updateAvailable: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+        size: const Size(280, 760),
+      );
+
+      final skipButton = find.ancestor(
+        of: find.text('Skip this version'),
+        matching: find.byType(TextButton),
+      );
+      final remindButton = find.ancestor(
+        of: find.text('Remind me later'),
+        matching: find.byType(TextButton),
+      );
+      final primaryButton = find.ancestor(
+        of: find.text('Update now'),
+        matching: find.byType(FilledButton),
+      );
+      final skipRect = tester.getRect(skipButton.first);
+      final remindRect = tester.getRect(remindButton.first);
+      final primaryRect = tester.getRect(primaryButton.first);
+
+      expect(skipRect.bottom, lessThanOrEqualTo(remindRect.top));
+      expect(remindRect.bottom, lessThanOrEqualTo(primaryRect.top));
+      expect(skipRect.width, greaterThanOrEqualTo(primaryRect.width * 0.9));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('larger text stacks secondary actions on a regular phone', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: 'v0.5.5',
+          releaseNotes:
+              '## What\'s Changed\n* A long release note with a URL that remains scrollable.',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.5.5/Stroom.apk',
+          updateAvailable: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+        size: const Size(390, 844),
+      );
+
+      final skipRect = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Skip this version'),
+              matching: find.byType(TextButton),
+            )
+            .first,
+      );
+      final remindRect = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Remind me later'),
+              matching: find.byType(TextButton),
+            )
+            .first,
+      );
+      final primaryRect = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Update now'),
+              matching: find.byType(FilledButton),
+            )
+            .first,
+      );
+
+      expect(skipRect.bottom, lessThanOrEqualTo(remindRect.top));
+      expect(remindRect.bottom, lessThanOrEqualTo(primaryRect.top));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('labels follow the selected locale', (tester) async {
       final notifier = _setupNotifier(
         state: const UpdateState(

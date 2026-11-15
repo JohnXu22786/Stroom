@@ -301,8 +301,25 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       child: Text(strings.updateRemindLater),
     );
 
-    if (MediaQuery.sizeOf(context).width >= 600) {
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    if (viewportWidth >= 600 && textScale <= 1.2) {
       return [skipAction, remindAction, primaryAction];
+    }
+
+    if (viewportWidth < 360 || textScale > 1.2) {
+      return [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(width: double.infinity, child: skipAction),
+            SizedBox(width: double.infinity, child: remindAction),
+            const SizedBox(height: 4),
+            SizedBox(width: double.infinity, child: primaryAction),
+          ],
+        ),
+      ];
     }
 
     return [
