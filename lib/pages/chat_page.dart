@@ -598,7 +598,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
               // ── Chat widget ──
               Expanded(
                 child: controller == null
-                    ? const SizedBox.shrink()
+                    ? TickerMode(
+                        enabled: TickerMode.of(context) &&
+                            ChatTabVisibility.of(context),
+                        child: const ChatConversationStateView(
+                          state: ChatConversationState.loading,
+                        ),
+                      )
                     : Stack(
                         children: [
                           Visibility(

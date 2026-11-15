@@ -564,14 +564,15 @@ extension _ChatPageListenersExt on _ChatPageState {
         _isReasoningCompletedForMsg.clear();
         _convertedStreamingPlaceholderIds.clear();
         manager.activateConversation(next);
-        // Schedule loads for conversation switches and for an initial
-        // null→ID restoration that the first _initialize load could not see.
-        // Keep an already pending spinner tied to the new active ID as well.
-        final isInitialConversationRestore =
-            prev == null && _loadedConversationId != next;
-        if (isInitialConversationRestore && !_isInitialChatLoadPending) {
+        // Show the loader for every conversation switch, including when this
+        // page already has a controller from an earlier conversation.
+        if (!_isInitialChatLoadPending) {
           setState(() => _isInitialChatLoadPending = true);
         }
+        // Schedule loads for conversation switches and for an initial
+        // null→ID restoration that the first _initialize load could not see.
+        final isInitialConversationRestore =
+            prev == null && _loadedConversationId != next;
         // Capture the target conversation ID so rapid C1→C2→C3 switches
         // don't load the wrong conversation (the post-frame reads
         // activeConversationIdProvider which may have changed).

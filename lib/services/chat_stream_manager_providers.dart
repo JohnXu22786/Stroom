@@ -44,11 +44,11 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
     _setProvider(streamingHasFirstTokenProvider(convId), false);
     _setProvider(streamingReasoningProvider(convId), '');
     _setProvider(streamingReasoningAppendProvider(convId), null);
-    _setProvider(streamingReasoningSectionsProvider(convId), []);
-    _setProvider(streamingToolCallsProvider(convId), []);
-    _setProvider(streamingTextSectionsProvider(convId), ['']);
+    _setProvider(streamingReasoningSectionsProvider(convId), <String>[]);
+    _setProvider(streamingToolCallsProvider(convId), <ToolCallData>[]);
+    _setProvider(streamingTextSectionsProvider(convId), <String>['']);
     _setProvider(streamingTextAppendProvider(convId), null);
-    _setProvider(streamingToolCallRoundStartsProvider(convId), []);
+    _setProvider(streamingToolCallRoundStartsProvider(convId), <int>[]);
   }
 
   /// Pushes a provider update for [convId]'s family instance.

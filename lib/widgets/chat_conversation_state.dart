@@ -22,7 +22,13 @@ class ChatConversationStateView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 40, maxHeight: 40),
+              child: const AspectRatio(
+                aspectRatio: 1,
+                child: CircularProgressIndicator(),
+              ),
+            ),
             const SizedBox(height: 12),
             Text(l10n.chatLoadingConversation),
           ],
