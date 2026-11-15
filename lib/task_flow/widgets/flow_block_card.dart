@@ -119,10 +119,9 @@ class FlowBlockCard extends ConsumerWidget {
           onTemporaryOutputChanged != null)
         Tooltip(
           message: strings.taskFlowUiTemporaryFileHint,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Checkbox(
+          child: Semantics(
+            label: strings.taskFlowUiTemporary,
+            child: Checkbox(
                 value: temporaryOutput,
                 onChanged: (value) {
                   if (value != null) {
@@ -131,9 +130,7 @@ class FlowBlockCard extends ConsumerWidget {
                 },
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              Text(strings.taskFlowUiTemporary, style: TextStyle(fontSize: 10)),
-            ],
+            ),
           ),
         ),
       // Settings button (hidden in readOnly)
@@ -182,8 +179,10 @@ class FlowBlockCard extends ConsumerWidget {
               ),
               if (headerControls.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  runAlignment: WrapAlignment.end,
+                  spacing: 0,
                   children: headerControls,
                 ),
               ],
