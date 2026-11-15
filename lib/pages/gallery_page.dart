@@ -32,8 +32,15 @@ import '../widgets/constrained_text.dart';
 class GalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
+  @visibleForTesting
+  final Future<XFile?> Function()? testCameraPicker;
 
-  const GalleryPage({super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const GalleryPage({
+    super.key,
+    this.tabIndex = 0,
+    this.isActiveTab = true,
+    this.testCameraPicker,
+  });
 
   @override
   ConsumerState<GalleryPage> createState() => _GalleryPageState();
@@ -165,11 +172,15 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     var success = false;
     try {
       final picker = ImagePicker();
-      final file = await picker.pickImage(source: ImageSource.camera);
+      final file = await (widget.testCameraPicker?.call() ??
+          picker.pickImage(source: ImageSource.camera));
       if (file == null) return;
       if (!mounted) return;
 
       final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        throw const FormatException('Camera returned an empty image');
+      }
       final hash = computeImageHash(bytes);
       const format = 'jpg';
       final fileName = '$hash.$format';

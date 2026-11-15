@@ -154,6 +154,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/web_thumbnail_test.dart",
         "utils/record_models_test.dart",
         "pages/video_gallery_web_source_test.dart",
+        "pages/gallery_camera_empty_image_test.dart",
         "pages/content/audio*_test.dart",
         "pages/content/extended_image_editor_page_test.dart",
         "pages/content/gallery_viewer_page_test.dart",
