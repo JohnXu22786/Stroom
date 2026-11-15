@@ -88,12 +88,12 @@ void main() {
     );
   });
 
-  test('corrects progress after a ranged stream fails mid-response', () async {
+  test('retries a ranged stream failure without correcting unreported bytes',
+      () async {
     await verifyRangeRetry(
       rejectedContentRange: 'bytes 2-4/10',
       rejectedBody: 'cd',
       rejectByStreamError: true,
-      expectByteCorrection: true,
     );
   });
 
