@@ -40,6 +40,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('browser permits externally hosted mixed-content resources',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+
+    await _startNavigation(tester, platform);
+
+    expect(
+      platform.webView!.params.initialSettings?.mixedContentMode,
+      MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('ambiguous same-URL error waits for active load completion',
       (tester) async {
     final previousPlatform = InAppWebViewPlatform.instance;

@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
+import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 
 /// Pumps a ChatPage with a single seeded conversation, mirroring
@@ -48,6 +50,75 @@ Widget _appFor({
 
 void main() {
   testWidgets(
+    'switching to an existing temporary conversation does not replay its glow',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final first = Conversation(
+        id: 'c-first',
+        title: 'First',
+        isTemporary: true,
+        temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 40)),
+      )..temporaryExpiryRevision = 1;
+      final second = Conversation(
+        id: 'c-second',
+        title: 'Second',
+        isTemporary: true,
+        temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 20)),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            final notifier = ConversationsNotifier(ref);
+            notifier.state = [first, second];
+            return notifier;
+          }),
+          activeConversationIdProvider.overrideWith((ref) => first.id),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+          chatStreamManagerProvider.overrideWith(
+            (ref) => ChatStreamManager(null),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: ChatPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      container.read(activeConversationIdProvider.notifier).state = second.id;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+
+      final capsule = tester.widget<Container>(
+        find.descendant(
+          of: find.byType(TemporaryCountdownCapsule),
+          matching: find.byType(Container),
+        ),
+      );
+      expect((capsule.decoration as BoxDecoration).boxShadow, isNull);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
       'top bar toggles temporary mode on the current conversation '
       'and shows the countdown capsule', (tester) async {
     await tester.pumpWidget(_appFor(activeId: 'c-main', convTitle: '主对话'));
@@ -59,27 +130,17 @@ void main() {
     expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
-    // Cancelling the explanation must leave temporary mode disabled.
     await tester.tap(find.byIcon(Icons.timer_outlined));
     await tester.pumpAndSettle();
-    expect(find.textContaining('一小时后删除'), findsOneWidget);
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
-    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
-
-    // Confirm the lifecycle explanation before enabling.
-    await tester.tap(find.byIcon(Icons.timer_outlined));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('开启临时模式').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('一小时后删除'), findsNothing);
 
     // 开启态：气泡 + 打勾图标、标题前出现倒计时胶囊。
     expect(find.widgetWithIcon(IconButton, Icons.timer), findsOneWidget);
     expect(find.widgetWithIcon(IconButton, Icons.timer_outlined), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsOneWidget);
-    expect(find.text('临时'), findsOneWidget);
+    expect(find.text('临时'), findsNothing);
     expect(find.text('60:00'), findsOneWidget);
 
     // 再点一次关闭。

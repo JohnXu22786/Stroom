@@ -26,22 +26,24 @@ void main() {
       expect(conversationMap, isNot(contains('temporaryExpiryVersion')));
     });
 
-    test('a persisted opt-out takes precedence over send-time temporary state',
-        () {
-      final conversationMap = <String, dynamic>{'id': 'c1'};
+    test(
+      'a persisted opt-out takes precedence over send-time temporary state',
+      () {
+        final conversationMap = <String, dynamic>{'id': 'c1'};
 
-      final wasTemporary = applyTemporaryCountdownFallback(
-        conversationMap,
-        wasTemporary: true,
-        persistedStateIsAuthoritative: true,
-        startedAt: DateTime.parse('2026-10-03T11:30:00.000'),
-      );
+        final wasTemporary = applyTemporaryCountdownFallback(
+          conversationMap,
+          wasTemporary: true,
+          persistedStateIsAuthoritative: true,
+          startedAt: DateTime.parse('2026-10-03T11:30:00.000'),
+        );
 
-      expect(wasTemporary, isFalse);
-      expect(conversationMap, isNot(contains('isTemporary')));
-      expect(conversationMap, isNot(contains('temporaryExpiresAt')));
-      expect(conversationMap, isNot(contains('temporaryExpiryVersion')));
-    });
+        expect(wasTemporary, isFalse);
+        expect(conversationMap, isNot(contains('isTemporary')));
+        expect(conversationMap, isNot(contains('temporaryExpiresAt')));
+        expect(conversationMap, isNot(contains('temporaryExpiryVersion')));
+      },
+    );
 
     test('an unknown temporary state still uses persisted state', () {
       final conversationMap = <String, dynamic>{
@@ -51,6 +53,9 @@ void main() {
         'temporaryExpiryVersion': 1,
       };
       final startedAt = DateTime.parse('2026-10-03T11:30:00.000');
+      final persistedExpiry = DateTime.parse(
+        conversationMap['temporaryExpiresAt'] as String,
+      );
 
       final wasTemporary = applyTemporaryCountdownFallback(
         conversationMap,
@@ -64,7 +69,7 @@ void main() {
       );
       expect(conversationMap['isTemporary'], isTrue);
       expect(wasTemporary, isTrue);
-      expect(expiresAt, startedAt.add(kTemporaryConversationDuration));
+      expect(expiresAt, persistedExpiry);
     });
 
     test('a current temporary state takes precedence over a stale opt-out', () {

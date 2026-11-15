@@ -274,14 +274,33 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
+    if (_isModifyingHistory) return;
     _isModifyingHistory = true;
+    final retryConversationId = ref.read(activeConversationIdProvider);
+    final originalConversationId = retryConversationId;
+    final originalController = _controller;
+    final conversationsNotifier = ref.read(conversationsProvider.notifier);
+    var countdownPaused = false;
+    var countdownResolved = false;
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index == 0 || index >= _history.length) return;
+      if (retryConversationId != null &&
+          ref.read(conversationsProvider).any((conversation) =>
+              conversation.id == retryConversationId &&
+              conversation.isTemporary)) {
+        countdownPaused = true;
+        await conversationsNotifier.pauseTemporaryCountdown(
+          retryConversationId,
+        );
+        if (!mounted ||
+            !identical(_controller, originalController) ||
+            ref.read(activeConversationIdProvider) != originalConversationId) {
+          return;
+        }
+      }
       final historyBeforeAttempt = List<ChatMessage>.from(_history);
       final historyForSuccess = historyBeforeAttempt.sublist(0, index);
-      final originalController = _controller;
-      final originalConversationId = ref.read(activeConversationIdProvider);
       final detachedSuffix = await _detachVisibleSuffix(
         messageId,
         controller: originalController,
@@ -311,6 +330,16 @@ extension _ChatPageEditingExt on _ChatPageState {
         );
         rethrow;
       }
+      if (countdownPaused) {
+        countdownResolved = true;
+        await conversationsNotifier.finishTemporaryCountdown(
+          retryConversationId!,
+          successful: result != null &&
+              !result.cancelled &&
+              !result.failed &&
+              result.assistantMessage?.isError != true,
+        );
+      }
       if (result == null ||
           result.cancelled ||
           result.assistantMessage == null ||
@@ -329,6 +358,13 @@ extension _ChatPageEditingExt on _ChatPageState {
         );
       }
     } finally {
+      if (countdownPaused && !countdownResolved) {
+        countdownResolved = true;
+        await conversationsNotifier.finishTemporaryCountdown(
+          retryConversationId!,
+          successful: false,
+        );
+      }
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();
     }
