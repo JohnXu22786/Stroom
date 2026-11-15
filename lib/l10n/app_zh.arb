@@ -775,7 +775,17 @@
   "chatErrorDetailResponseHeaders": "响应标头",
   "chatErrorDetailResponseBody": "响应正文",
   "chatErrorDetailEmpty": "暂无详细信息",
-  "chatErrorDetailViewFullContent": "查看完整内容",
+  "chatErrorDetailOmittedContentMarker": "[中间内容已省略，共 {count} 字]",
+  "chatErrorDetailOmittedContentUnknown": "[中间内容已省略]",
+  "chatErrorDetailSavedPreviewNotice": "此保存的请求仅包含预览，省略的文本未被保留。",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

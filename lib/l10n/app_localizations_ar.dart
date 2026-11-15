@@ -2163,7 +2163,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatErrorDetailEmpty => 'لا تتوفر بيانات تفصيلية';
 
   @override
-  String get chatErrorDetailViewFullContent => 'عرض المحتوى كاملاً';
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[تم إخفاء $count حرفًا من الوسط]';
+  }
+
+  @override
+  String get chatErrorDetailOmittedContentUnknown => '[تم حذف المحتوى الأوسط]';
+
+  @override
+  String get chatErrorDetailSavedPreviewNotice => 'هذا الطلب المحفوظ يحتوي على معاينة فقط؛ لم يتم الاحتفاظ بالنص المحذوف.';
 
   @override
   String get chatAudioPreviewClose => 'إغلاق';

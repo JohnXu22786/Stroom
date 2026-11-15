@@ -2150,7 +2150,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatErrorDetailEmpty => 'No hay datos detallados disponibles';
 
   @override
-  String get chatErrorDetailViewFullContent => 'Ver contenido completo';
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[se omitieron $count caracteres intermedios]';
+  }
+
+  @override
+  String get chatErrorDetailOmittedContentUnknown => '[contenido intermedio omitido]';
+
+  @override
+  String get chatErrorDetailSavedPreviewNotice => 'La solicitud guardada solo contiene una vista previa; no se conservó el texto omitido.';
 
   @override
   String get chatAudioPreviewClose => 'Cerrar';

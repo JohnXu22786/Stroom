@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+
+import '../../../models/chat_message.dart';
 import '../utils/format_chat_error.dart';
 import '../../../utils/data_sanitizer.dart';
 import '../../../utils/ocr_diagnostics.dart';
@@ -87,9 +89,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       },
       child: Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Container(
@@ -108,8 +108,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                   child: sections.isEmpty
                       ? _buildEmptyState()
                       : _selectedSectionId != null
-                          ? _buildDetailView(sections, isDark)
-                          : _buildListView(sections, isDark),
+                      ? _buildDetailView(sections, isDark)
+                      : _buildListView(sections, isDark),
                 ),
                 // Close button
                 Padding(
@@ -145,8 +145,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
         children: [
           if (_selectedSectionId != null)
             IconButton(
-              icon: Icon(Icons.arrow_back,
-                  size: 18, color: Theme.of(context).colorScheme.primary),
+              icon: Icon(
+                Icons.arrow_back,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               onPressed: () {
                 setState(() {
                   _selectedSectionId = null;
@@ -175,9 +178,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.close,
-                size: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            icon: Icon(
+              Icons.close,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             onPressed: () => Navigator.pop(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -205,12 +210,14 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (widget.isOcrDiagnostics) {
       final credentialValues =
           OcrDiagnosticSnapshot.credentialValuesFromRequest(req);
-      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
+      final safeRequest =
+          OcrDiagnosticSnapshot.sanitizeRequest(
             req,
             excludedValues: credentialValues,
           ) ??
           {};
-      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      final safeResponse =
+          OcrDiagnosticSnapshot.sanitizeResponse(
             resp,
             excludedValues: credentialValues,
           ) ??
@@ -248,69 +255,83 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
 
     // 1. Request URL
     if (req.containsKey('url') && req['url'] != null) {
-      sections.add(_DataSection(
-        id: 'request_url',
-        label: l10n.chatErrorDetailRequestUrl,
-        icon: Icons.link,
-        value: req['url'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_url',
+          label: l10n.chatErrorDetailRequestUrl,
+          icon: Icons.link,
+          value: req['url'],
+        ),
+      );
     }
 
     // 2. Request Headers
     if (req.containsKey('headers') && req['headers'] != null) {
-      sections.add(_DataSection(
-        id: 'request_headers',
-        label: l10n.chatErrorDetailRequestHeaders,
-        icon: Icons.code,
-        value: req['headers'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_headers',
+          label: l10n.chatErrorDetailRequestHeaders,
+          icon: Icons.code,
+          value: req['headers'],
+        ),
+      );
     }
 
     // 3. Request Body
     if (req.containsKey('body') && req['body'] != null) {
-      sections.add(_DataSection(
-        id: 'request_body',
-        label: l10n.chatErrorDetailRequestBody,
-        icon: Icons.code,
-        value: req['body'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_body',
+          label: l10n.chatErrorDetailRequestBody,
+          icon: Icons.code,
+          value: req['body'],
+        ),
+      );
     }
 
     // 4. Status Code
     if (resp.containsKey('statusCode') && resp['statusCode'] != null) {
-      sections.add(_DataSection(
-        id: 'status_code',
-        label: l10n.chatErrorDetailStatusCode,
-        icon: Icons.info_outline,
-        value: resp['statusCode'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'status_code',
+          label: l10n.chatErrorDetailStatusCode,
+          icon: Icons.info_outline,
+          value: resp['statusCode'],
+        ),
+      );
     }
 
     // 5. Response Headers
     if (resp.containsKey('headers') && resp['headers'] != null) {
-      sections.add(_DataSection(
-        id: 'response_headers',
-        label: l10n.chatErrorDetailResponseHeaders,
-        icon: Icons.code,
-        value: resp['headers'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_headers',
+          label: l10n.chatErrorDetailResponseHeaders,
+          icon: Icons.code,
+          value: resp['headers'],
+        ),
+      );
     }
 
     // 6. Response Body — check both 'data' (HTTP success) and 'error' (network error)
     if (resp.containsKey('data') && resp['data'] != null) {
-      sections.add(_DataSection(
-        id: 'response_body',
-        label: l10n.chatErrorDetailResponseBody,
-        icon: Icons.code,
-        value: resp['data'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_body',
+          label: l10n.chatErrorDetailResponseBody,
+          icon: Icons.code,
+          value: resp['data'],
+        ),
+      );
     } else if (resp.containsKey('error') && resp['error'] != null) {
-      sections.add(_DataSection(
-        id: 'response_body',
-        label: l10n.chatErrorDetailResponseBody,
-        icon: Icons.code,
-        value: resp['error'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_body',
+          label: l10n.chatErrorDetailResponseBody,
+          icon: Icons.code,
+          value: resp['error'],
+        ),
+      );
     }
 
     return sections;
@@ -350,8 +371,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               section.label,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
-            trailing:
-                Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+            trailing: Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: cs.onSurfaceVariant,
+            ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             onTap: () {
               setState(() {
@@ -469,38 +493,80 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       );
     }
 
-    if (value is String && value.characters.length > 80) {
-      final characters = value.characters;
-      final preview = jsonEncode(
-        '${characters.take(40)}…${characters.skip(characters.length - 40)}',
-      );
+    final decodedPreview = ChatMessage.decodeRequestBodyPreview(value);
+    final textValue = decodedPreview?.fullText ?? value;
+    if (textValue is String &&
+        (decodedPreview?.isSavedPreview == true ||
+            textValue.characters.length > 80)) {
+      final characters = textValue.characters;
       final l10n = AppLocalizations.of(context)!;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$prefix$preview${comma ? ',' : ''}', style: _jsonStyle),
-          Padding(
-            padding: EdgeInsets.only(left: (depth * 16).toDouble()),
-            child: Semantics(
-              button: true,
-              label: '${l10n.chatErrorDetailViewFullContent}: $path',
-              child: TextButton.icon(
-                onPressed: () => _showFullContentDialog(value, path),
-                icon: const Icon(Icons.open_in_full, size: 16),
-                label: Text(l10n.chatErrorDetailViewFullContent),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  visualDensity: VisualDensity.compact,
+      final first = decodedPreview?.first ?? characters.take(40).toString();
+      final last =
+          decodedPreview?.last ??
+          characters.skip(characters.length - 40).toString();
+      final omittedCount = decodedPreview?.isSavedPreview == true
+          ? decodedPreview!.omittedCharacters
+          : characters.length - 80;
+      final marker = omittedCount == null
+          ? l10n.chatErrorDetailOmittedContentUnknown
+          : l10n.chatErrorDetailOmittedContentMarker(omittedCount);
+      final isSavedPreview = decodedPreview?.isSavedPreview == true;
+      final fullAvailableText = isSavedPreview
+          ? '$first$marker$last'
+          : textValue;
+      final colors = Theme.of(context).colorScheme;
+      return RichText(
+        text: TextSpan(
+          style: _jsonStyle,
+          children: [
+            TextSpan(text: prefix),
+            TextSpan(text: '"${_escapeJsonFragment(first)}'),
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: Semantics(
+                button: true,
+                label:
+                    '$marker${isSavedPreview ? ', ${l10n.chatErrorDetailSavedPreviewNotice}' : ''}, $path',
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    onTap: () => _showFullContentDialog(
+                      fullAvailableText,
+                      path,
+                      isSavedPreview: isSavedPreview,
+                    ),
+                    mouseCursor: SystemMouseCursors.click,
+                    borderRadius: BorderRadius.circular(3),
+                    hoverColor: colors.primary.withValues(alpha: 0.08),
+                    focusColor: colors.primary.withValues(alpha: 0.16),
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: colors.primaryContainer,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        marker,
+                        style: _jsonStyle.copyWith(
+                          color: colors.primary,
+                          decoration: TextDecoration.underline,
+                          decorationStyle: TextDecorationStyle.dashed,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+            TextSpan(text: '${_escapeJsonFragment(last)}"${comma ? ',' : ''}'),
+          ],
+        ),
       );
     }
 
     return Text(
-      '$prefix${jsonEncode(value)}${comma ? ',' : ''}',
+      '$prefix${jsonEncode(textValue)}${comma ? ',' : ''}',
       style: _jsonStyle,
     );
   }
@@ -512,6 +578,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     return '$path[${jsonEncode(key)}]';
   }
 
+  String _escapeJsonFragment(String value) {
+    final encoded = jsonEncode(value);
+    return encoded.substring(1, encoded.length - 1);
+  }
+
   TextStyle get _jsonStyle {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextStyle(
@@ -521,35 +592,85 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     );
   }
 
-  void _showFullContentDialog(String value, String path) {
+  void _showFullContentDialog(
+    String value,
+    String path, {
+    bool isSavedPreview = false,
+  }) {
     final l10n = AppLocalizations.of(context)!;
     showDialog<void>(
       context: context,
       builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: 640,
-            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+            maxWidth: 560,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.76,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(path, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: SelectableText(value, style: _jsonStyle),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          path,
+                          style: _jsonStyle.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: l10n.actionClose,
+                        icon: const Icon(Icons.close, size: 20),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(l10n.actionClose),
+                const Divider(height: 1),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 18,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isSavedPreview) ...[
+                          Text(
+                            l10n.chatErrorDetailSavedPreviewNotice,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        SelectableText(value, style: _jsonStyle),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 12, 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(l10n.actionClose),
+                    ),
                   ),
                 ),
               ],

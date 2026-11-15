@@ -580,7 +580,17 @@
   "chatErrorDetailResponseHeaders": "Encabezados de respuesta",
   "chatErrorDetailResponseBody": "Cuerpo de respuesta",
   "chatErrorDetailEmpty": "No hay datos detallados disponibles",
-  "chatErrorDetailViewFullContent": "Ver contenido completo",
+  "chatErrorDetailOmittedContentMarker": "[se omitieron {count} caracteres intermedios]",
+  "chatErrorDetailOmittedContentUnknown": "[contenido intermedio omitido]",
+  "chatErrorDetailSavedPreviewNotice": "La solicitud guardada solo contiene una vista previa; no se conservó el texto omitido.",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Cerrar",
   "chatPreviewClose": "Cerrar vista previa",
   "actionBack": "Atrás",

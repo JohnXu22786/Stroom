@@ -580,7 +580,17 @@
   "chatErrorDetailResponseHeaders": "応答ヘッダー",
   "chatErrorDetailResponseBody": "応答本文",
   "chatErrorDetailEmpty": "詳細なデータはありません",
-  "chatErrorDetailViewFullContent": "全文を表示",
+  "chatErrorDetailOmittedContentMarker": "[中間を{count}文字省略]",
+  "chatErrorDetailOmittedContentUnknown": "[中間を省略]",
+  "chatErrorDetailSavedPreviewNotice": "保存されたリクエストにはプレビューのみが含まれ、省略されたテキストは保存されていません。",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "閉じる",
   "chatPreviewClose": "プレビューを閉じる",
   "actionBack": "戻る",

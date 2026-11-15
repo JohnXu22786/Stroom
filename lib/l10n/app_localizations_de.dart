@@ -2144,7 +2144,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chatErrorDetailEmpty => 'Keine Detaildaten verfügbar';
 
   @override
-  String get chatErrorDetailViewFullContent => 'Vollständigen Inhalt anzeigen';
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[$count Zeichen in der Mitte ausgelassen]';
+  }
+
+  @override
+  String get chatErrorDetailOmittedContentUnknown => '[mittlerer Inhalt ausgelassen]';
+
+  @override
+  String get chatErrorDetailSavedPreviewNotice => 'Diese gespeicherte Anfrage enthält nur eine Vorschau; der ausgelassene Text wurde nicht gespeichert.';
 
   @override
   String get chatAudioPreviewClose => 'Schließen';

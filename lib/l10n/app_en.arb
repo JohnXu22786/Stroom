@@ -775,7 +775,17 @@
   "chatErrorDetailResponseHeaders": "Response Headers",
   "chatErrorDetailResponseBody": "Response Body",
   "chatErrorDetailEmpty": "No detail data available",
-  "chatErrorDetailViewFullContent": "View full content",
+  "chatErrorDetailOmittedContentMarker": "[middle content omitted, {count} characters]",
+  "chatErrorDetailOmittedContentUnknown": "[middle content omitted]",
+  "chatErrorDetailSavedPreviewNotice": "This saved request contains only a preview; the omitted text was not retained.",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Close",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

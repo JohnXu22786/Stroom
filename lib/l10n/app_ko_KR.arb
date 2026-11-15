@@ -778,7 +778,17 @@
   "chatErrorDetailResponseHeaders": "응답 헤더",
   "chatErrorDetailResponseBody": "응답 본문",
   "chatErrorDetailEmpty": "사용할 수 있는 세부 정보가 없습니다",
-  "chatErrorDetailViewFullContent": "전체 내용 보기",
+  "chatErrorDetailOmittedContentMarker": "[중간 내용 {count}자 생략]",
+  "chatErrorDetailOmittedContentUnknown": "[중간 내용 생략]",
+  "chatErrorDetailSavedPreviewNotice": "저장된 요청에는 미리보기만 있으며 생략된 텍스트는 보존되지 않았습니다.",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "닫기",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

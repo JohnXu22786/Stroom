@@ -133,7 +133,31 @@ class Attachment {
       'Attachment(id: $id, fileName: $fileName, fileType: $fileType)';
 }
 
+class RequestBodyTextPreview {
+  final String fullText;
+  final String? first;
+  final String? last;
+  final int? omittedCharacters;
+  final bool isSavedPreview;
+
+  const RequestBodyTextPreview({
+    this.fullText = '',
+    this.first,
+    this.last,
+    this.omittedCharacters,
+    this.isSavedPreview = false,
+  });
+}
+
+class _StoredRequestBodyPreview {
+  final String encoded;
+
+  const _StoredRequestBodyPreview(this.encoded);
+}
+
 class ChatMessage {
+  static const _storedPreviewPrefix = '\u2063stroom-request-body-preview-v1:';
+
   final String id;
   final String role; // 'user' | 'assistant'
   final String? _content;
@@ -267,14 +291,35 @@ class ChatMessage {
   static Map<String, dynamic> compactRawRequest(
     Map<String, dynamic> raw, {
     bool compactText = true,
+    bool trustStoredPreviews = false,
   }) {
     // Sanitize before previewing so encoded image/audio/document payloads
     // cannot leak their leading or trailing bytes through a text preview.
     final serializable = _sanitizeJsonValue(raw);
     final sanitized = DataSanitizer.sanitizeForDisplay(serializable);
     if (sanitized is! Map) return <String, dynamic>{};
-    if (!compactText) return Map<String, dynamic>.from(sanitized);
+    if (!compactText) {
+      final capture = trustStoredPreviews
+          ? _trustStoredPreviewMarkers(sanitized)
+          : sanitized;
+      return Map<String, dynamic>.from(capture);
+    }
     return Map<String, dynamic>.from(_previewLongStrings(sanitized));
+  }
+
+  static dynamic _trustStoredPreviewMarkers(dynamic value) {
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          if (entry.key is String)
+            (entry.key as String): _trustStoredPreviewMarkers(entry.value),
+      };
+    }
+    if (value is List) return value.map(_trustStoredPreviewMarkers).toList();
+    if (value is String) {
+      if (_isStoredPreview(value)) return _StoredRequestBodyPreview(value);
+    }
+    return value;
   }
 
   static dynamic _previewLongStrings(dynamic value) {
@@ -286,17 +331,54 @@ class ChatMessage {
       };
     }
     if (value is List) return value.map(_previewLongStrings).toList();
+    if (value is _StoredRequestBodyPreview) return value.encoded;
     if (value is! String) return value;
+    final text = value;
+    final characters = text.characters;
+    if (characters.length > 80) {
+      final count = characters.length - 80;
+      return '$_storedPreviewPrefix$count|'
+          '${characters.take(40)}${characters.skip(characters.length - 40)}';
+    }
+    return text;
+  }
 
-    final characters = value.characters;
-    if (characters.length <= 80) return value;
-    return '${characters.take(40)}…${characters.skip(characters.length - 40)}';
+  static bool _isStoredPreview(String value) =>
+      _decodeStoredPreview(value) != null;
+
+  static RequestBodyTextPreview? decodeRequestBodyPreview(dynamic value) {
+    if (value is _StoredRequestBodyPreview) {
+      return _decodeStoredPreview(value.encoded);
+    }
+    return null;
+  }
+
+  static RequestBodyTextPreview? _decodeStoredPreview(String value) {
+    if (!value.startsWith(_storedPreviewPrefix)) return null;
+
+    final separator = value.indexOf('|', _storedPreviewPrefix.length);
+    if (separator < 0) return null;
+    final omittedText = value.substring(_storedPreviewPrefix.length, separator);
+    final omittedCharacters = omittedText == '?'
+        ? null
+        : int.tryParse(omittedText);
+    if (omittedText != '?' && omittedCharacters == null) return null;
+
+    final excerpt = value.substring(separator + 1).characters;
+    if (excerpt.length != 80) return null;
+    return RequestBodyTextPreview(
+      first: excerpt.take(40).toString(),
+      last: excerpt.skip(40).toString(),
+      omittedCharacters: omittedCharacters,
+      isSavedPreview: true,
+    );
   }
 
   /// Recursively sanitize a single value for JSON serialization.
   /// Returns the sanitized value, or null if it can't be sanitized.
   static dynamic _sanitizeJsonValue(dynamic value) {
     if (value == null) return null;
+    if (value is _StoredRequestBodyPreview) return value;
     if (value is String || value is num || value is bool) return value;
     if (value is Map) {
       final result = <String, dynamic>{};
@@ -338,7 +420,13 @@ class ChatMessage {
 
   static Map<String, dynamic>? _compactDeserializedRawRequest(dynamic value) {
     final rawRequest = safeCastToMap(value);
-    return rawRequest == null ? null : compactRawRequest(rawRequest);
+    return rawRequest == null
+        ? null
+        : compactRawRequest(
+            rawRequest,
+            compactText: false,
+            trustStoredPreviews: true,
+          );
   }
 
   static bool _matchesJoinedSections(

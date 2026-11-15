@@ -773,7 +773,17 @@
   "chatErrorDetailResponseHeaders": "Antwort-Header",
   "chatErrorDetailResponseBody": "Antwortinhalt",
   "chatErrorDetailEmpty": "Keine Detaildaten verfügbar",
-  "chatErrorDetailViewFullContent": "Vollständigen Inhalt anzeigen",
+  "chatErrorDetailOmittedContentMarker": "[{count} Zeichen in der Mitte ausgelassen]",
+  "chatErrorDetailOmittedContentUnknown": "[mittlerer Inhalt ausgelassen]",
+  "chatErrorDetailSavedPreviewNotice": "Diese gespeicherte Anfrage enthält nur eine Vorschau; der ausgelassene Text wurde nicht gespeichert.",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Schließen",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
