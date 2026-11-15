@@ -167,6 +167,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _updatePendingAttachmentAfterEdit(index, bytes);
 
   @visibleForTesting
+  void reorderPendingAttachmentsForTesting(int oldIndex, int newIndex) =>
+      _onReorderPendingAttachment(oldIndex, newIndex);
+
+  @visibleForTesting
   Future<void> addPendingAttachmentAfterPickerForTesting(
     String fileName,
     Future<Uint8List> selectedBytes,
@@ -268,7 +272,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     super.initState();
 
     if (widget.editingMessageId != null) {
-      _editSessionConversationId = widget.conversationId;
+      _editSessionConversationId = widget.conversationId ??
+          (widget.editingMessageAttachments?.isNotEmpty == true
+              ? widget.editingMessageAttachments!.first.conversationId
+              : null);
     }
 
     // Listen to app lifecycle events so drafts are saved even when the
@@ -351,7 +358,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
             conversationId: _editSessionConversationId,
           );
         }
-        _editSessionConversationId = widget.conversationId;
+        _editSessionConversationId = widget.conversationId ??
+            (widget.editingMessageAttachments?.isNotEmpty == true
+                ? widget.editingMessageAttachments!.first.conversationId
+                : null);
         _textController.text = widget.editingMessageText!;
         _lastSavedDraft = widget.editingMessageText!;
         _lastHadText = widget.editingMessageText!.trim().isNotEmpty;

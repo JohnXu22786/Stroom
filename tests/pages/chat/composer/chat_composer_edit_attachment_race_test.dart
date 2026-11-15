@@ -152,6 +152,7 @@ void main() {
         bytes,
       ),
     );
+    await tester.pump();
     return composerKey.currentState!.pendingAttachmentsForTesting.singleWhere(
       (attachment) => attachment.fileName == '$id.png',
     );
@@ -237,16 +238,8 @@ void main() {
         await tester.pump();
         await cleanupStarted.future;
       });
-      final gesture = await tester.startGesture(
-        tester.getCenter(
-          find.byKey(ValueKey('pending_att_${editedOriginal.id}')),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 350));
-      await gesture.moveBy(const Offset(170, 0));
+      composerKey.currentState!.reorderPendingAttachmentsForTesting(0, 1);
       await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
       finishCleanup.complete();
       await _runInTestZone(() => edit);
 
