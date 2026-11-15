@@ -27,7 +27,6 @@ final Set<String> _textExtensions = {
   'ps1',
   'py',
   'js',
-  'ts',
   'jsx',
   'tsx',
   'html',
