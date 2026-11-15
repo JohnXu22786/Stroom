@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 
 import '../../services/storage_service.dart';
+import '../../utils/atomic_file.dart';
 import '../../utils/web_file_store.dart';
 import '../models/flow_payload.dart';
 
@@ -68,13 +69,8 @@ class FlowTemporaryArtifactStorage {
         Directory(await _nativeBlockDirectory(executionId, blockId));
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, safeName));
-    try {
-      await file.writeAsBytes(bytes, flush: true);
-      return file.path;
-    } catch (_) {
-      if (await file.exists()) await file.delete();
-      rethrow;
-    }
+    await AtomicFile.writeBytes(file, bytes);
+    return file.path;
   }
 
   /// Copies a native producer file into execution-owned storage without
@@ -85,6 +81,7 @@ class FlowTemporaryArtifactStorage {
     required String executionId,
     required String blockId,
     bool Function()? cancelled,
+    Future<void> Function()? afterPublish,
   }) async {
     if (_useWebStore) {
       throw UnsupportedError('Native file staging is unavailable on Web');
@@ -98,38 +95,35 @@ class FlowTemporaryArtifactStorage {
         Directory(await _nativeBlockDirectory(executionId, blockId));
     await directory.create(recursive: true);
     final target = File(p.join(directory.path, _safeFileName(sourcePath)));
-    final sink = target.openWrite();
-    var closed = false;
-    try {
-      await for (final bytes in source.openRead()) {
+    await AtomicFile.writeFrom(
+      target,
+      (stagedFile) async {
+        final sink = stagedFile.openWrite();
+        try {
+          await for (final bytes in source.openRead()) {
+            if (cancelled?.call() ?? false) {
+              throw FileSystemException('Temporary output copy cancelled');
+            }
+            sink.add(bytes);
+          }
+          await sink.flush();
+        } finally {
+          await sink.close();
+        }
+      },
+      beforeCommit: () {
         if (cancelled?.call() ?? false) {
           throw FileSystemException('Temporary output copy cancelled');
         }
-        sink.add(bytes);
-      }
-      await sink.flush();
-      await sink.close();
-      closed = true;
-      if (cancelled?.call() ?? false) {
-        throw FileSystemException('Temporary output copy cancelled');
-      }
-      return target.path;
-    } catch (_) {
-      if (!closed) {
-        try {
-          await sink.close();
-        } catch (_) {
-          // Preserve the producer/cancellation error while still attempting
-          // to remove a partially written artifact below.
+      },
+      afterCommit: () async {
+        if (cancelled?.call() ?? false) {
+          throw FileSystemException('Temporary output copy cancelled');
         }
-      }
-      try {
-        if (await target.exists()) await target.delete();
-      } catch (_) {
-        // The execution-scoped orphan sweep can remove a failed partial copy.
-      }
-      rethrow;
-    }
+        await afterPublish?.call();
+      },
+    );
+    return target.path;
   }
 
   /// Confirms that [reference] is a single file directly owned by the

@@ -16,7 +16,6 @@ import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_kind.dart';
 import '../models/media_resource.dart';
-import '../../task_flow/models/flow_payload.dart';
 import '../../task_flow/services/flow_temporary_artifact_storage.dart';
 import 'ev1_decoder.dart';
 import 'executor_utils.dart';
@@ -95,20 +94,9 @@ Future<String> executeSave({
         executionId: temporaryExecutionId,
         blockId: temporaryBlockId,
         cancelled: cancelled,
+        afterPublish: () async => finishStep(),
       );
-      try {
-        finishStep();
-        return temporaryPath;
-      } catch (_) {
-        await FlowTemporaryArtifactStorage.deleteArtifact(
-          FlowTemporaryArtifact(
-            executionId: temporaryExecutionId,
-            blockId: temporaryBlockId,
-            reference: temporaryPath,
-          ),
-        );
-        rethrow;
-      }
+      return temporaryPath;
     }
 
     final appDirPath = await AppStorage.directory;
