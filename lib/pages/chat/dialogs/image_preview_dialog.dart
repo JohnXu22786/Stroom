@@ -1,8 +1,11 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 /// Full-screen dark dialog with pinch-to-zoom image preview.
 ///
@@ -18,8 +21,10 @@ void showImagePreviewDialog({
   Uint8List? data,
   Future<Uint8List?> Function()? dataLoader,
 }) {
-  assert(data != null || dataLoader != null,
-      'showImagePreviewDialog requires either data or dataLoader');
+  assert(
+    data != null || dataLoader != null,
+    'showImagePreviewDialog requires either data or dataLoader',
+  );
   showDialog(
     context: context,
     builder: (ctx) => _ChatImagePreviewDialog(
@@ -94,7 +99,7 @@ class _ChatImagePreviewDialogState extends State<_ChatImagePreviewDialog> {
             bottom: 16,
             left: 16,
             right: 16,
-            child: Text(
+            child: ConstrainedText(
               fileName,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 14),
@@ -135,10 +140,7 @@ class _ChatImagePreviewDialogState extends State<_ChatImagePreviewDialog> {
       return InteractiveViewer(
         minScale: 0.5,
         maxScale: 4.0,
-        child: SvgPicture.memory(
-          data,
-          fit: BoxFit.contain,
-        ),
+        child: SvgPicture.memory(data, fit: BoxFit.contain),
       );
     }
     return ExtendedImage.memory(
@@ -174,8 +176,10 @@ class _BrokenImage extends StatelessWidget {
         children: [
           Icon(Icons.broken_image, size: 48, color: Colors.white54),
           SizedBox(height: 8),
-          Text(AppLocalizations.of(context)!.chatImageLoadFailed,
-              style: TextStyle(color: Colors.white54)),
+          Text(
+            AppLocalizations.of(context)!.chatImageLoadFailed,
+            style: TextStyle(color: Colors.white54),
+          ),
         ],
       ),
     );

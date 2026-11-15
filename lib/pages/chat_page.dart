@@ -21,6 +21,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/markdown_extensions.dart';
+import '../widgets/constrained_text.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/temporary_conversation_dialog.dart';

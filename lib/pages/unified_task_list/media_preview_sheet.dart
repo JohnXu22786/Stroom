@@ -13,6 +13,8 @@ import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 const _audioPreviewExtensions = {
   'oga',
   'mp3',
@@ -116,7 +118,9 @@ class _MediaPreviewError {
         _MediaPreviewErrorKind.loadFailed =>
           strings.unifiedTaskLoadFailed(detail!),
         _MediaPreviewErrorKind.playbackFailed =>
-          strings.unifiedTaskPlaybackFailed(detail!),
+          strings.unifiedTaskPlaybackFailed(
+            detail!,
+          ),
       };
 }
 
@@ -403,7 +407,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
+            child: ConstrainedText(
               widget.taskTitle,
               style: Theme.of(context).textTheme.titleMedium,
               maxLines: 1,

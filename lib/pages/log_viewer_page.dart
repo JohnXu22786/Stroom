@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 import '../l10n/app_localizations.dart';
 import '../services/app_log_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ====================================================================
 // LogViewerPage — 应用日志查看器
 // ====================================================================
@@ -30,8 +32,10 @@ class _LogViewerPageState extends State<LogViewerPage>
   List<String> _logFiles = [];
   bool _isLoading = true;
   AppLogPolicy? _policy;
-  AppLogStorageUsage _storageUsage =
-      const AppLogStorageUsage(fileCount: 0, bytes: 0);
+  AppLogStorageUsage _storageUsage = const AppLogStorageUsage(
+    fileCount: 0,
+    bytes: 0,
+  );
   Timer? _retryTimer;
   int _retryCount = 0;
   static const Duration _maxRetryDelay = Duration(seconds: 60);
@@ -102,8 +106,9 @@ class _LogViewerPageState extends State<LogViewerPage>
         _scheduleRetry(); // Retry on error too
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.appLogLoadFilesError(e)),
+            content: Text(
+              AppLocalizations.of(context)!.appLogLoadFilesError(e),
+            ),
           ),
         );
       }
@@ -131,10 +136,8 @@ class _LogViewerPageState extends State<LogViewerPage>
       if (!mounted) return;
       final updatedPolicy = await showDialog<AppLogPolicy>(
         context: context,
-        builder: (_) => _AppLogSettingsDialog(
-          policy: policy,
-          storageUsage: storageUsage,
-        ),
+        builder: (_) =>
+            _AppLogSettingsDialog(policy: policy, storageUsage: storageUsage),
       );
       if (updatedPolicy == null || !mounted) return;
       await AppLogService.updatePolicy(updatedPolicy);
@@ -143,7 +146,8 @@ class _LogViewerPageState extends State<LogViewerPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(AppLocalizations.of(context)!.appLogSettingsSaved)),
+          content: Text(AppLocalizations.of(context)!.appLogSettingsSaved),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -225,7 +229,8 @@ class _LogViewerPageState extends State<LogViewerPage>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  AppLocalizations.of(context)!.appLogDeleteDone(fileName)),
+                AppLocalizations.of(context)!.appLogDeleteDone(fileName),
+              ),
             ),
           );
         }
@@ -266,8 +271,9 @@ class _LogViewerPageState extends State<LogViewerPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.appLogPathCopied(filePath)),
+            content: Text(
+              AppLocalizations.of(context)!.appLogPathCopied(filePath),
+            ),
           ),
         );
       }
@@ -289,7 +295,11 @@ class _LogViewerPageState extends State<LogViewerPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appLogPageTitle),
+        title: ConstrainedText(
+          l10n.appLogPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -314,9 +324,9 @@ class _LogViewerPageState extends State<LogViewerPage>
               await _loadLogFiles();
               await _loadPolicyAndUsage();
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.appLogCleanupDone)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(l10n.appLogCleanupDone)));
             },
           ),
         ],
@@ -419,10 +429,7 @@ class _LogViewerPageState extends State<LogViewerPage>
       itemBuilder: (context, index) {
         final fileName = _logFiles[index];
         return ListTile(
-          leading: Icon(
-            Icons.article,
-            color: theme.colorScheme.primary,
-          ),
+          leading: Icon(Icons.article, color: theme.colorScheme.primary),
           title: Text(
             fileName,
             style: const TextStyle(fontWeight: FontWeight.w500),
@@ -435,14 +442,20 @@ class _LogViewerPageState extends State<LogViewerPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: Icon(Icons.ios_share,
-                    color: theme.colorScheme.primary, size: 20),
+                icon: Icon(
+                  Icons.ios_share,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
                 tooltip: l10n.appLogExport,
                 onPressed: () => _exportLogFile(fileName),
               ),
               IconButton(
-                icon: Icon(Icons.delete_outline,
-                    color: theme.colorScheme.error, size: 20),
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: theme.colorScheme.error,
+                  size: 20,
+                ),
                 tooltip: l10n.appLogDelete,
                 onPressed: () => _confirmDelete(fileName),
               ),
@@ -478,12 +491,20 @@ class _LogViewerPageState extends State<LogViewerPage>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.appLogConfirmDeleteTitle),
+        title: ConstrainedText(
+          l10n.appLogConfirmDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.appLogConfirmDeleteMessage(fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.appLogCancel),
+            child: ConstrainedText(
+              l10n.appLogCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -493,7 +514,11 @@ class _LogViewerPageState extends State<LogViewerPage>
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(ctx).colorScheme.error,
             ),
-            child: Text(l10n.appLogDelete),
+            child: ConstrainedText(
+              l10n.appLogDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -548,11 +573,15 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
       10 * megabyte,
       50 * megabyte,
       100 * megabyte,
-      500 * megabyte
+      500 * megabyte,
     }..add(_maxStorageBytes);
 
     return AlertDialog(
-      title: Text(l10n.appLogSettingsTitle),
+      title: ConstrainedText(
+        l10n.appLogSettingsTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -567,13 +596,18 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
             ),
             const SizedBox(height: 20),
             DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: _retentionDays,
               decoration: InputDecoration(labelText: l10n.appLogRetentionDays),
               items: (retentionOptions.toList()..sort())
                   .map(
                     (days) => DropdownMenuItem(
                       value: days,
-                      child: Text(l10n.appLogDays(days)),
+                      child: ConstrainedText(
+                        l10n.appLogDays(days),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),
@@ -583,13 +617,18 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<LogLevel>(
+              isExpanded: true,
               initialValue: _minimumLevel,
               decoration: InputDecoration(labelText: l10n.appLogMinimumLevel),
               items: LogLevel.values
                   .map(
                     (level) => DropdownMenuItem(
                       value: level,
-                      child: Text(_logLevelLabel(l10n, level)),
+                      child: ConstrainedText(
+                        _logLevelLabel(l10n, level),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),
@@ -599,15 +638,18 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: _maxStorageBytes,
               decoration: InputDecoration(labelText: l10n.appLogStorageLimit),
               items: (sizeOptions.toList()..sort()).map((sizeBytes) {
                 return DropdownMenuItem(
                   value: sizeBytes,
-                  child: Text(
+                  child: ConstrainedText(
                     sizeBytes == 0
                         ? l10n.appLogUnlimited
                         : _formatLogBytes(sizeBytes),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 );
               }).toList(),
@@ -626,7 +668,11 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(l10n.appLogCancel),
+          child: ConstrainedText(
+            l10n.appLogCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(
@@ -637,7 +683,11 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
               maxStorageBytes: _maxStorageBytes == 0 ? null : _maxStorageBytes,
             ),
           ),
-          child: Text(l10n.appLogSave),
+          child: ConstrainedText(
+            l10n.appLogSave,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -800,7 +850,8 @@ class _LogContentPageState extends State<LogContentPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(AppLocalizations.of(context)!.appLogCopyError(e))),
+          content: Text(AppLocalizations.of(context)!.appLogCopyError(e)),
+        ),
       );
       return;
     }
@@ -847,9 +898,9 @@ class _LogContentPageState extends State<LogContentPage> {
           );
           if (_levelFilter != null && entry.level != _levelFilter) return false;
           if (_sourceFilter.trim().isNotEmpty &&
-              !(entry.source ?? '')
-                  .toLowerCase()
-                  .contains(_sourceFilter.trim().toLowerCase())) {
+              !(entry.source ?? '').toLowerCase().contains(
+                    _sourceFilter.trim().toLowerCase(),
+                  )) {
             return false;
           }
           if ((_fromTime != null || _untilTime != null) &&
@@ -940,8 +991,11 @@ class _LogContentPageState extends State<LogContentPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(widget.fileName,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              ConstrainedText(
+                widget.fileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               Text(
                 _hasActiveFilters
                     ? l10n.appLogFilteredLineCount(
@@ -959,9 +1013,7 @@ class _LogContentPageState extends State<LogContentPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: Icon(
-              _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
-            ),
+            icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
             tooltip: l10n.appLogFilter,
             onPressed: () => setState(() => _showFilters = !_showFilters),
           ),
@@ -1021,6 +1073,7 @@ class _LogContentPageState extends State<LogContentPage> {
               Expanded(
                 child: DropdownButtonFormField<String?>(
                   key: ValueKey(_levelFilter),
+                  isExpanded: true,
                   initialValue: _levelFilter,
                   decoration: InputDecoration(
                     labelText: l10n.appLogLevel,
@@ -1029,12 +1082,20 @@ class _LogContentPageState extends State<LogContentPage> {
                   items: [
                     DropdownMenuItem<String?>(
                       value: null,
-                      child: Text(l10n.appLogAnyLevel),
+                      child: ConstrainedText(
+                        l10n.appLogAnyLevel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     ...LogLevel.values.map(
                       (level) => DropdownMenuItem<String?>(
                         value: level.label,
-                        child: Text(_logLevelLabel(l10n, level)),
+                        child: ConstrainedText(
+                          _logLevelLabel(l10n, level),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ],
@@ -1050,10 +1111,12 @@ class _LogContentPageState extends State<LogContentPage> {
                 child: OutlinedButton.icon(
                   onPressed: () => _chooseTime(fromTime: true),
                   icon: const Icon(Icons.schedule),
-                  label: Text(
+                  label: ConstrainedText(
                     _fromTime == null
                         ? l10n.appLogFromTime
                         : '${l10n.appLogFromTime}: ${_fromTime!.format(context)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1062,10 +1125,12 @@ class _LogContentPageState extends State<LogContentPage> {
                 child: OutlinedButton.icon(
                   onPressed: () => _chooseTime(fromTime: false),
                   icon: const Icon(Icons.schedule),
-                  label: Text(
+                  label: ConstrainedText(
                     _untilTime == null
                         ? l10n.appLogUntilTime
                         : '${l10n.appLogUntilTime}: ${_untilTime!.format(context)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),

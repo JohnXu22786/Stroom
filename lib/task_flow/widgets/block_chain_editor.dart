@@ -11,6 +11,8 @@ import 'flow_block_card.dart';
 import 'io_type_indicator.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 class BlockChainEditor extends StatelessWidget {
   final List<TaskFlowBlock> blocks;
   final IOType inputType;
@@ -253,7 +255,11 @@ class BlockChainEditor extends StatelessWidget {
                           items: _inputTypeOptions.map((type) {
                             return DropdownMenuItem(
                               value: type,
-                              child: Text(localizedIoTypeLabel(type, strings)),
+                              child: ConstrainedText(
+                                localizedIoTypeLabel(type, strings),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             );
                           }).toList(),
                         ),
@@ -324,9 +330,11 @@ class BlockChainEditor extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () => _showAddBlockSheet(context),
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.taskFlowUiAddBlock,
                     style: TextStyle(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   style: OutlinedButton.styleFrom(
                     shape: RoundedRectangleBorder(
@@ -354,8 +362,10 @@ class BlockChainEditor extends StatelessWidget {
             ? () => _showAddBlockSheet(context, insertIndex: index)
             : null,
         icon: const Icon(Icons.add, size: 16),
-        label: Text(
+        label: ConstrainedText(
           AppLocalizations.of(context)!.taskFlowUiInsertBeforeStep(index + 1),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

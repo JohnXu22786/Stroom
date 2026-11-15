@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import 'constrained_text.dart';
 
 /// Shows the File Attachment Panel — a modal bottom sheet with file transfer
 /// options only. No model selection, tools, or reasoning settings.
@@ -168,7 +169,7 @@ class _FileActionButton extends StatelessWidget {
               child: Icon(icon, size: 24, color: color),
             ),
             const SizedBox(height: 6),
-            Text(
+            ConstrainedText(
               label,
               style: TextStyle(
                 fontSize: 11,

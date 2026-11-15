@@ -24,6 +24,8 @@ import '../utils/task_flow_localization.dart';
 import 'catcatch_policy_menu.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 String _localizedIoTypeLabel(IOType type, AppLocalizations strings) =>
     switch (type) {
       IOType.text => strings.taskFlowIoTypeText,
@@ -185,7 +187,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiClose),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiClose,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -361,8 +367,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.taskFlowUiCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -386,8 +394,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         );
                         Navigator.pop(context, updated);
                       },
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.taskFlowUiConfirm,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -509,6 +519,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             DropdownButtonFormField<int>(
               dropdownColor: StroomMenuStyle.surface(context),
               borderRadius: StroomMenuStyle.borderRadius,
+              isExpanded: true,
               value: selectedIndex,
               hint: Text(
                 models.isEmpty
@@ -542,8 +553,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     : AppLocalizations.of(context)!.taskFlowUiUnnamedProvider;
                 return DropdownMenuItem<int>(
                   value: i,
-                  child: Text(
+                  child: ConstrainedText(
                     '$modelName | $providerName',
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 );
@@ -591,12 +603,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                       for (final dynamic cp in customParams)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(
+                          child: ConstrainedText(
                             '${cp.paramName}: ${cp.defaultValue}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
                             ),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -677,6 +690,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         return DropdownButtonFormField<String>(
           dropdownColor: StroomMenuStyle.surface(context),
           borderRadius: StroomMenuStyle.borderRadius,
+          isExpanded: true,
           value: currentOption != null
               ? '${currentOption.modelIndex}:${currentOption.id}'
               : null,
@@ -704,7 +718,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               // Name only — the id (e.g. zh-CN-XiaoxiaoNeural) is a long
               // opaque string that would confuse users; the TTS page shows
               // the same.
-              child: Text(o.name),
+              child: ConstrainedText(
+                o.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             );
           }).toList(),
           onChanged: (v) {
@@ -747,7 +765,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         display == null
                             ? (currentId.isEmpty
                                 ? AppLocalizations.of(context)!
@@ -761,6 +779,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                               ? cs.onSurfaceVariant
                               : cs.onSurface,
                         ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -949,7 +968,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               Icon(Icons.folder_outlined, size: 16, color: cs.primary),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   value?.toString().isNotEmpty == true
                       ? value.toString()
                       : AppLocalizations.of(context)!.taskFlowUiDefaultRoot,
@@ -970,9 +989,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!.taskFlowUiSelect,
                   style: TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -1125,8 +1146,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         name,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -1135,7 +1157,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (subtitle.isNotEmpty)
-                        Text(
+                        ConstrainedText(
                           subtitle,
                           style: TextStyle(
                             fontSize: 11,

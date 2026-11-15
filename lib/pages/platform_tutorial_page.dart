@@ -1,4 +1,7 @@
+import '../widgets/constrained_text.dart';
+
 import 'package:flutter/material.dart';
+
 import '../l10n/app_localizations.dart';
 
 /// Configuration for a platform tutorial.
@@ -57,7 +60,11 @@ class PlatformTutorialSelectionPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.platformTutorialPageTitle),
+        title: ConstrainedText(
+          l10n.platformTutorialPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -127,7 +134,11 @@ class PlatformTutorialPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.platformTutorialDetailTitle(config.platformName)),
+        title: ConstrainedText(
+          l10n.platformTutorialDetailTitle(config.platformName),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -172,10 +183,7 @@ class PlatformTutorialPage extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildTutorialSteps(
-    ThemeData theme,
-    AppLocalizations l10n,
-  ) {
+  List<Widget> _buildTutorialSteps(ThemeData theme, AppLocalizations l10n) {
     final steps = _getStepsForPlatform(config.platformName, l10n);
     return [
       _buildSectionHeader(l10n.platformTutorialStepsHeading, theme),

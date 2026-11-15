@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'constrained_text.dart';
+
 import '../l10n/app_localizations.dart';
 
 enum GalleryChoice { system, app }
@@ -144,7 +146,7 @@ class _ChoiceCard extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    ConstrainedText(
                       subtitle,
                       style: Theme.of(context)
                           .textTheme

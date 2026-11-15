@@ -53,7 +53,11 @@ void showAssistantFullEditDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDlgState) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.assistantEditTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.assistantEditTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: DefaultTabController(
@@ -70,13 +74,26 @@ void showAssistantFullEditDialog(
                   labelPadding: const EdgeInsets.symmetric(horizontal: 24),
                   indicatorSize: TabBarIndicatorSize.label,
                   tabs: [
-                    Tab(text: AppLocalizations.of(context)!.assistantBasicTab),
                     Tab(
-                      text:
-                          AppLocalizations.of(context)!.assistantParametersTab,
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.assistantBasicTab,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     Tab(
-                      text: AppLocalizations.of(context)!.assistantDefaultsTab,
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.assistantParametersTab,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Tab(
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.assistantDefaultsTab,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -146,7 +163,11 @@ void showAssistantFullEditDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -237,7 +258,11 @@ void showAssistantFullEditDialog(
 
               Navigator.pop(ctx);
             },
-            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.mermaidSaveButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/constrained_text.dart';
+
 String detectFormat(String? name) {
   if (name == null) return 'mp4';
   final lower = name.toLowerCase();
@@ -73,7 +75,7 @@ class ChoiceCard extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    ConstrainedText(
                       subtitle,
                       style: Theme.of(context)
                           .textTheme
@@ -85,11 +87,7 @@ class ChoiceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, size: 20, color: cs.onSurfaceVariant),
             ],
           ),
         ),
