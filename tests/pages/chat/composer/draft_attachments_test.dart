@@ -187,8 +187,11 @@ void main() {
             'old-chat.txt',
             Uint8List.fromList([1, 2, 3]),
           );
+          // Let the async logging call at the start of saveFile resume before
+          // waiting for the fake path provider to report its blocked lookup.
+          await Future<void>.delayed(Duration.zero);
+          await pathProvider.started.future;
         });
-        await pathProvider.started.future;
 
         await tester.pumpWidget(
           _composer(
@@ -239,8 +242,9 @@ void main() {
             'late-edit.txt',
             Uint8List.fromList([4, 5, 6]),
           );
+          await Future<void>.delayed(Duration.zero);
+          await editPathProvider.started.future;
         });
-        await editPathProvider.started.future;
 
         final originalEditAttachment = readyImage(
           id: 'edit-att',
@@ -300,14 +304,11 @@ void main() {
       );
 
       final selectedBytes = Completer<Uint8List>();
-      late Future<void> pendingImport;
-      await tester.runAsync(() async {
-        pendingImport =
-            key.currentState!.addPendingAttachmentAfterPickerForTesting(
-          'picked-in-conv-1.txt',
-          selectedBytes.future,
-        );
-      });
+      final pendingImport =
+          key.currentState!.addPendingAttachmentAfterPickerForTesting(
+        'picked-in-conv-1.txt',
+        selectedBytes.future,
+      );
 
       await tester.pumpWidget(
         _composer(
