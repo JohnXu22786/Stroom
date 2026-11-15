@@ -38,13 +38,12 @@ void main() {
       expect(notifier.state.single.isManuallyUnread, isFalse);
       expect(notifier.state.single.lastReadMessageId, 'assistant-1');
 
-      final saved =
-          (jsonDecode(
-                (await SharedPreferences.getInstance()).getString(
-                  'conversations',
-                )!,
-              ) as List).single
-              as Map<String, dynamic>;
+      final saved = (jsonDecode(
+        (await SharedPreferences.getInstance()).getString(
+          'conversations',
+        )!,
+      ) as List)
+          .single as Map<String, dynamic>;
       expect(saved['isManuallyUnread'], isNot(true));
     },
   );
@@ -81,7 +80,8 @@ void main() {
     expect(conversation.lastReadMessageId, 'new');
   });
 
-  test('marking an errored conversation read preserves its error marker', () async {
+  test('marking an errored conversation read preserves its error marker',
+      () async {
     final conversation = Conversation(
       id: 'error',
       title: 'Error',
