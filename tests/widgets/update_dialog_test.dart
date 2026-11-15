@@ -15,7 +15,15 @@ Future<void> _showDialog({
   required WidgetTester tester,
   required UpdateNotifier notifier,
   Locale locale = const Locale('zh', 'CN'),
+  Size? size,
 }) async {
+  if (size != null) {
+    await tester.binding.setSurfaceSize(size);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [updateProvider.overrideWith((ref) => notifier)],
@@ -98,11 +106,6 @@ void main() {
     testWidgets('phone layout gives the primary action a full-width target', (
       tester,
     ) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
       final notifier = _setupNotifier(
         state: UpdateState(
           latestVersion: 'v0.5.5',
@@ -119,6 +122,7 @@ void main() {
         tester: tester,
         notifier: notifier,
         locale: const Locale('en', 'US'),
+        size: const Size(390, 844),
       );
 
       final dialogRect = tester.getRect(find.byType(AlertDialog));
