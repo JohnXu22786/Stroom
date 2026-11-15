@@ -155,7 +155,11 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     if (bytes == null || !mounted) return;
     if (att.fileType == 'image') {
       // 重新触发后台预压缩（结果写回 base64Data + 磁盘缓存）
-      await _preCompressPendingImage(att, bytes);
+      await _preCompressPendingImage(
+        att,
+        bytes,
+        conversationId: att.conversationId ?? widget.conversationId,
+      );
       if (!mounted) return;
       setState(() {
         _pendingImageBytes[att.id] = bytes;
@@ -261,7 +265,12 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       );
       for (final a in removed) {
         if (attachments.any((n) => n.hash == a.hash)) continue;
-        unawaited(_deleteCompressedCacheAfterPreCompress(a));
+        unawaited(
+          _deleteCompressedCacheAfterPreCompress(
+            a,
+            conversationId: _editSessionConversationId,
+          ),
+        );
       }
       _clearPendingAttachments();
       _textController.clear();

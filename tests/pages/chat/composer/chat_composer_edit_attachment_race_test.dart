@@ -30,6 +30,8 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
   Future<String?> getTemporaryPath() async => '$root/tmp';
 }
 
+Future<T> _runInTestZone<T>(Future<T> Function() callback) => callback();
+
 void main() {
   late Directory root;
   late PathProviderPlatform previousPathProvider;
@@ -81,6 +83,7 @@ void main() {
   Future<void> pumpComposer(
     WidgetTester tester, {
     Attachment? editingAttachment,
+    String conversationId = 'race-test',
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -88,7 +91,7 @@ void main() {
           conversationsProvider.overrideWith(
             (ref) => ConversationsNotifier(ref),
           ),
-          activeConversationIdProvider.overrideWith((ref) => 'race-test'),
+          activeConversationIdProvider.overrideWith((ref) => conversationId),
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(),
           ),
@@ -105,7 +108,7 @@ void main() {
           home: Scaffold(
             body: ChatComposerWidget(
               key: composerKey,
-              conversationId: 'race-test',
+              conversationId: conversationId,
               editingMessageId:
                   editingAttachment == null ? null : 'message-to-edit',
               editingMessageText:
@@ -128,17 +131,22 @@ void main() {
   Future<void> mountComposer(
     WidgetTester tester, {
     Attachment? editingAttachment,
+    String conversationId = 'race-test',
   }) async {
     composerKey = GlobalKey<ChatComposerWidgetState>();
     sent = null;
-    await pumpComposer(tester, editingAttachment: editingAttachment);
+    await pumpComposer(
+      tester,
+      editingAttachment: editingAttachment,
+      conversationId: conversationId,
+    );
   }
 
   Future<Attachment> addImage(WidgetTester tester, String id) async {
     final bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
     );
-    await tester.runAsync(
+    await _runInTestZone(
       () => composerKey.currentState!.addPendingAttachmentForTesting(
         '$id.png',
         bytes,
@@ -174,9 +182,10 @@ void main() {
       };
 
       late Future<void> edit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await cleanupStarted.future;
       });
       await tester.tap(
@@ -187,7 +196,7 @@ void main() {
       );
       await tester.pump();
       finishCleanup.complete();
-      await tester.runAsync(() => edit);
+      await _runInTestZone(() => edit);
 
       expect(
         storageFiles.keys,
@@ -222,9 +231,10 @@ void main() {
       };
 
       late Future<void> edit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await cleanupStarted.future;
       });
       final gesture = await tester.startGesture(
@@ -238,7 +248,7 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
       finishCleanup.complete();
-      await tester.runAsync(() => edit);
+      await _runInTestZone(() => edit);
 
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
@@ -249,7 +259,7 @@ void main() {
       final edited = sent!.last;
       expect(edited.storagePath, startsWith('temp_edited/'));
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(edited.storagePath),
         ),
         editedBytes,
@@ -283,31 +293,32 @@ void main() {
 
       late Future<void> firstEdit;
       late Future<void> secondEdit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         firstEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
         secondEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await bothSaved.future;
       });
 
       releaseSave[1].complete();
-      await tester.runAsync(() => secondEdit);
+      await _runInTestZone(() => secondEdit);
       releaseSave[0].complete();
-      await tester.runAsync(() => firstEdit);
+      await _runInTestZone(() => firstEdit);
 
       final pending =
           composerKey.currentState!.pendingAttachmentsForTesting.single;
       expect(pending.storagePath, savedPaths[1]);
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(savedPaths[0]!),
         ),
         isNull,
         reason: 'a superseded overlapping edit must clean up its saved file',
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(savedPaths[1]!),
         ),
         editedBytes,
@@ -341,16 +352,17 @@ void main() {
 
       late Future<void> olderEdit;
       late Future<void> newerEdit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         olderEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
         newerEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await bothSaved.future;
       });
 
       releaseSave[0].complete();
-      await tester.runAsync(() => olderEdit);
+      await _runInTestZone(() => olderEdit);
       expect(
         composerKey
             .currentState!.pendingAttachmentsForTesting.single.storagePath,
@@ -359,7 +371,7 @@ void main() {
             'an older request must not publish while a newer save is pending',
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(savedPaths[0]!),
         ),
         isNull,
@@ -367,14 +379,14 @@ void main() {
       );
 
       releaseSave[1].complete();
-      await tester.runAsync(() => newerEdit);
+      await _runInTestZone(() => newerEdit);
       expect(
         composerKey
             .currentState!.pendingAttachmentsForTesting.single.storagePath,
         savedPaths[1],
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(savedPaths[1]!),
         ),
         editedBytes,
@@ -388,7 +400,7 @@ void main() {
       final sourceBytes = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
       );
-      final sourcePath = await tester.runAsync(
+      final sourcePath = await _runInTestZone(
         () => AttachmentStorage.saveFile('source.png', sourceBytes),
       );
       final source = Attachment(
@@ -397,7 +409,7 @@ void main() {
         mimeType: 'image/png',
         fileType: 'image',
         hash: 'source-hash',
-        storagePath: sourcePath!,
+        storagePath: sourcePath,
         fileSize: sourceBytes.length,
         base64Data: base64Encode(sourceBytes),
       );
@@ -406,7 +418,7 @@ void main() {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
       );
 
-      await tester.runAsync(
+      await _runInTestZone(
         () => composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
       );
@@ -414,7 +426,7 @@ void main() {
           composerKey.currentState!.pendingAttachmentsForTesting.single;
       expect(editedOriginal.storagePath, startsWith('temp_edited/'));
 
-      await tester.runAsync(
+      await _runInTestZone(
         () => composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
       );
@@ -423,7 +435,7 @@ void main() {
       expect(
           latestEditedOriginal.storagePath, isNot(editedOriginal.storagePath));
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(editedOriginal.storagePath),
         ),
         isNull,
@@ -431,13 +443,20 @@ void main() {
       );
 
       final addedOriginal = await addImage(tester, 'new-image');
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         await composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(1, editedBytes);
       });
       final editedAdded = composerKey.currentState!.pendingAttachmentsForTesting
           .singleWhere((attachment) => attachment.id == addedOriginal.id);
       expect(editedAdded.storagePath, startsWith('temp_edited/'));
+      expect(
+        await _runInTestZone(
+          () => AttachmentStorage.readFile(addedOriginal.storagePath),
+        ),
+        isNull,
+        reason: 'editing a new attachment must delete its replaced file',
+      );
 
       Future<void> remove(String id) async {
         await tester.tap(
@@ -451,26 +470,24 @@ void main() {
 
       await remove(source.id);
       await remove(addedOriginal.id);
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 30));
-      });
+      await tester.pump(const Duration(milliseconds: 30));
 
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(source.storagePath),
         ),
         sourceBytes,
         reason: 'the original message must keep its source file',
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(editedOriginal.storagePath),
         ),
         isNull,
         reason: 'a removed original edit replacement must not be orphaned',
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(latestEditedOriginal.storagePath),
         ),
         isNull,
@@ -478,7 +495,7 @@ void main() {
             'the current original edit replacement must be deleted on removal',
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(editedAdded.storagePath),
         ),
         isNull,
@@ -507,19 +524,159 @@ void main() {
       };
 
       late Future<void> edit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await saveStarted.future;
       });
       await tester.pumpWidget(const SizedBox.shrink());
       finishSave.complete();
-      await tester.runAsync(() => edit);
+      await _runInTestZone(() => edit);
 
       expect(
         storageFiles.keys,
         hasLength(1),
         reason: 'only the original attachment should remain',
+      );
+    },
+  );
+
+  testWidgets(
+    'canceling an edit after switching conversations cleans its original cache',
+    (tester) async {
+      final deletedCacheConversations = <String?>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
+        deletedCacheConversations.add(conversationId);
+        return true;
+      };
+
+      await mountComposer(tester, conversationId: 'original-conversation');
+      final original = await addImage(tester, 'source');
+      await pumpComposer(
+        tester,
+        editingAttachment: original,
+        conversationId: 'original-conversation',
+      );
+
+      final editedBytes = Uint8List.fromList([
+        ...base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+        ),
+        0,
+      ]);
+      await _runInTestZone(
+        () => composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
+      );
+      await tester.pump();
+      final newlyAdded = await addImage(tester, 'newly-added');
+
+      await pumpComposer(
+        tester,
+        editingAttachment: original,
+        conversationId: 'new-conversation',
+      );
+      await pumpComposer(tester, conversationId: 'new-conversation');
+
+      expect(deletedCacheConversations, isNotEmpty);
+      expect(
+        deletedCacheConversations,
+        everyElement('original-conversation'),
+        reason:
+            'cancel cleanup must not delete a cache for the new conversation',
+      );
+      expect(
+        await _runInTestZone(
+          () => AttachmentStorage.readFile(newlyAdded.storagePath),
+        ),
+        isNull,
+        reason: 'canceling edit must delete newly added attachment files',
+      );
+    },
+  );
+
+  testWidgets(
+    'removing a new attachment in edit mode deletes its stored file',
+    (tester) async {
+      await mountComposer(tester);
+      final original = await addImage(tester, 'original');
+      await pumpComposer(tester, editingAttachment: original);
+      final newlyAdded = await addImage(tester, 'newly-added');
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ValueKey('pending_att_${newlyAdded.id}')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        await _runInTestZone(
+          () => AttachmentStorage.readFile(newlyAdded.storagePath),
+        ),
+        isNull,
+      );
+      expect(
+        await _runInTestZone(
+          () => AttachmentStorage.readFile(original.storagePath),
+        ),
+        isNotNull,
+        reason: 'removing a new edit attachment must preserve the source file',
+      );
+    },
+  );
+
+  testWidgets(
+    'submitting an edit after switching conversations cleans its original cache',
+    (tester) async {
+      final deletedCacheConversations = <String?>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
+        deletedCacheConversations.add(conversationId);
+        return true;
+      };
+
+      await mountComposer(tester, conversationId: 'original-conversation');
+      final original = await addImage(tester, 'original');
+      await pumpComposer(
+        tester,
+        editingAttachment: original,
+        conversationId: 'original-conversation',
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ValueKey('pending_att_${original.id}')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await pumpComposer(
+        tester,
+        editingAttachment: original,
+        conversationId: 'new-conversation',
+      );
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+
+      expect(deletedCacheConversations, isNotEmpty);
+      expect(
+        deletedCacheConversations,
+        everyElement('original-conversation'),
+        reason:
+            'submitting the old edit must not delete a new conversation cache',
+      );
+      expect(
+        await _runInTestZone(
+          () => AttachmentStorage.readFile(original.storagePath),
+        ),
+        isNotNull,
+        reason:
+            'submitting the edit must preserve its original attachment file',
       );
     },
   );
@@ -534,7 +691,7 @@ void main() {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
       );
 
-      await tester.runAsync(
+      await _runInTestZone(
         () => composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
       );
@@ -558,28 +715,31 @@ void main() {
       };
 
       late Future<void> secondEdit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         secondEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await oldCleanupStarted.future;
       });
       latestReplacementPath = composerKey
           .currentState!.pendingAttachmentsForTesting.single.storagePath;
 
       await pumpComposer(tester);
-      await tester.runAsync(() => latestReplacementDeleted.future);
+      await tester.pump();
+      await _runInTestZone(() => latestReplacementDeleted.future);
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(latestReplacementPath!),
         ),
         isNull,
       );
 
       finishOldCleanup.complete();
-      await tester.runAsync(() => secondEdit);
+      await _runInTestZone(() => secondEdit);
       expect(
-        await tester
-            .runAsync(() => AttachmentStorage.readFile(source.storagePath)),
+        await _runInTestZone(
+          () => AttachmentStorage.readFile(source.storagePath),
+        ),
         isNotNull,
         reason: 'canceling edit must preserve the source message attachment',
       );
@@ -592,7 +752,7 @@ void main() {
       final sourceBytes = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
       );
-      final sourcePath = await tester.runAsync(
+      final sourcePath = await _runInTestZone(
         () => AttachmentStorage.saveFile('source.png', sourceBytes),
       );
       final source = Attachment(
@@ -601,7 +761,7 @@ void main() {
         mimeType: 'image/png',
         fileType: 'image',
         hash: 'source-hash',
-        storagePath: sourcePath!,
+        storagePath: sourcePath,
         fileSize: sourceBytes.length,
         base64Data: base64Encode(sourceBytes),
       );
@@ -622,16 +782,17 @@ void main() {
       );
 
       late Future<void> edit;
-      await tester.runAsync(() async {
+      await _runInTestZone(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
         await saveStarted.future;
       });
 
       await pumpComposer(tester);
       await pumpComposer(tester, editingAttachment: source);
       finishSave.complete();
-      await tester.runAsync(() => edit);
+      await _runInTestZone(() => edit);
 
       expect(
         composerKey
@@ -641,7 +802,7 @@ void main() {
             'the canceled save must not replace an attachment in a new edit session',
       );
       expect(
-        await tester.runAsync(
+        await _runInTestZone(
           () => AttachmentStorage.readFile(savedEditedPath!),
         ),
         isNull,

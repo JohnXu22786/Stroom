@@ -25,6 +25,12 @@ class AttachmentStorage {
   static Future<bool> Function(String)? deleteFileOverrideForTesting;
 
   @visibleForTesting
+  static Future<bool> Function({
+    required String? conversationId,
+    required String hash,
+  })? deleteCompressedImageOverrideForTesting;
+
+  @visibleForTesting
   static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
 
   @visibleForTesting
@@ -32,6 +38,7 @@ class AttachmentStorage {
     saveFileOverrideForTesting = null;
     saveEditedFileOverrideForTesting = null;
     deleteFileOverrideForTesting = null;
+    deleteCompressedImageOverrideForTesting = null;
     readFileOverrideForTesting = null;
   }
 
@@ -316,6 +323,10 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
+    final override = deleteCompressedImageOverrideForTesting;
+    if (override != null) {
+      return override(conversationId: conversationId, hash: hash);
+    }
     if (!_isSafeConversationId(conversationId) ||
         !_isSafeCompressedCacheHash(hash)) {
       return false;

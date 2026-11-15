@@ -265,7 +265,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (fileType == 'image') {
       _pendingImageBytes[att.id] = bytes;
       // 选中即后台预压缩：发送时不再等待（isolate 中执行，不阻塞 UI）
-      unawaited(_preCompressPendingImage(att, bytes));
+      unawaited(
+        _preCompressPendingImage(
+          att,
+          bytes,
+          conversationId: attachmentOrigin.conversationId,
+        ),
+      );
     }
     setState(() {
       _pendingAttachments.add(att);
@@ -305,8 +311,12 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// 同名 hash 的多次调用（重复选中同一张图）会被串成链条：地图里的
   /// 条目永远代表"该 hash 最后一次写入"之前的全部任务，清理路径
   /// await 它即保证先于所有在途写入执行。
-  Future<void> _preCompressPendingImage(Attachment att, Uint8List bytes) async {
-    final convIdAtStart = widget.conversationId;
+  Future<void> _preCompressPendingImage(
+    Attachment att,
+    Uint8List bytes, {
+    required String? conversationId,
+  }) async {
+    final convIdAtStart = conversationId;
     final task = _preCompressImage(att, bytes, convIdAtStart);
     final prev = _preCompressFutures[att.hash];
     final chained = (prev ?? Future<void>.value()).then((_) => task);
@@ -353,7 +363,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   ///
   /// 防止竞态：移除/编辑触发的清理若先于在途压缩执行，缓存文件会被
   /// 压缩任务重新创建（在对话已删除时成为永久孤儿）。
-  Future<void> _deleteCompressedCacheAfterPreCompress(Attachment att) async {
+  Future<void> _deleteCompressedCacheAfterPreCompress(
+    Attachment att, {
+    required String? conversationId,
+  }) async {
     final inflight = _preCompressFutures[att.hash];
     if (inflight != null) {
       try {
@@ -362,14 +375,17 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 预压缩失败也会完成（内部已兜底），这里仅需等待时序
       }
     }
-    await _deleteCompressedCache(att);
+    await _deleteCompressedCache(att, conversationId: conversationId);
   }
 
   /// Best-effort 删除附件的磁盘压缩缓存（派生缓存，删除永远安全）。
-  Future<void> _deleteCompressedCache(Attachment att) async {
+  Future<void> _deleteCompressedCache(
+    Attachment att, {
+    required String? conversationId,
+  }) async {
     try {
       await AttachmentStorage.deleteCompressedImage(
-        conversationId: att.conversationId ?? widget.conversationId,
+        conversationId: conversationId,
         hash: att.hash,
       );
     } catch (_) {
@@ -389,23 +405,27 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     //   再统一清理。
     final isOriginalEditFile = widget.editingMessageId != null &&
         (widget.editingMessageAttachments?.any(
-              (a) => a.id == att.id && a.storagePath == att.storagePath,
+              (a) => a.storagePath == att.storagePath,
             ) ??
             false);
     final originalEditUsesHash = widget.editingMessageId != null &&
         (widget.editingMessageAttachments?.any((a) => a.hash == att.hash) ??
             false);
     final editCacheStillReferenced = isOriginalEditFile || originalEditUsesHash;
-    // An edited replacement is unreferenced once removed, including in edit
-    // mode. Preserve a temp-edited path only when it is the original file
-    // still referenced by the message being edited.
-    if (att.storagePath.startsWith('temp_edited/') && !isOriginalEditFile) {
-      unawaited(_deleteTempFile(att.storagePath));
+    // Files copied into the composer are unreferenced once removed. Preserve
+    // any path still referenced by the message being edited.
+    if (!isOriginalEditFile) {
+      unawaited(_deletePendingAttachmentFile(att.storagePath));
     }
     if (editCacheStillReferenced) {
       _removedEditAttachments.add(att);
     } else {
-      unawaited(_deleteCompressedCacheAfterPreCompress(att));
+      unawaited(
+        _deleteCompressedCacheAfterPreCompress(
+          att,
+          conversationId: att.conversationId ?? widget.conversationId,
+        ),
+      );
     }
     setState(() {
       _pendingAttachments.removeAt(index);
@@ -414,34 +434,39 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     _scheduleDraftSave();
   }
 
-  /// Delete a temp-edited file from the attachment storage.
-  Future<void> _deleteTempFile(String tempStoragePath) async {
+  /// Delete an unreferenced composer attachment file from storage.
+  Future<void> _deletePendingAttachmentFile(String storagePath) async {
     try {
-      await AttachmentStorage.deleteFile(tempStoragePath);
+      await AttachmentStorage.deleteFile(storagePath);
     } catch (_) {
       // Non-critical cleanup
     }
   }
 
-  /// Discard edited temp files that were only owned by a canceled edit.
-  void _discardPendingEditReplacements(List<Attachment>? originalAttachments) {
+  /// Discard pending files that were only owned by a canceled edit.
+  void _discardPendingEditReplacements(
+    List<Attachment>? originalAttachments, {
+    required String? conversationId,
+  }) {
     for (final att in _pendingAttachments) {
-      if (!att.storagePath.startsWith('temp_edited/')) continue;
       final originalFileStillReferenced = originalAttachments?.any(
-            (original) =>
-                original.id == att.id &&
-                original.storagePath == att.storagePath,
+            (original) => original.storagePath == att.storagePath,
           ) ??
           false;
       if (originalFileStillReferenced) continue;
 
-      unawaited(_deleteTempFile(att.storagePath));
+      unawaited(_deletePendingAttachmentFile(att.storagePath));
       final originalCacheStillReferenced = originalAttachments?.any(
             (original) => original.hash == att.hash,
           ) ??
           false;
       if (!originalCacheStillReferenced) {
-        unawaited(_deleteCompressedCacheAfterPreCompress(att));
+        unawaited(
+          _deleteCompressedCacheAfterPreCompress(
+            att,
+            conversationId: conversationId,
+          ),
+        );
       }
     }
   }
@@ -527,6 +552,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (index >= _pendingAttachments.length) return;
     final oldAtt = _pendingAttachments[index];
     final editSessionGeneration = _pendingAttachmentDraftGeneration;
+    final editConversationId = widget.editingMessageId == null
+        ? widget.conversationId
+        : _editSessionConversationId;
     final editRequestId = ++_pendingAttachmentEditRequestId;
     _pendingAttachmentEditRequests[oldAtt.id] = editRequestId;
 
@@ -547,6 +575,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       final updatedAtt = oldAtt.copyWith(
         hash: newHash,
         storagePath: tempStoragePath,
+        conversationId: editConversationId,
         fileSize: editedBytes.length,
         // 编辑输出格式可能与源不同（编辑器对 JPEG 源输出 JPEG，
         // 其余源输出 PNG）：mimeType 必须与真实内容一致，否则
@@ -566,7 +595,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (currentIndex < 0 ||
           editSessionGeneration != _pendingAttachmentDraftGeneration ||
           _pendingAttachmentEditRequests[oldAtt.id] != editRequestId) {
-        await _deleteTempFile(tempStoragePath);
+        await _deletePendingAttachmentFile(tempStoragePath);
         return;
       }
 
@@ -580,14 +609,20 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         _pendingAttachments[currentIndex] = updatedAtt;
         _pendingImageBytes[updatedAtt.id] = editedBytes;
       });
-      unawaited(_preCompressPendingImage(updatedAtt, editedBytes));
+      unawaited(
+        _preCompressPendingImage(
+          updatedAtt,
+          editedBytes,
+          conversationId: editConversationId,
+        ),
+      );
       _scheduleDraftSave();
 
       // 清理旧文件：普通模式的附件不再被消息引用；编辑模式只保留原
       // 消息仍引用的源路径。按 hash 共享的压缩缓存则等确定重发后再清。
       if (widget.editingMessageId == null) {
         if (replacedAtt.storagePath.startsWith('temp_edited/')) {
-          await _deleteTempFile(replacedAtt.storagePath);
+          await _deletePendingAttachmentFile(replacedAtt.storagePath);
         } else {
           try {
             await AttachmentStorage.deleteFile(replacedAtt.storagePath);
@@ -598,7 +633,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 同 hash 的新附件继续使用这份缓存，不要在等待它的预压缩完成后
         // 再将它删除。
         if (replacedAtt.hash != updatedAtt.hash) {
-          await _deleteCompressedCacheAfterPreCompress(replacedAtt);
+          await _deleteCompressedCacheAfterPreCompress(
+            replacedAtt,
+            conversationId: editConversationId,
+          );
         }
       } else {
         final isOriginalEditFile = widget.editingMessageAttachments?.any(
@@ -611,16 +649,26 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
               (a) => a.hash == replacedAtt.hash,
             ) ??
             false;
-        if (!isOriginalEditFile &&
-            replacedAtt.storagePath.startsWith('temp_edited/')) {
-          await _deleteTempFile(replacedAtt.storagePath);
+        if (!isOriginalEditFile) {
+          if (replacedAtt.storagePath.startsWith('temp_edited/')) {
+            await _deletePendingAttachmentFile(replacedAtt.storagePath);
+          } else {
+            try {
+              await AttachmentStorage.deleteFile(replacedAtt.storagePath);
+            } catch (_) {
+              // Non-fatal cleanup
+            }
+          }
         }
         if (isOriginalEditFile || originalEditUsesHash) {
           if (replacedAtt.hash != updatedAtt.hash) {
             _removedEditAttachments.add(replacedAtt);
           }
         } else if (replacedAtt.hash != updatedAtt.hash) {
-          await _deleteCompressedCacheAfterPreCompress(replacedAtt);
+          await _deleteCompressedCacheAfterPreCompress(
+            replacedAtt,
+            conversationId: editConversationId,
+          );
         }
       }
     } catch (e) {

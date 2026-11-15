@@ -146,6 +146,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   int _pendingAttachmentDraftGeneration = 0;
   int _pendingAttachmentEditRequestId = 0;
   final Map<String, int> _pendingAttachmentEditRequests = {};
+  String? _editSessionConversationId;
 
   @visibleForTesting
   Future<void> addPendingAttachmentForTesting(
@@ -266,6 +267,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   void initState() {
     super.initState();
 
+    if (widget.editingMessageId != null) {
+      _editSessionConversationId = widget.conversationId;
+    }
+
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
     WidgetsBinding.instance.addObserver(this);
@@ -343,8 +348,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         if (oldWidget.editingMessageId != null) {
           _discardPendingEditReplacements(
             oldWidget.editingMessageAttachments,
+            conversationId: _editSessionConversationId,
           );
         }
+        _editSessionConversationId = widget.conversationId;
         _textController.text = widget.editingMessageText!;
         _lastSavedDraft = widget.editingMessageText!;
         _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
@@ -370,7 +377,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _lastHadText = false;
         _discardPendingEditReplacements(
           oldWidget.editingMessageAttachments,
+          conversationId: _editSessionConversationId,
         );
+        _editSessionConversationId = null;
         _clearPendingAttachments();
         _disarmEditWarning();
         if (widget.initialDraftText.isNotEmpty) {
@@ -524,7 +533,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
     if (widget.editingMessageId != null) {
-      _discardPendingEditReplacements(widget.editingMessageAttachments);
+      _discardPendingEditReplacements(
+        widget.editingMessageAttachments,
+        conversationId: _editSessionConversationId,
+      );
     }
     // Save draft before disposing. Use try-catch because ref may
     // already be disposed during teardown, especially in tests.
