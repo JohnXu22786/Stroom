@@ -6427,19 +6427,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get providerBuiltinBadge => 'مدمج';
 
   @override
-  String get providerBuiltinTtsName => 'موفّر تحويل النص إلى كلام';
+  String get providerBuiltinTtsName => 'TTS (تحويل النص إلى كلام)';
 
   @override
-  String get providerBuiltinLlmName => 'موفّر LLM';
+  String get providerBuiltinLlmName => 'LLM (نموذج لغوي كبير)';
 
   @override
-  String get providerBuiltinOcrName => 'موفّر OCR';
+  String get providerBuiltinOcrName => 'OCR (التعرّف الضوئي على الحروف)';
 
   @override
-  String get providerBuiltinAsrName => 'موفّر التعرّف على الكلام';
+  String get providerBuiltinAsrName => 'STT (تحويل الكلام إلى نص)';
 
   @override
-  String get providerBuiltinMcpName => 'موفّر MCP';
+  String get providerBuiltinMcpName => 'MCP (بروتوكول سياق النموذج)';
 
   @override
   String get providerBuiltinSearchGroupName => 'بحث';
@@ -18523,19 +18523,19 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get providerBuiltinBadge => 'مدمج';
 
   @override
-  String get providerBuiltinTtsName => 'موفّر تحويل النص إلى كلام';
+  String get providerBuiltinTtsName => 'TTS (تحويل النص إلى كلام)';
 
   @override
-  String get providerBuiltinLlmName => 'موفّر LLM';
+  String get providerBuiltinLlmName => 'LLM (نموذج لغوي كبير)';
 
   @override
-  String get providerBuiltinOcrName => 'موفّر OCR';
+  String get providerBuiltinOcrName => 'OCR (التعرّف الضوئي على الحروف)';
 
   @override
-  String get providerBuiltinAsrName => 'موفّر التعرّف على الكلام';
+  String get providerBuiltinAsrName => 'STT (تحويل الكلام إلى نص)';
 
   @override
-  String get providerBuiltinMcpName => 'موفّر MCP';
+  String get providerBuiltinMcpName => 'MCP (بروتوكول سياق النموذج)';
 
   @override
   String get providerBuiltinSearchGroupName => 'بحث';

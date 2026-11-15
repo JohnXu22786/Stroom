@@ -3264,11 +3264,11 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "Integrado",
-  "providerBuiltinTtsName": "Provedor de TTS",
-  "providerBuiltinLlmName": "Provedor de LLM",
-  "providerBuiltinOcrName": "Provedor de OCR",
-  "providerBuiltinAsrName": "Provedor de reconhecimento de fala",
-  "providerBuiltinMcpName": "Provedor de MCP",
+  "providerBuiltinTtsName": "TTS (Texto para fala)",
+  "providerBuiltinLlmName": "LLM (Modelo de linguagem grande)",
+  "providerBuiltinOcrName": "OCR (Reconhecimento óptico de caracteres)",
+  "providerBuiltinAsrName": "STT (Fala para texto)",
+  "providerBuiltinMcpName": "MCP (Protocolo de contexto do modelo)",
   "providerBuiltinSearchGroupName": "Pesquisa",
   "providerBuiltinMcpServicesGroupName": "Outros serviços MCP",
   "@providerBuiltinBadge": {

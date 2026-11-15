@@ -3267,11 +3267,11 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "기본 제공",
-  "providerBuiltinTtsName": "TTS 제공업체",
-  "providerBuiltinLlmName": "LLM 제공업체",
-  "providerBuiltinOcrName": "OCR 제공업체",
-  "providerBuiltinAsrName": "음성 인식 제공업체",
-  "providerBuiltinMcpName": "MCP 제공업체",
+  "providerBuiltinTtsName": "TTS (텍스트 음성 변환)",
+  "providerBuiltinLlmName": "LLM (대규모 언어 모델)",
+  "providerBuiltinOcrName": "OCR (광학 문자 인식)",
+  "providerBuiltinAsrName": "STT (음성 텍스트 변환)",
+  "providerBuiltinMcpName": "MCP (모델 컨텍스트 프로토콜)",
   "providerBuiltinSearchGroupName": "검색",
   "providerBuiltinMcpServicesGroupName": "기타 MCP 서비스",
   "@providerBuiltinBadge": {

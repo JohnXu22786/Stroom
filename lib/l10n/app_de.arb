@@ -3262,11 +3262,11 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "Integriert",
-  "providerBuiltinTtsName": "Sprachausgabe-Anbieter",
-  "providerBuiltinLlmName": "LLM-Anbieter",
-  "providerBuiltinOcrName": "OCR-Anbieter",
-  "providerBuiltinAsrName": "Spracherkennungsanbieter",
-  "providerBuiltinMcpName": "MCP-Anbieter",
+  "providerBuiltinTtsName": "TTS (Text zu Sprache)",
+  "providerBuiltinLlmName": "LLM (Großes Sprachmodell)",
+  "providerBuiltinOcrName": "OCR (Optische Zeichenerkennung)",
+  "providerBuiltinAsrName": "STT (Sprache zu Text)",
+  "providerBuiltinMcpName": "MCP (Modell-Kontext-Protokoll)",
   "providerBuiltinSearchGroupName": "Suche",
   "providerBuiltinMcpServicesGroupName": "Andere MCP-Dienste",
   "@providerBuiltinBadge": {

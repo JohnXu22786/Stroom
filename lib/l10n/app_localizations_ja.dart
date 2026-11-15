@@ -6229,19 +6229,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get providerBuiltinBadge => '内蔵';
 
   @override
-  String get providerBuiltinTtsName => 'TTSプロバイダー';
+  String get providerBuiltinTtsName => 'TTS (テキスト読み上げ)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM プロバイダー';
+  String get providerBuiltinLlmName => 'LLM (大規模言語モデル)';
 
   @override
-  String get providerBuiltinOcrName => 'OCRプロバイダー';
+  String get providerBuiltinOcrName => 'OCR (光学文字認識)';
 
   @override
-  String get providerBuiltinAsrName => '音声認識プロバイダー';
+  String get providerBuiltinAsrName => 'STT (音声テキスト変換)';
 
   @override
-  String get providerBuiltinMcpName => 'MCPプロバイダー';
+  String get providerBuiltinMcpName => 'MCP (モデルコンテキストプロトコル)';
 
   @override
   String get providerBuiltinSearchGroupName => '検索';
@@ -17902,19 +17902,19 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get providerBuiltinBadge => '内蔵';
 
   @override
-  String get providerBuiltinTtsName => 'TTSプロバイダー';
+  String get providerBuiltinTtsName => 'TTS (テキスト読み上げ)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM プロバイダー';
+  String get providerBuiltinLlmName => 'LLM (大規模言語モデル)';
 
   @override
-  String get providerBuiltinOcrName => 'OCRプロバイダー';
+  String get providerBuiltinOcrName => 'OCR (光学文字認識)';
 
   @override
-  String get providerBuiltinAsrName => '音声認識プロバイダー';
+  String get providerBuiltinAsrName => 'STT (音声テキスト変換)';
 
   @override
-  String get providerBuiltinMcpName => 'MCPプロバイダー';
+  String get providerBuiltinMcpName => 'MCP (モデルコンテキストプロトコル)';
 
   @override
   String get providerBuiltinSearchGroupName => '検索';
