@@ -12,6 +12,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/tts_state_provider.dart';
 import '../services/storage_service.dart';
 import '../utils/file_manifest.dart';
+import '../utils/storage_file_publication.dart';
 
 import '../widgets/constrained_text.dart';
 
@@ -343,8 +344,19 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       await FileManifest.withStorageFileSaveLock(
         record.storageFileName,
         () async {
-          await FileManifest.writeFile(record.storageFileName, bytes);
-          await FileManifest.addRecord(record);
+          await publishStorageFiles<void, AudioRecord>(
+            publish: (writeFile) async {
+              await writeFile(record.storageFileName, bytes);
+              await FileManifest.addRecord(record);
+            },
+            loadRecords: FileManifest.loadRecordsStrict,
+            isReferenced: (candidate, fileName) =>
+                candidate.storageFileName == fileName,
+            writeFile: FileManifest.writeFile,
+            readFile: FileManifest.readFile,
+            fileExists: FileManifest.fileExists,
+            deleteFile: FileManifest.deleteFile,
+          );
         },
       );
 

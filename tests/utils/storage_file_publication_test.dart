@@ -168,4 +168,39 @@ void main() {
       expect(files[thumbName], oldThumbnail);
     },
   );
+
+  test(
+    'failed publication keeps files still referenced by the manifest',
+    () async {
+      final record = imageRecord();
+      final thumbName = imageThumbFileName(record.hash);
+      final files = <String, Uint8List>{};
+
+      await expectLater(
+        publishStorageFiles<void, ImageRecord>(
+          publish: (write) async {
+            await write(record.storageFileName, content);
+            await write(thumbName, thumbnail);
+            throw StateError('manifest publication outcome is uncertain');
+          },
+          loadRecords: () async => [record],
+          isReferenced: (candidate, fileName) =>
+              candidate.hash == record.hash &&
+              (fileName == candidate.storageFileName || fileName == thumbName),
+          writeFile: (name, bytes) async {
+            files[name] = bytes;
+            return null;
+          },
+          readFile: (name) async => files[name],
+          fileExists: (name) async => files.containsKey(name),
+          deleteFile: (name) async {
+            files.remove(name);
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(files, {record.storageFileName: content, thumbName: thumbnail});
+    },
+  );
 }

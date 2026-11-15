@@ -176,28 +176,38 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final destinationFolder = _currentFolder;
       await ImageManifest.withFilePublicationLock(hash, destinationFolder,
           () async {
-        await ImageManifest.writeFile(fileName, bytes);
-        final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
-          bytes,
-        );
-        if (thumbnailBytes != null) {
-          await ImageManifest.writeFile(
-            imageThumbFileName(hash),
-            thumbnailBytes,
-          );
-        }
-        final now = DateTime.now();
-        final timestamp =
-            '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
-        await ImageManifest.addRecord(
-          ImageRecord(
-            name: '照片_$timestamp',
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: destinationFolder,
-          ),
+        await publishStorageFiles<void, ImageRecord>(
+          publish: (writeFile) async {
+            await writeFile(fileName, bytes);
+            final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
+              bytes,
+            );
+            if (thumbnailBytes != null) {
+              await writeFile(imageThumbFileName(hash), thumbnailBytes);
+            }
+            final now = DateTime.now();
+            final timestamp =
+                '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
+            await ImageManifest.addRecord(
+              ImageRecord(
+                name: '照片_$timestamp',
+                hash: hash,
+                format: format,
+                createdAt: DateTime.now(),
+                size: bytes.length,
+                folder: destinationFolder,
+              ),
+            );
+          },
+          loadRecords: ImageManifest.loadRecordsStrict,
+          isReferenced: (record, name) =>
+              record.hash == hash &&
+              (name == record.storageFileName ||
+                  name == imageThumbFileName(record.hash)),
+          writeFile: ImageManifest.writeFile,
+          readFile: ImageManifest.readFile,
+          fileExists: ImageManifest.fileExists,
+          deleteFile: ImageManifest.deleteFile,
         );
       });
       success = true;
