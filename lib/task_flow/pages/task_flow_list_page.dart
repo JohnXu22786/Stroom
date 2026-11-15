@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/unified_task_list/task_utils.dart';
@@ -265,6 +266,7 @@ class TaskFlowListPage extends ConsumerWidget {
   ) {
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -375,9 +377,9 @@ class TaskFlowListPage extends ConsumerWidget {
   void _showTemplates(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: 640),
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

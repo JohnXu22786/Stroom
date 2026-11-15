@@ -153,6 +153,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
   }) {
     return showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -274,6 +275,7 @@ class _SystemAssistantConfigPanelState
   Future<void> _pickModel() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),

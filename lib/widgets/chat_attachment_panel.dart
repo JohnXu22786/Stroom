@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../l10n/app_localizations.dart';
 
@@ -18,6 +19,7 @@ void showChatAttachmentPanel({
 }) {
   showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
