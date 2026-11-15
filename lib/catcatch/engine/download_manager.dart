@@ -367,13 +367,18 @@ class DownloadManager {
 
     // 恢复进度
     final hasByteRanges = segmentRanges?.any((range) => range != null) ?? false;
-    int completedCount = 0;
+    final completedSegments = <int>{};
     if (taskId.isNotEmpty && !hasByteRanges) {
       final saved = await loadSegmentProgress(taskId);
-      if (saved != null) {
-        completedCount = saved['completed'] as int? ?? 0;
+      final savedSegments = saved?['completedSegments'];
+      if (savedSegments is List) {
+        completedSegments.addAll(
+          savedSegments
+              .whereType<int>()
+              .where((index) => index >= 0 && index < total),
+        );
         debugPrint(
-          '[DownloadManager] Restored progress: $completedCount/$total',
+          '[DownloadManager] Restored progress: ${completedSegments.length}/$total',
         );
       }
     }
@@ -383,35 +388,36 @@ class DownloadManager {
     final errors = <int, String>{};
 
     // 收集已完成的下载
-    for (int i = 0; i < completedCount && i < total; i++) {
+    for (int i = 0; i < total; i++) {
+      if (!completedSegments.contains(i)) continue;
       final partPath = p.join(tempDirPath, 'part_$i');
       final partFile = File(partPath);
       if (await partFile.exists() && await partFile.length() > 0) {
         partFiles[i] = partPath;
       } else {
-        completedCount = i; // 回退
-        break;
+        completedSegments.remove(i);
       }
     }
 
     // Seed the byte counter from restored parts so the published total
     // never regresses across retries with restored segment progress.
     var totalBytes = 0;
-    for (int i = 0; i < completedCount && i < total; i++) {
+    for (int i = 0; i < total; i++) {
+      if (!completedSegments.contains(i)) continue;
       final partFile = File(p.join(tempDirPath, 'part_$i'));
-      if (await partFile.exists()) {
-        totalBytes += await partFile.length();
-      }
+      totalBytes += await partFile.length();
     }
 
     // 并行下载
     final semaphore = Semaphore(concurrency);
     final futures = <Future<void>>[];
+    var progressWrite = Future<void>.value();
     // Total bytes across all segments (monotonic; no awaits inside the
     // accumulation, so the single-threaded event loop keeps it atomic).
     // Seeded above from restored parts.
 
-    for (int i = completedCount; i < total; i++) {
+    for (int i = 0; i < total; i++) {
+      if (completedSegments.contains(i)) continue;
       futures.add(
         downloadSingleSegment(
           index: i,
@@ -425,13 +431,19 @@ class DownloadManager {
           cancelToken: cancelToken,
           errors: errors,
           taskId: taskId,
-          onSegmentComplete: (idx) {
-            completedCount++;
+          onSegmentComplete: (idx) async {
+            completedSegments.add(idx);
+            final completedCount = completedSegments.length;
             final progress = (completedCount * 100 ~/ total).clamp(0, 100);
             onProgress?.call(completedCount, total, progress);
-            // 保存进度
             if (taskId.isNotEmpty) {
-              saveSegmentProgress(taskId, {'completed': completedCount});
+              final savedSegments = completedSegments.toList()..sort();
+              progressWrite = progressWrite.then(
+                (_) => saveSegmentProgress(taskId, {
+                  'completedSegments': savedSegments,
+                }),
+              );
+              await progressWrite;
             }
           },
           onBytesDelta: (delta) {
@@ -444,7 +456,7 @@ class DownloadManager {
 
     await Future.wait(futures);
 
-    if (errors.isNotEmpty && completedCount < total) {
+    if (errors.isNotEmpty && completedSegments.length < total) {
       final errorMsg =
           errors.entries.map((e) => 'Segment[${e.key}]: ${e.value}').join('; ');
       throw Exception('Download failed: $errorMsg');

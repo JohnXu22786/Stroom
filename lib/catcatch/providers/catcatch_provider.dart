@@ -15,6 +15,7 @@ import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
 import '../engine/sniffing_engine.dart';
+import '../engine/task_progress_path.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
 import '../../utils/atomic_file.dart';
@@ -509,18 +510,15 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       return false;
     }
 
-    // 1. 删除分段下载进度跟踪。 Persisted IDs must be safe path components
-    // before being interpolated into a filesystem path.
-    if (_isSafeTaskId(task.id)) {
-      final catcatchDir = p.join(appDir, 'catcatch');
-      final progressDir = p.join(appDir, 'catcatch', '.progress');
-      final progressPath = p.join(progressDir, '${task.id}_dl_progress.json');
-      if (await _isCanonicalPathWithin(
-          progressPath, progressDir, catcatchDir, appDir)) {
-        await _deleteFileBestEffort(File(progressPath),
-            shouldDelete: () => !currentRemainingTasks()
-                .any((current) => current.id == task.id));
-      }
+    // 1. 删除分段下载进度跟踪。
+    final catcatchDir = p.join(appDir, 'catcatch');
+    final progressDir = p.join(appDir, 'catcatch', '.progress');
+    final progressPath = p.join(progressDir, taskProgressFileName(task.id));
+    if (await _isCanonicalPathWithin(
+        progressPath, progressDir, catcatchDir, appDir)) {
+      await _deleteFileBestEffort(File(progressPath),
+          shouldDelete: () =>
+              !currentRemainingTasks().any((current) => current.id == task.id));
     }
 
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
@@ -528,7 +526,6 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (task.downloadedFilePath != null &&
         task.status != TaskStatus.completed) {
       final downloadedFilePath = task.downloadedFilePath!;
-      final catcatchDir = p.join(appDir, 'catcatch');
       final downloadsDir = p.join(catcatchDir, 'downloads');
       final convertedDir = p.join(catcatchDir, 'converted');
       if (await _isCanonicalPathWithin(
@@ -543,7 +540,6 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
     if (task.selectedMedia == null) return;
 
-    final catcatchDir = p.join(appDir, 'catcatch');
     final downloadsDir = p.join(catcatchDir, 'downloads');
     final convertedDir = p.join(catcatchDir, 'converted');
     for (final artifact in _mediaDerivedArtifacts(task, appDir)) {
@@ -564,12 +560,6 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   static String _normalizedFilePath(String path) =>
       p.normalize(p.absolute(path));
-
-  static bool _isSafeTaskId(String id) =>
-      id.isNotEmpty &&
-      id != '.' &&
-      id != '..' &&
-      RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(id);
 
   /// Checks a path after resolving existing symlinks in its path components.
   /// Missing leaf paths are resolved against their nearest existing parent.

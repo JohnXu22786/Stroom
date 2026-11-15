@@ -738,7 +738,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se puede determinar el recuento de imágenes originales';
 
   @override
-  String get ocrConfirmClear => 'Confirmar claro';
+  String get ocrConfirmClear => 'Confirmar borrado';
 
   @override
   String get ocrRetryUnavailableConfirmClear =>
@@ -1508,7 +1508,45 @@ class AppLocalizationsEs extends AppLocalizations {
   String get conversationTemporary => 'conversación temporal';
 
   @override
+  String get conversationSetTemporary =>
+      'Establecer como conversación temporal';
+
+  @override
   String get conversationCloseTemporary => 'Cerrar conversación temporal';
+
+  @override
+  String get conversationKeep => 'Conservar conversación';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporal';
+
+  @override
+  String get conversationTemporaryWarning => 'Caduca pronto';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Esta conversación se eliminará después de una hora. Cada mensaje reinicia el temporizador. Desactiva el modo temporal para conservarla.';
+
+  @override
+  String get conversationEnableTemporary => 'Activar modo temporal';
+
+  @override
+  String get chatLoadingConversation => 'Cargando conversación…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envía un mensaje para iniciar la conversación.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Elige o crea una conversación para empezar a chatear.';
+
+  @override
+  String get chatConversationLoadError =>
+      'No se pudo cargar esta conversación.';
+
+  @override
+  String get chatRetryLoadConversation => 'Reintentar';
 
   @override
   String get taskListTitle => 'lista de tareas';
@@ -3288,6 +3326,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get topicItemPin => 'Alfiler';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como no leído';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como leído';
+
   String get topicItemRename => 'Rebautizar';
 
   @override
@@ -3811,6 +3855,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => 'Subcarpetas';
+
+  @override
+  String get folderPickerNoFolders => 'No hay carpetas';
 
   @override
   String get folderPickerExistingFolders => 'Carpetas existentes';
@@ -12127,6 +12174,18 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get providerMaxUploadSizePositive =>
       'El tamaño máximo de carga debe ser un número positivo.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'La temperatura guardada está fuera del intervalo 0–2. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'El valor top-P guardado está fuera del intervalo 0–1. Ajusta el control deslizante o desactívalo antes de guardar.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
 }
 
 /// The translations for Spanish Castilian, as used in Spain (`es_ES`).
@@ -12862,7 +12921,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       'No se puede determinar el recuento de imágenes originales';
 
   @override
-  String get ocrConfirmClear => 'Confirmar claro';
+  String get ocrConfirmClear => 'Confirmar borrado';
 
   @override
   String get ocrRetryUnavailableConfirmClear =>
@@ -13632,7 +13691,45 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get conversationTemporary => 'conversación temporal';
 
   @override
+  String get conversationSetTemporary =>
+      'Establecer como conversación temporal';
+
+  @override
   String get conversationCloseTemporary => 'Cerrar conversación temporal';
+
+  @override
+  String get conversationKeep => 'Conservar conversación';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporal';
+
+  @override
+  String get conversationTemporaryWarning => 'Caduca pronto';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Esta conversación se eliminará después de una hora. Cada mensaje reinicia el temporizador. Desactiva el modo temporal para conservarla.';
+
+  @override
+  String get conversationEnableTemporary => 'Activar modo temporal';
+
+  @override
+  String get chatLoadingConversation => 'Cargando conversación…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envía un mensaje para iniciar la conversación.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Elige o crea una conversación para empezar a chatear.';
+
+  @override
+  String get chatConversationLoadError =>
+      'No se pudo cargar esta conversación.';
+
+  @override
+  String get chatRetryLoadConversation => 'Reintentar';
 
   @override
   String get taskListTitle => 'lista de tareas';
@@ -15412,6 +15509,12 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get topicItemPin => 'Alfiler';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como no leído';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como leído';
+
   String get topicItemRename => 'Rebautizar';
 
   @override

@@ -370,6 +370,15 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required String? streamingMsgId,
     required bool isDark,
   }) {
+    Widget withAssistantBubbleSurface(Widget child) => Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[850] : Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: child,
+        );
+
     // If the message has accumulated content (e.g.,
     // after page restoration from background streaming),
     // render it as regular text instead of a spinner.
@@ -403,15 +412,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
         streamingText: streamingFullReply,
         streamingFenceInfoCache: streamingFenceInfoCache,
       );
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: MarkdownWidget(
-          data: streamingFullReply,
-          selectable: true,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          config: config,
-          markdownGenerator: markdownGenerator,
+      return withAssistantBubbleSurface(
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: MarkdownWidget(
+            data: streamingFullReply,
+            selectable: true,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            config: config,
+            markdownGenerator: markdownGenerator,
+          ),
         ),
       );
     }
@@ -423,17 +434,19 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // text showed a pile of "思考完成" buttons and hid the tool calls
     // until the first text token converted the message to a text message.
     if (segments != null && segments.isNotEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: _buildSegmentWidgets(
-            messageId: message.id,
-            segments: segments,
-            isDark: isDark,
-            isStreaming: isStreaming,
-            hasSearchMatch: false,
+      return withAssistantBubbleSurface(
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: _buildSegmentWidgets(
+              messageId: message.id,
+              segments: segments,
+              isDark: isDark,
+              isStreaming: isStreaming,
+              hasSearchMatch: false,
+            ),
           ),
         ),
       );
@@ -445,41 +458,45 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // textStream to text type.
     final reasoningSections = _reasoningContents[message.id];
     if (reasoningSections != null && reasoningSections.isNotEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ReasoningSection(
-              sections: ReasoningSectionData(
-                texts: reasoningSections,
-                // During textStream phase, reasoning
-                // events are still being received (no
-                // TextEvent yet), so streaming is
-                // always true. Once TextEvent arrives,
-                // updateMessage() converts the message
-                // to text type and textMessageBuilder
-                // takes over with the correct flag.
-                streaming: isStreaming &&
-                    message.id == _streamingMsgId &&
-                    _isReasoningCompletedForMsg[message.id] != true,
+      return withAssistantBubbleSurface(
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: reasoningSections,
+                  // During textStream phase, reasoning
+                  // events are still being received (no
+                  // TextEvent yet), so streaming is
+                  // always true. Once TextEvent arrives,
+                  // updateMessage() converts the message
+                  // to text type and textMessageBuilder
+                  // takes over with the correct flag.
+                  streaming: isStreaming &&
+                      message.id == _streamingMsgId &&
+                      _isReasoningCompletedForMsg[message.id] != true,
+                ),
+                messageId: message.id,
               ),
-              messageId: message.id,
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
-    return TickerMode(
-      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
-      child: const Padding(
-        padding: EdgeInsets.all(12),
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
+    return withAssistantBubbleSurface(
+      TickerMode(
+        enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+        child: const Padding(
+          padding: EdgeInsets.all(12),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
           ),
         ),
       ),

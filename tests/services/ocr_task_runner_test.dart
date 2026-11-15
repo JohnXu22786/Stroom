@@ -461,6 +461,78 @@ void main() {
     },
   );
 
+  test('per-image finish reasons cannot persist a credential', () async {
+    const apiKey = 'provider-secret-echoed-as-finish-reason';
+    final credentialAdapter = _OutOfOrderAdapter();
+    final emittedSnapshots = <String>[];
+    final incompleteOutcomePublished = Completer<void>();
+    notifier.addListener((tasks) {
+      if (tasks.isNotEmpty) {
+        emittedSnapshots.add(jsonEncode(tasks.single.toMap()));
+        if (!incompleteOutcomePublished.isCompleted &&
+            tasks.single.ocrPageOutcomes.any(
+              (outcome) => outcome.status == OcrPageOutcomeStatus.incomplete,
+            )) {
+          incompleteOutcomePublished.complete();
+        }
+      }
+    }, fireImmediately: false);
+    final credentialRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config.copyWith(apiKey: apiKey),
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = credentialAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = credentialRunner.run();
+    await credentialAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    credentialAdapter.complete(
+      1,
+      text: 'partial text',
+      finishReason: apiKey,
+    );
+    await incompleteOutcomePublished.future.timeout(
+      const Duration(seconds: 2),
+    );
+
+    expect(
+      emittedSnapshots.any((snapshot) => snapshot.contains(apiKey)),
+      isFalse,
+      reason: 'page outcomes are emitted before terminal error sanitization',
+    );
+    await notifier.pendingPersistence;
+    final persistedFile = File(
+      '${directory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+    );
+    expect(await persistedFile.readAsString(), isNot(contains(apiKey)));
+
+    credentialAdapter.complete(2, text: 'complete page');
+    await running;
+    await notifier.pendingPersistence;
+
+    expect(await persistedFile.readAsString(), isNot(contains(apiKey)));
+    expect(
+      notifier.state.single.ocrPageOutcomes.first.error,
+      contains('unknown'),
+    );
+  });
+
   test('per-image result headings follow the current English locale', () async {
     locale = const Locale('en', 'US');
     final englishAdapter = _OutOfOrderAdapter();
@@ -922,6 +994,10 @@ void main() {
       finishReason: 'length',
     );
     await incompletePagePublished.future.timeout(const Duration(seconds: 2));
+    expect(
+      notifier.state.single.ocrPageOutcomes.first.error,
+      contains('length'),
+    );
     diagnosticsAdapter.complete(
       2,
       text: 'failed page response',

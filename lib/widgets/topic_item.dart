@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 import 'temporary_countdown_capsule.dart';
+import 'temporary_conversation_dialog.dart';
 
 class TopicItem extends StatelessWidget {
   final Conversation topic;
@@ -19,7 +20,9 @@ class TopicItem extends StatelessWidget {
   final VoidCallback onPinToggle;
   final VoidCallback onRename;
   final VoidCallback onAutoRename;
+  final VoidCallback onReadStateToggle;
   final VoidCallback onSelectionToggle;
+  final VoidCallback? onTemporaryToggle;
 
   const TopicItem({
     super.key,
@@ -35,7 +38,9 @@ class TopicItem extends StatelessWidget {
     required this.onPinToggle,
     required this.onRename,
     required this.onAutoRename,
+    required this.onReadStateToggle,
     required this.onSelectionToggle,
+    this.onTemporaryToggle,
   });
 
   @override
@@ -208,8 +213,11 @@ class TopicItem extends StatelessWidget {
                         size: 18,
                         color: cs.onSurfaceVariant,
                       ),
-                      onSelected: (value) {
+                      onSelected: (value) async {
                         switch (value) {
+                          case 'read_state':
+                            onReadStateToggle();
+                            break;
                           case 'rename':
                             onRename();
                             break;
@@ -219,12 +227,46 @@ class TopicItem extends StatelessWidget {
                           case 'pin':
                             onPinToggle();
                             break;
+                          case 'toggle_temporary':
+                            if (topic.isTemporary ||
+                                await showTemporaryConversationEnableDialog(
+                                  context,
+                                )) {
+                              if (context.mounted) {
+                                onTemporaryToggle?.call();
+                              }
+                            }
+                            break;
                           case 'delete':
                             onDelete();
                             break;
                         }
                       },
                       itemBuilder: (ctx) => [
+                        PopupMenuItem(
+                          value: 'read_state',
+                          child: Row(
+                            children: [
+                              Icon(
+                                isUnread
+                                    ? Icons.mark_email_read_outlined
+                                    : Icons.mark_email_unread_outlined,
+                                size: 20,
+                                color: isUnread
+                                    ? Color.lerp(cs.primary, Colors.green, 0.55)
+                                    : cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                isUnread
+                                    ? AppLocalizations.of(context)!
+                                        .topicItemMarkRead
+                                    : AppLocalizations.of(context)!
+                                        .topicItemMarkUnread,
+                              ),
+                            ],
+                          ),
+                        ),
                         PopupMenuItem(
                           value: 'rename',
                           child: Text(
@@ -246,6 +288,17 @@ class TopicItem extends StatelessWidget {
                                 : AppLocalizations.of(context)!.topicItemPin,
                           ),
                         ),
+                        if (onTemporaryToggle != null)
+                          PopupMenuItem(
+                            value: 'toggle_temporary',
+                            child: Text(
+                              topic.isTemporary
+                                  ? AppLocalizations.of(context)!
+                                      .conversationKeep
+                                  : AppLocalizations.of(context)!
+                                      .conversationSetTemporary,
+                            ),
+                          ),
                         const PopupMenuDivider(),
                         PopupMenuItem(
                           value: 'delete',

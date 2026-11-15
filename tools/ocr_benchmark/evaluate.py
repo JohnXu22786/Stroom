@@ -308,6 +308,14 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             or any(not isinstance(category, str) for category in categories)
         ):
             raise EvaluationError(f"{display_fixture_id}: categories must be strings")
+        if "table" in categories and "table_text" not in fixture:
+            raise EvaluationError(
+                f"{display_fixture_id}: table fixture needs table_text"
+            )
+        if "formula" in categories and "formula_text" not in fixture:
+            raise EvaluationError(
+                f"{display_fixture_id}: formula fixture needs formula_text"
+            )
         for field in ("table_text", "formula_text"):
             if field in fixture and not isinstance(fixture[field], str):
                 raise EvaluationError(f"{display_fixture_id}: {field} must be a string")
@@ -2646,7 +2654,7 @@ def verify_fixtures(
         raise EvaluationError(
             "cannot read fixture manifest: JSON nesting exceeds parser limit"
         ) from error
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, ValueError) as error:
         raise EvaluationError(f"cannot read fixture manifest: {error}") from error
     if not isinstance(manifest, dict):
         raise EvaluationError("fixture manifest must be an object")
@@ -2695,15 +2703,6 @@ def verify_fixtures(
             raise EvaluationError(
                 f"{display_fixture_id}: blank fixture needs empty gold_text"
             )
-        if "table" in fixture["categories"] and "table_text" not in fixture:
-            raise EvaluationError(
-                f"{display_fixture_id}: table fixture needs table_text"
-            )
-        if "formula" in fixture["categories"] and "formula_text" not in fixture:
-            raise EvaluationError(
-                f"{display_fixture_id}: formula fixture needs formula_text"
-            )
-
     return {
         "fixture_count": len(fixtures),
         "categories": sorted(categories),
@@ -2745,7 +2744,7 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise EvaluationError(
             f"cannot read {path}: JSON nesting exceeds parser limit"
         ) from error
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, ValueError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
         raise EvaluationError(f"{path} must contain a JSON object")
