@@ -120,12 +120,10 @@ void main() {
         p.basename(await progressPath('a/b')),
         isNot(p.basename(await progressPath('a%2Fb'))),
       );
-      final firstWindowsUnsafe = p
-          .basename(await progressPath('\u0000/'))
-          .toLowerCase();
-      final secondWindowsUnsafe = p
-          .basename(await progressPath('h/'))
-          .toLowerCase();
+      final firstWindowsUnsafe =
+          p.basename(await progressPath('\u0000/')).toLowerCase();
+      final secondWindowsUnsafe =
+          p.basename(await progressPath('h/')).toLowerCase();
       expect(firstWindowsUnsafe, isNot(secondWindowsUnsafe));
       expect(await expectedOutsideFile.readAsString(), 'keep');
       expect(jsonDecode(await File(savedPath).readAsString()), {

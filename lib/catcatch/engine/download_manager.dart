@@ -156,9 +156,8 @@ class DownloadManager {
       requestedOutputPath,
     );
     final outputPath = _reserveOutputPath(requestedOutputPath);
-    final taskSuffix = base64Url
-        .encode(utf8.encode(taskId))
-        .replaceAll('=', '');
+    final taskSuffix =
+        base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
     final tempPath = taskId.isEmpty
         ? '$outputPath${DefaultRules.tempFileSuffix}'
         : '$requestedOutputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
@@ -166,8 +165,7 @@ class DownloadManager {
         existingPath != null && existingPath != tempPath;
     final ownsExistingPartialReservation =
         hasExistingPartialReservation && _reserveLegacyPartial(existingPath);
-    final canUseExistingPartial =
-        ownsExistingPartialReservation &&
+    final canUseExistingPartial = ownsExistingPartialReservation &&
         !(sameNameDownloadIsActive &&
             existingPath ==
                 '$requestedOutputPath${DefaultRules.tempFileSuffix}');
@@ -223,9 +221,8 @@ class DownloadManager {
         cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
           final adjustedReceived = received + startByte;
-          final adjustedTotal = total > 0
-              ? total + startByte
-              : -1; // -1 means unknown
+          final adjustedTotal =
+              total > 0 ? total + startByte : -1; // -1 means unknown
           onProgress?.call(adjustedReceived, adjustedTotal);
         },
       );
@@ -384,8 +381,8 @@ class DownloadManager {
       if (savedSegments is List) {
         completedSegments.addAll(
           savedSegments.whereType<int>().where(
-            (index) => index >= 0 && index < total,
-          ),
+                (index) => index >= 0 && index < total,
+              ),
         );
         debugPrint(
           '[DownloadManager] Restored progress: ${completedSegments.length}/$total',
@@ -467,9 +464,8 @@ class DownloadManager {
     await Future.wait(futures);
 
     if (errors.isNotEmpty && completedSegments.length < total) {
-      final errorMsg = errors.entries
-          .map((e) => 'Segment[${e.key}]: ${e.value}')
-          .join('; ');
+      final errorMsg =
+          errors.entries.map((e) => 'Segment[${e.key}]: ${e.value}').join('; ');
       throw Exception('Download failed: $errorMsg');
     }
 
