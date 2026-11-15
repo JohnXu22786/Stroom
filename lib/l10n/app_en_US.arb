@@ -3262,11 +3262,11 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "Built-in",
-  "providerBuiltinTtsName": "TTS Provider",
-  "providerBuiltinLlmName": "LLM Provider",
-  "providerBuiltinOcrName": "OCR Provider",
-  "providerBuiltinAsrName": "Speech Recognition Provider",
-  "providerBuiltinMcpName": "MCP Provider",
+  "providerBuiltinTtsName": "TTS (Text to Speech)",
+  "providerBuiltinLlmName": "LLM (Large Language Model)",
+  "providerBuiltinOcrName": "OCR (Optical Character Recognition)",
+  "providerBuiltinAsrName": "STT (Speech to Text)",
+  "providerBuiltinMcpName": "MCP (Model Context Protocol)",
   "providerBuiltinSearchGroupName": "Search",
   "providerBuiltinMcpServicesGroupName": "Other MCP Services",
   "@providerBuiltinBadge": {

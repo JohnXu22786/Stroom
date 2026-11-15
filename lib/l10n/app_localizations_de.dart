@@ -6481,19 +6481,19 @@ class AppLocalizationsDe extends AppLocalizations {
   String get providerBuiltinBadge => 'Integriert';
 
   @override
-  String get providerBuiltinTtsName => 'Sprachausgabe-Anbieter';
+  String get providerBuiltinTtsName => 'TTS (Text zu Sprache)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM-Anbieter';
+  String get providerBuiltinLlmName => 'LLM (Großes Sprachmodell)';
 
   @override
-  String get providerBuiltinOcrName => 'OCR-Anbieter';
+  String get providerBuiltinOcrName => 'OCR (Optische Zeichenerkennung)';
 
   @override
-  String get providerBuiltinAsrName => 'Spracherkennungsanbieter';
+  String get providerBuiltinAsrName => 'STT (Sprache zu Text)';
 
   @override
-  String get providerBuiltinMcpName => 'MCP-Anbieter';
+  String get providerBuiltinMcpName => 'MCP (Modell-Kontext-Protokoll)';
 
   @override
   String get providerBuiltinSearchGroupName => 'Suche';
@@ -18629,19 +18629,19 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get providerBuiltinBadge => 'Integriert';
 
   @override
-  String get providerBuiltinTtsName => 'Sprachausgabe-Anbieter';
+  String get providerBuiltinTtsName => 'TTS (Text zu Sprache)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM-Anbieter';
+  String get providerBuiltinLlmName => 'LLM (Großes Sprachmodell)';
 
   @override
-  String get providerBuiltinOcrName => 'OCR-Anbieter';
+  String get providerBuiltinOcrName => 'OCR (Optische Zeichenerkennung)';
 
   @override
-  String get providerBuiltinAsrName => 'Spracherkennungsanbieter';
+  String get providerBuiltinAsrName => 'STT (Sprache zu Text)';
 
   @override
-  String get providerBuiltinMcpName => 'MCP-Anbieter';
+  String get providerBuiltinMcpName => 'MCP (Modell-Kontext-Protokoll)';
 
   @override
   String get providerBuiltinSearchGroupName => 'Suche';
