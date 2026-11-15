@@ -153,8 +153,8 @@ void main() {
       await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await cleanupStarted.future;
       });
-      await tester.runAsync(() => cleanupStarted.future);
       await tester.tap(
         find.descendant(
           of: find.byKey(ValueKey('pending_att_${editedOriginal.id}')),
@@ -205,8 +205,8 @@ void main() {
       await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await cleanupStarted.future;
       });
-      await tester.runAsync(() => cleanupStarted.future);
       final gesture = await tester.startGesture(
         tester.getCenter(
           find.byKey(ValueKey('pending_att_${editedOriginal.id}')),
@@ -269,8 +269,8 @@ void main() {
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
         secondEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await bothSaved.future;
       });
-      await tester.runAsync(() => bothSaved.future);
 
       releaseSave[1].complete();
       await tester.runAsync(() => secondEdit);
@@ -424,8 +424,8 @@ void main() {
       await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await saveStarted.future;
       });
-      await tester.runAsync(() => saveStarted.future);
       await tester.pumpWidget(const SizedBox.shrink());
       finishSave.complete();
       await tester.runAsync(() => edit);
@@ -479,8 +479,8 @@ void main() {
       await tester.runAsync(() async {
         secondEdit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await oldCleanupStarted.future;
       });
-      await tester.runAsync(() => oldCleanupStarted.future);
       latestReplacementPath = composerKey
           .currentState!.pendingAttachmentsForTesting.single.storagePath;
 
@@ -544,8 +544,8 @@ void main() {
       await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await saveStarted.future;
       });
-      await tester.runAsync(() => saveStarted.future);
 
       await pumpComposer(tester);
       await pumpComposer(tester, editingAttachment: source);
