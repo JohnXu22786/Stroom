@@ -67,6 +67,7 @@ void main() {
           body: SizedBox(
             width: 180,
             child: DropdownButton<String>(
+              isExpanded: true,
               value: 'format',
               items: [
                 DropdownMenuItem(
