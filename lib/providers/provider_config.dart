@@ -286,11 +286,16 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         // 对齐 conversations 的防御风格。整表回退会导致含 API key
         // 的配置静默丢失且被后续 _persist 覆盖。
         final entries = <ProviderEntry>[];
+        var skippedCorruptEntry = false;
         for (final raw in rawList) {
-          if (raw is! Map) continue;
+          if (raw is! Map) {
+            skippedCorruptEntry = true;
+            continue;
+          }
           try {
             entries.add(ProviderEntry.fromMap(Map<String, dynamic>.from(raw)));
           } catch (e) {
+            skippedCorruptEntry = true;
             debugPrint('Skipping corrupt provider entry: $e');
           }
         }
@@ -299,6 +304,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           await _backupCorruptProviderEntries(prefs, json);
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
+        }
+        if (skippedCorruptEntry) {
+          // 混合列表仍可加载有效条目，但后续持久化只写入已解析条目；
+          // 先备份原始 JSON，避免跳过的配置（可能含 API key）被永久覆盖。
+          await _backupCorruptProviderEntries(prefs, json);
         }
 
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
