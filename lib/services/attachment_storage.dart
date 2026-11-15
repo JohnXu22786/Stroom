@@ -15,6 +15,18 @@ class AttachmentStorage {
   static DateTime Function() _now = DateTime.now;
 
   @visibleForTesting
+  static Future<String> Function(String, Uint8List)? saveFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<bool> Function(String)? deleteFileOverrideForTesting;
+
+  @visibleForTesting
+  static void resetOverridesForTesting() {
+    saveFileOverrideForTesting = null;
+    deleteFileOverrideForTesting = null;
+  }
+
+  @visibleForTesting
   static set nowForTesting(DateTime Function() now) => _now = now;
 
   @visibleForTesting
@@ -55,6 +67,9 @@ class AttachmentStorage {
   }
 
   static Future<String> saveFile(String fileName, Uint8List bytes) async {
+    final override = saveFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     await AppLogService.info(
         'AttachmentStorage', '保存文件: $fileName, 大小: ${bytes.length} 字节');
     try {
@@ -129,6 +144,9 @@ class AttachmentStorage {
   }
 
   static Future<bool> deleteFile(String storagePath) async {
+    final override = deleteFileOverrideForTesting;
+    if (override != null) return override(storagePath);
+
     await AppLogService.info('AttachmentStorage', '删除文件: $storagePath');
     try {
       if (kIsWeb) {
