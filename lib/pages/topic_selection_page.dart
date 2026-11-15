@@ -716,7 +716,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                 final isUnread = topic.isManuallyUnread ||
                                     (!isRunning &&
                                         !isFailed &&
-                                        topic.id != activeConversationId &&
                                         latestMessage?.role == 'assistant' &&
                                         latestMessage?.isStreaming == false &&
                                         latestMessage?.isError == false &&
