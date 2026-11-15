@@ -131,6 +131,40 @@ void main() {
     },
   );
 
+  test('a transient manifest load failure is retried on the next load',
+      () async {
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'transient_load_failure',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: ManifestTables.audioRecords,
+      toMap: (record) => record.toMap(),
+    );
+    final record = AudioRecord(
+      id: 'transient_load_failure',
+      name: 'recover after read failure',
+      hash: 'transient_load_hash',
+      format: 'wav',
+      createdAt: DateTime(2024),
+      size: 1,
+      folder: 'kept_folder',
+    );
+    await operations.addRecord(record);
+    operations.invalidateCache();
+
+    operations.beforeFolderLoadForTesting = () async {
+      operations.beforeFolderLoadForTesting = null;
+      throw StateError('injected transient folder read failure');
+    };
+
+    expect(await operations.loadRecords(), isEmpty);
+    expect(
+      (await operations.loadRecords()).map((item) => item.id),
+      [record.id],
+    );
+    expect(await operations.getAllFolders(), contains(record.folder));
+  });
+
   test('audio writes reject Windows-invalid filename characters', () async {
     await expectLater(
       FileManifest.writeFile('hash?.wav', Uint8List.fromList([1])),

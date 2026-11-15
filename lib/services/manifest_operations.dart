@@ -817,9 +817,10 @@ class ManifestOperations<T extends FileRecord> {
         rethrow;
       }
       if (_recordMutationRevision == revision) {
-        _cache = [];
-        _folderCache = {};
-        _dirty = false;
+        // Do not turn a transient storage read failure into a clean empty
+        // cache. Keep any last known snapshot and retry on the next load.
+        _cache ??= [];
+        _dirty = true;
       }
     }
     return _cache!;
