@@ -722,7 +722,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       // 文本类型文件重命名时显示格式下拉框（与创建页一致）
       renameFormatOptions: kTextFileFormats,
       extraPopupMenuItems: (file) => [
-        // 默认菜单已包含「预览」，这里只补充页面特有的导出项
+        // 默认菜单已包含「打开」，这里只补充页面特有的导出项
         PopupMenuItem(
           value: 'export',
           child: ListTile(

@@ -168,6 +168,7 @@ Widget _buildFileManagerApp({
   List<_TestFileRecord> records = const [],
   GlobalKey<NavigatorState>? navigatorKey,
   bool wrapInHomeStylePopScope = false,
+  Locale locale = const Locale('zh', 'CN'),
 }) {
   final navKey = navigatorKey ?? GlobalKey<NavigatorState>();
 
@@ -204,7 +205,7 @@ Widget _buildFileManagerApp({
 
   return ProviderScope(
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Navigator(
         key: navKey,
@@ -244,6 +245,35 @@ class _HomeStylePopScopeWrapper extends ConsumerWidget {
 }
 
 void main() {
+  group('FileManagerView file menu', () {
+    testWidgets('uses Open for the file action', (tester) async {
+      var openedFile = false;
+      await tester.pumpWidget(
+        _buildFileManagerApp(
+          config: FileManagerConfig<_TestFileRecord>(
+            title: 'Test',
+            fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
+            onFileTap: (_) => openedFile = true,
+          ),
+          folders: {},
+          manifestBridge: testManifestBridge,
+          records: [testFiles.first],
+          locale: const Locale('en'),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('fm_file_popup_file_1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Preview'), findsNothing);
+      expect(find.text('Open'), findsOneWidget);
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(openedFile, isTrue);
+    });
+  });
+
   // ===========================================================================
   // 1. file_manager_view_test.dart
   // ===========================================================================
