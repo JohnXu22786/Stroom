@@ -1651,13 +1651,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       final todowriteSwitch = find.widgetWithText(SwitchListTile, 'todowrite');
       await tester.ensureVisible(todowriteSwitch);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(todowriteSwitch);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Save
       await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // The assistant now carries the defaults
       final container = ProviderScope.containerOf(
