@@ -531,7 +531,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       // while its identity is still present; otherwise the new file has no
       // owner and must be cleaned up.
       final currentIndex = mounted
-          ? _pendingAttachments.indexWhere((attachment) => attachment.id == oldAtt.id)
+          ? _pendingAttachments
+              .indexWhere((attachment) => attachment.id == oldAtt.id)
           : -1;
       if (currentIndex < 0) {
         await _deleteTempFile(tempStoragePath);
@@ -577,7 +578,6 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 编辑模式 + 本次新加附件被编辑：与普通发送一致，立即清理。
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
       }
-
     } catch (e) {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
       if (mounted) {

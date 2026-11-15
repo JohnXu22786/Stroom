@@ -82,15 +82,12 @@ void main() {
             body: ChatComposerWidget(
               key: composerKey,
               conversationId: 'race-test',
-              editingMessageId: editingAttachment == null
-                  ? null
-                  : 'message-to-edit',
-              editingMessageText: editingAttachment == null
-                  ? null
-                  : 'message text',
-              editingMessageAttachments: editingAttachment == null
-                  ? null
-                  : [editingAttachment],
+              editingMessageId:
+                  editingAttachment == null ? null : 'message-to-edit',
+              editingMessageText:
+                  editingAttachment == null ? null : 'message text',
+              editingMessageAttachments:
+                  editingAttachment == null ? null : [editingAttachment],
               initialDraftAttachments: const [],
               onSend: (text, attachments) => sent = attachments,
               onStop: () {},
@@ -307,11 +304,11 @@ void main() {
       );
       AttachmentStorage.saveEditedFileOverrideForTesting =
           (fileName, bytes) async {
-            savedPath = await AttachmentStorage.saveFile(fileName, bytes);
-            if (!saveStarted.isCompleted) saveStarted.complete();
-            await finishSave.future;
-            return 'temp_edited/${savedPath!.split('/').last}';
-          };
+        savedPath = await AttachmentStorage.saveFile(fileName, bytes);
+        if (!saveStarted.isCompleted) saveStarted.complete();
+        await finishSave.future;
+        return 'temp_edited/${savedPath!.split('/').last}';
+      };
 
       final edit = composerKey.currentState!
           .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
