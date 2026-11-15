@@ -59,7 +59,8 @@ void main() {
         tester.element(find.byType(TabBar)),
       );
       tabController.animateTo(1, duration: Duration.zero);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(tabController.index, 1);
 
       expect(find.text('Fallback method'), findsOneWidget);

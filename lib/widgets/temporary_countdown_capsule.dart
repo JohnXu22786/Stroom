@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart'
     show temporaryCountdownTickProvider;
-import 'constrained_text.dart';
 
 String formatTemporaryCountdown(Duration remaining) {
   final totalSeconds = remaining <= Duration.zero
@@ -128,24 +127,6 @@ class _TemporaryCountdownCapsuleState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.timer_outlined, size: 12, color: accent),
-                  const SizedBox(width: 3),
-                  Flexible(
-                    child: ConstrainedText(
-                      l10n.conversationTemporaryStatus,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        height: 1.2,
-                        fontWeight: FontWeight.w600,
-                        color: isNearExpiry
-                            ? Theme.of(context).colorScheme.error
-                            : (isDark
-                                ? Colors.amber.shade100
-                                : Colors.amber.shade800),
-                      ),
-                    ),
-                  ),
                   const SizedBox(width: 4),
                   Text(
                     text,
