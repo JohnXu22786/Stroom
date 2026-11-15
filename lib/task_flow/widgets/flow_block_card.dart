@@ -122,14 +122,14 @@ class FlowBlockCard extends ConsumerWidget {
           child: Semantics(
             label: strings.taskFlowUiTemporary,
             child: Checkbox(
-                value: temporaryOutput,
-                onChanged: (value) {
-                  if (value != null) {
-                    onTemporaryOutputChanged!(value);
-                  }
-                },
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              value: temporaryOutput,
+              onChanged: (value) {
+                if (value != null) {
+                  onTemporaryOutputChanged!(value);
+                }
+              },
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
         ),
