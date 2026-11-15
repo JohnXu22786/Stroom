@@ -575,6 +575,8 @@ class MainActivity : FlutterActivity() {
         content: String,
         result: MethodChannel.Result
     ) {
+        var existingFile: DocumentFile? = null
+        var combinedContentForFallback: String? = null
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -592,7 +594,7 @@ class MainActivity : FlutterActivity() {
             }
 
             // 查找已有日志文件，读取已有内容用于追加
-            val existingFile = logsDir.findFile(fileName)
+            existingFile = logsDir.findFile(fileName)
             val existingContent = if (existingFile != null) {
                 val inputStream = contentResolver.openInputStream(existingFile.uri)
                 inputStream?.bufferedReader()?.use { it.readText() } ?: ""
@@ -602,6 +604,7 @@ class MainActivity : FlutterActivity() {
 
             // 拼接完整内容
             val combinedContent = existingContent + content
+            combinedContentForFallback = combinedContent
 
             // 安全写入：先写临时文件，成功后删除旧文件并重命名
             val tempFileName = "$fileName.tmp_${System.currentTimeMillis()}"
@@ -626,21 +629,49 @@ class MainActivity : FlutterActivity() {
 
             // 写入成功：删除旧文件
             if (existingFile != null) {
-                existingFile.delete()
+                val deleted = existingFile.delete()
+                if (!deleted && existingFile.exists()) {
+                    tempFile.delete()
+                    result.error(
+                        "LOG_REPLACE_FAILED",
+                        "无法替换已有日志文件 $fileName",
+                        content
+                    )
+                    return
+                }
             }
 
             // 将临时文件重命名为目标文件名
             val renamed = tempFile.renameTo(fileName)
             if (!renamed) {
-                // 重命名失败，尝试重新创建。内容已写入临时文件，
-                // 至少数据没丢（临时文件会留在目录里）
+                // 将完整内容交给 Dart 层的本地回退路径保存，临时文件保留以防回退失败。
                 Log.w(TAG, "SAF: 日志文件重命名失败，临时文件保留: $tempFileName")
+                result.error(
+                    "LOG_TARGET_REMOVED",
+                    "无法将临时日志文件重命名为 $fileName",
+                    combinedContent
+                )
+                return
             }
 
             result.success(null)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 写入日志文件失败", e)
-            result.error("WRITE_LOG_FAILED", "写入日志文件失败: ${e.message}", null)
+            val oldFileStillExists = try {
+                existingFile?.exists() == true
+            } catch (_: Exception) {
+                false
+            }
+            val fallbackContent = if (oldFileStillExists) {
+                content
+            } else {
+                combinedContentForFallback
+            }
+            result.error(
+                if (oldFileStillExists) "LOG_REPLACE_FAILED" else "LOG_TARGET_REMOVED",
+                "写入日志文件失败: ${e.message}",
+                fallbackContent
+            )
         }
     }
 

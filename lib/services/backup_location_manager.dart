@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
-import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,6 +39,11 @@ class BackupLocationManager {
   /// 测试专用：覆盖剩余空间查询（null 表示不覆盖，使用真实查询）。
   @visibleForTesting
   static Future<int?> Function()? debugFreeSpaceOverride;
+
+  /// Allows log SAF behavior to be exercised in platform-independent tests.
+  static bool? debugIsAndroidOverride;
+
+  static bool get _isAndroid => debugIsAndroidOverride ?? Platform.isAndroid;
 
   static String? _testBackupRoot;
   static String? _testLogRoot;
@@ -88,13 +93,14 @@ class BackupLocationManager {
   /// Metadata for log files used by retention and storage-cap enforcement.
   static Future<List<LogFileMetadata>> getLogFileMetadata() async {
     if (kIsWeb) return [];
-    if (Platform.isAndroid) {
+    if (_isAndroid) {
+      final safMetadata = <LogFileMetadata>[];
       final uri = await _getSavedSafUri();
       if (uri != null) {
         try {
           final result = await _safChannel.invokeMethod<List<dynamic>>(
               'listLogMetadata', {'uri': uri}).timeout(_safChannelTimeout);
-          return (result ?? [])
+          safMetadata.addAll((result ?? [])
               .whereType<Map>()
               .map((entry) {
                 final name = entry['name'] as String?;
@@ -108,13 +114,15 @@ class BackupLocationManager {
                       DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
                 );
               })
-              .whereType<LogFileMetadata>()
-              .toList();
+              .whereType<LogFileMetadata>());
         } catch (e) {
           debugPrint('[BackupLocationManager] SAF 日志元数据读取失败: $e');
-          rethrow;
         }
       }
+      return _mergeLogFileMetadata(
+        safMetadata,
+        await _getAppLocalLogMetadata(),
+      );
     }
 
     final logsPath = await getLogsRootPath();
@@ -810,43 +818,70 @@ class BackupLocationManager {
   ///
   /// Android SAF 模式会通过 MethodChannel 操作 Stroom/Logs 目录；
   /// 其他平台直接使用 dart:io 写入。
-  static Future<void> writeLogContent(
+  static Future<bool> writeLogContent(
       String relativePath, String content) async {
-    if (kIsWeb) return;
+    if (kIsWeb) return false;
 
     // Android SAF
     if (!kIsWeb) {
       try {
-        if (Platform.isAndroid) {
+        if (_isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            // SAF 未配置，尝试使用 dart:io fallback
+            // SAF is unavailable; preserve logs in app-local storage.
             debugPrint('[BackupLocationManager] SAF URI 未配置，'
-                '日志将写入临时目录');
-            await _writeLogToFile(relativePath, content);
-            return;
+                '日志将写入应用本地目录');
+            return await _writeLogToFile(
+              relativePath,
+              content,
+              logsPath: await _getAppLocalLogsRootPath(),
+            );
           }
           await _safChannel.invokeMethod<void>('writeLog', {
             'uri': uri,
             'fileName': relativePath,
             'content': content,
           }).timeout(_safChannelTimeout);
-          return;
+          return true;
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] SAF 写入日志失败: $e');
-        // Fallback: 尝试直接文件 I/O
-        try {
-          await _writeLogToFile(relativePath, content);
-        } catch (_) {
-          // 静默失败，日志写入不应阻塞应用
+        // A SAF display URI is not a local filesystem path. Use a real
+        // app-local directory and report whether the batch was persisted.
+        if (e is PlatformException &&
+            e.code == 'LOG_TARGET_REMOVED' &&
+            e.details is String) {
+          try {
+            final logsPath = await _getAppLocalLogsRootPath();
+            final fallbackFile = File(p.join(logsPath, relativePath));
+            final existingContent = await fallbackFile.exists()
+                ? await fallbackFile.readAsString()
+                : null;
+            final reconciledContent = existingContent == null
+                ? e.details as String
+                : _mergeLogContent(existingContent, e.details as String);
+            return await _writeLogToFile(
+              relativePath,
+              reconciledContent,
+              logsPath: logsPath,
+              replaceContent: true,
+            );
+          } catch (fallbackError) {
+            debugPrint(
+                '[BackupLocationManager] SAF 完整日志回退失败: $fallbackError');
+            return false;
+          }
         }
-        return;
+        return await _writeLogToFile(
+          relativePath,
+          content,
+          logsPath: await _getAppLocalLogsRootPath(),
+        );
       }
     }
 
     // 非 Android 平台：直接使用 dart:io
-    await _writeLogToFile(relativePath, content);
+    return await _writeLogToFile(relativePath, content);
   }
 
   /// 读取日志文件内容。
@@ -859,20 +894,32 @@ class BackupLocationManager {
     // Android SAF
     if (!kIsWeb) {
       try {
-        if (Platform.isAndroid) {
+        if (_isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            return await _readLogFromFile(relativePath);
+            return await _readLogFromFile(
+              relativePath,
+              logsPath: await _getAppLocalLogsRootPath(),
+            );
           }
           final result = await _safChannel.invokeMethod<String>('readLog', {
             'uri': uri,
             'fileName': relativePath,
           }).timeout(_safChannelTimeout);
-          return result;
+          final fallback = await _readLogFromFile(
+            relativePath,
+            logsPath: await _getAppLocalLogsRootPath(),
+          );
+          if (result == null) return fallback;
+          if (fallback == null || fallback.isEmpty) return result;
+          return _mergeLogContent(result, fallback);
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] SAF 读取日志失败: $e');
-        return await _readLogFromFile(relativePath);
+        return await _readLogFromFile(
+          relativePath,
+          logsPath: await _getAppLocalLogsRootPath(),
+        );
       }
     }
 
@@ -889,21 +936,30 @@ class BackupLocationManager {
     // Android SAF
     if (!kIsWeb) {
       try {
-        if (Platform.isAndroid) {
+        if (_isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            return await _listLogFilesFromDir();
+            return await _listLogFilesFromDir(
+              logsPath: await _getAppLocalLogsRootPath(),
+            );
           }
           final result = await _safChannel.invokeMethod<List<dynamic>>(
               'listLogs', {'uri': uri}).timeout(_safChannelTimeout);
           if (result != null) {
-            return result.cast<String>();
+            final fallback = await _listLogFilesFromDir(
+              logsPath: await _getAppLocalLogsRootPath(),
+            );
+            return {...result.cast<String>(), ...fallback}.toList();
           }
-          return [];
+          return await _listLogFilesFromDir(
+            logsPath: await _getAppLocalLogsRootPath(),
+          );
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] SAF 列出日志文件失败: $e');
-        return await _listLogFilesFromDir();
+        return await _listLogFilesFromDir(
+          logsPath: await _getAppLocalLogsRootPath(),
+        );
       }
     }
 
@@ -920,16 +976,29 @@ class BackupLocationManager {
     // Android SAF
     if (!kIsWeb) {
       try {
-        if (Platform.isAndroid) {
+        if (_isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            return await _deleteLogFromFile(relativePath);
+            return await _deleteLogFromFile(
+              relativePath,
+              logsPath: await _getAppLocalLogsRootPath(),
+            );
           }
-          return await _safChannel.invokeMethod<bool>('deleteLog', {
-                'uri': uri,
-                'fileName': relativePath,
-              }).timeout(_safChannelTimeout) ??
-              false;
+          bool safDeleted = false;
+          try {
+            safDeleted = await _safChannel.invokeMethod<bool>('deleteLog', {
+                  'uri': uri,
+                  'fileName': relativePath,
+                }).timeout(_safChannelTimeout) ??
+                false;
+          } catch (e) {
+            debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
+          }
+          final fallbackDeleted = await _deleteLogFromFile(
+            relativePath,
+            logsPath: await _getAppLocalLogsRootPath(),
+          );
+          return safDeleted && fallbackDeleted;
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
@@ -942,29 +1011,149 @@ class BackupLocationManager {
   }
 
   /// dart:io 日志写入（非 SAF 模式）。
-  static Future<void> _writeLogToFile(
-      String relativePath, String content) async {
+  static Future<bool> _writeLogToFile(
+    String relativePath,
+    String content, {
+    String? logsPath,
+    bool replaceContent = false,
+  }) async {
     try {
-      final logsPath = await getLogsRootPath();
-      if (logsPath == null) return;
-      final dir = Directory(logsPath);
+      final resolvedLogsPath = logsPath ?? await getLogsRootPath();
+      if (resolvedLogsPath == null) return false;
+      final dir = Directory(resolvedLogsPath);
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
-      final file = File(p.join(logsPath, relativePath));
+      final file = File(p.join(resolvedLogsPath, relativePath));
       // 追加模式写入
-      await file.writeAsString(content, mode: FileMode.append);
+      await file.writeAsString(
+        content,
+        mode: replaceContent ? FileMode.write : FileMode.append,
+      );
+      return true;
     } catch (e) {
       debugPrint('[BackupLocationManager] 写入日志文件失败: $relativePath: $e');
+      return false;
     }
   }
 
-  /// dart:io 日志读取（非 SAF 模式）。
-  static Future<String?> _readLogFromFile(String relativePath) async {
+  /// App-private fallback for Android SAF log writes.
+  static Future<String> _getAppLocalLogsRootPath() async {
     try {
-      final logsPath = await getLogsRootPath();
-      if (logsPath == null) return null;
-      final file = File(p.join(logsPath, relativePath));
+      if (Platform.environment['FLUTTER_TEST'] == 'true') return testLogRoot;
+    } catch (_) {}
+    final supportDir = await getApplicationSupportDirectory();
+    return p.join(supportDir.path, 'Stroom', 'Logs');
+  }
+
+  static Future<List<LogFileMetadata>> _getAppLocalLogMetadata() async {
+    final logsPath = await _getAppLocalLogsRootPath();
+    final dir = Directory(logsPath);
+    if (!await dir.exists()) return [];
+    final result = <LogFileMetadata>[];
+    await for (final entry in dir.list()) {
+      if (entry is! File || !entry.path.endsWith('.log')) continue;
+      try {
+        final stat = await entry.stat();
+        result.add(LogFileMetadata(
+          name: p.basename(entry.path),
+          sizeBytes: stat.size,
+          modifiedAt: stat.modified,
+        ));
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  static String _mergeLogContent(String first, String second) {
+    final recordStart = RegExp(
+      r'(?=^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\])',
+      multiLine: true,
+    );
+    List<({String content, DateTime? timestamp})> recordsFor(String source) =>
+        source
+            .split(recordStart)
+            .where((content) => content.isNotEmpty)
+            .map((content) {
+              final match = RegExp(
+                r'^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]',
+              ).firstMatch(content);
+              final timestamp = match == null
+                  ? null
+                  : DateTime.tryParse('${match.group(1)}T${match.group(2)}');
+              return (content: content, timestamp: timestamp);
+            })
+            .toList();
+
+    final firstRecords = recordsFor(first);
+    final secondRecords = recordsFor(second);
+    final firstCounts = <String, int>{};
+    for (final record in firstRecords) {
+      firstCounts.update(
+        record.content,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    final records = <({String content, DateTime? timestamp, int index})>[];
+    var index = 0;
+    for (final record in firstRecords) {
+      records.add((
+        content: record.content,
+        timestamp: record.timestamp,
+        index: index++,
+      ));
+    }
+    for (final record in secondRecords) {
+      final duplicateCount = firstCounts[record.content] ?? 0;
+      if (duplicateCount > 0) {
+        firstCounts[record.content] = duplicateCount - 1;
+        continue;
+      }
+      records.add((
+        content: record.content,
+        timestamp: record.timestamp,
+        index: index++,
+      ));
+    }
+    records.sort((a, b) {
+      final comparison =
+          (a.timestamp ?? DateTime(0)).compareTo(b.timestamp ?? DateTime(0));
+      if (comparison != 0) return comparison;
+      return a.index.compareTo(b.index);
+    });
+    return records.map((record) => record.content).join();
+  }
+
+  static List<LogFileMetadata> _mergeLogFileMetadata(
+    List<LogFileMetadata> first,
+    List<LogFileMetadata> second,
+  ) {
+    final byName = <String, LogFileMetadata>{};
+    for (final file in [...first, ...second]) {
+      final previous = byName[file.name];
+      byName[file.name] = previous == null
+          ? file
+          : LogFileMetadata(
+              name: file.name,
+              sizeBytes: previous.sizeBytes + file.sizeBytes,
+              modifiedAt: previous.modifiedAt.isAfter(file.modifiedAt)
+                  ? previous.modifiedAt
+                  : file.modifiedAt,
+            );
+    }
+    return byName.values.toList();
+  }
+
+  /// dart:io 日志读取（非 SAF 模式）。
+  static Future<String?> _readLogFromFile(
+    String relativePath, {
+    String? logsPath,
+  }) async {
+    try {
+      final resolvedLogsPath = logsPath ?? await getLogsRootPath();
+      if (resolvedLogsPath == null) return null;
+      final file = File(p.join(resolvedLogsPath, relativePath));
       if (!await file.exists()) return null;
       return await file.readAsString();
     } catch (e) {
@@ -974,11 +1163,11 @@ class BackupLocationManager {
   }
 
   /// dart:io 日志文件列表（非 SAF 模式）。
-  static Future<List<String>> _listLogFilesFromDir() async {
+  static Future<List<String>> _listLogFilesFromDir({String? logsPath}) async {
     try {
-      final logsPath = await getLogsRootPath();
-      if (logsPath == null) return [];
-      final dir = Directory(logsPath);
+      final resolvedLogsPath = logsPath ?? await getLogsRootPath();
+      if (resolvedLogsPath == null) return [];
+      final dir = Directory(resolvedLogsPath);
       if (!await dir.exists()) return [];
       final entries = await dir.list().toList();
       return entries
@@ -993,11 +1182,14 @@ class BackupLocationManager {
   }
 
   /// dart:io 日志文件删除（非 SAF 模式）。
-  static Future<bool> _deleteLogFromFile(String relativePath) async {
+  static Future<bool> _deleteLogFromFile(
+    String relativePath, {
+    String? logsPath,
+  }) async {
     try {
-      final logsPath = await getLogsRootPath();
-      if (logsPath == null) return false;
-      final file = File(p.join(logsPath, relativePath));
+      final resolvedLogsPath = logsPath ?? await getLogsRootPath();
+      if (resolvedLogsPath == null) return false;
+      final file = File(p.join(resolvedLogsPath, relativePath));
       if (await file.exists()) {
         await file.delete();
       }
@@ -1126,7 +1318,7 @@ class BackupLocationManager {
   static Future<bool> isUsingSafMode() async {
     if (kIsWeb) return false;
     try {
-      if (Platform.isAndroid) {
+      if (_isAndroid) {
         final uri = await _getSavedSafUri();
         return uri != null;
       }
@@ -1135,6 +1327,10 @@ class BackupLocationManager {
     }
     return false;
   }
+
+  /// Whether log operations must go through this manager instead of direct
+  /// file I/O. Android uses this for both SAF and its app-local fallback.
+  static bool shouldUseManagedLogStorage() => !kIsWeb && _isAndroid;
 }
 
 class LogFileMetadata {
