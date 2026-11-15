@@ -388,6 +388,31 @@ void main() {
   // ==================================================================
 
   group('LogContentPage — actions', () {
+    testWidgets('source filters parse fractional log timestamps',
+        (tester) async {
+      const content =
+          '[2024-01-01 00:00:00.000001] [INFO] [PreciseSource] fractional entry\n'
+          '[2024-01-01 00:00:01] [ERROR] [OtherSource] other entry';
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogContentPage(
+            fileName: 'app_2024-01-01-00.log',
+            content: content,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Filter log entries'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1), 'PreciseSource');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('fractional entry'), findsOneWidget);
+      expect(find.textContaining('other entry'), findsNothing);
+      expect(find.text('1 of 2 lines'), findsOneWidget);
+    });
+
     testWidgets('shows line count in the AppBar', (tester) async {
       await tester.pumpWidget(
         localizationTestApp(

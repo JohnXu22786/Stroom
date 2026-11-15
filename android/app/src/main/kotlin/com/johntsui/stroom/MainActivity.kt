@@ -621,7 +621,8 @@ class MainActivity : FlutterActivity() {
             existingFile = targetFile
             val existingContent = if (!replaceExisting && contentSource != null) {
                 val inputStream = contentResolver.openInputStream(contentSource.uri)
-                inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    ?: throw IllegalStateException("无法读取已有日志文件")
+                inputStream.bufferedReader().use { it.readText() }
             } else {
                 ""
             }
@@ -706,10 +707,19 @@ class MainActivity : FlutterActivity() {
                 return
             }
             tempCompleteMarker!!.delete()
-            if (newestTempFile != null && newestTempFile != existingFile) {
-                logsDir.findFile("${newestTempFile.name}.complete")?.delete()
-                newestTempFile.delete()
-            }
+            // The published target supersedes every retained complete temp
+            // generation for this log, including generations older than the
+            // one used as the source for this replacement.
+            logsDir.listFiles()
+                .filter { candidate ->
+                    candidate.name?.startsWith("$fileName.tmp_") == true &&
+                        !candidate.name.orEmpty().endsWith(".complete") &&
+                        logsDir.findFile("${candidate.name}.complete") != null
+                }
+                .forEach { candidate ->
+                    logsDir.findFile("${candidate.name}.complete")?.delete()
+                    candidate.delete()
+                }
 
             result.success(null)
         } catch (e: Exception) {
@@ -727,7 +737,11 @@ class MainActivity : FlutterActivity() {
             } catch (_: Exception) {
                 false
             }
-            val fallbackContent = combinedContentForFallback ?: content
+            // If reading the old SAF file failed, `content` is only the new
+            // batch, not a complete replacement payload. Let Dart persist it
+            // as an append fallback instead of retrying it with replace=true.
+            val fallbackContent = combinedContentForFallback
+                ?: if (replaceExisting) content else null
             result.error(
                 if (oldFileStillExists) "LOG_REPLACE_FAILED" else "LOG_TARGET_REMOVED",
                 "写入日志文件失败: ${e.message}",

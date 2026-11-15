@@ -749,7 +749,7 @@ class _ParsedLogLine {
 /// 匹配日志行中的级别标记，如 `[ERROR]`。
 final RegExp _levelPattern = RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]');
 final RegExp _logEntryPattern = RegExp(
-  r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] '
+  r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{6})?)\] '
   r'\[(DEBUG|INFO|WARN|ERROR)\] \[([^\]]+)\]',
 );
 

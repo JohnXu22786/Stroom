@@ -3608,7 +3608,6 @@ abstract class AppLocalizations {
   /// Clickable marker for omitted text in a Request Body preview.
   String chatErrorDetailOmittedContentMarker(int count);
 
-
   /// No description provided for @chatAudioPreviewClose.
   ///
   /// In en, this message translates to:

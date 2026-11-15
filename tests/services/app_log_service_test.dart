@@ -8,6 +8,26 @@ import 'package:stroom/services/backup_location_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
+Future<String> _createUnwritableLogRoot(String prefix) async {
+  final directory = await Directory.systemTemp.createTemp(prefix);
+  await directory.delete();
+  await File(directory.path).create();
+  return directory.path;
+}
+
+Future<void> _makeLogRootWritable(String path) async {
+  final file = File(path);
+  if (await file.exists()) await file.delete();
+  await Directory(path).create(recursive: true);
+}
+
+Future<void> _deleteLogRootFixture(String path) async {
+  final file = File(path);
+  if (await file.exists()) await file.delete();
+  final directory = Directory(path);
+  if (await directory.exists()) await directory.delete(recursive: true);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -18,6 +38,8 @@ void main() {
     // Must enable file logging AFTER WebFileStore test mode (which disables it by default)
     AppLogService.reset();
     BackupLocationManager.debugIsAndroidOverride = null;
+    BackupLocationManager.debugAppLocalLogsRootPath = null;
+    BackupLocationManager.debugPendingLogRootPath = null;
     AppLogService.debugTimestampOverride = null;
     AppLogService.enableFileLogging();
   });
@@ -267,18 +289,17 @@ void main() {
         throw MissingPluginException('Unexpected SAF method: ${call.method}');
       });
 
+      final failurePath = await _createUnwritableLogRoot(
+        'stroom_log_failure_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = failurePath;
+      BackupLocationManager.debugPendingLogRootPath = failurePath;
       try {
-        final logRoot = Directory(BackupLocationManager.testLogRoot);
-        if (await logRoot.exists()) await logRoot.delete(recursive: true);
-        // Make the app-local fallback unwritable for the first flush.
-        await File(logRoot.path).create();
-
         await AppLogService.info('Test', 'SAF retry entry');
         await AppLogService.flush();
 
         // Restore the fallback directory and retry the retained entry.
-        await File(logRoot.path).delete();
-        await logRoot.create(recursive: true);
+        await _makeLogRootWritable(failurePath);
         await AppLogService.flush();
 
         expect(await BackupLocationManager.listLogFiles(), contains(fileName));
@@ -288,7 +309,7 @@ void main() {
         expect(content!.indexOf('Existing SAF entry'),
             lessThan(content.indexOf('SAF retry entry')));
 
-        final localFile = File('${logRoot.path}/$fileName');
+        final localFile = File('$failurePath/$fileName');
         safReadContent = '$existingSafContent${await localFile.readAsString()}';
         final reconciled = await BackupLocationManager.readLogContent(fileName);
         expect(
@@ -307,6 +328,9 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, null);
         BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await _deleteLogRootFixture(failurePath);
       }
     });
 
@@ -321,6 +345,11 @@ void main() {
       final secondName = 'app_2026-01-01-11.log';
       AppLogService.debugTimestampOverride = firstTimestamp;
       final writes = <String, int>{};
+      final failurePath = await _createUnwritableLogRoot(
+        'stroom_log_hourly_failure_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = failurePath;
+      BackupLocationManager.debugPendingLogRootPath = failurePath;
       final channel = const MethodChannel('com.johntsui.stroom/saf');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
@@ -328,9 +357,9 @@ void main() {
           final fileName = call.arguments['fileName'] as String;
           writes.update(fileName, (count) => count + 1, ifAbsent: () => 1);
           if (fileName == secondName && writes[fileName] == 1) {
-            final logRoot = Directory(BackupLocationManager.testLogRoot);
-            if (await logRoot.exists()) await logRoot.delete(recursive: true);
-            await File(logRoot.path).create();
+            final failureFile = File(failurePath);
+            if (await failureFile.exists()) await failureFile.delete();
+            await File(failurePath).create();
             throw PlatformException(code: 'write_failed');
           }
           return null;
@@ -349,9 +378,7 @@ void main() {
         expect(writes[firstName], 1);
         expect(writes[secondName], 1);
 
-        final logRoot = Directory(BackupLocationManager.testLogRoot);
-        await File(logRoot.path).delete();
-        await logRoot.create(recursive: true);
+        await _makeLogRootWritable(failurePath);
         await AppLogService.flush();
 
         expect(writes[firstName], 1,
@@ -362,7 +389,10 @@ void main() {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, null);
         BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
         AppLogService.debugTimestampOverride = null;
+        await _deleteLogRootFixture(failurePath);
       }
     });
 
