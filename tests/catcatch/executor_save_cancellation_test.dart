@@ -49,6 +49,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     VideoManifest.invalidateCache();
     FileManifest.invalidateCache();
     directory = await Directory.systemTemp.createTemp('catcatch_save_cancel_');
@@ -60,6 +61,7 @@ void main() {
 
   tearDown(() async {
     ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     PathProviderPlatform.instance = previous;
     AppStorage.resetCache();
     await directory.delete(recursive: true);
@@ -164,7 +166,7 @@ void main() {
     await expectLater(pending, throwsA(isA<Exception>()));
 
     expect(await VideoManifest.loadRecords(), isEmpty);
-    expect(await WebFileStore.exists('videos/$hash.mp4'), isTrue);
+    expect(await WebFileStore.exists('videos/$hash.mp4'), isFalse);
     expect(
         await File(p.join(directory.path, 'catcatch', 'completed', 'clip.mp4'))
             .exists(),
@@ -228,7 +230,7 @@ void main() {
     );
 
     expect(await VideoManifest.loadRecords(), isEmpty);
-    expect(await WebFileStore.exists('videos/$hash.mp4'), isTrue);
+    expect(await WebFileStore.exists('videos/$hash.mp4'), isFalse);
     expect(
         await File(
                 p.join(directory.path, 'catcatch', 'completed', 'callback.mp4'))
@@ -261,7 +263,7 @@ void main() {
     expect(await VideoManifest.loadRecords(), isEmpty);
     expect(await FileManifest.loadRecords(), isEmpty);
     expect(await WebFileStore.exists('videos/$hash.ogg'), isFalse);
-    expect(await WebFileStore.exists('tts_audio/$hash.ogg'), isTrue);
+    expect(await WebFileStore.exists('tts_audio/$hash.ogg'), isFalse);
   });
 
   test('new save waits for cancelled same-hash save to roll back', () async {
@@ -432,6 +434,97 @@ void main() {
     expect(await VideoManifest.readFile('$hash.mp4'), isNull);
   });
 
+  test('failed video publication removes the new unreferenced blob', () async {
+    final bytes = await videoBytes(14);
+    final hash = md5.convert(bytes).toString();
+    final source = await File(p.join(directory.path, 'failed-video.mp4'))
+        .writeAsBytes(bytes);
+
+    await expectLater(
+      registerCompletedMedia(
+        source.path,
+        taskFor('failed-video', source.path),
+        beforeRecordAdded: () async => throw StateError('manifest unavailable'),
+      ),
+      throwsStateError,
+    );
+
+    expect(await VideoManifest.loadRecords(), isEmpty);
+    expect(await WebFileStore.exists('videos/$hash.mp4'), isFalse);
+  });
+
+  test('failed audio publication removes the new unreferenced blob', () async {
+    final bytes = await audioOggBytes();
+    final hash = md5.convert(bytes).toString();
+    final source = await File(p.join(directory.path, 'failed-audio.ogg'))
+        .writeAsBytes(bytes);
+
+    await expectLater(
+      registerCompletedMedia(
+        source.path,
+        taskFor('failed-audio', source.path),
+        beforeRecordAdded: () async => throw StateError('manifest unavailable'),
+      ),
+      throwsStateError,
+    );
+
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(await WebFileStore.exists('tts_audio/$hash.ogg'), isFalse);
+  });
+
+  test('rollback preserves published blobs when owner refresh fails', () async {
+    final videoBytesList = await videoBytes(15);
+    final videoHash = md5.convert(videoBytesList).toString();
+    final videoSource = await File(p.join(directory.path, 'refresh.mp4'))
+        .writeAsBytes(videoBytesList);
+    final videoToken = CancelToken();
+
+    await expectLater(
+      save(
+        taskFor('refresh-video', videoSource.path),
+        token: videoToken,
+        afterRecordAdded: () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = () async {
+            ManifestDatabase.beforeWebDataSaveForTesting = null;
+            ManifestDatabase.invalidateWebDataCacheForTesting();
+            ManifestDatabase.beforeWebDataReadForTesting = () async {
+              throw StateError('manifest refresh failed');
+            };
+          };
+          videoToken.cancel();
+        },
+      ),
+      throwsA(isA<Exception>()),
+    );
+    expect(await WebFileStore.exists('videos/$videoHash.mp4'), isTrue);
+
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    final audioBytesList = await audioOggBytes();
+    final audioHash = md5.convert(audioBytesList).toString();
+    final audioSource = await File(p.join(directory.path, 'refresh.ogg'))
+        .writeAsBytes(audioBytesList);
+    final audioToken = CancelToken();
+
+    await expectLater(
+      save(
+        taskFor('refresh-audio', audioSource.path),
+        token: audioToken,
+        afterRecordAdded: () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = () async {
+            ManifestDatabase.beforeWebDataSaveForTesting = null;
+            ManifestDatabase.invalidateWebDataCacheForTesting();
+            ManifestDatabase.beforeWebDataReadForTesting = () async {
+              throw StateError('manifest refresh failed');
+            };
+          };
+          audioToken.cancel();
+        },
+      ),
+      throwsA(isA<Exception>()),
+    );
+    expect(await WebFileStore.exists('tts_audio/$audioHash.ogg'), isTrue);
+  });
+
   test('an unowned partial hash blob is repaired before registration',
       () async {
     final bytes = await videoBytes(7);
@@ -493,6 +586,47 @@ void main() {
 
     expect(await target.readAsBytes(), bytes);
     expect(await storage.list().toList(), [isA<File>()]);
+  });
+
+  test('failed replacement still marks the blob as attempt-published',
+      () async {
+    final bytes = await videoBytes(16);
+    final hash = md5.convert(bytes).toString();
+    final source =
+        await File(p.join(directory.path, 'bad-replacement.mp4'))
+            .writeAsBytes(bytes);
+    final storage = await Directory(p.join(directory.path, 'videos')).create();
+    final target = await File(p.join(storage.path, '$hash.mp4'))
+        .writeAsBytes(bytes.sublist(0, 2));
+    var published = false;
+
+    Future<File> refuseOverwrite(File staged, String path) async {
+      throw FileSystemException('Target already exists', path);
+    }
+
+    Future<bool> publishInvalidReplacement(
+        String stagedPath, String targetPath) async {
+      await File(stagedPath).rename(targetPath);
+      await File(targetPath).writeAsBytes([0]);
+      return true;
+    }
+
+    await expectLater(
+      publishCompletedBlob(
+        source,
+        '$hash.mp4',
+        storage.path,
+        hash,
+        cancelled: () => false,
+        renameStaged: refuseOverwrite,
+        replaceExisting: publishInvalidReplacement,
+        onPublished: () => published = true,
+      ),
+      throwsStateError,
+    );
+
+    expect(published, isTrue);
+    expect(await target.readAsBytes(), [0]);
   });
 
   test('rename refusal repairs invalid blob but preserves a valid shared blob',
@@ -566,6 +700,6 @@ void main() {
     await expectLater(pending, throwsA(isA<Exception>()));
 
     expect(await VideoManifest.loadRecords(), isEmpty);
-    expect(await WebFileStore.exists('videos/$hash.mp4'), isTrue);
+    expect(await WebFileStore.exists('videos/$hash.mp4'), isFalse);
   });
 }
