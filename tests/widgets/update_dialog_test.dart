@@ -129,10 +129,17 @@ void main() {
         of: find.text('Update now'),
         matching: find.byType(FilledButton),
       );
+      final actionArea = find
+          .ancestor(
+            of: primaryAction,
+            matching: find.byType(OverflowBar),
+          )
+          .first;
       final primaryRect = tester.getRect(primaryAction);
-      final viewportWidth =
-          tester.view.physicalSize.width / tester.view.devicePixelRatio;
-      expect(primaryRect.width, greaterThanOrEqualTo(viewportWidth * 0.6));
+      expect(
+        primaryRect.width,
+        greaterThanOrEqualTo(tester.getSize(actionArea).width * 0.65),
+      );
       expect(
         primaryRect.bottom,
         lessThanOrEqualTo(tester.getRect(find.byType(AlertDialog)).bottom),
