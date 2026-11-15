@@ -91,8 +91,9 @@ class _FailingVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Stream<VideoEvent> videoEventsFor(int playerId) => Stream<VideoEvent>.error(
-    PlatformException(code: 'video_init_failed', message: 'fixture failure'),
-  );
+        PlatformException(
+            code: 'video_init_failed', message: 'fixture failure'),
+      );
 
   @override
   Future<void> setPreventsDisplaySleepDuringVideoPlayback(
