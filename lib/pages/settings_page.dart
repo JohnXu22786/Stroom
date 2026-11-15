@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/built_in_assistants.dart';

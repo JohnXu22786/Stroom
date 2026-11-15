@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
@@ -68,6 +69,7 @@ Future<void> showMediaPreview(
 ) async {
   await showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
