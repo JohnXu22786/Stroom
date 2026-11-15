@@ -249,6 +249,10 @@ class AppLogService {
   /// Allows log grouping across hourly boundaries to be tested deterministically.
   static DateTime? debugTimestampOverride;
 
+  /// Keeps distinct log entries distinguishable when multiple writes occur
+  /// during the same clock tick.
+  static int _lastLogTimestampMicros = 0;
+
   /// 定时刷入计时器（每 10 秒）。
   static Timer? _flushTimer;
 
@@ -313,9 +317,15 @@ class AppLogService {
     await _ensurePolicyLoaded();
     if (level.severity < _policy.minimumLevel.severity) return;
 
+    final timestamp = debugTimestampOverride ?? DateTime.now();
+    final timestampMicros = timestamp.microsecondsSinceEpoch;
+    final uniqueTimestampMicros = timestampMicros > _lastLogTimestampMicros
+        ? timestampMicros
+        : _lastLogTimestampMicros + 1;
+    _lastLogTimestampMicros = uniqueTimestampMicros;
     _buffer.add(
       _LogEntry(
-        timestamp: debugTimestampOverride ?? DateTime.now(),
+        timestamp: DateTime.fromMicrosecondsSinceEpoch(uniqueTimestampMicros),
         level: level,
         source: source,
         message: message,
@@ -399,13 +409,7 @@ class AppLogService {
 
       final sb = StringBuffer();
       for (final e in hourEntries) {
-        final ts = e.timestamp;
-        final timestamp =
-            '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
-            '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
-        sb.writeln(
-          '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}',
-        );
+        sb.writeln(_serializeEntry(e));
       }
 
       try {
@@ -445,17 +449,29 @@ class AppLogService {
 
       final sb = StringBuffer();
       for (final e in hourEntries) {
-        final ts = e.timestamp;
-        final timestamp =
-            '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
-            '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
-        sb.writeln(
-          '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}',
-        );
+        sb.writeln(_serializeEntry(e));
       }
 
       await logFile.writeAsString(sb.toString(), mode: FileMode.append);
     }
+  }
+
+  static String _serializeEntry(_LogEntry entry) {
+    final ts = entry.timestamp;
+    final timestamp =
+        '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+        '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}.'
+        '${ts.millisecond.toString().padLeft(3, '0')}'
+        '${(ts.microsecond % 1000).toString().padLeft(3, '0')}';
+    final continuationHeader = RegExp(
+      r'^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{6})?\] '
+      r'\[(?:DEBUG|INFO|WARN|ERROR)\] \[[^\]\r\n]*\] ',
+    );
+    final message = entry.message
+        .split('\n')
+        .map((line) => continuationHeader.hasMatch(line) ? '  $line' : line)
+        .join('\n');
+    return '[$timestamp] [${entry.level.label}] [${entry.source}] $message';
   }
 
   /// 等待所有待写入日志刷入文件。
@@ -472,6 +488,7 @@ class AppLogService {
     _flushTimer = null;
     _buffer.clear();
     debugTimestampOverride = null;
+    _lastLogTimestampMicros = 0;
     _cachedLogDir = null;
     _policy = const AppLogPolicy();
     _policyLoad = null;

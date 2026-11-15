@@ -586,6 +586,9 @@ class MainActivity : FlutterActivity() {
     ) {
         var existingFile: DocumentFile? = null
         var combinedContentForFallback: String? = null
+        var tempFile: DocumentFile? = null
+        var tempCompleteMarker: DocumentFile? = null
+        var tempFileComplete = false
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -602,10 +605,22 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // 查找已有日志文件，读取已有内容用于追加
-            existingFile = logsDir.findFile(fileName)
-            val existingContent = if (existingFile != null) {
-                val inputStream = contentResolver.openInputStream(existingFile.uri)
+            // Resume from a retained complete temp file when an earlier write
+            // failed after writing its payload but before publishing the target.
+            val targetFile = logsDir.findFile(fileName)
+            val newestTempFile = logsDir.listFiles()
+                .filter { candidate ->
+                    candidate.name?.startsWith("$fileName.tmp_") == true &&
+                        !candidate.name.orEmpty().endsWith(".complete") &&
+                        logsDir.findFile("${candidate.name}.complete") != null
+                }
+                .maxByOrNull { candidate ->
+                    candidate.name.orEmpty().substringAfter("$fileName.tmp_")
+                }
+            val contentSource = newestTempFile ?: targetFile
+            existingFile = targetFile
+            val existingContent = if (!replaceExisting && contentSource != null) {
+                val inputStream = contentResolver.openInputStream(contentSource.uri)
                 inputStream?.bufferedReader()?.use { it.readText() } ?: ""
             } else {
                 ""
@@ -617,18 +632,30 @@ class MainActivity : FlutterActivity() {
             combinedContentForFallback = combinedContent
 
             // 安全写入：先写临时文件，成功后删除旧文件并重命名
-            val tempFileName = "$fileName.tmp_${System.currentTimeMillis()}"
-            val tempFile = logsDir.createFile("text/plain", tempFileName)
+            val tempGeneration =
+                "${System.currentTimeMillis().toString().padStart(13, '0')}_" +
+                    java.lang.Long.toUnsignedString(System.nanoTime())
+                        .padStart(20, '0')
+            val tempFileName = "$fileName.tmp_$tempGeneration"
+            tempFile = logsDir.createFile("text/plain", tempFileName)
             if (tempFile == null) {
-                result.error("CREATE_FILE_FAILED", "无法创建临时日志文件", null)
+                result.error(
+                    "CREATE_FILE_FAILED",
+                    "无法创建临时日志文件",
+                    combinedContent
+                )
                 return
             }
 
-            val outputStream = contentResolver.openOutputStream(tempFile.uri)
+            val outputStream = contentResolver.openOutputStream(tempFile!!.uri)
             if (outputStream == null) {
                 // 清理临时文件
-                tempFile.delete()
-                result.error("WRITE_FAILED", "无法打开输出流写入日志", null)
+                tempFile!!.delete()
+                result.error(
+                    "WRITE_FAILED",
+                    "无法打开输出流写入日志",
+                    combinedContent
+                )
                 return
             }
 
@@ -636,23 +663,38 @@ class MainActivity : FlutterActivity() {
                 writer.write(combinedContent)
                 writer.flush()
             }
+            tempCompleteMarker = logsDir.createFile(
+                "text/plain",
+                "$tempFileName.complete"
+            )
+            if (tempCompleteMarker == null) {
+                tempFile!!.delete()
+                result.error(
+                    "LOG_REPLACE_FAILED",
+                    "无法标记完整临时日志文件",
+                    combinedContent
+                )
+                return
+            }
+            tempFileComplete = true
 
             // 写入成功：删除旧文件
             if (existingFile != null) {
                 val deleted = existingFile.delete()
                 if (!deleted && existingFile.exists()) {
-                    tempFile.delete()
+                    tempFile!!.delete()
+                    tempCompleteMarker!!.delete()
                     result.error(
                         "LOG_REPLACE_FAILED",
                         "无法替换已有日志文件 $fileName",
-                        content
+                        combinedContent
                     )
                     return
                 }
             }
 
             // 将临时文件重命名为目标文件名
-            val renamed = tempFile.renameTo(fileName)
+            val renamed = tempFile!!.renameTo(fileName)
             if (!renamed) {
                 // 将完整内容交给 Dart 层的本地回退路径保存，临时文件保留以防回退失败。
                 Log.w(TAG, "SAF: 日志文件重命名失败，临时文件保留: $tempFileName")
@@ -663,20 +705,29 @@ class MainActivity : FlutterActivity() {
                 )
                 return
             }
+            tempCompleteMarker!!.delete()
+            if (newestTempFile != null && newestTempFile != existingFile) {
+                logsDir.findFile("${newestTempFile.name}.complete")?.delete()
+                newestTempFile.delete()
+            }
 
             result.success(null)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 写入日志文件失败", e)
+            if (!tempFileComplete) {
+                try {
+                    tempFile?.delete()
+                    tempCompleteMarker?.delete()
+                } catch (_: Exception) {
+                    // The complete Dart/local fallback remains available.
+                }
+            }
             val oldFileStillExists = try {
                 existingFile?.exists() == true
             } catch (_: Exception) {
                 false
             }
-            val fallbackContent = if (oldFileStillExists) {
-                content
-            } else {
-                combinedContentForFallback
-            }
+            val fallbackContent = combinedContentForFallback ?: content
             result.error(
                 if (oldFileStillExists) "LOG_REPLACE_FAILED" else "LOG_TARGET_REMOVED",
                 "写入日志文件失败: ${e.message}",
@@ -704,7 +755,17 @@ class MainActivity : FlutterActivity() {
                     return
                 }
 
-            val file = logsDir.findFile(fileName)
+            val targetFile = logsDir.findFile(fileName)
+            val newestTempFile = logsDir.listFiles()
+                .filter { candidate ->
+                    candidate.name?.startsWith("$fileName.tmp_") == true &&
+                        !candidate.name.orEmpty().endsWith(".complete") &&
+                        logsDir.findFile("${candidate.name}.complete") != null
+                }
+                .maxByOrNull { candidate ->
+                    candidate.name.orEmpty().substringAfter("$fileName.tmp_")
+                }
+            val file = newestTempFile ?: targetFile
             if (file != null) {
                 val inputStream = contentResolver.openInputStream(file.uri)
                 val content = inputStream?.bufferedReader()?.use { it.readText() }
@@ -737,10 +798,17 @@ class MainActivity : FlutterActivity() {
                 }
 
             val children = logsDir.listFiles()
-            val fileNames = children
-                .filter { it.isFile && (it.name?.endsWith(".log") == true) }
-                .map { it.name }
-                .filterNotNull()
+            val fileNames = children.mapNotNull { child ->
+                if (!child.isFile) return@mapNotNull null
+                val name = child.name ?: return@mapNotNull null
+                if (name.endsWith(".log")) return@mapNotNull name
+                val marker = ".log.tmp_"
+                val markerIndex = name.indexOf(marker)
+                if (markerIndex < 0) return@mapNotNull null
+                if (name.endsWith(".complete")) return@mapNotNull null
+                if (logsDir.findFile("$name.complete") == null) return@mapNotNull null
+                name.substring(0, markerIndex + ".log".length)
+            }.distinct()
             result.success(fileNames)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 列出日志文件失败", e)
@@ -761,16 +829,52 @@ class MainActivity : FlutterActivity() {
                 result.error("LOGS_DIR_UNAVAILABLE", "无法访问日志目录", null)
                 return
             }
-            val metadata = logsDir.listFiles()
-                .filter { it.isFile && (it.name?.endsWith(".log") == true) }
-                .mapNotNull { file ->
-                    val name = file.name ?: return@mapNotNull null
-                    mapOf(
-                        "name" to name,
-                        "sizeBytes" to file.length(),
-                        "modifiedAtMillis" to file.lastModified(),
-                    )
+            val filesByLogName = mutableMapOf<String, DocumentFile>()
+            val generationsByLogName = mutableMapOf<String, String>()
+            logsDir.listFiles().forEach { file ->
+                if (!file.isFile) return@forEach
+                val name = file.name ?: return@forEach
+                val isCompleteTemp = !name.endsWith(".log") &&
+                    name.contains(".log.tmp_") &&
+                    !name.endsWith(".complete") &&
+                    logsDir.findFile("$name.complete") != null
+                val logName = if (name.endsWith(".log")) {
+                    name
+                } else {
+                    val marker = ".log.tmp_"
+                    val markerIndex = name.indexOf(marker)
+                    if (markerIndex < 0) return@forEach
+                    if (name.endsWith(".complete")) return@forEach
+                    if (logsDir.findFile("$name.complete") == null) return@forEach
+                    name.substring(0, markerIndex + ".log".length)
                 }
+                val previous = filesByLogName[logName]
+                val generation = if (isCompleteTemp) {
+                    name.substringAfter("$logName.tmp_")
+                } else {
+                    null
+                }
+                val previousGeneration = generationsByLogName[logName]
+                if (generation != null &&
+                    (previousGeneration == null || generation > previousGeneration)
+                ) {
+                    filesByLogName[logName] = file
+                    generationsByLogName[logName] = generation
+                } else if (previous == null && generation == null) {
+                    filesByLogName[logName] = file
+                } else if (previousGeneration == null && generation == null &&
+                    file.lastModified() > (previous?.lastModified() ?: Long.MIN_VALUE)
+                ) {
+                    filesByLogName[logName] = file
+                }
+            }
+            val metadata = filesByLogName.map { (name, file) ->
+                mapOf(
+                    "name" to name,
+                    "sizeBytes" to file.length(),
+                    "modifiedAtMillis" to file.lastModified(),
+                )
+            }
             result.success(metadata)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 读取日志元数据失败", e)
@@ -797,8 +901,11 @@ class MainActivity : FlutterActivity() {
                     return
                 }
 
-            val file = logsDir.findFile(fileName)
-            val deleted = file?.delete() ?: true
+            val files = logsDir.listFiles().filter { candidate ->
+                candidate.name == fileName ||
+                    candidate.name?.startsWith("$fileName.tmp_") == true
+            }
+            val deleted = files.all { it.delete() }
             Log.i(TAG, "SAF: 删除日志文件 $fileName: $deleted")
             result.success(deleted)
         } catch (e: Exception) {
