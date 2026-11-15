@@ -90,11 +90,11 @@ void main() {
     ) async {
       const fileName = 'app_2026-01-01-10.log';
       const safChannel = MethodChannel('com.johntsui.stroom/saf');
-      final logRoot = await Directory.systemTemp.createTemp('log_viewer_');
+      final logRoot = Directory.systemTemp.createTempSync('log_viewer_');
       final fallbackLog = File('${logRoot.path}/$fileName');
-      await fallbackLog.writeAsString('fallback log');
+      fallbackLog.writeAsStringSync('fallback log');
       final remainingLog = File('${logRoot.path}/app_2026-01-01-11.log');
-      await remainingLog.writeAsString('remaining log');
+      remainingLog.writeAsStringSync('remaining log');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'backup_saf_uri',
@@ -120,7 +120,7 @@ void main() {
         BackupLocationManager.debugIsAndroidOverride = null;
         BackupLocationManager.debugAppLocalLogsRootPath = null;
         BackupLocationManager.debugPendingLogRootPath = null;
-        await logRoot.delete(recursive: true);
+        logRoot.deleteSync(recursive: true);
       });
 
       await tester.pumpWidget(
@@ -140,8 +140,8 @@ void main() {
       await tester.pump();
       await _pumpWithRealIo(tester);
 
-      expect(await fallbackLog.exists(), isFalse);
-      expect(await remainingLog.exists(), isTrue);
+      expect(fallbackLog.existsSync(), isFalse);
+      expect(remainingLog.existsSync(), isTrue);
       expect(find.text(fileName), findsNothing);
     });
 
@@ -150,11 +150,11 @@ void main() {
     ) async {
       const fileName = 'app_2026-01-01-10.log';
       const safChannel = MethodChannel('com.johntsui.stroom/saf');
-      final logRoot = await Directory.systemTemp.createTemp('log_viewer_');
+      final logRoot = Directory.systemTemp.createTempSync('log_viewer_');
       final fallbackLog = File('${logRoot.path}/$fileName');
-      await fallbackLog.writeAsString('fallback log');
+      fallbackLog.writeAsStringSync('fallback log');
       final remainingLog = File('${logRoot.path}/app_2026-01-01-11.log');
-      await remainingLog.writeAsString('remaining log');
+      remainingLog.writeAsStringSync('remaining log');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'backup_saf_uri',
@@ -185,7 +185,7 @@ void main() {
         BackupLocationManager.debugIsAndroidOverride = null;
         BackupLocationManager.debugAppLocalLogsRootPath = null;
         BackupLocationManager.debugPendingLogRootPath = null;
-        await logRoot.delete(recursive: true);
+        logRoot.deleteSync(recursive: true);
       });
 
       await tester.pumpWidget(
@@ -205,8 +205,8 @@ void main() {
       await tester.pump();
       await _pumpWithRealIo(tester);
 
-      expect(await fallbackLog.exists(), isFalse);
-      expect(await remainingLog.exists(), isTrue);
+      expect(fallbackLog.existsSync(), isFalse);
+      expect(remainingLog.existsSync(), isTrue);
       expect(find.text(fileName), findsNothing);
       expect(find.text('无法确认删除结果。'), findsOneWidget);
     });
@@ -218,7 +218,7 @@ void main() {
       const safChannel = MethodChannel('com.johntsui.stroom/saf');
       final deleteCompleter = Completer<bool>();
       var deleteStarted = false;
-      final logRoot = await Directory.systemTemp.createTemp('log_viewer_');
+      final logRoot = Directory.systemTemp.createTempSync('log_viewer_');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'backup_saf_uri',
@@ -250,7 +250,7 @@ void main() {
         BackupLocationManager.debugIsAndroidOverride = null;
         BackupLocationManager.debugAppLocalLogsRootPath = null;
         BackupLocationManager.debugPendingLogRootPath = null;
-        await logRoot.delete(recursive: true);
+        logRoot.deleteSync(recursive: true);
       });
 
       await tester.pumpWidget(
