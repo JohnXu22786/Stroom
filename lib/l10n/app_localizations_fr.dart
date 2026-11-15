@@ -2153,6 +2153,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chatErrorDetailEmpty => 'Aucune donnée détaillée disponible';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[contenu central omis, $count caractères]';
+  }
+
+  @override
   String get chatAudioPreviewClose => 'Fermer';
 
   @override

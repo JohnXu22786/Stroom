@@ -775,6 +775,15 @@
   "chatErrorDetailResponseHeaders": "ترويسات الاستجابة",
   "chatErrorDetailResponseBody": "نص الاستجابة",
   "chatErrorDetailEmpty": "لا تتوفر بيانات تفصيلية",
+  "chatErrorDetailOmittedContentMarker": "[تم إخفاء {count} حرفًا من الوسط]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "إغلاق",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

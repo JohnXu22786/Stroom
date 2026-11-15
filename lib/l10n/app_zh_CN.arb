@@ -775,6 +775,15 @@
   "chatErrorDetailResponseHeaders": "响应标头",
   "chatErrorDetailResponseBody": "响应正文",
   "chatErrorDetailEmpty": "暂无详细信息",
+  "chatErrorDetailOmittedContentMarker": "[中间内容已省略，共 {count} 字]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

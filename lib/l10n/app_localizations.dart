@@ -3605,6 +3605,10 @@ abstract class AppLocalizations {
   /// **'No detail data available'**
   String get chatErrorDetailEmpty;
 
+  /// Clickable marker for omitted text in a Request Body preview.
+  String chatErrorDetailOmittedContentMarker(int count);
+
+
   /// No description provided for @chatAudioPreviewClose.
   ///
   /// In en, this message translates to:

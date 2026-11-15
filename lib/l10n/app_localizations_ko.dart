@@ -2059,6 +2059,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatErrorDetailEmpty => '사용할 수 있는 세부 정보가 없습니다';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[중간 내용 $count자 생략]';
+  }
+
+  @override
   String get chatAudioPreviewClose => '닫기';
 
   @override

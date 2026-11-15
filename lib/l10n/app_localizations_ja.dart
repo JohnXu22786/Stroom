@@ -2050,6 +2050,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatErrorDetailEmpty => '詳細なデータはありません';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中間を$count文字省略]';
+  }
+
+  @override
   String get chatAudioPreviewClose => '閉じる';
 
   @override

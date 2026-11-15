@@ -1,6 +1,11 @@
+import 'dart:convert';
+
+import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+
 import '../utils/format_chat_error.dart';
+import '../../../utils/data_sanitizer.dart';
 import '../../../utils/ocr_diagnostics.dart';
 
 /// Represents a selectable data section within the detail dialog.
@@ -83,9 +88,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       },
       child: Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Container(
@@ -141,8 +144,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
         children: [
           if (_selectedSectionId != null)
             IconButton(
-              icon: Icon(Icons.arrow_back,
-                  size: 18, color: Theme.of(context).colorScheme.primary),
+              icon: Icon(
+                Icons.arrow_back,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               onPressed: () {
                 setState(() {
                   _selectedSectionId = null;
@@ -171,9 +177,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.close,
-                size: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            icon: Icon(
+              Icons.close,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             onPressed: () => Navigator.pop(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -244,69 +252,83 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
 
     // 1. Request URL
     if (req.containsKey('url') && req['url'] != null) {
-      sections.add(_DataSection(
-        id: 'request_url',
-        label: l10n.chatErrorDetailRequestUrl,
-        icon: Icons.link,
-        value: req['url'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_url',
+          label: l10n.chatErrorDetailRequestUrl,
+          icon: Icons.link,
+          value: req['url'],
+        ),
+      );
     }
 
     // 2. Request Headers
     if (req.containsKey('headers') && req['headers'] != null) {
-      sections.add(_DataSection(
-        id: 'request_headers',
-        label: l10n.chatErrorDetailRequestHeaders,
-        icon: Icons.code,
-        value: req['headers'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_headers',
+          label: l10n.chatErrorDetailRequestHeaders,
+          icon: Icons.code,
+          value: req['headers'],
+        ),
+      );
     }
 
     // 3. Request Body
     if (req.containsKey('body') && req['body'] != null) {
-      sections.add(_DataSection(
-        id: 'request_body',
-        label: l10n.chatErrorDetailRequestBody,
-        icon: Icons.code,
-        value: req['body'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'request_body',
+          label: l10n.chatErrorDetailRequestBody,
+          icon: Icons.code,
+          value: req['body'],
+        ),
+      );
     }
 
     // 4. Status Code
     if (resp.containsKey('statusCode') && resp['statusCode'] != null) {
-      sections.add(_DataSection(
-        id: 'status_code',
-        label: l10n.chatErrorDetailStatusCode,
-        icon: Icons.info_outline,
-        value: resp['statusCode'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'status_code',
+          label: l10n.chatErrorDetailStatusCode,
+          icon: Icons.info_outline,
+          value: resp['statusCode'],
+        ),
+      );
     }
 
     // 5. Response Headers
     if (resp.containsKey('headers') && resp['headers'] != null) {
-      sections.add(_DataSection(
-        id: 'response_headers',
-        label: l10n.chatErrorDetailResponseHeaders,
-        icon: Icons.code,
-        value: resp['headers'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_headers',
+          label: l10n.chatErrorDetailResponseHeaders,
+          icon: Icons.code,
+          value: resp['headers'],
+        ),
+      );
     }
 
     // 6. Response Body — check both 'data' (HTTP success) and 'error' (network error)
     if (resp.containsKey('data') && resp['data'] != null) {
-      sections.add(_DataSection(
-        id: 'response_body',
-        label: l10n.chatErrorDetailResponseBody,
-        icon: Icons.code,
-        value: resp['data'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_body',
+          label: l10n.chatErrorDetailResponseBody,
+          icon: Icons.code,
+          value: resp['data'],
+        ),
+      );
     } else if (resp.containsKey('error') && resp['error'] != null) {
-      sections.add(_DataSection(
-        id: 'response_body',
-        label: l10n.chatErrorDetailResponseBody,
-        icon: Icons.code,
-        value: resp['error'],
-      ));
+      sections.add(
+        _DataSection(
+          id: 'response_body',
+          label: l10n.chatErrorDetailResponseBody,
+          icon: Icons.code,
+          value: resp['error'],
+        ),
+      );
     }
 
     return sections;
@@ -346,8 +368,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               section.label,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
-            trailing:
-                Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+            trailing: Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: cs.onSurfaceVariant,
+            ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             onTap: () {
               setState(() {
@@ -391,7 +416,11 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               color: isDark ? Colors.black : Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: _buildValueDisplay(section.value, isDark),
+            child: _buildValueDisplay(
+              section.value,
+              isDark,
+              isRequestBody: section.id == 'request_body',
+            ),
           ),
         ],
       ),
@@ -399,13 +428,217 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
   }
 
   /// Builds the display widget for a section value.
-  Widget _buildValueDisplay(dynamic value, bool isDark) {
+  Widget _buildValueDisplay(
+    dynamic value,
+    bool isDark, {
+    bool isRequestBody = false,
+  }) {
+    if (isRequestBody) {
+      return _buildJsonValue(DataSanitizer.sanitizeForDisplay(value), r'$', 0);
+    }
     return SelectableText(
       formatErrorValueForDisplay(value),
       style: TextStyle(
         fontFamily: 'monospace',
         fontSize: 12,
         color: isDark ? Colors.grey[300] : Colors.grey[800],
+      ),
+    );
+  }
+
+  Widget _buildJsonValue(
+    dynamic value,
+    String path,
+    int depth, {
+    String? key,
+    bool comma = false,
+  }) {
+    final indent = '  ' * depth;
+    final prefix = key == null ? indent : '$indent${jsonEncode(key)}: ';
+    if (value is Map) {
+      final entries = value.entries.toList();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$prefix{', style: _jsonStyle),
+          for (var i = 0; i < entries.length; i++)
+            _buildJsonValue(
+              entries[i].value,
+              _childPath(path, entries[i].key.toString()),
+              depth + 1,
+              key: entries[i].key.toString(),
+              comma: i < entries.length - 1,
+            ),
+          Text('$indent}${comma ? ',' : ''}', style: _jsonStyle),
+        ],
+      );
+    }
+    if (value is List) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$prefix[', style: _jsonStyle),
+          for (var i = 0; i < value.length; i++)
+            _buildJsonValue(
+              value[i],
+              '$path[$i]',
+              depth + 1,
+              comma: i < value.length - 1,
+            ),
+          Text('$indent]${comma ? ',' : ''}', style: _jsonStyle),
+        ],
+      );
+    }
+
+    if (value is String && value.characters.length > 80) {
+      final characters = value.characters;
+      final l10n = AppLocalizations.of(context)!;
+      final omittedCount = characters.length - 80;
+      final marker = l10n.chatErrorDetailOmittedContentMarker(omittedCount);
+      if (omittedCount > marker.characters.length) {
+        final first = characters.take(40).toString();
+        final last = characters.skip(characters.length - 40).toString();
+        final colors = Theme.of(context).colorScheme;
+        return RichText(
+          text: TextSpan(
+            style: _jsonStyle,
+            children: [
+              TextSpan(text: prefix),
+              TextSpan(text: '"${_escapeJsonFragment(first)}'),
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: Semantics(
+                  button: true,
+                  label: '$marker, $path',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      onTap: () => _showFullContentDialog(value, path),
+                      mouseCursor: SystemMouseCursors.click,
+                      borderRadius: BorderRadius.circular(3),
+                      hoverColor: colors.primary.withValues(alpha: 0.08),
+                      focusColor: colors.primary.withValues(alpha: 0.16),
+                      child: Ink(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: colors.primaryContainer,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          marker,
+                          style: _jsonStyle.copyWith(
+                            color: colors.primary,
+                            decoration: TextDecoration.underline,
+                            decorationStyle: TextDecorationStyle.dashed,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              TextSpan(
+                  text: '${_escapeJsonFragment(last)}"${comma ? ',' : ''}'),
+            ],
+          ),
+        );
+      }
+    }
+
+    return Text(
+      '$prefix${jsonEncode(value)}${comma ? ',' : ''}',
+      style: _jsonStyle,
+    );
+  }
+
+  String _childPath(String path, String key) {
+    if (RegExp(r'^[A-Za-z_$][A-Za-z0-9_$]*$').hasMatch(key)) {
+      return '$path.$key';
+    }
+    return '$path[${jsonEncode(key)}]';
+  }
+
+  String _escapeJsonFragment(String value) {
+    final encoded = jsonEncode(value);
+    return encoded.substring(1, encoded.length - 1);
+  }
+
+  TextStyle get _jsonStyle {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 12,
+      color: isDark ? Colors.grey[300] : Colors.grey[800],
+    );
+  }
+
+  void _showFullContentDialog(String value, String path) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 560,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.76,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          path,
+                          style: _jsonStyle.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: l10n.actionClose,
+                        icon: const Icon(Icons.close, size: 20),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 18,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [SelectableText(value, style: _jsonStyle)],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 12, 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(l10n.actionClose),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

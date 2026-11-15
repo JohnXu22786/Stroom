@@ -2163,6 +2163,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatErrorDetailEmpty => 'لا تتوفر بيانات تفصيلية';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[تم إخفاء $count حرفًا من الوسط]';
+  }
+
+  @override
   String get chatAudioPreviewClose => 'إغلاق';
 
   @override

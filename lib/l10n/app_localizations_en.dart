@@ -2118,6 +2118,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatErrorDetailEmpty => 'No detail data available';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
+
+  @override
   String get chatAudioPreviewClose => 'Close';
 
   @override
@@ -14102,6 +14107,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Close';

@@ -2144,6 +2144,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chatErrorDetailEmpty => 'Keine Detaildaten verfügbar';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[$count Zeichen in der Mitte ausgelassen]';
+  }
+
+  @override
   String get chatAudioPreviewClose => 'Schließen';
 
   @override

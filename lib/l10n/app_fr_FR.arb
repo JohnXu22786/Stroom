@@ -775,6 +775,15 @@
   "chatErrorDetailResponseHeaders": "En-têtes de la réponse",
   "chatErrorDetailResponseBody": "Corps de la réponse",
   "chatErrorDetailEmpty": "Aucune donnée détaillée disponible",
+  "chatErrorDetailOmittedContentMarker": "[contenu central omis, {count} caractères]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Fermer",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

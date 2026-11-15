@@ -580,6 +580,15 @@
   "chatErrorDetailResponseHeaders": "応答ヘッダー",
   "chatErrorDetailResponseBody": "応答本文",
   "chatErrorDetailEmpty": "詳細なデータはありません",
+  "chatErrorDetailOmittedContentMarker": "[中間を{count}文字省略]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "閉じる",
   "chatPreviewClose": "プレビューを閉じる",
   "actionBack": "戻る",

@@ -1989,6 +1989,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatErrorDetailEmpty => '暂无详细信息';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中间内容已省略，共 $count 字]';
+  }
+
+  @override
   String get chatAudioPreviewClose => '关闭';
 
   @override
