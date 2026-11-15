@@ -386,20 +386,22 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // - 编辑模式 + 原消息附件：**不立即清理**——用户可能取消编辑，
     //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
     //   再统一清理。
-    final isOriginalEditAttachment = widget.editingMessageId != null &&
-        (widget.editingMessageAttachments?.any((a) => a.id == att.id) ?? false);
-    final isOriginalEditFile = isOriginalEditAttachment &&
+    final isOriginalEditFile = widget.editingMessageId != null &&
         (widget.editingMessageAttachments?.any(
               (a) => a.id == att.id && a.storagePath == att.storagePath,
             ) ??
             false);
+    final originalEditUsesHash = widget.editingMessageId != null &&
+        (widget.editingMessageAttachments?.any((a) => a.hash == att.hash) ??
+            false);
+    final editCacheStillReferenced = isOriginalEditFile || originalEditUsesHash;
     // An edited replacement is unreferenced once removed, including in edit
     // mode. Preserve a temp-edited path only when it is the original file
     // still referenced by the message being edited.
     if (att.storagePath.startsWith('temp_edited/') && !isOriginalEditFile) {
       unawaited(_deleteTempFile(att.storagePath));
     }
-    if (isOriginalEditAttachment) {
+    if (editCacheStillReferenced) {
       _removedEditAttachments.add(att);
     } else {
       unawaited(_deleteCompressedCacheAfterPreCompress(att));
@@ -417,6 +419,29 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       await AttachmentStorage.deleteFile(tempStoragePath);
     } catch (_) {
       // Non-critical cleanup
+    }
+  }
+
+  /// Discard edited temp files that were only owned by a canceled edit.
+  void _discardPendingEditReplacements(List<Attachment>? originalAttachments) {
+    for (final att in _pendingAttachments) {
+      if (!att.storagePath.startsWith('temp_edited/')) continue;
+      final originalFileStillReferenced = originalAttachments?.any(
+            (original) =>
+                original.id == att.id &&
+                original.storagePath == att.storagePath,
+          ) ??
+          false;
+      if (originalFileStillReferenced) continue;
+
+      unawaited(_deleteTempFile(att.storagePath));
+      final originalCacheStillReferenced = originalAttachments?.any(
+            (original) => original.hash == att.hash,
+          ) ??
+          false;
+      if (!originalCacheStillReferenced) {
+        unawaited(_deleteCompressedCacheAfterPreCompress(att));
+      }
     }
   }
 
@@ -552,10 +577,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       unawaited(_preCompressPendingImage(updatedAtt, editedBytes));
       _scheduleDraftSave();
 
-      // 清理旧文件：仅限普通模式（pending 中未被任何消息引用）。
-      // 编辑模式：旧附件可能仍被原消息引用（取消编辑后气泡仍需加载），
-      // 删除会让附件悬空；已提交编辑时被替换的文件成为孤儿，由删除
-      // 整个对话时的附件清理兜底。
+      // 清理旧文件：普通模式的附件不再被消息引用；编辑模式只保留原
+      // 消息仍引用的源路径。按 hash 共享的压缩缓存则等确定重发后再清。
       if (widget.editingMessageId == null) {
         if (oldAtt.storagePath.startsWith('temp_edited/')) {
           await _deleteTempFile(oldAtt.storagePath);
@@ -566,24 +589,31 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
             // Non-fatal cleanup
           }
         }
-        // 旧字节的压缩缓存一并清理（hash 已变，旧缓存成为孤儿）。
-        // 等旧 hash 在途的预压缩完成后删除，防止它复活旧缓存。
-        await _deleteCompressedCacheAfterPreCompress(oldAtt);
-      } else if (widget.editingMessageAttachments?.any(
-            (a) => a.id == oldAtt.id && a.storagePath == oldAtt.storagePath,
-          ) ??
-          false) {
-        // 编辑模式 + 原消息附件被编辑：旧字节缓存同样推迟到确定重发
-        // 时清理（可能取消编辑，原消息仍引用旧字节）。
-        _removedEditAttachments.add(oldAtt);
+        // 同 hash 的新附件继续使用这份缓存，不要在等待它的预压缩完成后
+        // 再将它删除。
+        if (oldAtt.hash != updatedAtt.hash) {
+          await _deleteCompressedCacheAfterPreCompress(oldAtt);
+        }
       } else {
-        // 编辑模式下的替换文件已不再被引用（包括同一附件的上一次
-        // 编辑产物）：立即删除文件和缓存。原消息引用的源文件路径在上
-        // 一个分支保留。
-        if (oldAtt.storagePath.startsWith('temp_edited/')) {
+        final isOriginalEditFile = widget.editingMessageAttachments?.any(
+              (a) => a.id == oldAtt.id && a.storagePath == oldAtt.storagePath,
+            ) ??
+            false;
+        final originalEditUsesHash = widget.editingMessageAttachments?.any(
+              (a) => a.hash == oldAtt.hash,
+            ) ??
+            false;
+        if (!isOriginalEditFile &&
+            oldAtt.storagePath.startsWith('temp_edited/')) {
           await _deleteTempFile(oldAtt.storagePath);
         }
-        await _deleteCompressedCacheAfterPreCompress(oldAtt);
+        if (isOriginalEditFile || originalEditUsesHash) {
+          if (oldAtt.hash != updatedAtt.hash) {
+            _removedEditAttachments.add(oldAtt);
+          }
+        } else if (oldAtt.hash != updatedAtt.hash) {
+          await _deleteCompressedCacheAfterPreCompress(oldAtt);
+        }
       }
     } catch (e) {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');

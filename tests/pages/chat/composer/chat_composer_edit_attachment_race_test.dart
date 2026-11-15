@@ -52,12 +52,10 @@ void main() {
   late GlobalKey<ChatComposerWidgetState> composerKey;
   List<Attachment>? sent;
 
-  Future<void> mountComposer(
+  Future<void> pumpComposer(
     WidgetTester tester, {
     Attachment? editingAttachment,
   }) async {
-    composerKey = GlobalKey<ChatComposerWidgetState>();
-    sent = null;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -99,6 +97,15 @@ void main() {
       ),
     );
     await tester.pump();
+  }
+
+  Future<void> mountComposer(
+    WidgetTester tester, {
+    Attachment? editingAttachment,
+  }) async {
+    composerKey = GlobalKey<ChatComposerWidgetState>();
+    sent = null;
+    await pumpComposer(tester, editingAttachment: editingAttachment);
   }
 
   Future<Attachment> addImage(WidgetTester tester, String id) async {
@@ -431,6 +438,68 @@ void main() {
         files,
         hasLength(1),
         reason: 'only the original attachment should remain',
+      );
+    },
+  );
+
+  testWidgets(
+    'canceling edit during old replacement cleanup deletes the latest edit',
+    (tester) async {
+      await mountComposer(tester);
+      final source = await addImage(tester, 'source');
+      await pumpComposer(tester, editingAttachment: source);
+      final editedBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+      );
+
+      await tester.runAsync(
+        () => composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
+      );
+      final firstReplacement =
+          composerKey.currentState!.pendingAttachmentsForTesting.single;
+      final oldCleanupStarted = Completer<void>();
+      final finishOldCleanup = Completer<void>();
+      final latestReplacementDeleted = Completer<void>();
+      String? latestReplacementPath;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        if (path == firstReplacement.storagePath) {
+          if (!oldCleanupStarted.isCompleted) oldCleanupStarted.complete();
+          await finishOldCleanup.future;
+        }
+        await removeFile(path);
+        if (path == latestReplacementPath &&
+            !latestReplacementDeleted.isCompleted) {
+          latestReplacementDeleted.complete();
+        }
+        return true;
+      };
+
+      late Future<void> secondEdit;
+      await tester.runAsync(() async {
+        secondEdit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      });
+      await tester.runAsync(() => oldCleanupStarted.future);
+      latestReplacementPath = composerKey
+          .currentState!.pendingAttachmentsForTesting.single.storagePath;
+
+      await pumpComposer(tester);
+      await tester.runAsync(() => latestReplacementDeleted.future);
+      expect(
+        await tester.runAsync(
+          () => AttachmentStorage.readFile(latestReplacementPath!),
+        ),
+        isNull,
+      );
+
+      finishOldCleanup.complete();
+      await tester.runAsync(() => secondEdit);
+      expect(
+        await tester
+            .runAsync(() => AttachmentStorage.readFile(source.storagePath)),
+        isNotNull,
+        reason: 'canceling edit must preserve the source message attachment',
       );
     },
   );

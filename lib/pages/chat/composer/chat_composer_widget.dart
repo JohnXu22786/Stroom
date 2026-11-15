@@ -338,6 +338,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       if (widget.editingMessageId != null &&
           widget.editingMessageText != null) {
         // Entering edit mode (or switching to a different message)
+        if (oldWidget.editingMessageId != null) {
+          _discardPendingEditReplacements(
+            oldWidget.editingMessageAttachments,
+          );
+        }
         _textController.text = widget.editingMessageText!;
         _lastSavedDraft = widget.editingMessageText!;
         _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
@@ -361,6 +366,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _lastSavedDraft = '';
         _lastSavedDraftAttSignature = const [];
         _lastHadText = false;
+        _discardPendingEditReplacements(
+          oldWidget.editingMessageAttachments,
+        );
         _clearPendingAttachments();
         _disarmEditWarning();
         if (widget.initialDraftText.isNotEmpty) {
@@ -513,6 +521,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
+    if (widget.editingMessageId != null) {
+      _discardPendingEditReplacements(widget.editingMessageAttachments);
+    }
     // Save draft before disposing. Use try-catch because ref may
     // already be disposed during teardown, especially in tests.
     try {
