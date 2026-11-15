@@ -3187,6 +3187,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get topicItemPin => 'ピン';
 
   @override
+  @override
+  String get topicItemMarkUnread => '未読にする';
+
+  @override
+  String get topicItemMarkRead => '既読にする';
+
   String get topicItemRename => '名前の変更';
 
   @override
@@ -14857,6 +14863,12 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get topicItemPin => 'ピン';
 
   @override
+  @override
+  String get topicItemMarkUnread => '未読にする';
+
+  @override
+  String get topicItemMarkRead => '既読にする';
+
   String get topicItemRename => '名前の変更';
 
   @override

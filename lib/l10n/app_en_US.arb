@@ -1203,6 +1203,8 @@
   "topicItemNew": "New topic",
   "topicItemUnpin": "Unpin",
   "topicItemPin": "Pin",
+  "topicItemMarkUnread": "Mark as unread",
+  "topicItemMarkRead": "Mark as read",
   "topicItemRename": "Rename",
   "topicItemAutoName": "Auto name",
   "topicItemDelete": "Delete",

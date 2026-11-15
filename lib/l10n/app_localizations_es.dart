@@ -3326,6 +3326,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get topicItemPin => 'Alfiler';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como no leído';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como leído';
+
   String get topicItemRename => 'Rebautizar';
 
   @override
@@ -15503,6 +15509,12 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   String get topicItemPin => 'Alfiler';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como no leído';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como leído';
+
   String get topicItemRename => 'Rebautizar';
 
   @override

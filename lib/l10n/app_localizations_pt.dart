@@ -3309,6 +3309,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get topicItemPin => 'Fixar';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como não lida';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como lida';
+
   String get topicItemRename => 'Renomear';
 
   @override
@@ -15450,6 +15456,12 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get topicItemPin => 'Fixar';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marcar como não lida';
+
+  @override
+  String get topicItemMarkRead => 'Marcar como lida';
+
   String get topicItemRename => 'Renomear';
 
   @override

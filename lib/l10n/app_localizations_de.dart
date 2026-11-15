@@ -3323,6 +3323,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get topicItemPin => 'Anheften';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Als ungelesen markieren';
+
+  @override
+  String get topicItemMarkRead => 'Als gelesen markieren';
+
   String get topicItemRename => 'Umbenennen';
 
   @override
@@ -15468,6 +15474,12 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get topicItemPin => 'Anheften';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Als ungelesen markieren';
+
+  @override
+  String get topicItemMarkRead => 'Als gelesen markieren';
+
   String get topicItemRename => 'Umbenennen';
 
   @override

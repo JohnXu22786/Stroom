@@ -1205,6 +1205,8 @@
   "topicItemNew": "Novo tópico",
   "topicItemUnpin": "Desafixar",
   "topicItemPin": "Fixar",
+  "topicItemMarkUnread": "Marcar como não lida",
+  "topicItemMarkRead": "Marcar como lida",
   "topicItemRename": "Renomear",
   "topicItemAutoName": "Nome automático",
   "topicItemDelete": "Excluir",

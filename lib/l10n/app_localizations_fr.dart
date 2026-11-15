@@ -3333,6 +3333,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get topicItemPin => 'Épingler';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marquer comme non lu';
+
+  @override
+  String get topicItemMarkRead => 'Marquer comme lu';
+
   String get topicItemRename => 'Renommer';
 
   @override
@@ -15539,6 +15545,12 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   String get topicItemPin => 'Épingler';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Marquer comme non lu';
+
+  @override
+  String get topicItemMarkRead => 'Marquer comme lu';
+
   String get topicItemRename => 'Renommer';
 
   @override

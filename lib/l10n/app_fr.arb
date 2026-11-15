@@ -1205,6 +1205,8 @@
   "topicItemNew": "Nouveau sujet",
   "topicItemUnpin": "Désépingler",
   "topicItemPin": "Épingler",
+  "topicItemMarkUnread": "Marquer comme non lu",
+  "topicItemMarkRead": "Marquer comme lu",
   "topicItemRename": "Renommer",
   "topicItemAutoName": "Nom automatique",
   "topicItemDelete": "Supprimer",

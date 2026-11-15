@@ -53,16 +53,28 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   // Mutations
   // --------------------------------------------------------------------------
 
-  bool _markLatestAssistantMessageRead(Conversation? conversation) {
+  bool _markLatestAssistantMessageRead(
+    Conversation? conversation, {
+    bool clearManualUnread = false,
+    bool skipErrors = false,
+  }) {
     if (conversation == null) return false;
+    var changed = false;
+    if (clearManualUnread && conversation.isManuallyUnread) {
+      conversation.isManuallyUnread = false;
+      changed = true;
+    }
     for (final message in conversation.messages.reversed) {
       if (message.role != 'assistant' || message.isStreaming) continue;
-      if (message.isError) return false;
-      if (conversation.lastReadMessageId == message.id) return false;
+      if (message.isError) {
+        if (skipErrors) continue;
+        return changed;
+      }
+      if (conversation.lastReadMessageId == message.id) return changed;
       conversation.lastReadMessageId = message.id;
       return true;
     }
-    return false;
+    return changed;
   }
 
   /// Creates a new conversation with an empty title and adds it to the list.
@@ -253,11 +265,36 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     var markedRead = false;
     for (final conversation in state) {
       if (conversation.id != id && conversation.id != previousId) continue;
-      markedRead = _markLatestAssistantMessageRead(conversation) || markedRead;
+      markedRead = _markLatestAssistantMessageRead(
+            conversation,
+            clearManualUnread: conversation.id == id,
+          ) ||
+          markedRead;
     }
     _ref.read(activeConversationIdProvider.notifier).state = id;
-    if (markedRead) _persist();
+    if (markedRead) {
+      state = List<Conversation>.from(state);
+      _persist();
+    }
     _persistActiveId();
+  }
+
+  /// Toggles a conversation's explicit unread override from the topic menu.
+  /// Marking read also advances the successful assistant read marker.
+  void toggleConversationReadState(String id, {required bool isUnread}) {
+    final conversation = state.where((item) => item.id == id).firstOrNull;
+    if (conversation == null) return;
+    if (isUnread) {
+      _markLatestAssistantMessageRead(
+        conversation,
+        clearManualUnread: true,
+        skipErrors: true,
+      );
+    } else {
+      conversation.isManuallyUnread = true;
+    }
+    state = List<Conversation>.from(state);
+    _persist();
   }
 
   /// Renames a conversation.

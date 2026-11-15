@@ -1208,6 +1208,8 @@
   "topicItemNew": "새 주제",
   "topicItemUnpin": "고정 해제",
   "topicItemPin": "고정",
+  "topicItemMarkUnread": "읽지 않음으로 표시",
+  "topicItemMarkRead": "읽음으로 표시",
   "topicItemRename": "이름 변경",
   "topicItemAutoName": "자동 이름 지정",
   "topicItemDelete": "삭제",

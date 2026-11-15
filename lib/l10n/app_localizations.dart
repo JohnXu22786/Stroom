@@ -5545,6 +5545,12 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Rename'**
+  /// Mark a conversation as unread.
+  String get topicItemMarkUnread;
+
+  /// Mark a conversation as read.
+  String get topicItemMarkRead;
+
   String get topicItemRename;
 
   /// No description provided for @topicItemAutoName.

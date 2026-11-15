@@ -1203,6 +1203,8 @@
   "topicItemNew": "Neues Thema",
   "topicItemUnpin": "Lösen",
   "topicItemPin": "Anheften",
+  "topicItemMarkUnread": "Als ungelesen markieren",
+  "topicItemMarkRead": "Als gelesen markieren",
   "topicItemRename": "Umbenennen",
   "topicItemAutoName": "Automatisch benennen",
   "topicItemDelete": "Löschen",

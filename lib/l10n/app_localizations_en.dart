@@ -3276,6 +3276,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get topicItemPin => 'Pin';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Mark as unread';
+
+  @override
+  String get topicItemMarkRead => 'Mark as read';
+
   String get topicItemRename => 'Rename';
 
   @override
@@ -15256,6 +15262,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get topicItemPin => 'Pin';
 
   @override
+  @override
+  String get topicItemMarkUnread => 'Mark as unread';
+
+  @override
+  String get topicItemMarkRead => 'Mark as read';
+
   String get topicItemRename => 'Rename';
 
   @override

@@ -11,8 +11,11 @@ Widget _app({
   bool isTemporary = false,
   VoidCallback? onTemporaryToggle,
   Brightness brightness = Brightness.light,
+  VoidCallback? onReadStateToggle,
+  Locale? locale,
 }) {
   return MaterialApp(
+    locale: locale,
     theme: ThemeData(
       colorSchemeSeed: Colors.deepPurple,
       brightness: brightness,
@@ -37,6 +40,7 @@ Widget _app({
         onPinToggle: () {},
         onRename: () {},
         onAutoRename: () {},
+        onReadStateToggle: onReadStateToggle ?? () {},
         onSelectionToggle: () {},
         onTemporaryToggle: onTemporaryToggle ?? () {},
       ),
@@ -198,5 +202,52 @@ void main() {
         0.4,
       ),
     );
+  });
+
+  testWidgets(
+    'menu read toggle follows unread state and preserves error icon',
+    (tester) async {
+      await tester.pumpWidget(_app(isUnread: true, isFailed: true));
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mark as read'), findsOneWidget);
+      expect(find.text('Mark as unread'), findsNothing);
+      final actionIcon = tester.widget<Icon>(
+        find.byIcon(Icons.mark_email_read_outlined),
+      );
+      final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
+      expect(actionIcon.color, Color.lerp(cs.primary, Colors.green, 0.55));
+
+      final leadingIcon = tester.widget<Icon>(
+        find.byIcon(Icons.chat_bubble_outline_rounded),
+      );
+      expect(leadingIcon.color, Color.lerp(cs.error, cs.onSurfaceVariant, 0.4));
+    },
+  );
+
+  testWidgets('first topic menu action invokes the read-state toggle', (
+    tester,
+  ) async {
+    var toggled = false;
+    await tester.pumpWidget(_app(onReadStateToggle: () => toggled = true));
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(find.text('Mark as unread')).dy,
+      lessThan(tester.getTopLeft(find.text('Rename')).dy),
+    );
+    await tester.tap(find.text('Mark as unread'));
+    await tester.pumpAndSettle();
+    expect(toggled, isTrue);
+  });
+
+  testWidgets('read toggle uses the selected locale', (tester) async {
+    await tester.pumpWidget(_app(locale: const Locale('zh', 'CN')));
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+
+    expect(find.text('标记为未读'), findsOneWidget);
   });
 }
