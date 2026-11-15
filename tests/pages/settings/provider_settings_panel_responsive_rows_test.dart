@@ -58,8 +58,9 @@ void main() {
       final tabController = DefaultTabController.of(
         tester.element(find.byType(TabBar)),
       );
-      tabController.animateTo(1);
-      await tester.pump(const Duration(milliseconds: 400));
+      tabController.animateTo(1, duration: Duration.zero);
+      await tester.pump();
+      expect(tabController.index, 1);
 
       expect(find.text('Fallback method'), findsOneWidget);
       expect(find.text('Preprocessing method'), findsOneWidget);
