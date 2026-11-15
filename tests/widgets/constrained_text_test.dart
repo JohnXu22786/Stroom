@@ -9,10 +9,13 @@ void main() {
         home: Scaffold(
           body: SizedBox(
             width: 240,
-            child: ConstrainedText(
-              'Short label',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ConstrainedText(
+                'Short label',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ),
@@ -41,12 +44,16 @@ void main() {
       ),
     );
 
-    expect(find.text('A deliberately long value that will scroll'),
-        findsOneWidget);
+    expect(
+      find.text('A deliberately long value that will scroll'),
+      findsOneWidget,
+    );
     await tester.pump(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('A deliberately long value that will scroll'),
-        findsOneWidget);
+    expect(
+      find.text('A deliberately long value that will scroll'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('lays out safely inside dropdown items', (tester) async {
