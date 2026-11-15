@@ -18,11 +18,16 @@ class AttachmentStorage {
   static Future<String> Function(String, Uint8List)? saveFileOverrideForTesting;
 
   @visibleForTesting
+  static Future<String> Function(String, Uint8List)?
+      saveEditedFileOverrideForTesting;
+
+  @visibleForTesting
   static Future<bool> Function(String)? deleteFileOverrideForTesting;
 
   @visibleForTesting
   static void resetOverridesForTesting() {
     saveFileOverrideForTesting = null;
+    saveEditedFileOverrideForTesting = null;
     deleteFileOverrideForTesting = null;
   }
 
@@ -105,6 +110,9 @@ class AttachmentStorage {
   /// readFile/deleteFile 通过 basename 即可正确解析（Web 端则因键名
   /// 本身就是 storagePath 而天然一致），标记仍保留用于移除/删除语义。
   static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
+    final override = saveEditedFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
     final storageName = _createStorageName(hash, ext);

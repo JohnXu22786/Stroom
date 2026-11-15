@@ -380,16 +380,6 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   void _removePendingAttachment(int index) {
     final att = _pendingAttachments[index];
     _pendingImageBytes.remove(att.id);
-    // 清理编辑产物文件：仅限普通模式（pending 中未被任何消息引用）。
-    // 编辑模式：附件仍被原消息引用（取消编辑后气泡仍需加载），
-    // 删除会让原消息附件悬空。已提交编辑时被移除的文件成为孤儿，
-    // 由删除整个对话时的附件清理兜底（见 conversations 删除逻辑）；
-    // 若后续删除引用它的消息，_deleteMessage 的 isReferencedElsewhere
-    // 检查会一并清理。
-    if (widget.editingMessageId == null &&
-        att.storagePath.startsWith('temp_edited/')) {
-      _deleteTempFile(att.storagePath);
-    }
     // 磁盘压缩缓存清理时机：
     // - 普通模式（非编辑）：待发附件已被移除、无人引用，立即清理。
     // - 编辑模式 + 本次新加的附件：与普通发送一致，立即清理。
@@ -398,6 +388,17 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     //   再统一清理。
     final isOriginalEditAttachment = widget.editingMessageId != null &&
         (widget.editingMessageAttachments?.any((a) => a.id == att.id) ?? false);
+    final isOriginalEditFile = isOriginalEditAttachment &&
+        (widget.editingMessageAttachments?.any(
+              (a) => a.id == att.id && a.storagePath == att.storagePath,
+            ) ??
+            false);
+    // An edited replacement is unreferenced once removed, including in edit
+    // mode. Preserve a temp-edited path only when it is the original file
+    // still referenced by the message being edited.
+    if (att.storagePath.startsWith('temp_edited/') && !isOriginalEditFile) {
+      unawaited(_deleteTempFile(att.storagePath));
+    }
     if (isOriginalEditAttachment) {
       _removedEditAttachments.add(att);
     } else {
@@ -525,15 +526,28 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         base64Data: newBase64,
       );
 
-      // Defense-in-depth: the composer may be disposed or switched to
-      // another conversation during the awaits above. Re-validate BEFORE
-      // any destructive file I/O so we never delete the file of an
-      // attachment that is still in the list.
-      if (!mounted ||
-          index >= _pendingAttachments.length ||
-          _pendingAttachments[index].id != oldAtt.id) {
+      // The attachment may have been removed, reordered, or the composer
+      // disposed while the file was being written. Only publish the edit
+      // while its identity is still present; otherwise the new file has no
+      // owner and must be cleaned up.
+      final currentIndex = mounted
+          ? _pendingAttachments.indexWhere((attachment) => attachment.id == oldAtt.id)
+          : -1;
+      if (currentIndex < 0) {
+        await _deleteTempFile(tempStoragePath);
         return;
       }
+
+      // Commit the new file reference before awaiting old-file cleanup.
+      // If the attachment is removed during cleanup, its removal handler now
+      // owns the new path; if the list is reordered, the updated attachment
+      // moves with its stable id.
+      setState(() {
+        _pendingAttachments[currentIndex] = updatedAtt;
+        _pendingImageBytes[updatedAtt.id] = editedBytes;
+      });
+      unawaited(_preCompressPendingImage(updatedAtt, editedBytes));
+      _scheduleDraftSave();
 
       // 清理旧文件：仅限普通模式（pending 中未被任何消息引用）。
       // 编辑模式：旧附件可能仍被原消息引用（取消编辑后气泡仍需加载），
@@ -564,22 +578,6 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
       }
 
-      // Re-validate after the delete await — the list may have changed
-      // while the file work was running.
-      if (!mounted ||
-          index >= _pendingAttachments.length ||
-          _pendingAttachments[index].id != oldAtt.id) {
-        return;
-      }
-
-      setState(() {
-        _pendingAttachments[index] = updatedAtt;
-        _pendingImageBytes[updatedAtt.id] = editedBytes;
-      });
-      // 编辑后的图片同样立即后台预压缩（发送时零等待）
-      unawaited(_preCompressPendingImage(updatedAtt, editedBytes));
-      // 附件变化触发草稿保存
-      _scheduleDraftSave();
     } catch (e) {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
       if (mounted) {
