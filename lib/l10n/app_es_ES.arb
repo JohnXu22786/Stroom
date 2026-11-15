@@ -193,7 +193,7 @@
   "ocrImagesLoaded": "{count, plural, one{Se cargó {count} imagen} other{Se cargaron {count} imágenes}}",
   "ocrProcessImageFailed": "Error al procesar la imagen: {error}",
   "ocrUnknownSourceImageCount": "No se puede determinar el recuento de imágenes originales",
-  "ocrConfirmClear": "Confirmar claro",
+  "ocrConfirmClear": "Confirmar borrado",
   "ocrRetryUnavailableConfirmClear": "La caché de imágenes OCR original no está disponible y su recuento de imágenes no se puede recuperar. Al borrarlo se restablecerá el estado de reintento anterior. Seleccione todas las imágenes para esta tarea de OCR nuevamente.",
   "ocrConfirmClearSelected": "¿Borrar las imágenes OCR seleccionadas?",
   "ocrCancel": "Cancelar",
