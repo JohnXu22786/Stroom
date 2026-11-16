@@ -394,19 +394,26 @@ void main() {
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await tester.tap(find.text('选择文件（可多选）'));
-      await tester.runAsync(() async {
-        final storage = Directory('${directory.path}/attachments');
-        for (var attempt = 0; attempt < 100; attempt++) {
-          if (storage.existsSync() &&
-              storage.listSync().whereType<File>().isNotEmpty) {
-            return;
+      final storage = Directory('${directory.path}/attachments');
+      Future<void> pickFile() async {
+        await tester.runAsync(() async {
+          await tester.tap(find.text('选择文件（可多选）'));
+          for (var attempt = 0; attempt < 100; attempt++) {
+            if (storage.existsSync() &&
+                storage.listSync().whereType<File>().any(
+                      (file) => file.lengthSync() == 6,
+                    )) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+              return;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 10));
           }
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-        fail('The selected document was not copied into app storage');
-      });
-      await tester.pumpAndSettle();
+          fail('The selected document was not copied into app storage');
+        });
+        await tester.pumpAndSettle();
+      }
+
+      await pickFile();
 
       await tester.tap(find.byTooltip('移除'));
       await tester.pumpAndSettle();
