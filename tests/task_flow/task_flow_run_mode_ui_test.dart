@@ -22,6 +22,7 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/task_flow/services/task_flow_input_cleanup.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
@@ -131,6 +132,8 @@ bool _startButtonEnabled(WidgetTester tester) {
 }
 
 void main() {
+  tearDown(TaskFlowInputCleanup.resetOverridesForTesting);
+
   group('Task flow run-mode input adapts to the FIRST block', () {
     testWidgets(
       'OCR rejects a valid image selection when another manifest record is unresolved',
@@ -368,6 +371,7 @@ void main() {
 
     testWidgets('failed removal retains ownership for dispose cleanup',
         (tester) async {
+      SharedPreferences.setMockInitialValues({});
       final directory =
           Directory.systemTemp.createTempSync('flow_file_cleanup_');
       final source = File('${directory.path}/notes.pdf')
@@ -377,6 +381,15 @@ void main() {
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
       final deletedPaths = <String>[];
+      final queuedReferences = <String>[];
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deletedPaths.add(path);
         if (deletedPaths.length == 1) throw StateError('disk unavailable');
@@ -421,19 +434,78 @@ void main() {
       expect(find.text('notes.pdf'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      expect(queuedReferences, [deletedPaths.single]);
+    });
+
+    testWidgets('failed dispose cleanup is retried by the next builder',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final directory =
+          Directory.systemTemp.createTempSync('flow_dispose_cleanup_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('report');
+      final originalPicker = FilePickerPlatform.instance;
+      final originalDocuments = PathProviderPlatform.instance;
+      FilePickerPlatform.instance = _InputPicker(source.path);
+      PathProviderPlatform.instance = _Documents(directory.path);
+      final queuedReferences = <String>[];
+      var retryCount = 0;
+      TaskFlowInputCleanup.retryPendingOverrideForTesting = () {
+        retryCount++;
+        return Future<void>.value();
+      };
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
+      addTearDown(() {
+        FilePickerPlatform.instance = originalPicker;
+        PathProviderPlatform.instance = originalDocuments;
+        directory.deleteSync(recursive: true);
+      });
+
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
+      );
       await tester.runAsync(() async {
-        for (var attempt = 0;
-            attempt < 100 && deletedPaths.length < 2;
-            attempt++) {
+        await tester.tap(find.text('选择文件（可多选）'));
+        final storage = Directory('${directory.path}/attachments');
+        for (var attempt = 0; attempt < 100; attempt++) {
+          if (storage.existsSync() &&
+              storage.listSync().whereType<File>().any(
+                    (file) => file.lengthSync() == 6,
+                  )) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            return;
+          }
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
+        fail('The selected document was not copied into app storage');
       });
-      expect(
-        deletedPaths,
-        hasLength(2),
-        reason: 'dispose retries cleanup after the explicit removal fails',
+      await tester.pumpAndSettle();
+      expect(find.text('notes.pdf'), findsOneWidget);
+      final copyPath = Directory('${directory.path}/attachments')
+          .listSync()
+          .whereType<File>()
+          .single
+          .path;
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(queuedReferences, [copyPath]);
+      expect(retryCount, 1);
+
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
       );
-      expect(deletedPaths.last, deletedPaths.first);
+      expect(retryCount, 2);
     });
 
     testWidgets('oversized document metadata is rejected before copying', (
@@ -617,6 +689,7 @@ void main() {
     testWidgets('leaving an unsubmitted file run removes its copied input', (
       tester,
     ) async {
+      SharedPreferences.setMockInitialValues({});
       final directory = Directory.systemTemp.createTempSync('flow_file_exit_');
       final source = File('${directory.path}/notes.pdf')
         ..writeAsStringSync('report');
@@ -624,6 +697,17 @@ void main() {
       final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
+      final queuedReferences = <String>[];
+      TaskFlowInputCleanup.retryPendingOverrideForTesting =
+          () => Future<void>.value();
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
       addTearDown(() {
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
@@ -654,13 +738,8 @@ void main() {
       final copy = storage.listSync().whereType<File>().single;
       expect(find.text('notes.pdf'), findsOneWidget);
 
-      await tester.runAsync(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
-        for (var attempt = 0; attempt < 100 && copy.existsSync(); attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      expect(copy.existsSync(), isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(queuedReferences, [copy.path]);
     });
 
     testWidgets(
