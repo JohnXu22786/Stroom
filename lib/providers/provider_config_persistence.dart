@@ -115,7 +115,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           return false;
         }
         try {
-          ProviderEntry.fromMap(entry);
+          final parsed = ProviderEntry.fromMap(entry);
+          if (parsed.configs.isEmpty) return false;
+          jsonEncode(parsed.toMap());
           return true;
         } catch (_) {
           return false;

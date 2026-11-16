@@ -112,6 +112,57 @@ void main() {
       expect(entries, isNotEmpty);
     });
 
+    test('malformed non-built-in LLM entry does not discard legacy configs',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'corrupt_llm',
+            'type': 'llm',
+            'name': 'Corrupt LLM',
+            'configs': [
+              {
+                'customParams': [
+                  {
+                    'paramName': 'legacy_param',
+                    'options': [123]
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.5},
+            ],
+          },
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final migrated = entries
+          .whereType<Map<String, dynamic>>()
+          .firstWhere((entry) => entry['id'] == 'migrated_llm');
+      final configs = migrated['configs'] as List;
+      final provider = configs.single as Map<String, dynamic>;
+      expect(provider['providerName'], 'Legacy provider');
+      expect(provider['key'], 'legacy-key');
+      expect(
+        ((provider['models'] as List).single
+            as Map<String, dynamic>)['modelId'],
+        'legacy-model',
+      );
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test('migrates per-model context/maxTokens into typeConfig', () async {
       // 回归：旧数据把压缩阈值挂在 model 上，不迁移则自动压缩静默失效。
       SharedPreferences.setMockInitialValues({
