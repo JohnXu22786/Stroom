@@ -371,9 +371,18 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     }
   }
 
-  final hasLlmEntry = existingEntries
-      .any((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm');
-  if (hasLlmEntry) {
+  final hasUsableLlmEntry = existingEntries.any((entry) {
+    if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') return false;
+    try {
+      final parsed = ProviderEntry.fromMap(entry);
+      if (parsed.configs.isEmpty) return false;
+      jsonEncode(parsed.toMap());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  });
+  if (hasUsableLlmEntry) {
     return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
   }
 

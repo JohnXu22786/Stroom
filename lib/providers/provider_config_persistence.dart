@@ -108,11 +108,23 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         }
       }
 
-      // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry = existingEntries.any(
-        (e) => e['type'] == 'llm' && e['id'] != 'builtin_llm',
-      );
-      if (!hasLlmEntry) {
+      // 只有可正常解析的自定义 LLM 条目才算已迁移；损坏条目不能阻止
+      // 从 chat_configs 恢复仍可用的旧设置。
+      final hasUsableLlmEntry = existingEntries.any((entry) {
+        if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') {
+          return false;
+        }
+        try {
+          final parsed = ProviderEntry.fromMap(entry);
+          if (parsed.configs.isEmpty) return false;
+          jsonEncode(parsed.toMap());
+          return true;
+        } catch (_) {
+          return false;
+        }
+      });
+      var legacyConfigsPersisted = hasUsableLlmEntry;
+      if (!hasUsableLlmEntry) {
         existingEntries.add({
           'id': 'migrated_llm',
           'type': 'llm',
@@ -120,10 +132,15 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           'configs': migratedConfigs.map((c) => c.toMap()).toList(),
         });
 
-        await prefs.setString('provider_entries', jsonEncode(existingEntries));
+        legacyConfigsPersisted = await prefs.setString(
+          'provider_entries',
+          jsonEncode(existingEntries),
+        );
       }
 
-      // 删除旧数据，防止重复迁移
+      // 只有目标已存在或写入成功后才删除旧数据，避免偏好存储写入失败时
+      // 丢失唯一一份可恢复的供应商配置。
+      if (!legacyConfigsPersisted) return;
       await prefs.remove('chat_configs');
       await prefs.remove('chat_selected_config_id');
       debugPrint(

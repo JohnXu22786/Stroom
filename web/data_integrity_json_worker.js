@@ -353,10 +353,24 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
     }
   }
 
-  const hasLlmEntry = existingEntries.some((entry) =>
-    entry.type === 'llm' && entry.id !== 'builtin_llm',
-  );
-  if (hasLlmEntry) {
+  const hasUsableLlmEntry = existingEntries.some((entry) => {
+    if (!isRecord(entry) || entry.type !== 'llm' ||
+        entry.id === 'builtin_llm' || typeof entry.id !== 'string' ||
+        !isOptionalType(entry.type, 'string') ||
+        !isOptionalType(entry.name, 'string')) return false;
+    if (!Object.prototype.hasOwnProperty.call(entry, 'configs')) {
+      return isOptionalType(entry.providerName, 'string') &&
+        isOptionalType(entry.host, 'string') &&
+        isOptionalType(entry.key, 'string') &&
+        isList(entry.models, isUsableModel) &&
+        [entry.providerName, entry.host, entry.key]
+          .some((value) => typeof value === 'string' && value.length > 0);
+    }
+    return isOptionalType(entry.enabled, 'boolean') &&
+      Array.isArray(entry.configs) && entry.configs.length > 0 &&
+      entry.configs.every(isUsableProviderConfig);
+  });
+  if (hasUsableLlmEntry) {
     return { metadata: { status: 'alreadyMigrated', corruptExisting } };
   }
 
@@ -370,6 +384,86 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
     metadata: { status: 'write', corruptExisting },
     payload: JSON.stringify(existingEntries),
   };
+}
+
+function isUsableProviderConfig(config) {
+  if (!isRecord(config) ||
+      !isOptionalType(config.id, 'string') ||
+      !isOptionalType(config.providerName, 'string') ||
+      !isOptionalType(config.host, 'string') ||
+      !isOptionalType(config.key, 'string') ||
+      !isOptionalType(config.endpointType, 'string') ||
+      (config.typeConfig != null && !isRecord(config.typeConfig))) {
+    return false;
+  }
+  if (!isList(config.customParams, isUsableCustomParam) ||
+      !isList(config.reasoningParams, isUsableReasoningParam)) return false;
+  if (config.models == null) return true;
+  return Array.isArray(config.models) && config.models.every(isUsableModel);
+}
+
+function isUsableModel(model) {
+  return isRecord(model) &&
+    isOptionalType(model.id, 'string') &&
+    isOptionalType(model.name, 'string') &&
+    isOptionalType(model.modelId, 'string') &&
+    isOptionalType(model.selectedTrimPresetId, 'string') &&
+    isOptionalType(model.endpointType, 'string') &&
+    ['volumeMin', 'volumeMax', 'speedMin', 'speedMax', 'maxWordsPerRequest']
+      .every((key) => model[key] == null || typeof model[key] === 'number') &&
+    ['hasVolume', 'hasSpeed', 'supportStream']
+      .every((key) => model[key] == null || typeof model[key] === 'boolean') &&
+    (model.typeConfig == null || isRecord(model.typeConfig)) &&
+    isList(model.voices, isUsableVoice) &&
+    isList(model.customParams, isUsableCustomParam) &&
+    isList(model.reasoningParams, isUsableReasoningParam);
+}
+
+function isUsableVoice(voice) {
+  return isRecord(voice) &&
+    isOptionalType(voice.name, 'string') &&
+    isOptionalType(voice.id, 'string');
+}
+
+function isUsableCustomParam(param) {
+  return isRecord(param) &&
+    isOptionalType(param.paramName, 'string') &&
+    isOptionalType(param.defaultValue, 'string') &&
+    isOptionalType(param.type, 'string') &&
+    isOptionalType(param.typeDefaultOverridden, 'boolean') &&
+    isStringList(param.options) &&
+    isStringList(param.optionOrder);
+}
+
+function isUsableReasoningParam(param) {
+  if (!isRecord(param) || !isOptionalType(param.paramName, 'string')) {
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(param, 'defaultValue') &&
+      !Object.prototype.hasOwnProperty.call(param, 'options')) {
+    return true;
+  }
+  return isOptionalType(param.enabled, 'boolean') &&
+    isOptionalType(param.isReasoningToggle, 'boolean') &&
+    isOptionalType(param.isEffortParam, 'boolean') &&
+    isOptionalType(param.onValue, 'string') &&
+    isOptionalType(param.offValue, 'string') &&
+    isOptionalType(param.type, 'string') &&
+    (param.options == null || Array.isArray(param.options)) &&
+    (param.optionOrder == null || Array.isArray(param.optionOrder));
+}
+
+function isList(value, isValidItem) {
+  return value == null || (Array.isArray(value) && value.every(isValidItem));
+}
+
+function isStringList(value) {
+  return value == null ||
+    (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+}
+
+function isOptionalType(value, type) {
+  return value == null || typeof value === type;
 }
 
 function fixProviderEntries(json) {
