@@ -500,7 +500,7 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await tester.runAsync(TaskFlowInputCleanup.waitForIdleForTesting);
+      await TaskFlowInputCleanup.waitForIdleForTesting();
       expect(deletedPaths, hasLength(1));
       expect(
         await TaskFlowInputCleanup.pendingReferencesForTesting(),
@@ -513,7 +513,7 @@ void main() {
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await tester.runAsync(TaskFlowInputCleanup.waitForIdleForTesting);
+      await TaskFlowInputCleanup.waitForIdleForTesting();
 
       expect(deletedPaths, hasLength(2));
       expect(deletedPaths.last, deletedPaths.first);
@@ -572,7 +572,7 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await tester.runAsync(TaskFlowInputCleanup.waitForIdleForTesting);
+      await TaskFlowInputCleanup.waitForIdleForTesting();
       expect(failingStore.writeAttempted, isTrue);
       expect(deletedPaths, isEmpty);
 
@@ -583,7 +583,7 @@ void main() {
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await tester.runAsync(TaskFlowInputCleanup.waitForIdleForTesting);
+      await TaskFlowInputCleanup.waitForIdleForTesting();
 
       expect(deletedPaths, hasLength(1));
       expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
@@ -809,7 +809,7 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await tester.runAsync(TaskFlowInputCleanup.waitForIdleForTesting);
+      await TaskFlowInputCleanup.waitForIdleForTesting();
       expect(copy.existsSync(), isFalse);
     });
 
