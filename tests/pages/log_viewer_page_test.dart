@@ -137,7 +137,14 @@ void main() {
       await _pumpUntil(tester, () => tester.any(find.text(fileName)));
       expect(find.text(fileName), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Delete'));
+      final deleteAction = find.descendant(
+        of: find.ancestor(
+          of: find.text(fileName),
+          matching: find.byType(ListTile),
+        ),
+        matching: find.byTooltip('Delete'),
+      );
+      await tester.tap(deleteAction);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
@@ -205,7 +212,14 @@ void main() {
       await _pumpUntil(tester, () => tester.any(find.text(fileName)));
       expect(find.text(fileName), findsOneWidget);
 
-      await tester.tap(find.byTooltip('删除'));
+      final deleteAction = find.descendant(
+        of: find.ancestor(
+          of: find.text(fileName),
+          matching: find.byType(ListTile),
+        ),
+        matching: find.byTooltip('删除'),
+      );
+      await tester.tap(deleteAction);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, '删除'));
