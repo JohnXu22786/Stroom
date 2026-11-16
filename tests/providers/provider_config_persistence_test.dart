@@ -118,6 +118,54 @@ void main() {
         isTrue,
       );
     });
+
+    test('legacy configs survive a malformed non-built-in LLM entry', () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'corrupt_llm',
+            'type': 'llm',
+            'name': 'Corrupt LLM',
+            'configs': 'invalid configs',
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.5},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final migrated = notifier.state.entries
+          .where((entry) => entry.id == 'migrated_llm')
+          .toList();
+      expect(migrated, hasLength(1));
+      expect(migrated.single.configs, hasLength(1));
+      expect(migrated.single.configs.single.providerName, 'Legacy provider');
+      expect(migrated.single.configs.single.key, 'legacy-key');
+      expect(
+        migrated.single.configs.single.models.single.modelId,
+        'legacy-model',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+      expect(
+        prefs.getKeys().where(
+          (key) => key.startsWith('provider_entries_corrupt_'),
+        ),
+        isNotEmpty,
+        reason: 'the corrupt current entry should remain recoverable',
+      );
+    });
   });
 
   group('built-in provider display localization', () {
