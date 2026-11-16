@@ -155,7 +155,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           final configs = rawConfigs is List
               ? rawConfigs
               : parsedEntry.configs.map((config) => config.toMap()).toList();
-          configs.addAll(unrepresentedConfigs.map((config) => config.toMap()));
+          configs.addAll(
+            unrepresentedConfigs.map<Map<String, dynamic>>(
+              (config) => config.toMap(),
+            ),
+          );
           existingEntry['configs'] = configs;
           if (skippedCorruptEntry && existingJson != null) {
             final backedUp =
