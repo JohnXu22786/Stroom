@@ -28,6 +28,7 @@ import '../models/task_flow_exception.dart';
 import '../providers/task_flow_provider.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
+import '../services/task_flow_input_cleanup.dart';
 import '../services/task_flow_validator.dart';
 import '../utils/block_param_display.dart';
 import '../utils/task_flow_localization.dart';
@@ -143,6 +144,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(TaskFlowInputCleanup.retryPending());
     _nameController = TextEditingController();
     _descController = TextEditingController();
     _inputController = TextEditingController();
@@ -220,19 +222,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     super.dispose();
   }
 
-  Future<void> _discardUnsubmittedInput(String reference) async {
-    try {
-      await AttachmentStorage.deleteFile(reference);
-    } catch (error) {
-      debugPrint('Failed to discard unsubmitted flow input: $error');
-    }
-  }
-
   void _discardAllUnsubmittedInputs() {
     final references = List<String>.of(_unsubmittedFileInputs);
-    _unsubmittedFileInputs.clear();
-    for (final reference in references) {
-      unawaited(_discardUnsubmittedInput(reference));
+    unawaited(_queueAndDiscardUnsubmittedInputs(references));
+  }
+
+  Future<void> _queueAndDiscardUnsubmittedInputs(
+    List<String> references,
+  ) async {
+    try {
+      await TaskFlowInputCleanup.enqueueAll(references);
+      _unsubmittedFileInputs.removeAll(references);
+      await TaskFlowInputCleanup.retryPending();
+    } catch (error) {
+      debugPrint('Failed to queue unsubmitted flow input cleanup: $error');
     }
   }
 
