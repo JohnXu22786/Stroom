@@ -475,6 +475,7 @@ void main() {
               storage.listSync().whereType<File>().any(
                     (file) => file.lengthSync() == 6,
                   )) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
             return;
           }
           await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -482,6 +483,7 @@ void main() {
         fail('The selected document was not copied into app storage');
       });
       await tester.pumpAndSettle();
+      expect(find.text('notes.pdf'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
