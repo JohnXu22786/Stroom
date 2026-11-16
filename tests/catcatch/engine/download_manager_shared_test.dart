@@ -531,6 +531,35 @@ void main() {
     }
   });
 
+  test('does not publish a partial file when segment merging fails', () async {
+    final directory = await Directory.systemTemp.createTemp('failed-merge-');
+    final firstPart = File(p.join(directory.path, 'first.part'))
+      ..writeAsStringSync('partial output');
+    final secondPart = File(p.join(directory.path, 'second.part'))
+      ..writeAsStringSync('remaining output');
+    final output = File(p.join(directory.path, 'merged.ts'));
+    try {
+      await expectLater(
+        DownloadManager.mergeFiles([
+          firstPart.path,
+          secondPart.path,
+        ], output.path, onBytes: (_) => throw StateError('merge failed')),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await output.exists(), isFalse);
+      expect(
+        Directory(directory.path)
+            .listSync()
+            .map((entry) => p.basename(entry.path))
+            .toSet(),
+        {'first.part', 'second.part'},
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test(
     'downloads and merges repeated URL byte ranges in playlist order',
     () async {
