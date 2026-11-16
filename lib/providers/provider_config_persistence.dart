@@ -626,15 +626,25 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     }
   }
 
-  Future<void> _persist({bool rethrowOnFailure = false}) async {
+  Future<void> _persist({
+    bool rethrowOnFailure = false,
+    bool persistMcpGroups = true,
+    ProviderEntriesState? stateToPersist,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
+      final persistedState = stateToPersist ?? state;
+      final json =
+          jsonEncode(persistedState.entries.map((e) => e.toMap()).toList());
       final entriesSaved = await prefs.setString('provider_entries', json);
-      final groupsSaved = await prefs.setString(
-        'mcp_provider_groups',
-        jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList()),
-      );
+      final groupsSaved = persistMcpGroups
+          ? await prefs.setString(
+              'mcp_provider_groups',
+              jsonEncode(
+                persistedState.mcpGroups.map((group) => group.toMap()).toList(),
+              ),
+            )
+          : true;
       if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
         throw StateError('Failed to persist provider configuration.');
       }
