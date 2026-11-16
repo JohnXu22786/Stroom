@@ -1510,6 +1510,8 @@ void main() {
       Future<void> Function(List<String>, String)? onMoveFiles,
       Future<void> Function(List<String>, String)? onMoveFolders,
       Future<String?> Function(List<String>, String)? onExportFiles,
+      Future<String?> Function(List<String>, String, List<String>)?
+          onExportFilesWithFolders,
       Future<String?> Function(List<String>, String)? onExportFolders,
       Future<void> Function(String)? onDeleteFolder,
       Future<void> Function(String, String)? onMoveFolder,
@@ -1547,6 +1549,7 @@ void main() {
         onMoveFolders: onMoveFolders ?? (_, __) async {},
         onExportFile: (_) async {},
         onExportFiles: onExportFiles,
+        onExportFilesWithFolders: onExportFilesWithFolders,
         onExportFolders: onExportFolders,
         onRenameFolder: onRenameFolder ?? (_, __) async {},
         onMoveFolder: onMoveFolder ?? (_, __) async {},
@@ -1908,12 +1911,16 @@ void main() {
       (tester) async {
         String? folderCallbackTarget;
         final exportedFolders = <String>[];
+        final reservedFolders = <String>[];
         await tester.pumpWidget(
           _buildTestApp(
             buildBatchFM(
               records: [_TestFileRecord(id: 'f1', name: 'one')],
               folders: {'a'},
-              onExportFiles: (ids, t) async => 'D:\\picked',
+              onExportFilesWithFolders: (ids, t, folders) async {
+                reservedFolders.addAll(folders);
+                return 'D:\\picked';
+              },
               onExportFolders: (names, t) async {
                 folderCallbackTarget = t;
                 exportedFolders.addAll(names);
@@ -1934,6 +1941,7 @@ void main() {
         // 文件夹导出必须复用文件导出选定的目录，不再弹出第二次目录选择
         expect(folderCallbackTarget, 'D:\\picked');
         expect(exportedFolders, ['a']);
+        expect(reservedFolders, ['a']);
         // 导出成功后退出选择模式
         expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
       },

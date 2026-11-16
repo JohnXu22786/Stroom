@@ -408,7 +408,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
   /// 批量导出文件。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；归档导出返回 ''）。
-  Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
+  Future<String?> _exportFiles(
+    List<String> ids,
+    String targetDirectory, {
+    List<String> reservedFolders = const [],
+  }) async {
     final l10n = AppLocalizations.of(context)!;
     try {
       final useArchive = kIsWeb || SystemPickDirectories.isNativeMobile;
@@ -440,8 +444,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         selectedPaths.add(await _userVisibleExportPath(file));
       }
       validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              folders: reservedFolders,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         var data = await FileManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -463,10 +478,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (useArchive) {
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
+          await writeUserVisibleExportFile(outputPath, data);
         }
         exportedCount++;
       }
@@ -655,11 +670,20 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         files: folderExportPaths,
         folders: selectedFolders,
       );
+      final resolvedOutputPaths = await resolveNonClobberingExportPaths(
+        files: folderExportPaths,
+        directory: outputDir,
+        folders: selectedFolders,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
       for (final folderName in selectedFolders) {
         await Directory(p.join(outputDir, folderName)).create(recursive: true);
       }
 
-      for (final file in folderFiles) {
+      for (var index = 0; index < folderFiles.length; index++) {
+        final file = folderFiles[index];
         var data = await FileManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -677,10 +701,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (!exportPaths.add(relativePath)) {
           throw StateError('导出路径重复: $relativePath');
         }
-        final fileDir = p.join(outputDir, file.folder);
+        final outputPath = resolvedOutputPaths[index];
+        final fileDir = p.dirname(outputPath);
         await Directory(fileDir).create(recursive: true);
-        final outputPath = p.join(fileDir, exportName);
-        await File(outputPath).writeAsBytes(data);
+        await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }
 
@@ -907,7 +931,12 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         await ref.read(folderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
-      onExportFiles: _exportFiles,
+      onExportFilesWithFolders: (ids, targetDirectory, folders) =>
+          _exportFiles(
+            ids,
+            targetDirectory,
+            reservedFolders: folders,
+          ),
       onExportFolders: _exportFolders,
       onExportFolder: (name) async {
         return _exportFolder(name);
