@@ -11,6 +11,7 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/app_version.dart';
+import 'package:stroom/utils/file_manifest.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -263,6 +264,39 @@ void main() {
       expect(await refMedia.exists(), isTrue, reason: '被引用的媒体文件不能删');
       expect(await orphan.exists(), isFalse, reason: '无引用且超 3 天应删除');
       expect(await fresh.exists(), isTrue, reason: '3 天缓冲内的文件应保留');
+    });
+
+    test('cleanupOrphans keeps old audio with a Windows-invalid format',
+        () async {
+      const hash = 'ref_audio_hash_1';
+      const format = 'wa?v';
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'audio_1',
+        'name': 'audio',
+        'hash': hash,
+        'format': format,
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'sourceText': '',
+        'duration': 1,
+      });
+
+      final audioPath = AudioRecord.storageFileNameFor(
+        hash: hash,
+        format: format,
+      );
+      final audio = File(p.join(appDir, 'tts_audio', audioPath));
+      await audio.parent.create(recursive: true);
+      await audio.writeAsString('audio');
+      await audio.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await audio.exists(), isTrue,
+          reason: 'aged audio stored under the manifest-safe name stays alive');
     });
   });
 }
