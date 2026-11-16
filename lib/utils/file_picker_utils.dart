@@ -91,9 +91,8 @@ void validateUserVisibleExportPaths({
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
     if (segments.any(
-      (segment) => reservedWindowsName.hasMatch(
-        segment.split(RegExp(r'[.:]')).first,
-      ),
+      (segment) =>
+          reservedWindowsName.hasMatch(segment.split(RegExp(r'[.:]')).first),
     )) {
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }

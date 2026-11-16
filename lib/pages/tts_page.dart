@@ -932,11 +932,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       },
       onExportFile: _exportFile,
       onExportFilesWithFolders: (ids, targetDirectory, folders) =>
-          _exportFiles(
-            ids,
-            targetDirectory,
-            reservedFolders: folders,
-          ),
+          _exportFiles(ids, targetDirectory, reservedFolders: folders),
       onExportFolders: _exportFolders,
       onExportFolder: (name) async {
         return _exportFolder(name);
