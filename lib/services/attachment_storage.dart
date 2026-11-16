@@ -34,7 +34,8 @@ class AttachmentStorage {
   static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
 
   @visibleForTesting
-  static Future<void> Function(String, Uint8List)? restoreFileOverrideForTesting;
+  static Future<void> Function(String, Uint8List)?
+      restoreFileOverrideForTesting;
 
   @visibleForTesting
   static void resetOverridesForTesting() {
