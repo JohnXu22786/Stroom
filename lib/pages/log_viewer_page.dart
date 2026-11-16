@@ -226,10 +226,6 @@ class _LogViewerPageState extends State<LogViewerPage>
       deleteError = e;
     }
     if (!mounted) return;
-    await _loadLogFiles();
-    await _loadPolicyAndUsage();
-    if (!mounted) return;
-
     final l10n = AppLocalizations.of(context)!;
     final message = deleteError != null
         ? l10n.appLogDeleteError(deleteError)
@@ -238,6 +234,8 @@ class _LogViewerPageState extends State<LogViewerPage>
             : l10n.appLogDeleteUnconfirmed;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+    await _loadLogFiles();
+    await _loadPolicyAndUsage();
   }
 
   /// 导出日志文件：复制文件路径到剪贴板，方便用户用系统资源管理器打开。

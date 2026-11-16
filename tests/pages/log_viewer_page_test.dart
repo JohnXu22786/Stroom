@@ -229,7 +229,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, '删除'));
-      await _pumpUntil(tester, () => tester.any(find.text('无法确认删除结果。')));
+      await _pumpUntil(
+        tester,
+        () =>
+            tester.any(find.text('无法确认删除结果。')) &&
+            !tester.any(find.text(fileName)),
+      );
 
       expect(fallbackLog.existsSync(), isFalse);
       expect(remainingLog.existsSync(), isTrue);
