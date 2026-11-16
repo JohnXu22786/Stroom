@@ -517,11 +517,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Replaces the message list of a conversation (e.g. after sending or
   /// loading a different conversation).
   ///
-  Future<void> updateMessages(
+  Future<bool> updateMessages(
     String conversationId,
     List<ChatMessage> messages,
   ) async {
-    if (!mounted) return;
+    if (!mounted) return false;
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
       List<String> removedMessageIds() {
@@ -629,8 +629,29 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     } else {
       _replaceMessages(conversationId, messages);
     }
-    if (!mounted) return;
-    await _persistNow();
+    if (!mounted) return false;
+    return _persistNowChecked();
+  }
+
+  /// Restores history after a failed destructive operation and records a
+  /// tombstone cancellation for any checkpointed messages in [restoredIds].
+  Future<bool> restoreMessagesChecked(
+    String conversationId,
+    List<ChatMessage> messages, {
+    required Iterable<String> restoredIds,
+  }) async {
+    if (!mounted ||
+        !state.any((conversation) => conversation.id == conversationId)) {
+      return false;
+    }
+    if (!await updateMessages(conversationId, messages)) return false;
+    try {
+      await _appendMessageRestorations(conversationId, restoredIds);
+    } catch (error) {
+      debugPrint('Failed to record restored message history: $error');
+      return false;
+    }
+    return _persistNowChecked();
   }
 
   /// Queues a supersedable periodic stream checkpoint journal entry.

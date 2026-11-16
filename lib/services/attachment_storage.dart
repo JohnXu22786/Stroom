@@ -9,6 +9,19 @@ import '../utils/image_send_compressor.dart' show CompressedImage;
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 
+class AttachmentDeleteRollbackException implements Exception {
+  const AttachmentDeleteRollbackException(
+      this.deleteError, this.rollbackErrors);
+
+  final Object deleteError;
+  final List<Object> rollbackErrors;
+
+  @override
+  String toString() =>
+      'Attachment deletion failed and ${rollbackErrors.length} file restore(s) failed: '
+      '$deleteError';
+}
+
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
   static const _uuid = Uuid();
@@ -219,19 +232,24 @@ class AttachmentStorage {
         deletedPaths.add(path);
         await deleteFile(path);
       }
-    } catch (_) {
+    } catch (deleteError) {
+      final rollbackErrors = <Object>[];
       for (final path in deletedPaths.reversed) {
         final bytes = originals[path];
         if (bytes == null) continue;
         try {
           await _restoreFile(path, bytes);
         } catch (restoreError) {
+          rollbackErrors.add(restoreError);
           await AppLogService.error(
             'AttachmentStorage',
             '回滚附件删除失败: $path',
             restoreError,
           );
         }
+      }
+      if (rollbackErrors.isNotEmpty) {
+        throw AttachmentDeleteRollbackException(deleteError, rollbackErrors);
       }
       rethrow;
     }
