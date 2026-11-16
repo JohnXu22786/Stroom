@@ -208,6 +208,7 @@ void main() {
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
     },
+    timeout: const Timeout(Duration(seconds: 15)),
   );
 
   testWidgets(
@@ -251,6 +252,7 @@ void main() {
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
     },
+    timeout: const Timeout(Duration(seconds: 15)),
   );
 
   testWidgets(
@@ -300,6 +302,7 @@ void main() {
       ]);
       expect(find.text('Delete test'), findsNothing);
     },
+    timeout: const Timeout(Duration(seconds: 15)),
   );
 
   testWidgets(
@@ -355,6 +358,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(deletedPaths, ['attachments/file.txt', 'attachments/second.txt']);
     },
+    timeout: const Timeout(Duration(seconds: 15)),
   );
 
   testWidgets(
@@ -383,6 +387,7 @@ void main() {
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
     },
+    timeout: const Timeout(Duration(seconds: 15)),
   );
 
   testWidgets(
@@ -411,5 +416,6 @@ void main() {
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
     },
+    timeout: const Timeout(Duration(seconds: 15)),
   );
 }
