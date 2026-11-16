@@ -18,12 +18,28 @@ class AttachmentStorage {
   static Future<String> Function(String, Uint8List)? saveFileOverrideForTesting;
 
   @visibleForTesting
+  static Future<String> Function(String, Uint8List)?
+      saveEditedFileOverrideForTesting;
+
+  @visibleForTesting
   static Future<bool> Function(String)? deleteFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required String? conversationId,
+    required String hash,
+  })? deleteCompressedImageOverrideForTesting;
+
+  @visibleForTesting
+  static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
 
   @visibleForTesting
   static void resetOverridesForTesting() {
     saveFileOverrideForTesting = null;
+    saveEditedFileOverrideForTesting = null;
     deleteFileOverrideForTesting = null;
+    deleteCompressedImageOverrideForTesting = null;
+    readFileOverrideForTesting = null;
   }
 
   @visibleForTesting
@@ -105,6 +121,9 @@ class AttachmentStorage {
   /// readFile/deleteFile 通过 basename 即可正确解析（Web 端则因键名
   /// 本身就是 storagePath 而天然一致），标记仍保留用于移除/删除语义。
   static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
+    final override = saveEditedFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
     final storageName = _createStorageName(hash, ext);
@@ -120,6 +139,9 @@ class AttachmentStorage {
   }
 
   static Future<Uint8List?> readFile(String storagePath) async {
+    final override = readFileOverrideForTesting;
+    if (override != null) return override(storagePath);
+
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {
@@ -301,6 +323,10 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
+    final override = deleteCompressedImageOverrideForTesting;
+    if (override != null) {
+      return override(conversationId: conversationId, hash: hash);
+    }
     if (!_isSafeConversationId(conversationId) ||
         !_isSafeCompressedCacheHash(hash)) {
       return false;

@@ -144,6 +144,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
   int _pendingAttachmentDraftGeneration = 0;
+  int _pendingAttachmentEditRequestId = 0;
+  final Map<String, int> _pendingAttachmentEditRequests = {};
+  String? _editSessionConversationId;
 
   @visibleForTesting
   Future<void> addPendingAttachmentForTesting(
@@ -151,6 +154,21 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     Uint8List bytes,
   ) =>
       _addPendingAttachment(fileName, bytes);
+
+  @visibleForTesting
+  List<Attachment> get pendingAttachmentsForTesting =>
+      List.unmodifiable(_pendingAttachments);
+
+  @visibleForTesting
+  Future<void> updatePendingAttachmentAfterEditForTesting(
+    int index,
+    Uint8List bytes,
+  ) =>
+      _updatePendingAttachmentAfterEdit(index, bytes);
+
+  @visibleForTesting
+  void reorderPendingAttachmentsForTesting(int oldIndex, int newIndex) =>
+      _onReorderPendingAttachment(oldIndex, newIndex);
 
   @visibleForTesting
   Future<void> addPendingAttachmentAfterPickerForTesting(
@@ -253,6 +271,13 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   void initState() {
     super.initState();
 
+    if (widget.editingMessageId != null) {
+      _editSessionConversationId = widget.conversationId ??
+          (widget.editingMessageAttachments?.isNotEmpty == true
+              ? widget.editingMessageAttachments!.first.conversationId
+              : null);
+    }
+
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
     WidgetsBinding.instance.addObserver(this);
@@ -327,6 +352,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       if (widget.editingMessageId != null &&
           widget.editingMessageText != null) {
         // Entering edit mode (or switching to a different message)
+        if (oldWidget.editingMessageId != null) {
+          _discardPendingEditReplacements(
+            oldWidget.editingMessageAttachments,
+            conversationId: _editSessionConversationId,
+          );
+        }
+        _editSessionConversationId = widget.conversationId ??
+            (widget.editingMessageAttachments?.isNotEmpty == true
+                ? widget.editingMessageAttachments!.first.conversationId
+                : null);
         _textController.text = widget.editingMessageText!;
         _lastSavedDraft = widget.editingMessageText!;
         _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
@@ -350,6 +385,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _lastSavedDraft = '';
         _lastSavedDraftAttSignature = const [];
         _lastHadText = false;
+        _discardPendingEditReplacements(
+          oldWidget.editingMessageAttachments,
+          conversationId: _editSessionConversationId,
+        );
+        _editSessionConversationId = null;
         _clearPendingAttachments();
         _disarmEditWarning();
         if (widget.initialDraftText.isNotEmpty) {
@@ -502,6 +542,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
+    if (widget.editingMessageId != null) {
+      _discardPendingEditReplacements(
+        widget.editingMessageAttachments,
+        conversationId: _editSessionConversationId,
+      );
+    }
     // Save draft before disposing. Use try-catch because ref may
     // already be disposed during teardown, especially in tests.
     try {
