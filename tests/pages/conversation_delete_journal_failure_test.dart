@@ -138,10 +138,14 @@ Future<void> _pumpUi(WidgetTester tester) async {
   }
 }
 
-Future<void> _awaitSignal(WidgetTester tester, Future<void> signal) async {
-  await tester.runAsync(
-    () => signal.timeout(const Duration(seconds: 5)),
-  );
+Future<void> _awaitSignal(WidgetTester tester, Completer<void> signal) async {
+  for (var attempt = 0; attempt < 50 && !signal.isCompleted; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(signal.isCompleted, isTrue, reason: 'async operation did not finish');
 }
 
 Future<void> _deleteBySelectionMode(WidgetTester tester) async {
@@ -195,7 +199,7 @@ void main() {
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await _awaitSignal(tester, rollback.restored.future);
+      await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
@@ -227,7 +231,7 @@ void main() {
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await _awaitSignal(tester, rollback.restored.future);
+      await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
@@ -257,7 +261,7 @@ void main() {
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await _awaitSignal(tester, cleanupComplete.future);
+      await _awaitSignal(tester, cleanupComplete);
       await _pumpUi(tester);
 
       expect(attemptedPaths, [
@@ -296,7 +300,7 @@ void main() {
       await tester.pump();
       await tester.pumpWidget(const SizedBox.shrink());
       documentsPath.complete(root.path);
-      await _awaitSignal(tester, cleanupComplete.future);
+      await _awaitSignal(tester, cleanupComplete);
       await _pumpUi(tester);
 
       expect(tester.takeException(), isNull);
@@ -324,7 +328,7 @@ void main() {
       );
       addTearDown(rollback.close);
       await _deleteBySelectionMode(tester);
-      await _awaitSignal(tester, rollback.restored.future);
+      await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
@@ -352,7 +356,7 @@ void main() {
       );
       addTearDown(rollback.close);
       await _deleteBySelectionMode(tester);
-      await _awaitSignal(tester, rollback.restored.future);
+      await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
