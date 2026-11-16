@@ -22,6 +22,11 @@ Future<void> _pumpUntil(
     );
     await tester.pump(const Duration(milliseconds: 50));
   }
+  expect(
+    condition(),
+    isTrue,
+    reason: 'Timed out waiting for the log viewer to reach the expected state.',
+  );
 }
 
 void main() {
@@ -185,7 +190,8 @@ void main() {
           if (call.method == 'listLogs') {
             listCalls++;
             if (listCalls == 1) return <String>[];
-            throw PlatformException(code: 'list_failed');
+            if (listCalls == 2) throw PlatformException(code: 'list_failed');
+            return <String>[];
           }
           if (call.method == 'listLogMetadata') return <Map<String, Object>>[];
           if (call.method == 'deleteLog') return false;
