@@ -240,6 +240,7 @@ extension _ChatPageEditingExt on _ChatPageState {
           newAttachments,
           historyForRequestPrefix: List<ChatMessage>.from(_history.take(index)),
           onUserMessageCreated: (id) => replacementUserMessageId = id,
+          allowDuringHistoryModification: true,
         );
       } catch (_) {
         await _restoreVisibleSuffix(
@@ -371,6 +372,21 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   Future<void> _deleteMessage(String messageId) async {
+    if (_isModifyingHistory) return;
+    final activeId = ref.read(activeConversationIdProvider);
+    // A send reserves its conversation before its first await. Let an
+    // admitted send finish before snapshotting history for deletion rollback.
+    if (activeId != null && _pendingSendConvIds.contains(activeId)) return;
+    _isModifyingHistory = true;
+    try {
+      await _deleteMessageWhileModifyingHistory(messageId);
+    } finally {
+      _isModifyingHistory = false;
+      _scheduleReloadAfterBlockingOperation();
+    }
+  }
+
+  Future<void> _deleteMessageWhileModifyingHistory(String messageId) async {
     // Prevent deleting the currently streaming message — the streaming loop
     // relies on _chatSegments entries for this
     // message, and removing them mid-stream would cause null-assert crashes.
@@ -391,6 +407,47 @@ extension _ChatPageEditingExt on _ChatPageState {
       return;
     }
     final msg = _history[index];
+    final historyBeforeDelete = List<ChatMessage>.from(_history);
+
+    Future<void> restoreHistory() async {
+      var persisted = false;
+      try {
+        persisted = activeId != null &&
+            await _saveMessages(
+              capturedConvId: activeId,
+              historyOverride: historyBeforeDelete,
+              requireNotifierPersistence: true,
+            );
+      } finally {
+        if (mounted &&
+            ref.read(activeConversationIdProvider) == activeId &&
+            !_history.any((message) => message.id == messageId)) {
+          setState(() {
+            _history.insert(index, msg);
+            if (index < _loadedUpToIndex) _loadedUpToIndex++;
+          });
+        }
+      }
+      if (!persisted) {
+        throw StateError('Failed to persist deleted message restoration');
+      }
+    }
+
+    Future<void> discardMessageFromView() async {
+      if (!mounted || ref.read(activeConversationIdProvider) != activeId) return;
+      setState(() {
+        _chatSegments.remove(messageId);
+        _reasoningContents.remove(messageId);
+        _finalizedMessages.remove(messageId);
+        _isReasoningCompletedForMsg.remove(messageId);
+        _messageKeys.remove(messageId);
+      });
+      final controllerMessage =
+          _controller?.messages.where((message) => message.id == messageId).firstOrNull;
+      if (controllerMessage != null) {
+        await _controller?.removeMessage(controllerMessage);
+      }
+    }
 
     final attachmentsToDelete = <Attachment>[];
     for (final att in msg.attachments) {
@@ -406,9 +463,44 @@ extension _ChatPageEditingExt on _ChatPageState {
       }
     }
 
-    await AttachmentStorage.deleteFilesWithRollback(
-      attachmentsToDelete.map((att) => att.storagePath),
-    );
+    setState(() {
+      _history.removeAt(index);
+      // Adjust pagination state: if the deleted message was before the loaded
+      // region, shift _loadedUpToIndex to keep it pointing at the same messages.
+      if (index < _loadedUpToIndex && _loadedUpToIndex > 0) {
+        _loadedUpToIndex = _loadedUpToIndex > 0 ? _loadedUpToIndex - 1 : 0;
+      }
+      // 历史被截断：使进行中的加载失效，并同步清除其加载标志。
+      _isLoadingMore = false;
+      _loadMoreGeneration++;
+    });
+
+    // Commit history before deleting attachment bytes. A crash after the save
+    // can leave orphaned files, but persisted messages retain all their files.
+    if (!await _saveMessages(
+      capturedConvId: activeId,
+      requireNotifierPersistence: true,
+    )) {
+      await restoreHistory();
+      throw StateError('Failed to persist message deletion');
+    }
+
+    try {
+      await AttachmentStorage.deleteFilesWithRollback(
+        attachmentsToDelete.map((att) => att.storagePath),
+      );
+    } on AttachmentDeleteRollbackException {
+      // Some attachment bytes could not be restored. Keep the already-persisted
+      // history deletion so no message points at missing files.
+      await discardMessageFromView();
+      rethrow;
+    } catch (_) {
+      // The storage helper restores any partially deleted files. Restore the
+      // original history by conversation ID even if the user switched chats.
+      await restoreHistory();
+      rethrow;
+    }
+
     for (final att in attachmentsToDelete) {
       // 磁盘压缩缓存一并清理（派生缓存，best-effort：失败不影响
       // 消息删除）。缓存按（对话, hash）定位，isReferencedElsewhere
@@ -425,31 +517,8 @@ extension _ChatPageEditingExt on _ChatPageState {
       }
     }
 
-    setState(() {
-      _history.removeAt(index);
-      // Clean up cached maps for the deleted message to prevent memory leaks.
-      _chatSegments.remove(messageId);
-      _reasoningContents.remove(messageId);
-      _finalizedMessages.remove(messageId);
-      _isReasoningCompletedForMsg.remove(messageId);
-      _messageKeys.remove(messageId);
-      // Adjust pagination state: if the deleted message was before the loaded
-      // region, shift _loadedUpToIndex to keep it pointing at the same messages.
-      if (index < _loadedUpToIndex && _loadedUpToIndex > 0) {
-        _loadedUpToIndex = _loadedUpToIndex > 0 ? _loadedUpToIndex - 1 : 0;
-      }
-      // 历史被截断：使进行中的加载失效，并同步清除其加载标志。
-      _isLoadingMore = false;
-      _loadMoreGeneration++;
-    });
+    await discardMessageFromView();
 
-    final msgToRemove =
-        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
-    if (msgToRemove != null) {
-      await _controller?.removeMessage(msgToRemove);
-    }
-
-    _saveMessages();
   }
 
   void _confirmDeleteMessage(String messageId) {

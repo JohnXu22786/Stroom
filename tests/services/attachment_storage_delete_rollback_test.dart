@@ -44,4 +44,39 @@ void main() {
       expect(files['attachments/second.png'], [4, 5, 6]);
     },
   );
+
+  test(
+    'reports when failed attachment deletion cannot restore bytes',
+    () async {
+      final files = <String, Uint8List>{
+        'attachments/first.png': Uint8List.fromList([1, 2, 3]),
+        'attachments/second.png': Uint8List.fromList([4, 5, 6]),
+      };
+      AttachmentStorage.readFileOverrideForTesting = (path) async {
+        final bytes = files[path];
+        return bytes == null ? null : Uint8List.fromList(bytes);
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        files.remove(path);
+        if (path == 'attachments/second.png') {
+          throw StateError('delete failed');
+        }
+        return true;
+      };
+      AttachmentStorage.restoreFileOverrideForTesting = (path, bytes) async {
+        throw StateError('restore failed');
+      };
+
+      await expectLater(
+        AttachmentStorage.deleteFilesWithRollback(files.keys.toList()),
+        throwsA(
+          isA<AttachmentDeleteRollbackException>().having(
+            (error) => error.rollbackErrors,
+            'rollbackErrors',
+            hasLength(2),
+          ),
+        ),
+      );
+    },
+  );
 }

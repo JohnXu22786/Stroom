@@ -97,27 +97,38 @@ extension _ChatPagePersistenceExt on _ChatPageState {
   }
 
   /// 保存当前 `_history` 到对话；临时计时器状态由生成生命周期单独管理。
-  Future<void> _saveMessages({
+  Future<bool> _saveMessages({
     String? capturedConvId,
     Map<String, dynamic>? capturedTemporaryState,
+    List<ChatMessage>? historyOverride,
+    bool requireNotifierPersistence = false,
   }) async {
-    final historySnapshot = List<ChatMessage>.from(_history);
+    final historySnapshot = List<ChatMessage>.from(historyOverride ?? _history);
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-      if (convId == null) return;
-      await ref.read(conversationsProvider.notifier).updateMessages(
+      if (convId == null) return false;
+      final persisted = await ref.read(conversationsProvider.notifier).updateMessages(
         convId,
         [...historySnapshot],
       );
+      return persisted;
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
       debugPrint('_saveMessages via notifier failed: $e\n$s');
-      await AppLogService.error('ChatPage', '通过 notifier 保存消息失败, 尝试直接写入', e, s);
+      await AppLogService.error(
+        'ChatPage',
+        requireNotifierPersistence
+            ? '通过 notifier 持久化消息失败'
+            : '通过 notifier 保存消息失败, 尝试直接写入',
+        e,
+        s,
+      );
+      if (requireNotifierPersistence) return false;
       try {
         final prefs = await SharedPreferences.getInstance();
         final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-        if (convId == null) return;
+        if (convId == null) return false;
         var fallbackTemporaryState =
             capturedTemporaryState?['isTemporary'] == true;
         var fallbackTemporaryStateWasRead = false;
@@ -212,12 +223,14 @@ extension _ChatPagePersistenceExt on _ChatPageState {
                 );
               }
               final json = jsonEncode(list);
-              await prefs.setString('conversations', json);
+              if (!await prefs.setString('conversations', json)) {
+                throw StateError('SharedPreferences Tier A save returned false');
+              }
               await AppLogService.warning(
                 'ChatPage',
                 '通过直接写入 SharedPreferences 成功保存消息 (Tier A)',
               );
-              return;
+              return true;
             }
           }
         } catch (eA, sA) {
@@ -250,11 +263,14 @@ extension _ChatPagePersistenceExt on _ChatPageState {
             _copyTemporaryCountdownState(convMap, capturedTemporaryState);
           }
           final json = jsonEncode([convMap]);
-          await prefs.setString('conversations', json);
+          if (!await prefs.setString('conversations', json)) {
+            throw StateError('SharedPreferences Tier B save returned false');
+          }
           await AppLogService.error(
             'ChatPage',
             '通过直接写入 SharedPreferences 成功保存消息 (Tier B - 仅当前对话)',
           );
+          return true;
         } catch (eB, sB) {
           debugPrint('_saveMessages Tier B failed: $eB\n$sB');
           await AppLogService.error(
@@ -269,6 +285,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         await AppLogService.error('ChatPage', '保存消息失败 (外层兜底)', eOuter, sOuter);
       }
     }
+    return false;
   }
 
   Future<StreamResult?> _onMessageSend(
@@ -276,7 +293,9 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     List<Attachment> attachments, {
     List<ChatMessage>? historyForRequestPrefix,
     void Function(String messageId)? onUserMessageCreated,
+    bool allowDuringHistoryModification = false,
   }) async {
+    if (_isModifyingHistory && !allowDuringHistoryModification) return null;
     // Guard: only block sending if THIS conversation is streaming,
     // not if another conversation happens to be streaming elsewhere.
     String? convId = ref.read(activeConversationIdProvider);

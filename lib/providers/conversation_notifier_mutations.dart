@@ -517,11 +517,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Replaces the message list of a conversation (e.g. after sending or
   /// loading a different conversation).
   ///
-  Future<void> updateMessages(
+  Future<bool> updateMessages(
     String conversationId,
     List<ChatMessage> messages,
   ) async {
-    if (!mounted) return;
+    if (!mounted) return false;
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
       List<String> removedMessageIds() {
@@ -629,8 +629,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     } else {
       _replaceMessages(conversationId, messages);
     }
-    if (!mounted) return;
-    await _persistNow();
+    if (!mounted) return false;
+    return _persistNowChecked();
   }
 
   /// Queues a supersedable periodic stream checkpoint journal entry.
