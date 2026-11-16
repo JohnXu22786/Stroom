@@ -12,11 +12,16 @@ import 'package:stroom/services/backup_location_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
-Future<void> _pumpWithRealIo(WidgetTester tester) async {
-  await tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 50)),
-  );
-  await tester.pump();
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() condition,
+) async {
+  for (var attempt = 0; attempt < 300 && !condition(); attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+  }
 }
 
 void main() {
@@ -129,16 +134,19 @@ void main() {
           home: const LogViewerPage(),
         ),
       );
-      await tester.pump();
-      await _pumpWithRealIo(tester);
+      await _pumpUntil(tester, () => tester.any(find.text(fileName)));
       expect(find.text(fileName), findsOneWidget);
 
       await tester.tap(find.byTooltip('Delete'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.pump();
-      await _pumpWithRealIo(tester);
+      await _pumpUntil(
+        tester,
+        () =>
+            !tester.any(find.text(fileName)) &&
+            tester.any(find.text('app_2026-01-01-11.log')),
+      );
 
       expect(fallbackLog.existsSync(), isFalse);
       expect(remainingLog.existsSync(), isTrue);
@@ -194,16 +202,14 @@ void main() {
           home: const LogViewerPage(),
         ),
       );
-      await tester.pump();
-      await _pumpWithRealIo(tester);
+      await _pumpUntil(tester, () => tester.any(find.text(fileName)));
       expect(find.text(fileName), findsOneWidget);
 
       await tester.tap(find.byTooltip('删除'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, '删除'));
-      await tester.pump();
-      await _pumpWithRealIo(tester);
+      await _pumpUntil(tester, () => tester.any(find.text('无法确认删除结果。')));
 
       expect(fallbackLog.existsSync(), isFalse);
       expect(remainingLog.existsSync(), isTrue);
@@ -259,12 +265,11 @@ void main() {
           home: const LogViewerPage(),
         ),
       );
-      await tester.pump();
-      await _pumpWithRealIo(tester);
+      await _pumpUntil(tester, () => tester.any(find.text(fileName)));
       expect(find.text(fileName), findsOneWidget);
       await tester.tap(find.byTooltip('Delete'));
       await tester.pump();
-      await _pumpWithRealIo(tester);
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
       for (var attempt = 0; attempt < 5 && !deleteStarted; attempt++) {
         await tester.pump(const Duration(milliseconds: 20));
