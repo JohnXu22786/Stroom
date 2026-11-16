@@ -160,8 +160,8 @@ void main() {
       expect(prefs.getString('chat_configs'), isNull);
       expect(
         prefs.getKeys().where(
-          (key) => key.startsWith('provider_entries_corrupt_'),
-        ),
+              (key) => key.startsWith('provider_entries_corrupt_'),
+            ),
         isNotEmpty,
         reason: 'the corrupt current entry should remain recoverable',
       );
