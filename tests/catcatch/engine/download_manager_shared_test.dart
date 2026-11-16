@@ -369,6 +369,10 @@ void main() {
           RegExp(r'bytes=(\d+)-').firstMatch(range)![1]!,
         );
         request.response.statusCode = HttpStatus.partialContent;
+        request.response.headers.set(
+          HttpHeaders.contentRangeHeader,
+          'bytes $startByte-${contents.length - 1}/${contents.length}',
+        );
         request.response.write(contents.substring(startByte));
       } else {
         request.response.write(contents);
