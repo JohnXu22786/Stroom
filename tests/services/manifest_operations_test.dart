@@ -196,7 +196,8 @@ void main() {
     },
   );
 
-  test('native non-audio paths reject symbolic links outside storage', () async {
+  test('native non-audio paths reject symbolic links outside storage',
+      () async {
     final originalPathProvider = PathProviderPlatform.instance;
     final directory = await Directory.systemTemp.createTemp(
       'manifest-path-containment-test-',
