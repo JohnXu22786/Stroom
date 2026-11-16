@@ -23,6 +23,7 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/task_flow/services/task_flow_input_cleanup.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
@@ -150,6 +151,9 @@ Future<void> _pumpUntilCleanupSignal(
 ) async {
   for (var attempt = 0; attempt < 100; attempt++) {
     if (isReady()) return;
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
     await tester.pump(const Duration(milliseconds: 10));
   }
   if (isReady()) return;
@@ -450,7 +454,9 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await _pumpUntilCleanupSignal(
         tester,
-        () => deletedPaths.length == 2,
+        () =>
+            deletedPaths.length == 2 &&
+            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
         'dispose retries cleanup after the explicit removal fails',
       );
       await tester.pumpAndSettle();
@@ -514,7 +520,9 @@ void main() {
       await tester.pump();
       await _pumpUntilCleanupSignal(
         tester,
-        () => deletedPaths.length == 1,
+        () =>
+            deletedPaths.length == 1 &&
+            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
         'dispose should attempt cleanup before the next builder retries it',
       );
       await tester.pumpAndSettle();
@@ -528,7 +536,9 @@ void main() {
       );
       await _pumpUntilCleanupSignal(
         tester,
-        () => deletedPaths.length == 2,
+        () =>
+            deletedPaths.length == 2 &&
+            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
         'the next builder should retry the failed deletion',
       );
       await tester.pumpAndSettle();
@@ -591,7 +601,9 @@ void main() {
       await tester.pump();
       await _pumpUntilCleanupSignal(
         tester,
-        () => failingStore.writeAttempted,
+        () =>
+            failingStore.writeAttempted &&
+            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
         'disposal should attempt to persist cleanup before retaining fallback ownership',
       );
       await tester.pumpAndSettle();
@@ -607,7 +619,9 @@ void main() {
       );
       await _pumpUntilCleanupSignal(
         tester,
-        () => deletedPaths.length == 1,
+        () =>
+            deletedPaths.length == 1 &&
+            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
         'the next builder should retry cleanup held in process memory',
       );
       await tester.pumpAndSettle();
@@ -846,7 +860,9 @@ void main() {
       await tester.pump();
       await _pumpUntilCleanupSignal(
         tester,
-        () => deletedPaths.contains(copy.path),
+        () =>
+            deletedPaths.contains(copy.path) &&
+            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
         'leaving the run should delete its copied input',
       );
       await tester.pumpAndSettle();

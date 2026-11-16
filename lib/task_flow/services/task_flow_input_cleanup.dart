@@ -13,6 +13,9 @@ class TaskFlowInputCleanup {
   static final _activeOperations = <Future<void>>{};
   static Future<void> _pendingWrites = Future<void>.value();
 
+  @visibleForTesting
+  static int get activeOperationCountForTesting => _activeOperations.length;
+
   static Future<void> enqueueAll(Iterable<String> references) {
     final additions = references.toSet();
     if (additions.isEmpty) return Future<void>.value();
