@@ -96,6 +96,7 @@ Widget _app({required Widget home}) => ProviderScope(
           return notifier;
         }),
         selectedAssistantIdProvider.overrideWith((ref) => 'assistant'),
+        conversationsInitialLoadProvider.overrideWith((ref) async {}),
         conversationsProvider.overrideWith((ref) {
           final notifier = ConversationsNotifier(ref);
           notifier.state = [_conversation()];
@@ -110,15 +111,21 @@ Widget _app({required Widget home}) => ProviderScope(
       ),
     );
 
+Future<void> _pumpUi(WidgetTester tester) async {
+  for (var frame = 0; frame < 3; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 Future<void> _deleteBySelectionMode(WidgetTester tester) async {
   await tester.tap(find.byIcon(Icons.checklist));
-  await tester.pumpAndSettle();
+  await _pumpUi(tester);
   await tester.tap(find.byType(Checkbox).first);
-  await tester.pumpAndSettle();
+  await _pumpUi(tester);
   await tester.tap(find.byIcon(Icons.delete).first);
-  await tester.pumpAndSettle();
+  await _pumpUi(tester);
   await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-  await tester.pumpAndSettle();
+  await _pumpUi(tester);
 }
 
 void main() {
@@ -150,13 +157,13 @@ void main() {
       };
 
       await tester.pumpWidget(_app(home: const TopicSelectionPage()));
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.text('Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
@@ -175,13 +182,13 @@ void main() {
       };
 
       await tester.pumpWidget(_app(home: const ConversationsPage()));
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.text('Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
@@ -203,13 +210,13 @@ void main() {
       };
 
       await tester.pumpWidget(_app(home: const ConversationsPage()));
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.text('Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
 
       expect(attemptedPaths, [
         'attachments/file.txt',
@@ -235,17 +242,17 @@ void main() {
       };
 
       await tester.pumpWidget(_app(home: const ConversationsPage()));
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.text('Delete').last);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
       await tester.pump();
 
       await tester.pumpWidget(const SizedBox.shrink());
       documentsPath.complete(root.path);
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
 
       expect(tester.takeException(), isNull);
       expect(deletedPaths, ['attachments/file.txt', 'attachments/second.txt']);
@@ -264,7 +271,7 @@ void main() {
       };
 
       await tester.pumpWidget(_app(home: const TopicSelectionPage()));
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await _deleteBySelectionMode(tester);
 
       expect(deletedPaths, isEmpty);
@@ -284,7 +291,7 @@ void main() {
       };
 
       await tester.pumpWidget(_app(home: const ConversationsPage()));
-      await tester.pumpAndSettle();
+      await _pumpUi(tester);
       await _deleteBySelectionMode(tester);
 
       expect(deletedPaths, isEmpty);
