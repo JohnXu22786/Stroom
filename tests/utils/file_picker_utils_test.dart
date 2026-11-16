@@ -90,6 +90,38 @@ void main() {
     expect(await File(paths[1]).readAsBytes(), [1, 2, 3]);
   });
 
+  test('image, video, and text exports preserve same-named destination files',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('batch_export_');
+    addTearDown(() => directory.delete(recursive: true));
+
+    final names = <(String, String)>[
+      ('photo.jpg', 'photo (1).jpg'),
+      ('clip.mp4', 'clip (1).mp4'),
+      ('notes.txt', 'notes (1).txt'),
+    ];
+    for (final (name, suffixedName) in names) {
+      final existing = File('${directory.path}/$name');
+      await existing.writeAsString('keep $name');
+      final outputPaths = await resolveNonClobberingExportPaths(
+        files: [name],
+        directory: directory.path,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
+
+      expect(outputPaths.single, endsWith(suffixedName));
+      await writeUserVisibleExportFile(
+        outputPaths.single,
+        Uint8List.fromList('new $name'.codeUnits),
+      );
+
+      expect(await existing.readAsString(), 'keep $name');
+      expect(await File(outputPaths.single).readAsString(), 'new $name');
+    }
+  });
+
   test('desktop save applies the extension filter and writes selected bytes',
       () async {
     final directory = await Directory.systemTemp.createTemp('picker_save_');

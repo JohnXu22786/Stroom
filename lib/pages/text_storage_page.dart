@@ -357,13 +357,24 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final selectedFiles = ids
           .map((id) => records.firstWhere((record) => record.id == id))
           .toList();
-      validateUserVisibleExportPaths(
-        files: selectedFiles.map(
-          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
-        ),
-      );
+      final selectedPaths = selectedFiles
+          .map(
+            (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+          )
+          .toList();
+      validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         final content = await TextManifest.readText(file.storagePath);
         if (content == null) continue;
 
@@ -377,10 +388,13 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           final data = Uint8List.fromList(utf8.encode(content));
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsString(content);
+          await writeUserVisibleExportFile(
+            outputPath,
+            Uint8List.fromList(utf8.encode(content)),
+          );
         }
         exportedCount++;
       }
