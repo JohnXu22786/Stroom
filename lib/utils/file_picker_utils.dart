@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -5,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:path/path.dart' as p;
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// Opens a save dialog filtered to [extensions] and writes [bytes] to the
@@ -89,9 +91,8 @@ void validateUserVisibleExportPaths({
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
     if (segments.any(
-      (segment) => reservedWindowsName.hasMatch(
-        segment.split(RegExp(r'[.:]')).first,
-      ),
+      (segment) =>
+          reservedWindowsName.hasMatch(segment.split(RegExp(r'[.:]')).first),
     )) {
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
@@ -154,6 +155,85 @@ void validateUserVisibleExportPaths({
       throw StateError('Export file conflicts with a folder path: $filePath');
     }
   }
+}
+
+/// Selects filesystem destinations that do not replace existing files.
+///
+/// Existing destinations receive a numbered suffix before the extension,
+/// while all paths in [files] are reserved up front to keep a batch export
+/// from assigning two files the same destination.
+Future<List<String>> resolveNonClobberingExportPaths({
+  required Iterable<String> files,
+  required String directory,
+  Iterable<String> folders = const [],
+  required Future<bool> Function(String path) pathExists,
+}) async {
+  final paths = files.toList();
+  final folderPaths = folders.toList();
+  validateUserVisibleExportPaths(files: paths, folders: folderPaths);
+
+  final inputPaths = paths.map((path) => path.toLowerCase()).toSet();
+  final reservedFolderPaths = folderPaths
+      .where((path) => path.isNotEmpty)
+      .map((path) => path.toLowerCase())
+      .toSet();
+  final reserved = <String>{};
+  final resolved = <String>[];
+
+  bool conflictsWithPlannedPath(String candidate, String originalPath) {
+    final candidateKey = candidate.toLowerCase();
+    for (final plannedPath in {...inputPaths, ...reserved}) {
+      if (candidateKey == plannedPath &&
+          candidate == originalPath &&
+          inputPaths.contains(plannedPath)) {
+        continue;
+      }
+      if (candidateKey == plannedPath ||
+          candidateKey.startsWith('$plannedPath/') ||
+          plannedPath.startsWith('$candidateKey/')) {
+        return true;
+      }
+    }
+    for (final folderPath in reservedFolderPaths) {
+      if (candidateKey == folderPath ||
+          folderPath.startsWith('$candidateKey/')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (final path in paths) {
+    final parent = p.posix.dirname(path);
+    final basename = p.posix.basename(path);
+    final extension = p.posix.extension(basename);
+    final stem = extension.isEmpty
+        ? basename
+        : basename.substring(0, basename.length - extension.length);
+    var candidate = path;
+    var suffix = 1;
+    while (true) {
+      final candidateKey = candidate.toLowerCase();
+      final candidatePath = p.joinAll([directory, ...candidate.split('/')]);
+      if (!conflictsWithPlannedPath(candidate, path) &&
+          !await pathExists(candidatePath)) {
+        reserved.add(candidateKey);
+        resolved.add(candidatePath);
+        break;
+      }
+      final name = '$stem ($suffix)$extension';
+      candidate = parent == '.' ? name : p.posix.join(parent, name);
+      suffix++;
+    }
+  }
+  return resolved;
+}
+
+/// Writes an export only when [path] does not already exist.
+Future<void> writeUserVisibleExportFile(String path, Uint8List bytes) async {
+  final file = File(path);
+  await file.create(exclusive: true);
+  await file.writeAsBytes(bytes);
 }
 
 /// Builds a portable archive using the logical paths shown in Stroom.

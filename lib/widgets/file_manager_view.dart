@@ -183,6 +183,11 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   /// 返回非 null 的目录会被传递给后续导出，避免混合选择时弹出两次目录选择。
   final Future<String?> Function(List<String> ids, String targetDirectory)?
       onExportFiles;
+  final Future<String?> Function(
+    List<String> ids,
+    String targetDirectory,
+    List<String> selectedFolders,
+  )? onExportFilesWithFolders;
   final Future<String?> Function(List<String> names, String targetDirectory)?
       onExportFolders;
 
@@ -239,6 +244,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onMoveFolders,
     required this.onExportFile,
     this.onExportFiles,
+    this.onExportFilesWithFolders,
     this.onExportFolders,
     this.userVisibleExportPathBuilder,
     this.onExportFolder,
@@ -2118,8 +2124,16 @@ class _FileManagerViewState<T extends FileRecord>
     String? chosenDir;
 
     // Export files
-    if (adjustedFileIds.isNotEmpty && widget.onExportFiles != null) {
-      chosenDir = await widget.onExportFiles!(adjustedFileIds, '');
+    if (adjustedFileIds.isNotEmpty &&
+        (widget.onExportFilesWithFolders != null ||
+            widget.onExportFiles != null)) {
+      chosenDir = widget.onExportFilesWithFolders != null
+          ? await widget.onExportFilesWithFolders!(
+              adjustedFileIds,
+              '',
+              topLevelFolders,
+            )
+          : await widget.onExportFiles!(adjustedFileIds, '');
       if (chosenDir == null) return;
     }
 

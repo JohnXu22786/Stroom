@@ -50,6 +50,46 @@ void main() {
     selector_platform.FileSelectorPlatform.instance = originalFileSelector;
   });
 
+  test('file exports keep free names and reserve collision-free suffixes',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('tts_export_');
+    addTearDown(() => directory.delete(recursive: true));
+    final existing = File('${directory.path}/speech.wav');
+    await existing.writeAsBytes([9, 8, 7]);
+    final existingFolder = Directory('${directory.path}/other.wav');
+    await existingFolder.create();
+
+    final paths = await resolveNonClobberingExportPaths(
+      files: [
+        'speech.wav',
+        'other.wav',
+        'speech (1).wav/child.wav',
+        'plain.wav',
+      ],
+      directory: directory.path,
+      folders: ['other (1).wav'],
+      pathExists: (path) async =>
+          await FileSystemEntity.type(path, followLinks: false) !=
+          FileSystemEntityType.notFound,
+    );
+
+    expect(paths, [
+      '${directory.path}${Platform.pathSeparator}speech (2).wav',
+      '${directory.path}${Platform.pathSeparator}other (2).wav',
+      '${directory.path}${Platform.pathSeparator}speech (1).wav'
+          '${Platform.pathSeparator}child.wav',
+      '${directory.path}${Platform.pathSeparator}plain.wav',
+    ]);
+
+    await expectLater(
+      writeUserVisibleExportFile(existing.path, Uint8List.fromList([1, 2, 3])),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await existing.readAsBytes(), [9, 8, 7]);
+    await writeUserVisibleExportFile(paths[1], Uint8List.fromList([1, 2, 3]));
+    expect(await File(paths[1]).readAsBytes(), [1, 2, 3]);
+  });
+
   test('desktop save applies the extension filter and writes selected bytes',
       () async {
     final directory = await Directory.systemTemp.createTemp('picker_save_');
