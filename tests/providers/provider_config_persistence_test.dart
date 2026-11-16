@@ -22,6 +22,19 @@ class _FailingProviderCorruptBackupStore
   }
 }
 
+class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
+  _FailingProviderEntriesStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == 'flutter.provider_entries') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -331,6 +344,38 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('chat_configs'), isNull);
     });
+  });
+
+  test('provider update surfaces a failed persistence write', () async {
+    const savedEntries = '[{"id":"existing_llm","type":"llm",'
+        '"name":"Before","configs":[]}]';
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    SharedPreferencesStorePlatform.instance =
+        _FailingProviderEntriesStore({
+      'flutter.provider_entries': savedEntries,
+    });
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      await expectLater(
+        notifier.update(
+          'existing_llm',
+          ProviderEntry(
+            id: 'existing_llm',
+            type: 'llm',
+            name: 'After',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), savedEntries);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
   });
 
   group('built-in provider display localization', () {

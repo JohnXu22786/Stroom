@@ -485,7 +485,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> update(
     String id,
     ProviderEntry updated, {
-    bool requirePersistence = false,
+    bool requirePersistence = true,
   }) async {
     state = ProviderEntriesState(
       entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
