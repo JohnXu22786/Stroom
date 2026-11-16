@@ -487,13 +487,24 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final selectedFiles = ids
           .map((id) => records.firstWhere((record) => record.id == id))
           .toList();
-      validateUserVisibleExportPaths(
-        files: selectedFiles.map(
-          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
-        ),
-      );
+      final selectedPaths = selectedFiles
+          .map(
+            (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+          )
+          .toList();
+      validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         final data = await ImageManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -506,10 +517,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         if (useArchive) {
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
+          await writeUserVisibleExportFile(outputPath, data);
         }
         exportedCount++;
       }
