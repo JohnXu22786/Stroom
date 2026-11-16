@@ -51,8 +51,8 @@ void main() {
       expect(await attemptedWrite!.exists(), isFalse);
       expect(
         directory.listSync().whereType<File>().where(
-          (file) => file.path.endsWith('.apkg'),
-        ),
+              (file) => file.path.endsWith('.apkg'),
+            ),
         isEmpty,
       );
     },

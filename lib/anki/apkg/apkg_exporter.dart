@@ -65,9 +65,9 @@ class AnkiApkgExporter {
     // Write to downloads directory
     final dlDir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(
-      RegExp(r'[:.]'),
-      '-',
-    );
+          RegExp(r'[:.]'),
+          '-',
+        );
     final outPath = p.join(dlDir.path, 'stroom_anki_$timestamp.apkg');
     Directory? tempDir;
     try {
