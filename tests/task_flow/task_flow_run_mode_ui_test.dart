@@ -770,6 +770,8 @@ void main() {
     testWidgets('leaving an unsubmitted file run removes its copied input', (
       tester,
     ) async {
+      await TaskFlowInputCleanup.resetForTesting();
+      SharedPreferences.setMockInitialValues({});
       final directory = Directory.systemTemp.createTempSync('flow_file_exit_');
       final source = File('${directory.path}/notes.pdf')
         ..writeAsStringSync('report');

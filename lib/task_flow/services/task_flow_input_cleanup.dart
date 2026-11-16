@@ -79,6 +79,12 @@ class TaskFlowInputCleanup {
     await _pendingWrites;
   }
 
+  @visibleForTesting
+  static Future<void> resetForTesting() async {
+    await waitForIdleForTesting();
+    _inMemoryPendingReferences.clear();
+  }
+
   static Future<void> _track(Future<void> operation) {
     _activeOperations.add(operation);
     operation.then(
