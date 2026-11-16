@@ -193,7 +193,9 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     try {
       // Try to save to a temp file and open with system handler
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, att.fileName));
+      final tempFile = File(
+        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      );
       await tempFile.writeAsBytes(data);
       final uri = Uri.file(tempFile.path);
       if (await canLaunchUrl(uri)) {
@@ -214,7 +216,9 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, att.fileName));
+      final tempFile = File(
+        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      );
       await tempFile.writeAsBytes(data);
       filePath = tempFile.path;
     } catch (e) {
@@ -238,7 +242,9 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, att.fileName));
+      final tempFile = File(
+        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      );
       await tempFile.writeAsBytes(data);
       filePath = tempFile.path;
     } catch (e) {
