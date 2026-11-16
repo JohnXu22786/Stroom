@@ -61,19 +61,28 @@ void main() {
     expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
   });
 
-  test('failed queue persistence prevents deleting the input', () async {
-    SharedPreferencesStorePlatform.instance = _FailingStringListStore();
-    var deleteAttempted = false;
-    AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-      deleteAttempted = true;
-      return true;
-    };
+  test(
+    'failed queue persistence retains ownership for a later retry',
+    () async {
+      SharedPreferencesStorePlatform.instance = _FailingStringListStore();
+      final deleted = <String>[];
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleted.add(path);
+        return true;
+      };
 
-    await expectLater(
-      TaskFlowInputCleanup.enqueueAll(['attachments/input.pdf']),
-      throwsA(isA<StateError>()),
-    );
+      await expectLater(
+        TaskFlowInputCleanup.enqueueAll(['attachments/input.pdf']),
+        throwsA(isA<StateError>()),
+      );
 
-    expect(deleteAttempted, isFalse);
-  });
+      expect(deleted, isEmpty);
+
+      SharedPreferences.setMockInitialValues({});
+      await TaskFlowInputCleanup.retryPending();
+
+      expect(deleted, ['attachments/input.pdf']);
+      expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
+    },
+  );
 }

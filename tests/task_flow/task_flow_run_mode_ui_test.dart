@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import '../fake_file_picker.dart';
 
@@ -34,6 +35,18 @@ class _Documents extends PathProviderPlatform {
 
   @override
   Future<String> getApplicationDocumentsPath() async => path;
+}
+
+class _FailingStringListStore extends InMemorySharedPreferencesStore {
+  _FailingStringListStore() : super.empty();
+
+  bool writeAttempted = false;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (valueType == 'StringList') writeAttempted = true;
+    return false;
+  }
 }
 
 class _InputPicker extends FilePickerPlatform {
@@ -515,6 +528,82 @@ void main() {
 
       expect(deletedPaths, hasLength(2));
       expect(deletedPaths.last, deletedPaths.first);
+      expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
+    });
+
+    testWidgets('failed queue write is retried by the next builder',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final directory =
+          Directory.systemTemp.createTempSync('flow_queue_failure_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('report');
+      final originalPicker = FilePickerPlatform.instance;
+      final originalDocuments = PathProviderPlatform.instance;
+      FilePickerPlatform.instance = _InputPicker(source.path);
+      PathProviderPlatform.instance = _Documents(directory.path);
+      final deletedPaths = <String>[];
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deletedPaths.add(path);
+        return true;
+      };
+      addTearDown(() {
+        AttachmentStorage.resetOverridesForTesting();
+        FilePickerPlatform.instance = originalPicker;
+        PathProviderPlatform.instance = originalDocuments;
+        directory.deleteSync(recursive: true);
+      });
+
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
+      );
+      await tester.runAsync(() async {
+        await tester.tap(find.text('选择文件（可多选）'));
+        final storage = Directory('${directory.path}/attachments');
+        for (var attempt = 0; attempt < 100; attempt++) {
+          if (storage.existsSync() &&
+              storage.listSync().whereType<File>().any(
+                    (file) => file.lengthSync() == 6,
+                  )) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        fail('The selected document was not copied into app storage');
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('notes.pdf'), findsOneWidget);
+
+      final failingStore = _FailingStringListStore();
+      SharedPreferencesStorePlatform.instance = failingStore;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        for (var attempt = 0; attempt < 100 && !failingStore.writeAttempted;
+            attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      });
+      expect(failingStore.writeAttempted, isTrue);
+      expect(deletedPaths, isEmpty);
+
+      SharedPreferences.setMockInitialValues({});
+      expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
+      );
+      await tester.runAsync(() async {
+        for (var attempt = 0; attempt < 100 && deletedPaths.isEmpty; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+
+      expect(deletedPaths, hasLength(1));
       expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
     });
 

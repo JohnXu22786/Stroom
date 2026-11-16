@@ -8,25 +8,29 @@ class TaskFlowInputCleanup {
   TaskFlowInputCleanup._();
 
   static const _pendingKey = 'task_flow_pending_input_cleanup';
+  // Keep ownership if preferences reject the durable write, for a later builder.
+  static final _inMemoryPendingReferences = <String>{};
   static Future<void> _pendingWrites = Future<void>.value();
 
   static Future<void> enqueueAll(Iterable<String> references) async {
     final additions = references.toSet();
     if (additions.isEmpty) return;
+    _inMemoryPendingReferences.addAll(additions);
     await _updatePending((pending) => pending..addAll(additions));
+    _inMemoryPendingReferences.removeAll(additions);
   }
 
   static Future<void> retryPending() async {
-    late final List<String> pending;
+    final pending = Set<String>.of(_inMemoryPendingReferences);
     try {
-      pending = await pendingReferencesForTesting();
+      pending.addAll(await pendingReferencesForTesting());
     } catch (error) {
       debugPrint('Failed to load unsubmitted flow input cleanup: $error');
-      return;
     }
     for (final reference in pending) {
       try {
         await AttachmentStorage.deleteFile(reference);
+        _inMemoryPendingReferences.remove(reference);
         await _updatePending((references) => references..remove(reference));
       } catch (error) {
         debugPrint('Failed to discard unsubmitted flow input: $error');
