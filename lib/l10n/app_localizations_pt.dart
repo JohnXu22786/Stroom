@@ -10675,6 +10675,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appLogDelete => 'Excluir';
 
   @override
+  String get appLogDeleteUnconfirmed =>
+      'Não foi possível confirmar a exclusão.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirmar exclusão';
 
   @override
@@ -22813,6 +22817,10 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get appLogDelete => 'Excluir';
+
+  @override
+  String get appLogDeleteUnconfirmed =>
+      'Não foi possível confirmar a exclusão.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirmar exclusão';

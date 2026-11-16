@@ -2895,6 +2895,7 @@
   "appLogWillBeCreated": "アプリの実行中にログが生成される",
   "appLogExport": "輸出",
   "appLogDelete": "消去",
+  "appLogDeleteUnconfirmed": "削除を確認できませんでした。",
   "appLogConfirmDeleteTitle": "削除の確認",
   "appLogConfirmDeleteMessage": "ログファイル「{fileName}」を削除しますか?",
   "appLogCancel": "キャンセル",

@@ -96,12 +96,14 @@ class _LogFileInfo {
 /// 内存中的日志条目。
 class _LogEntry {
   final DateTime timestamp;
+  final int sequence;
   final LogLevel level;
   final String source;
   final String message;
 
   _LogEntry({
     required this.timestamp,
+    required this.sequence,
     required this.level,
     required this.source,
     required this.message,
@@ -246,6 +248,13 @@ class AppLogService {
   /// 内存日志缓冲区。
   static final List<_LogEntry> _buffer = [];
 
+  /// Allows log grouping across hourly boundaries to be tested deterministically.
+  static DateTime? debugTimestampOverride;
+
+  /// Keeps distinct log entries distinguishable when multiple writes occur
+  /// during the same clock tick.
+  static int _nextLogSequence = 0;
+
   /// 定时刷入计时器（每 10 秒）。
   static Timer? _flushTimer;
 
@@ -310,9 +319,12 @@ class AppLogService {
     await _ensurePolicyLoaded();
     if (level.severity < _policy.minimumLevel.severity) return;
 
+    final timestamp = debugTimestampOverride ?? DateTime.now();
+    final sequence = ++_nextLogSequence;
     _buffer.add(
       _LogEntry(
-        timestamp: DateTime.now(),
+        timestamp: timestamp,
+        sequence: sequence,
         level: level,
         source: source,
         message: message,
@@ -346,12 +358,13 @@ class AppLogService {
     _buffer.clear();
 
     try {
-      // 检查是否使用 SAF 模式（Android）
-      final bool useSaf = await _isSafMode();
+      // Android log writes use BackupLocationManager for SAF and local fallback.
+      final bool useSaf = await _usesBackupLocationManager();
 
       if (useSaf) {
         // SAF 模式：通过 BackupLocationManager 写入日志
-        await _flushViaSaf(entries);
+        final failedEntries = await _flushViaSaf(entries);
+        if (failedEntries.isNotEmpty) _buffer.insertAll(0, failedEntries);
       } else {
         // 标准模式：直接使用 dart:io
         await _flushViaDartIO(entries);
@@ -367,17 +380,17 @@ class AppLogService {
     }
   }
 
-  /// 检查是否使用 SAF 模式（Android）。
-  static Future<bool> _isSafMode() async {
+  /// Whether Android log operations should use BackupLocationManager.
+  static Future<bool> _usesBackupLocationManager() async {
     try {
-      return await BackupLocationManager.isUsingSafMode();
+      return BackupLocationManager.shouldUseManagedLogStorage();
     } catch (_) {
       return false;
     }
   }
 
   /// SAF 模式刷入：通过 BackupLocationManager 写入日志到 SAF 目录。
-  static Future<void> _flushViaSaf(List<_LogEntry> entries) async {
+  static Future<List<_LogEntry>> _flushViaSaf(List<_LogEntry> entries) async {
     // 按小时分组 (YYYY-MM-DD-HH)
     final byHour = <String, List<_LogEntry>>{};
     for (final entry in entries) {
@@ -387,6 +400,7 @@ class AppLogService {
     }
 
     // 逐小时写入
+    final failedEntries = <_LogEntry>[];
     for (final group in byHour.entries) {
       final hourStr = group.key;
       final hourEntries = group.value;
@@ -394,15 +408,21 @@ class AppLogService {
 
       final sb = StringBuffer();
       for (final e in hourEntries) {
-        final ts = e.timestamp;
-        final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
-            '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
-        sb.writeln(
-            '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+        sb.writeln(_serializeEntry(e));
       }
 
-      await BackupLocationManager.writeLogContent(fileName, sb.toString());
+      try {
+        final written = await BackupLocationManager.writeLogContent(
+          fileName,
+          sb.toString(),
+        );
+        if (!written) failedEntries.addAll(hourEntries);
+      } catch (e) {
+        debugPrint('[AppLogService] 写入日志文件失败: $fileName: $e');
+        failedEntries.addAll(hourEntries);
+      }
     }
+    return failedEntries;
   }
 
   /// dart:io 模式刷入：标准文件 I/O。
@@ -428,15 +448,30 @@ class AppLogService {
 
       final sb = StringBuffer();
       for (final e in hourEntries) {
-        final ts = e.timestamp;
-        final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
-            '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
-        sb.writeln(
-            '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+        sb.writeln(_serializeEntry(e));
       }
 
       await logFile.writeAsString(sb.toString(), mode: FileMode.append);
     }
+  }
+
+  static String _serializeEntry(_LogEntry entry) {
+    final ts = entry.timestamp;
+    final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+        '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}.'
+        '${ts.millisecond.toString().padLeft(3, '0')}'
+        '${(ts.microsecond % 1000).toString().padLeft(3, '0')}';
+    final continuationHeader = RegExp(
+      r'^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{6})?\] '
+      r'\[(?:DEBUG|INFO|WARN|ERROR)\] \[[^\]\r\n]*\] '
+      r'(?:\[seq:\d+\] )?',
+    );
+    final message = entry.message
+        .split('\n')
+        .map((line) => continuationHeader.hasMatch(line) ? '  $line' : line)
+        .join('\n');
+    return '[$timestamp] [${entry.level.label}] [${entry.source}] '
+        '[seq:${entry.sequence}] $message';
   }
 
   /// 等待所有待写入日志刷入文件。
@@ -452,6 +487,8 @@ class AppLogService {
     _flushTimer?.cancel();
     _flushTimer = null;
     _buffer.clear();
+    debugTimestampOverride = null;
+    _nextLogSequence = 0;
     _cachedLogDir = null;
     _policy = const AppLogPolicy();
     _policyLoad = null;
@@ -558,7 +595,7 @@ class AppLogService {
   static Future<List<String>> listLogFiles() async {
     try {
       // SAF 模式通过 BackupLocationManager
-      if (await _isSafMode()) {
+      if (await _usesBackupLocationManager()) {
         final files = await BackupLocationManager.listLogFiles();
         files.sort();
         return files;
@@ -581,6 +618,19 @@ class AppLogService {
     }
   }
 
+  /// Deletes a log through the storage backend used to list and read it.
+  static Future<bool> deleteLogFile(String fileName) async {
+    try {
+      return await _deleteLogFile(
+        fileName,
+        useSaf: await _usesBackupLocationManager(),
+      );
+    } catch (e) {
+      debugPrint('[AppLogService] 删除日志文件失败 ($fileName): $e');
+      return false;
+    }
+  }
+
   /// 读取指定日志文件的内容。
   ///
   /// [fileName] 是文件名（如 `app_2024-01-01.log`）。
@@ -589,7 +639,7 @@ class AppLogService {
   static Future<String?> readLogFile(String fileName) async {
     try {
       // SAF 模式通过 BackupLocationManager
-      if (await _isSafMode()) {
+      if (await _usesBackupLocationManager()) {
         return await BackupLocationManager.readLogContent(fileName);
       }
 
@@ -605,14 +655,16 @@ class AppLogService {
       debugPrint('[AppLogService] 读取日志文件失败 ($fileName): $e');
       // 如果是因为文件损坏或其他 I/O 错误，记录更详细的信息
       try {
-        if (!await _isSafMode()) {
+        if (!await _usesBackupLocationManager()) {
           final logDir = await getLogDir();
           final filePath = p.join(logDir.path, fileName);
           final file = File(filePath);
           if (await file.exists()) {
             final fileSize = await file.length();
-            debugPrint('[AppLogService] 文件存在，大小: $fileSize 字节,'
-                ' 路径: $filePath');
+            debugPrint(
+              '[AppLogService] 文件存在，大小: $fileSize 字节,'
+              ' 路径: $filePath',
+            );
           }
         }
       } catch (_) {
@@ -646,7 +698,7 @@ class AppLogService {
 
     try {
       await _ensurePolicyLoaded();
-      final bool useSaf = await _isSafMode();
+      final bool useSaf = await _usesBackupLocationManager();
       final files = await _getLogFileInfo(useSaf: useSaf);
       final cutoff = DateTime.now().subtract(
         Duration(days: _policy.retentionDays),
@@ -675,9 +727,13 @@ class AppLogService {
         if (totalBytes <= maxBytes) break;
         if (file.name == currentName) continue;
         if (await _deleteLogFile(file.name, useSaf: useSaf)) {
-          totalBytes -= file.sizeBytes;
           debugPrint('[AppLogService] 按存储上限清理日志: ${file.name}');
         }
+        final currentFiles = await _getLogFileInfo(useSaf: useSaf);
+        totalBytes = currentFiles.fold<int>(
+          0,
+          (sum, currentFile) => sum + currentFile.sizeBytes,
+        );
       }
     } catch (e) {
       debugPrint('[AppLogService] 清理旧日志失败: $e');
@@ -687,7 +743,9 @@ class AppLogService {
   /// Read current log usage for the settings UI.
   static Future<AppLogStorageUsage> getStorageUsage() async {
     if (kIsWeb) return const AppLogStorageUsage(fileCount: 0, bytes: 0);
-    final files = await _getLogFileInfo(useSaf: await _isSafMode());
+    final files = await _getLogFileInfo(
+      useSaf: await _usesBackupLocationManager(),
+    );
     return AppLogStorageUsage(
       fileCount: files.length,
       bytes: files.fold<int>(0, (sum, file) => sum + file.sizeBytes),

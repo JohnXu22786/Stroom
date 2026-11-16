@@ -10536,6 +10536,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appLogDelete => 'Delete';
 
   @override
+  String get appLogDeleteUnconfirmed => 'Deletion could not be confirmed.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirm deletion';
 
   @override
@@ -22517,6 +22520,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get appLogDelete => 'Delete';
+
+  @override
+  String get appLogDeleteUnconfirmed => 'Deletion could not be confirmed.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirm deletion';

@@ -6069,6 +6069,7 @@
   "appLogWillBeCreated": "Les journaux sont générés pendant l’exécution de l’application",
   "appLogExport": "Exporter",
   "appLogDelete": "Supprimer",
+  "appLogDeleteUnconfirmed": "La suppression n’a pas pu être confirmée.",
   "appLogConfirmDeleteTitle": "Confirmer la suppression",
   "appLogConfirmDeleteMessage": "Supprimer le fichier journal \"{fileName}\" ?",
   "@appLogConfirmDeleteMessage": {

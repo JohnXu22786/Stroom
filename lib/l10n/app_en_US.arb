@@ -6069,6 +6069,7 @@
   "appLogWillBeCreated": "Logs are generated while the app is running",
   "appLogExport": "Export",
   "appLogDelete": "Delete",
+  "appLogDeleteUnconfirmed": "Deletion could not be confirmed.",
   "appLogConfirmDeleteTitle": "Confirm deletion",
   "appLogConfirmDeleteMessage": "Delete log file \"{fileName}\"?",
   "@appLogConfirmDeleteMessage": {

@@ -6067,6 +6067,7 @@
   "appLogWillBeCreated": "Protokolle werden erstellt, während die App läuft",
   "appLogExport": "Exportieren",
   "appLogDelete": "Löschen",
+  "appLogDeleteUnconfirmed": "Löschen konnte nicht bestätigt werden.",
   "appLogConfirmDeleteTitle": "Löschen bestätigen",
   "appLogConfirmDeleteMessage": "Protokolldatei „{fileName}“ löschen?",
   "@appLogConfirmDeleteMessage": {

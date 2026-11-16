@@ -260,6 +260,8 @@ jobs:
           gradle-version: '8.14'
       - name: Test standalone scheduling module
         run: gradle -p android/keep_alive_schedule test
+      - name: Test SAF log append module
+        run: gradle -p android/saf_log_content test
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:

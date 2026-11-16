@@ -3608,7 +3608,6 @@ abstract class AppLocalizations {
   /// Clickable marker for omitted text in a Request Body preview.
   String chatErrorDetailOmittedContentMarker(int count);
 
-
   /// No description provided for @chatAudioPreviewClose.
   ///
   /// In en, this message translates to:
@@ -17465,6 +17464,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete'**
   String get appLogDelete;
+
+  /// No description provided for @appLogDeleteUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion could not be confirmed.'**
+  String get appLogDeleteUnconfirmed;
 
   /// No description provided for @appLogConfirmDeleteTitle.
   ///

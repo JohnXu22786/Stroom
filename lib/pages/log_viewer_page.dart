@@ -218,32 +218,24 @@ class _LogViewerPageState extends State<LogViewerPage>
   }
 
   Future<void> _deleteLogFile(String fileName) async {
+    bool? deleted;
+    Object? deleteError;
     try {
-      final logDir = await AppLogService.getLogDir();
-      final file = File(p.join(logDir.path, fileName));
-      if (await file.exists()) {
-        await file.delete();
-        await _loadLogFiles();
-        await _loadPolicyAndUsage();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(context)!.appLogDeleteDone(fileName),
-              ),
-            ),
-          );
-        }
-      }
+      deleted = await AppLogService.deleteLogFile(fileName);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.appLogDeleteError(e)),
-          ),
-        );
-      }
+      deleteError = e;
     }
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final message = deleteError != null
+        ? l10n.appLogDeleteError(deleteError)
+        : deleted == true
+            ? l10n.appLogDeleteDone(fileName)
+            : l10n.appLogDeleteUnconfirmed;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+    await _loadLogFiles();
+    await _loadPolicyAndUsage();
   }
 
   /// 导出日志文件：复制文件路径到剪贴板，方便用户用系统资源管理器打开。
@@ -749,8 +741,9 @@ class _ParsedLogLine {
 /// 匹配日志行中的级别标记，如 `[ERROR]`。
 final RegExp _levelPattern = RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]');
 final RegExp _logEntryPattern = RegExp(
-  r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] '
-  r'\[(DEBUG|INFO|WARN|ERROR)\] \[([^\]]+)\]',
+  r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{6})?)\] '
+  r'\[(DEBUG|INFO|WARN|ERROR)\] \[([^\]]+)\]'
+  r'(?: \[seq:\d+\])?',
 );
 
 class _LogContentPageState extends State<LogContentPage> {
