@@ -197,7 +197,7 @@ void downloadAudioFile(Uint8List data, String fileName, String mimeType) {
   html.document.body!.children.add(anchor);
   anchor.click();
   html.document.body!.children.remove(anchor);
-  html.Url.revokeObjectUrl(url);
+  Timer(const Duration(seconds: 1), () => html.Url.revokeObjectUrl(url));
 }
 
 /// 从 URL 播放音频
