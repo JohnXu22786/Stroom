@@ -44,6 +44,12 @@ void main() {
                 : contents.length;
         request.response.statusCode =
             requestedRange == null ? HttpStatus.ok : HttpStatus.partialContent;
+        if (requestedRange != null) {
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes $startByte-${contents.length - 1}/${contents.length}',
+          );
+        }
         request.response.write(contents.substring(startByte));
         await request.response.close();
       });
