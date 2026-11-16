@@ -448,6 +448,7 @@ void main() {
         reason: 'dispose retries cleanup after the explicit removal fails',
       );
       expect(deletedPaths.last, deletedPaths.first);
+      await TaskFlowInputCleanup.waitForIdleForTesting();
     });
 
     testWidgets('failed dispose cleanup is retried by the next builder',
