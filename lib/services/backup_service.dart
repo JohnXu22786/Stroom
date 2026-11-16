@@ -2547,6 +2547,7 @@ class BackupService {
     bool useStartupPreferenceAdapter = false,
     bool skipAnkiMigrationMarkerInvalidation = false,
     bool skipAnkiSyncIndexClear = false,
+    bool skipRollbackSnapshot = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2671,17 +2672,20 @@ class BackupService {
         // Keep a streaming snapshot of the selected pre-restore state. If a
         // staged file cannot be published, the restore can roll back files,
         // manifest records, and selected preferences together.
-        rollbackDirectory = await Directory.systemTemp.createTemp(
-          '.stroom-restore-rollback-$pid-',
-        );
-        final rollbackArchivePath =
-            p.join(rollbackDirectory.path, 'pre-restore.zip');
-        await _createBackup(
-          outputPath: rollbackArchivePath,
-          selection: restoreSelection,
-          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-          skipMissingSelectedFiles: true,
-        );
+        String? rollbackArchivePath;
+        if (!skipRollbackSnapshot) {
+          rollbackDirectory = await Directory.systemTemp.createTemp(
+            '.stroom-restore-rollback-$pid-',
+          );
+          rollbackArchivePath =
+              p.join(rollbackDirectory.path, 'pre-restore.zip');
+          await _createBackup(
+            outputPath: rollbackArchivePath,
+            selection: restoreSelection,
+            useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+            skipMissingSelectedFiles: true,
+          );
+        }
 
         try {
           // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
@@ -2774,32 +2778,37 @@ class BackupService {
           onProgress?.call(1.0);
           return metadata.skippedLabels;
         } catch (restoreError, restoreStackTrace) {
-          final publishHook = beforeRestoreBinaryPublishForTesting;
-          beforeRestoreBinaryPublishForTesting = null;
+          if (skipRollbackSnapshot) {
+            Error.throwWithStackTrace(restoreError, restoreStackTrace);
+          }
+          Object? rollbackError;
+          StackTrace? rollbackStackTrace;
           try {
             await _restoreFromZipFile(
-              rollbackArchivePath,
+              rollbackArchivePath!,
               selection: restoreSelection,
               skipPostRestoreMigration: true,
               useStartupPreferenceAdapter: useStartupPreferenceAdapter,
               skipAnkiMigrationMarkerInvalidation: true,
               skipAnkiSyncIndexClear: true,
+              skipRollbackSnapshot: true,
             );
-          } catch (rollbackError, rollbackStackTrace) {
+          } catch (error, stackTrace) {
+            rollbackError = error;
+            rollbackStackTrace = stackTrace;
             retainRollbackSnapshot = true;
             debugPrint(
               '[BackupService] restore rollback failed; snapshot retained at '
-              '${rollbackDirectory.path}: $rollbackError\n'
+              '${rollbackDirectory!.path}: $rollbackError\n'
               '$rollbackStackTrace',
             );
-          } finally {
-            beforeRestoreBinaryPublishForTesting = publishHook;
           }
           if (retainRollbackSnapshot) {
             throw StateError(
-              'Restore failed: $restoreError; rollback also failed. '
+              'Restore failed: $restoreError; rollback also failed: '
+              '$rollbackError.\n$rollbackStackTrace '
               'The recovery archive is retained at '
-              '${p.join(rollbackDirectory.path, 'pre-restore.zip')}.',
+              '${p.join(rollbackDirectory!.path, 'pre-restore.zip')}.',
             );
           }
           Error.throwWithStackTrace(restoreError, restoreStackTrace);

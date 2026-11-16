@@ -229,6 +229,84 @@ void main() {
   );
 
   test(
+    'restoreBackup bounds a failed rollback and retains its recovery archive',
+    () async {
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await writeBackupFile(
+        'pictures',
+        'existing.jpg',
+        Uint8List.fromList(utf8.encode('existing image')),
+      );
+
+      final archive = buildV2Archive(
+        files: {'pictures/incoming.jpg': Uint8List.fromList([1])},
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+      final zipPath = await writeArchive(archive, 'rollback_failure.zip');
+
+      String? retainedArchivePath;
+      addTearDown(() async {
+        final path = retainedArchivePath;
+        if (path != null) {
+          final separator = path.lastIndexOf(Platform.pathSeparator);
+          if (separator >= 0) {
+            final rollbackDirectory = Directory(path.substring(0, separator));
+            if (await rollbackDirectory.exists()) {
+              await rollbackDirectory.delete(recursive: true);
+            }
+          }
+        }
+      });
+
+      var publishAttempts = 0;
+      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
+        publishAttempts++;
+        throw StateError(
+          publishAttempts == 1
+              ? 'injected primary restore failure'
+              : 'injected recovery restore failure',
+        );
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      late StateError failure;
+      try {
+        await BackupService.restoreBackup(zipPath, selection: selection);
+        fail('restoreBackup should report the failed restore and rollback');
+      } on StateError catch (error) {
+        failure = error;
+      }
+
+      expect(
+        publishAttempts,
+        2,
+        reason: 'only one rollback restore is allowed',
+      );
+      expect(failure.message, contains('injected primary restore failure'));
+      expect(failure.message, contains('injected recovery restore failure'));
+      final archivePath = RegExp(
+        r'The recovery archive is retained at (.+)\.',
+      ).firstMatch(failure.message)?.group(1);
+      expect(archivePath, isNotNull);
+      retainedArchivePath = archivePath!;
+      expect(await File(retainedArchivePath).exists(), isTrue);
+    },
+  );
+
+  test(
     'restoreFromBytes keeps selected data unchanged when a later binary write fails',
     () async {
       WebFileStore.enableTestMode();
