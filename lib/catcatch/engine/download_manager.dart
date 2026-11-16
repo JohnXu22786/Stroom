@@ -160,7 +160,17 @@ class DownloadManager {
         base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
     final tempPath = taskId.isEmpty
         ? '$outputPath${DefaultRules.tempFileSuffix}'
+        : '$outputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
+    final previousTaskPartialPath = taskId.isEmpty
+        ? null
         : '$requestedOutputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
+    final hasPreviousTaskPartialReservation =
+        !sameNameDownloadIsActive &&
+        previousTaskPartialPath != null &&
+        previousTaskPartialPath != tempPath;
+    final ownsPreviousTaskPartialReservation =
+        hasPreviousTaskPartialReservation &&
+        _reserveLegacyPartial(previousTaskPartialPath);
     final hasExistingPartialReservation =
         existingPath != null && existingPath != tempPath;
     final ownsExistingPartialReservation =
@@ -182,6 +192,12 @@ class DownloadManager {
     int startByte = 0;
     try {
       final tempFile = File(tempPath);
+      if (!await tempFile.exists() && ownsPreviousTaskPartialReservation) {
+        final previousTaskPartialFile = File(previousTaskPartialPath);
+        if (await previousTaskPartialFile.exists()) {
+          await previousTaskPartialFile.copy(tempPath);
+        }
+      }
       if (!await tempFile.exists() &&
           existingPath != null &&
           existingPath != tempPath &&
@@ -202,6 +218,8 @@ class DownloadManager {
     final dio = Dio();
     cancelToken?.whenCancel.then((_) => dio.close());
 
+    var downloadCompleted = false;
+    var transferCompleted = false;
     try {
       final mergedHeaders = Map<String, String>.from(
         DefaultRules.defaultHeaders,
@@ -263,9 +281,11 @@ class DownloadManager {
           await raf.close();
         }
 
+        transferCompleted = true;
         // The output path was reserved before the request, so publication
         // never deletes a file that existed before this download.
         await file.rename(outputPath);
+        downloadCompleted = true;
         if (canUseExistingPartial && existingPath != tempPath) {
           try {
             await File(existingPath).delete();
@@ -285,10 +305,34 @@ class DownloadManager {
       }
     } finally {
       dio.close();
-      _activeDownloadPaths.remove(outputPath);
+      if (!downloadCompleted && transferCompleted) {
+        try {
+          await File(tempPath).delete();
+        } catch (_) {}
+      } else if (!downloadCompleted && _pathExists(tempPath)) {
+        if (ownsPreviousTaskPartialReservation) {
+          try {
+            await File(tempPath).copy(previousTaskPartialPath);
+          } catch (_) {}
+        }
+        if (ownsExistingPartialReservation &&
+            existingPath != previousTaskPartialPath) {
+          try {
+            await File(tempPath).copy(existingPath);
+          } catch (_) {}
+        }
+      } else if (downloadCompleted && ownsPreviousTaskPartialReservation) {
+        try {
+          await File(previousTaskPartialPath).delete();
+        } catch (_) {}
+      }
       if (hasExistingPartialReservation) {
         _releaseLegacyPartial(existingPath);
       }
+      if (hasPreviousTaskPartialReservation) {
+        _releaseLegacyPartial(previousTaskPartialPath);
+      }
+      _activeDownloadPaths.remove(outputPath);
     }
   }
 

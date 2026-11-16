@@ -200,6 +200,77 @@ void main() {
     }
   });
 
+  test(
+    'keeps a resumable partial when publication fails and paths change',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requestedRanges = <String?>[];
+      var requests = 0;
+      final serverDone = server.listen((request) async {
+        requests++;
+        requestedRanges.add(request.headers.value(HttpHeaders.rangeHeader));
+        if (requests == 1) {
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.contentLength = 'continued-'.length;
+          request.response.write('continued-');
+        } else {
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.write('content');
+        }
+        await request.response.close();
+      });
+      final directory = await Directory.systemTemp.createTemp('task-resume-');
+      const taskId = 'resume-task';
+      const fileName = 'download.bin';
+      final occupiedOutput = File(p.join(directory.path, fileName))
+        ..writeAsStringSync('keep existing');
+      final taskSuffix = base64Url
+          .encode(utf8.encode(taskId))
+          .replaceAll('=', '');
+      final partial = File(
+        '${directory.path}/$fileName.$taskSuffix${DefaultRules.tempFileSuffix}',
+      )..writeAsStringSync('partial-');
+      final url = 'http://${server.address.address}:${server.port}/file';
+      try {
+        var createdBlocker = false;
+        await expectLater(
+          DownloadManager.downloadFile(
+            url: url,
+            saveDir: directory.path,
+            fileName: fileName,
+            taskId: taskId,
+            onProgress: (received, total) {
+              if (received > 0 && !createdBlocker) {
+                createdBlocker = true;
+                Directory(p.join(directory.path, 'download (1).bin'))
+                    .createSync();
+              }
+            },
+          ),
+          throwsA(anything),
+        );
+
+        final outputPath = await DownloadManager.downloadFile(
+          url: url,
+          saveDir: directory.path,
+          fileName: fileName,
+          taskId: taskId,
+        );
+
+        expect(outputPath, p.join(directory.path, 'download (2).bin'));
+        expect(requestedRanges.first, 'bytes=${'partial-'.length}-');
+        expect(requestedRanges.last, 'bytes=${'partial-'.length}-');
+        expect(await File(outputPath).readAsString(), 'partial-content');
+        expect(await occupiedOutput.readAsString(), 'keep existing');
+        expect(await partial.exists(), isFalse);
+      } finally {
+        await serverDone.cancel();
+        await server.close(force: true);
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
   test('preserves an existing single-download output path', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final serverDone = server.listen((request) async {
@@ -303,8 +374,8 @@ void main() {
         fileName: 'shared.bin',
         firstContent: 'first-content',
         secondContent: 'second-content',
-        firstTaskId: 'first-task',
-        secondTaskId: 'second-task',
+        firstTaskId: 'same-task',
+        secondTaskId: 'same-task',
       );
       await verifyPair(
         fileName: 'shared-default.bin',
