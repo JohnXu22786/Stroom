@@ -17,17 +17,17 @@ void main() {
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/path_provider'),
-          (call) async => applicationSupportDirectory.path,
-        );
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => applicationSupportDirectory.path,
+    );
   });
 
   tearDown(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/path_provider'),
-          null,
-        );
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
     await applicationSupportDirectory.delete(recursive: true);
   });
 
