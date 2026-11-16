@@ -23,8 +23,7 @@ class _FailingProviderCorruptBackupStore
 }
 
 class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
-  _FailingProviderEntriesStore(Map<String, Object> data)
-      : super.withData(data);
+  _FailingProviderEntriesStore(Map<String, Object> data) : super.withData(data);
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) {
@@ -351,8 +350,7 @@ void main() {
         '"name":"Before","configs":[]}]';
     SharedPreferences.setMockInitialValues({});
     final previousStore = SharedPreferencesStorePlatform.instance;
-    SharedPreferencesStorePlatform.instance =
-        _FailingProviderEntriesStore({
+    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore({
       'flutter.provider_entries': savedEntries,
     });
     try {
