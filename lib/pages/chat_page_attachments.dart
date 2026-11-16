@@ -216,11 +216,15 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      filePath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
       );
-      await tempFile.writeAsBytes(data);
-      filePath = tempFile.path;
+      await writeAttachmentPreviewFile(
+        filePath,
+        (file) => file.writeAsBytes(data),
+      );
     } catch (e) {
       debugPrint('[ChatPage] Audio preview temp file failed: $e');
       if (mounted) _showFileInfoPreview(att);
@@ -247,11 +251,15 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      filePath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
       );
-      await tempFile.writeAsBytes(data);
-      filePath = tempFile.path;
+      await writeAttachmentPreviewFile(
+        filePath,
+        (file) => file.writeAsBytes(data),
+      );
     } catch (e) {
       debugPrint('[ChatPage] Video preview temp file failed: $e');
       if (mounted) _showFileInfoPreview(att);

@@ -27,6 +27,19 @@ Future<void> deleteAttachmentPreviewFile(String filePath) async {
   }
 }
 
+/// Removes a partial preview copy when writing its contents fails.
+Future<void> writeAttachmentPreviewFile(
+  String filePath,
+  Future<void> Function(File file) write,
+) async {
+  try {
+    await write(File(filePath));
+  } catch (_) {
+    await deleteAttachmentPreviewFile(filePath);
+    rethrow;
+  }
+}
+
 /// Waits for the media controller to release its file before removing it.
 Future<void> disposePreviewPlayerAndDeleteFile(
   String filePath,
