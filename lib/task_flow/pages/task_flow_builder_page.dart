@@ -231,9 +231,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     List<String> references,
   ) async {
     try {
-      await TaskFlowInputCleanup.enqueueAll(references);
-      _unsubmittedFileInputs.removeAll(references);
-      await TaskFlowInputCleanup.retryPending();
+      await TaskFlowInputCleanup.enqueueAndRetry(
+        references,
+        onQueued: () => _unsubmittedFileInputs.removeAll(references),
+      );
     } catch (error) {
       debugPrint('Failed to queue unsubmitted flow input cleanup: $error');
     }
