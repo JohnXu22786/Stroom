@@ -439,7 +439,8 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(
         (jsonDecode(prefs.getString('provider_entries')!) as List)
-            .single['name'],
+            .whereType<Map>()
+            .singleWhere((entry) => entry['id'] == 'existing_llm')['name'],
         'After',
       );
     } finally {
