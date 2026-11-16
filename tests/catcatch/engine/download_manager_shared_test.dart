@@ -201,6 +201,56 @@ void main() {
   });
 
   test(
+    'does not append a resumed response with invalid Content-Range',
+    () async {
+      for (final contentRange in [
+        'bytes 0-7/8',
+        'bytes 8-7/8',
+        'bytes\t8-14/15',
+      ]) {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        String? requestedRange;
+        final serverDone = server.listen((request) async {
+          requestedRange = request.headers.value(HttpHeaders.rangeHeader);
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            contentRange,
+          );
+          request.response.write('corrupt');
+          await request.response.close();
+        });
+        final directory = await Directory.systemTemp.createTemp(
+          'wrong-resume-range-',
+        );
+        const fileName = 'download.bin';
+        final partial = File(
+          '${directory.path}/$fileName${DefaultRules.tempFileSuffix}',
+        )..writeAsStringSync('trusted-');
+        final url = 'http://${server.address.address}:${server.port}/file';
+        try {
+          await expectLater(
+            DownloadManager.downloadFile(
+              url: url,
+              saveDir: directory.path,
+              fileName: fileName,
+            ),
+            throwsA(anything),
+          );
+
+          expect(requestedRange, 'bytes=${'trusted-'.length}-');
+          expect(await partial.readAsString(), 'trusted-');
+          expect(await File('${directory.path}/$fileName').exists(), isFalse);
+        } finally {
+          await serverDone.cancel();
+          await server.close(force: true);
+          await directory.delete(recursive: true);
+        }
+      }
+    },
+  );
+
+  test(
     'keeps a resumable partial when publication fails and paths change',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -211,10 +261,18 @@ void main() {
         requestedRanges.add(request.headers.value(HttpHeaders.rangeHeader));
         if (requests == 1) {
           request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes 8-17/18',
+          );
           request.response.contentLength = 'continued-'.length;
           request.response.write('continued-');
         } else {
           request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes 8-14/15',
+          );
           request.response.write('content');
         }
         await request.response.close();
