@@ -216,23 +216,32 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      filePath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
       );
-      await tempFile.writeAsBytes(data);
-      filePath = tempFile.path;
+      await writeAttachmentPreviewFile(
+        filePath,
+        (file) => file.writeAsBytes(data),
+      );
     } catch (e) {
       debugPrint('[ChatPage] Audio preview temp file failed: $e');
       if (mounted) _showFileInfoPreview(att);
       return;
     }
 
-    if (!mounted) return;
+    final previewPath = filePath;
+    if (!mounted) {
+      await deleteAttachmentPreviewFile(previewPath);
+      return;
+    }
     // Show audio player dialog
-    showDialog(
+    await showAttachmentPreviewDialog(
       context: context,
+      filePath: previewPath,
       builder: (ctx) =>
-          AudioPreviewDialog(filePath: filePath!, fileName: att.fileName),
+          AudioPreviewDialog(filePath: previewPath, fileName: att.fileName),
     );
   }
 
@@ -242,23 +251,32 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      filePath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
       );
-      await tempFile.writeAsBytes(data);
-      filePath = tempFile.path;
+      await writeAttachmentPreviewFile(
+        filePath,
+        (file) => file.writeAsBytes(data),
+      );
     } catch (e) {
       debugPrint('[ChatPage] Video preview temp file failed: $e');
       if (mounted) _showFileInfoPreview(att);
       return;
     }
 
-    if (!mounted) return;
+    final previewPath = filePath;
+    if (!mounted) {
+      await deleteAttachmentPreviewFile(previewPath);
+      return;
+    }
     // Show video player dialog
-    showDialog(
+    await showAttachmentPreviewDialog(
       context: context,
+      filePath: previewPath,
       builder: (ctx) =>
-          VideoPreviewDialog(filePath: filePath!, fileName: att.fileName),
+          VideoPreviewDialog(filePath: previewPath, fileName: att.fileName),
     );
   }
 }

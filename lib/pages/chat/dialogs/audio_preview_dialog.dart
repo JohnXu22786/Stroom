@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:stroom/utils/attachment_preview_lifecycle.dart';
 
 import '../../../widgets/constrained_text.dart';
 
@@ -29,10 +30,12 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   final List<StreamSubscription> _subscriptions = [];
+  late final AttachmentPreviewFileLifecycle _previewLifecycle;
 
   @override
   void initState() {
     super.initState();
+    _previewLifecycle = AttachmentPreviewFileLifecycle(widget.filePath);
     _initPlayer();
   }
 
@@ -41,6 +44,7 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
       final player = AudioPlayer();
       _player = player;
       await player.setFilePath(widget.filePath);
+      if (!mounted) return;
       _duration = player.duration ?? Duration.zero;
       _isInitialized = true;
 
@@ -72,8 +76,13 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[AudioPreview] init failed: $e');
-      _player?.dispose();
+      final player = _player;
       _player = null;
+      if (player != null) {
+        await _releasePlayerAndDeletePreview(player);
+      } else if (mounted) {
+        await _releasePlayerAndDeletePreview(null);
+      }
       if (mounted) setState(() {});
     }
   }
@@ -87,12 +96,20 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
     }
   }
 
+  Future<void> _releasePlayerAndDeletePreview(AudioPlayer? player) {
+    return _previewLifecycle.disposePlayerAndDelete(
+      () async => player?.dispose(),
+    );
+  }
+
   @override
   void dispose() {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
-    _player?.dispose();
+    final player = _player;
+    _player = null;
+    unawaited(_releasePlayerAndDeletePreview(player));
     super.dispose();
   }
 

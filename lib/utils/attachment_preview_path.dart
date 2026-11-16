@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 
 /// Returns a path for previewing an attachment in [directory].
 ///
@@ -42,4 +43,18 @@ String attachmentPreviewPath(
   }
   final previewName = '$prefix$truncatedStem$safeExtension';
   return p.join(directory, previewName);
+}
+
+/// Returns a unique preview path so concurrent previews of one attachment
+/// cannot delete or overwrite each other's temporary copies.
+String attachmentPreviewPathForPreview(
+  String directory,
+  String attachmentId,
+  String fileName,
+) {
+  return attachmentPreviewPath(
+    directory,
+    '$attachmentId:${const Uuid().v4()}',
+    fileName,
+  );
 }
