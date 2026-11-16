@@ -353,9 +353,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     final originalName = file.name;
 
     if (!mounted) return;
-    await ref.read(audioRecordsProvider.notifier).deleteRecord(file.id);
-
-    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -363,6 +360,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           initialText: sourceText.isNotEmpty ? sourceText : null,
           isOverwrite: true,
           originalTitle: originalName,
+          replaceRecordId: file.id,
           // 沿用原音频所在的文件夹，重新生成的音频落回原位
           initialFolder: file.folder.isNotEmpty ? file.folder : null,
         ),

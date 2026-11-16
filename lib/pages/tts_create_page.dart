@@ -23,6 +23,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
   final String? initialText;
   final bool isOverwrite;
   final String? originalTitle;
+  final String? replaceRecordId;
   final String? initialFolder;
   final SynthesisTask? retryTask;
 
@@ -31,6 +32,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
     this.initialText,
     this.isOverwrite = false,
     this.originalTitle,
+    this.replaceRecordId,
     this.initialFolder,
     this.retryTask,
   });
@@ -372,6 +374,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           customParams: customParams,
           trimPreset: trimPreset,
           folder: _saveFolder,
+          replaceRecordId:
+              widget.replaceRecordId ?? widget.retryTask?.replaceRecordId,
         );
 
     ScaffoldMessenger.of(context).showSnackBar(
