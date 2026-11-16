@@ -176,10 +176,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
-  Future<void> deleteConversation(String id) async {
+  Future<bool> deleteConversation(String id) async {
     final original = List<Conversation>.from(state);
     final deleted = state.where((c) => c.id == id).toList();
-    if (deleted.isEmpty) return;
+    if (deleted.isEmpty) return false;
     state = state.where((c) => c.id != id).toList();
     try {
       await _appendJournalBarrier({
@@ -191,15 +191,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record conversation deletion: $error');
-      return;
+      return false;
     }
-    if (!mounted) return;
+    if (!mounted) return true;
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
     await _persist();
     await _persistActiveId();
+    return true;
   }
 
   /// Replaces a flow-owned conversation from a prior attempt. Unlike the
@@ -452,11 +453,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Deletes multiple conversations by [ids]. Also clears active if included.
-  Future<void> batchDelete(List<String> ids) async {
+  Future<bool> batchDelete(List<String> ids) async {
     final original = List<Conversation>.from(state);
     final idSet = ids.toSet();
     final deleted = state.where((c) => idSet.contains(c.id)).toList();
-    if (deleted.isEmpty) return;
+    if (deleted.isEmpty) return false;
     state = state.where((c) => !idSet.contains(c.id)).toList();
     try {
       await _appendJournalBarrier({
@@ -469,15 +470,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record batch conversation deletion: $error');
-      return;
+      return false;
     }
-    if (!mounted) return;
+    if (!mounted) return true;
     if (idSet.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
     await _persist();
     await _persistActiveId();
+    return true;
   }
 
   /// Auto-generates a title for a conversation using the first messages.

@@ -233,6 +233,32 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     });
   }
 
+  Future<void> _cleanupConversationFiles(Conversation conversation) async {
+    for (final msg in conversation.messages) {
+      for (final att in msg.attachments) {
+        try {
+          await AttachmentStorage.deleteFile(att.storagePath);
+        } catch (_) {
+          // Journaled deletion is complete; keep cleaning the remaining files.
+        }
+      }
+    }
+    for (final att in conversation.draftAttachments) {
+      try {
+        await AttachmentStorage.deleteFile(att.storagePath);
+      } catch (_) {
+        // 非关键清理
+      }
+    }
+    try {
+      await AttachmentStorage.deleteConversationCompressedImages(
+        conversation.id,
+      );
+    } catch (_) {
+      // 非关键清理
+    }
+  }
+
   Future<void> _batchDelete() async {
     if (_selectedIds.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
@@ -271,39 +297,22 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     if (confirmed != true) return;
 
     final convs = ref.read(conversationsProvider);
-    for (final id in _selectedIds) {
-      final conv = convs.where((c) => c.id == id).firstOrNull;
-      if (conv != null) {
-        for (final msg in conv.messages) {
-          for (final att in msg.attachments) {
-            await AttachmentStorage.deleteFile(att.storagePath);
-          }
-        }
-        // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
-        for (final att in conv.draftAttachments) {
-          try {
-            await AttachmentStorage.deleteFile(att.storagePath);
-          } catch (_) {
-            // 非关键清理
-          }
-        }
-      }
-      // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
-      // （派生缓存，best-effort：失败不影响对话删除）
-      try {
-        await AttachmentStorage.deleteConversationCompressedImages(id);
-      } catch (_) {
-        // 非关键清理
+    final selectedIds = Set<String>.from(_selectedIds);
+    final deleted = await ref
+        .read(conversationsProvider.notifier)
+        .batchDelete(selectedIds.toList());
+    if (deleted) {
+      for (final conv in convs) {
+        if (!selectedIds.contains(conv.id)) continue;
+        await _cleanupConversationFiles(conv);
       }
     }
-
-    await ref
-        .read(conversationsProvider.notifier)
-        .batchDelete(_selectedIds.toList());
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+    }
   }
 
   void _deleteTopic(Conversation topic) async {
@@ -351,30 +360,12 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     );
     if (confirmed != true) return;
 
-    if (conv != null) {
-      for (final msg in conv.messages) {
-        for (final att in msg.attachments) {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        }
-      }
-      // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
-      for (final att in conv.draftAttachments) {
-        try {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        } catch (_) {
-          // 非关键清理
-        }
-      }
+    final deleted = await ref
+        .read(conversationsProvider.notifier)
+        .deleteConversation(topic.id);
+    if (deleted && conv != null) {
+      await _cleanupConversationFiles(conv);
     }
-    // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
-    // （派生缓存，best-effort：失败不影响对话删除）
-    try {
-      await AttachmentStorage.deleteConversationCompressedImages(topic.id);
-    } catch (_) {
-      // 非关键清理
-    }
-
-    await ref.read(conversationsProvider.notifier).deleteConversation(topic.id);
   }
 
   void _renameTopic(String id, String currentTitle) {
