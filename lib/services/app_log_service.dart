@@ -435,7 +435,8 @@ class AppLogService {
   }
 
   /// dart:io 模式刷入：标准文件 I/O。
-  static Future<List<_LogEntry>> _flushViaDartIO(List<_LogEntry> entries) async {
+  static Future<List<_LogEntry>> _flushViaDartIO(
+      List<_LogEntry> entries) async {
     final logDir = await getLogDir();
     if (!await logDir.exists()) {
       await logDir.create(recursive: true);
