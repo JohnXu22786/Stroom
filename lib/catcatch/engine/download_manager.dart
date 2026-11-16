@@ -164,13 +164,12 @@ class DownloadManager {
     final previousTaskPartialPath = taskId.isEmpty
         ? null
         : '$requestedOutputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
-    final hasPreviousTaskPartialReservation =
-        !sameNameDownloadIsActive &&
+    final hasPreviousTaskPartialReservation = !sameNameDownloadIsActive &&
         previousTaskPartialPath != null &&
         previousTaskPartialPath != tempPath;
     final ownsPreviousTaskPartialReservation =
         hasPreviousTaskPartialReservation &&
-        _reserveLegacyPartial(previousTaskPartialPath);
+            _reserveLegacyPartial(previousTaskPartialPath);
     final hasExistingPartialReservation =
         existingPath != null && existingPath != tempPath;
     final ownsExistingPartialReservation =

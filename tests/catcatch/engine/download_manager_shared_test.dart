@@ -224,9 +224,8 @@ void main() {
       const fileName = 'download.bin';
       final occupiedOutput = File(p.join(directory.path, fileName))
         ..writeAsStringSync('keep existing');
-      final taskSuffix = base64Url
-          .encode(utf8.encode(taskId))
-          .replaceAll('=', '');
+      final taskSuffix =
+          base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
       final partial = File(
         '${directory.path}/$fileName.$taskSuffix${DefaultRules.tempFileSuffix}',
       )..writeAsStringSync('partial-');
