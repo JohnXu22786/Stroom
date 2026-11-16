@@ -254,6 +254,8 @@ class DownloadManager {
         throw StateError(
           'Expected a partial response when resuming, got ${response.statusCode}',
         );
+      } else if (startByte > 0) {
+        _validateResumeContentRange(response, startByte);
       }
 
       // On web, File operations will fail - this is expected
@@ -332,6 +334,31 @@ class DownloadManager {
         _releaseLegacyPartial(previousTaskPartialPath);
       }
       _activeDownloadPaths.remove(outputPath);
+    }
+  }
+
+  static void _validateResumeContentRange(
+    Response<dynamic> response,
+    int requestedStart,
+  ) {
+    final contentRange =
+        response.headers.value(HttpHeaders.contentRangeHeader)?.trim() ?? '';
+    final match = RegExp(
+      r'^bytes (\d+)-(\d+)/(\d+|\*)$',
+      caseSensitive: false,
+    ).firstMatch(contentRange);
+    final responseStart = int.tryParse(match?.group(1) ?? '');
+    final responseEnd = int.tryParse(match?.group(2) ?? '');
+    final responseLength = int.tryParse(match?.group(3) ?? '');
+    if (responseStart != requestedStart ||
+        responseEnd == null ||
+        responseEnd < requestedStart ||
+        (match?.group(3) != '*' &&
+            (responseLength == null || responseLength <= responseEnd))) {
+      throw StateError(
+        'Expected a valid Content-Range starting at byte $requestedStart, got '
+        '${contentRange.isEmpty ? '<missing or invalid>' : contentRange}',
+      );
     }
   }
 
