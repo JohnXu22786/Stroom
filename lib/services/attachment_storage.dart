@@ -34,12 +34,16 @@ class AttachmentStorage {
   static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
 
   @visibleForTesting
+  static Future<void> Function(String, Uint8List)? restoreFileOverrideForTesting;
+
+  @visibleForTesting
   static void resetOverridesForTesting() {
     saveFileOverrideForTesting = null;
     saveEditedFileOverrideForTesting = null;
     deleteFileOverrideForTesting = null;
     deleteCompressedImageOverrideForTesting = null;
     readFileOverrideForTesting = null;
+    restoreFileOverrideForTesting = null;
   }
 
   @visibleForTesting
@@ -191,6 +195,60 @@ class AttachmentStorage {
       await AppLogService.error('AttachmentStorage', '删除文件失败: $storagePath', e);
       rethrow;
     }
+  }
+
+  /// Deletes a set of attachment files as one logical operation. If a delete
+  /// throws, bytes from files already deleted are restored at their original
+  /// storage paths before the error is rethrown.
+  static Future<void> deleteFilesWithRollback(
+      Iterable<String> storagePaths) async {
+    final paths = storagePaths.toList();
+    final originals = <String, Uint8List>{};
+    for (final path in paths) {
+      final bytes = await readFile(path);
+      if (bytes != null) originals[path] = bytes;
+    }
+
+    final deletedPaths = <String>[];
+    try {
+      for (final path in paths) {
+        // A storage delete can partially remove a file before throwing (for
+        // example, temp_edited files have two web keys). Include the current
+        // path in rollback before attempting deletion for that case.
+        deletedPaths.add(path);
+        await deleteFile(path);
+      }
+    } catch (_) {
+      for (final path in deletedPaths.reversed) {
+        final bytes = originals[path];
+        if (bytes == null) continue;
+        try {
+          await _restoreFile(path, bytes);
+        } catch (restoreError) {
+          await AppLogService.error(
+            'AttachmentStorage',
+            '回滚附件删除失败: $path',
+            restoreError,
+          );
+        }
+      }
+      rethrow;
+    }
+  }
+
+  static Future<void> _restoreFile(String storagePath, Uint8List bytes) async {
+    final override = restoreFileOverrideForTesting;
+    if (override != null) {
+      await override(storagePath, bytes);
+      return;
+    }
+
+    if (kIsWeb) {
+      await WebFileStore.write(_webKey(storagePath), bytes);
+      return;
+    }
+    final dir = await _storageDir;
+    await File(p.join(dir, p.basename(storagePath))).writeAsBytes(bytes);
   }
 
   static Future<String> getStorageDirPath() async {
