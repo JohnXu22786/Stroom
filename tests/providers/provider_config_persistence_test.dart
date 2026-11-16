@@ -5,7 +5,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/provider_preset_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/providers/provider_config.dart';
+
+class _FailingProviderCorruptBackupStore
+    extends InMemorySharedPreferencesStore {
+  _FailingProviderCorruptBackupStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key.startsWith('flutter.provider_entries_corrupt_')) {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -165,6 +180,156 @@ void main() {
         isNotEmpty,
         reason: 'the corrupt current entry should remain recoverable',
       );
+    });
+
+    test('usable LLM entry does not suppress unmatched legacy configs',
+        () async {
+      final existingEntriesJson = jsonEncode([
+        {
+          'id': 'existing_llm',
+          'type': 'llm',
+          'name': 'Custom LLM',
+          'providerName': 'Existing provider',
+          'host': 'https://existing.example.com',
+          'key': 'existing-key',
+          'models': [
+            {'modelId': 'existing-model'},
+          ],
+        },
+        'corrupt entry',
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': existingEntriesJson,
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model'},
+            ],
+          },
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model'},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntries =
+          notifier.state.entries.where((entry) => entry.type == 'llm').toList();
+      expect(llmEntries, hasLength(1));
+      expect(llmEntries.single.id, 'existing_llm');
+      expect(llmEntries.single.configs, hasLength(2));
+      expect(
+        llmEntries.single.configs.map((config) => config.providerName),
+        containsAll(['Existing provider', 'Legacy provider']),
+      );
+      expect(
+        llmEntries.single.configs.last.models.single.modelId,
+        'legacy-model',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+      final corruptKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, hasLength(1));
+      expect(prefs.getString(corruptKeys.single), existingEntriesJson);
+
+      final backupFailureEntriesJson = jsonEncode([
+        {
+          'id': 'existing_llm',
+          'type': 'llm',
+          'name': 'Custom LLM',
+          'configs': [
+            {
+              'id': 'existing_config',
+              'providerName': 'Existing provider',
+              'host': 'https://existing.example.com',
+              'key': 'existing-key',
+              'models': [
+                {'modelId': 'existing-model'},
+              ],
+            },
+          ],
+        },
+        {'id': 'existing_ocr', 'type': 'ocr', 'name': 'OCR', 'configs': []},
+        {'id': 'existing_asr', 'type': 'asr', 'name': 'ASR', 'configs': []},
+        'corrupt entry',
+      ]);
+      const legacyChatConfigsJson = '[{"providerName":"Legacy provider",'
+          '"host":"https://legacy.example.com","key":"legacy-key",'
+          '"models":[{"modelId":"legacy-model"}]}]';
+      final failedBackupStoreData = <String, Object>{
+        'flutter.provider_entries': backupFailureEntriesJson,
+        'flutter.chat_configs': legacyChatConfigsJson,
+      };
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _FailingProviderCorruptBackupStore(failedBackupStoreData);
+      try {
+        final failureNotifier = ProviderEntriesNotifier();
+        await failureNotifier.load();
+
+        final failurePrefs = await SharedPreferences.getInstance();
+        expect(failurePrefs.getString('chat_configs'), legacyChatConfigsJson);
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
+
+    test('represented legacy configs are not duplicated during migration',
+        () async {
+      final config = {
+        'id': 'existing_config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {'modelId': 'legacy-model'},
+        ],
+      };
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Custom LLM',
+            'configs': [config],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model'},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(1));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
     });
   });
 
