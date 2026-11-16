@@ -70,6 +70,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     Map<String, dynamic>? trimPreset,
     String? taskId,
     String folder = '',
+    String? replaceRecordId,
   }) {
     final id = taskId ?? _uuid.v4();
     final task = SynthesisTask(
@@ -81,6 +82,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       customParams: customParams,
       trimPreset: trimPreset,
       folder: folder,
+      replaceRecordId: replaceRecordId,
     );
 
     state = [task, ...state];
@@ -256,6 +258,16 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       );
 
       if (savedFilePath == null) return;
+
+      // Keep the original audio until the replacement record and bytes have
+      // both been committed. A cleanup failure leaves both versions intact.
+      if (task.replaceRecordId != null) {
+        try {
+          await FileManifest.deleteRecord(task.replaceRecordId!);
+        } catch (e) {
+          debugPrint('[TaskListNotifier] Failed to remove replaced audio: $e');
+        }
+      }
 
       // 刷新文件列表
       ref.read(audioRecordsProvider.notifier).loadRecords();
