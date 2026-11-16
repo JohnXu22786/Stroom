@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
@@ -23,12 +24,36 @@ class _FailingProviderCorruptBackupStore
 }
 
 class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
-  _FailingProviderEntriesStore(Map<String, Object> data) : super.withData(data);
+  _FailingProviderEntriesStore(
+    Map<String, Object> data, {
+    this.failedKey = 'flutter.provider_entries',
+  }) : super.withData(data);
+
+  final String failedKey;
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) {
-    if (key == 'flutter.provider_entries') {
+    if (key == failedKey) {
       return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _GatedProviderEntriesStore extends InMemorySharedPreferencesStore {
+  _GatedProviderEntriesStore(Map<String, Object> data) : super.withData(data);
+
+  final firstProviderEntriesWriteStarted = Completer<void>();
+  final releaseFirstProviderEntriesWrite = Completer<void>();
+  bool isArmed = false;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (isArmed &&
+        key == 'flutter.provider_entries' &&
+        !firstProviderEntriesWriteStarted.isCompleted) {
+      firstProviderEntriesWriteStarted.complete();
+      await releaseFirstProviderEntriesWrite.future;
     }
     return super.setValue(valueType, key, value);
   }
@@ -369,8 +394,146 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'existing_llm')
+            .name,
+        'Before',
+      );
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       expect(prefs.getString('provider_entries'), savedEntries);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('provider update ignores an unrelated group write failure', () async {
+    const savedEntries = '[{"id":"existing_llm","type":"llm",'
+        '"name":"Before","configs":[]}]';
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore(
+      {'flutter.provider_entries': savedEntries},
+      failedKey: 'flutter.mcp_provider_groups',
+    );
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      await notifier.update(
+        'existing_llm',
+        ProviderEntry(
+          id: 'existing_llm',
+          type: 'llm',
+          name: 'After',
+        ),
+      );
+
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'existing_llm')
+            .name,
+        'After',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        (jsonDecode(prefs.getString('provider_entries')!) as List)
+            .single['name'],
+        'After',
+      );
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('overlapping provider updates retain both edits', () async {
+    final savedEntries = jsonEncode([
+      {'id': 'first', 'type': 'llm', 'name': 'First before', 'configs': []},
+      {'id': 'second', 'type': 'llm', 'name': 'Second before', 'configs': []},
+    ]);
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _GatedProviderEntriesStore({
+      'flutter.provider_entries': savedEntries,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.isArmed = true;
+
+      final firstUpdate = notifier.update(
+        'first',
+        ProviderEntry(id: 'first', type: 'llm', name: 'First after'),
+      );
+      await store.firstProviderEntriesWriteStarted.future;
+      final secondUpdate = notifier.update(
+        'second',
+        ProviderEntry(id: 'second', type: 'llm', name: 'Second after'),
+      );
+      store.releaseFirstProviderEntriesWrite.complete();
+      await Future.wait([firstUpdate, secondUpdate]);
+
+      expect(
+        notifier.state.entries.map((entry) => entry.name),
+        containsAll(['First after', 'Second after']),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final persistedNames =
+          (jsonDecode(prefs.getString('provider_entries')!) as List)
+              .map((entry) => entry['name']);
+      expect(persistedNames, containsAll(['First after', 'Second after']));
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('concurrent provider addition is retained during update persistence',
+      () async {
+    const savedEntries = '[{"id":"existing_llm","type":"llm",'
+        '"name":"Before","configs":[]}]';
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _GatedProviderEntriesStore({
+      'flutter.provider_entries': savedEntries,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.isArmed = true;
+
+      final update = notifier.update(
+        'existing_llm',
+        ProviderEntry(
+          id: 'existing_llm',
+          type: 'llm',
+          name: 'After',
+        ),
+      );
+      await store.firstProviderEntriesWriteStarted.future;
+      final add = notifier.addFirst(
+        ProviderEntry(id: 'new_llm', type: 'llm', name: 'New'),
+      );
+      store.releaseFirstProviderEntriesWrite.complete();
+      await Future.wait([update, add]);
+
+      expect(
+        notifier.state.entries.map((entry) => entry.id),
+        containsAll(['existing_llm', 'new_llm']),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'existing_llm')
+            .name,
+        'After',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final persistedIds =
+          (jsonDecode(prefs.getString('provider_entries')!) as List)
+              .map((entry) => entry['id']);
+      expect(persistedIds, containsAll(['existing_llm', 'new_llm']));
     } finally {
       SharedPreferencesStorePlatform.instance = previousStore;
     }
