@@ -499,6 +499,7 @@ void main() {
       expect(find.text('notes.pdf'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       await tester.runAsync(() async {
         for (var attempt = 0;
             attempt < 100 && deletedPaths.isEmpty;
@@ -534,6 +535,9 @@ void main() {
     testWidgets('failed queue write is retried by the next builder',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
+      final defaultStore = SharedPreferencesStorePlatform.instance;
+      final failingStore = _FailingStringListStore();
+      SharedPreferencesStorePlatform.instance = failingStore;
       final directory =
           Directory.systemTemp.createTempSync('flow_queue_failure_');
       final source = File('${directory.path}/notes.pdf')
@@ -548,6 +552,7 @@ void main() {
         return true;
       };
       addTearDown(() {
+        SharedPreferencesStorePlatform.instance = defaultStore;
         AttachmentStorage.resetOverridesForTesting();
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
@@ -577,11 +582,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('notes.pdf'), findsOneWidget);
 
-      final failingStore = _FailingStringListStore();
-      SharedPreferencesStorePlatform.instance = failingStore;
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       await tester.runAsync(() async {
-        for (var attempt = 0; attempt < 100 && !failingStore.writeAttempted;
+        for (var attempt = 0;
+            attempt < 100 && !failingStore.writeAttempted;
             attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
@@ -598,7 +603,9 @@ void main() {
         inputType: IOType.file,
       );
       await tester.runAsync(() async {
-        for (var attempt = 0; attempt < 100 && deletedPaths.isEmpty; attempt++) {
+        for (var attempt = 0;
+            attempt < 100 && deletedPaths.isEmpty;
+            attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
       });
@@ -825,8 +832,9 @@ void main() {
       final copy = storage.listSync().whereType<File>().single;
       expect(find.text('notes.pdf'), findsOneWidget);
 
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       await tester.runAsync(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
         for (var attempt = 0; attempt < 100 && copy.existsSync(); attempt++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
