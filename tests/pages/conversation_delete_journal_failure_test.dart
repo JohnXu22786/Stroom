@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -25,6 +26,15 @@ class _DocumentsPathProvider extends PathProviderPlatform {
 
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+class _GatedDocumentsPathProvider extends PathProviderPlatform {
+  _GatedDocumentsPathProvider(this.path);
+
+  final Future<String?> path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() => path;
 }
 
 const _journalName = 'conversation_stream_checkpoints.jsonl';
@@ -206,6 +216,39 @@ void main() {
         'attachments/second.txt',
       ]);
       expect(find.text('Delete test'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'conversation deletion still cleans files if the page is disposed',
+    (tester) async {
+      final root = await Directory.systemTemp.createTemp('stroom_delete_test_');
+      final documentsPath = Completer<String?>();
+      PathProviderPlatform.instance =
+          _GatedDocumentsPathProvider(documentsPath.future);
+      AppStorage.resetCache();
+      addTearDown(() => root.delete(recursive: true));
+      final deletedPaths = <String>[];
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deletedPaths.add(path);
+        return true;
+      };
+
+      await tester.pumpWidget(_app(home: const ConversationsPage()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      documentsPath.complete(root.path);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(deletedPaths, ['attachments/file.txt', 'attachments/second.txt']);
     },
   );
 

@@ -298,20 +298,21 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
     final convs = ref.read(conversationsProvider);
     final selectedIds = Set<String>.from(_selectedIds);
-    await ref
+    final deleted = await ref
         .read(conversationsProvider.notifier)
         .batchDelete(selectedIds.toList());
-    final remainingIds =
-        ref.read(conversationsProvider).map((c) => c.id).toSet();
-    for (final conv in convs) {
-      if (selectedIds.contains(conv.id) && !remainingIds.contains(conv.id)) {
+    if (deleted) {
+      for (final conv in convs) {
+        if (!selectedIds.contains(conv.id)) continue;
         await _cleanupConversationFiles(conv);
       }
     }
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+    }
   }
 
   void _deleteTopic(Conversation topic) async {
@@ -359,9 +360,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     );
     if (confirmed != true) return;
 
-    await ref.read(conversationsProvider.notifier).deleteConversation(topic.id);
-    if (conv != null &&
-        !ref.read(conversationsProvider).any((item) => item.id == topic.id)) {
+    final deleted = await ref
+        .read(conversationsProvider.notifier)
+        .deleteConversation(topic.id);
+    if (deleted && conv != null) {
       await _cleanupConversationFiles(conv);
     }
   }

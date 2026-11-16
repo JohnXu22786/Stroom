@@ -160,20 +160,21 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
     final convs = ref.read(conversationsProvider);
     final selectedIds = Set<String>.from(_selectedIds);
-    await ref
+    final deleted = await ref
         .read(conversationsProvider.notifier)
         .batchDelete(selectedIds.toList());
-    final remainingIds =
-        ref.read(conversationsProvider).map((c) => c.id).toSet();
-    for (final conv in convs) {
-      if (selectedIds.contains(conv.id) && !remainingIds.contains(conv.id)) {
+    if (deleted) {
+      for (final conv in convs) {
+        if (!selectedIds.contains(conv.id)) continue;
         await _cleanupConversationFiles(conv);
       }
     }
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+    }
   }
 
   void _deleteConversation(String id) async {
@@ -214,9 +215,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     );
     if (confirmed != true) return;
 
-    await ref.read(conversationsProvider.notifier).deleteConversation(id);
-    if (conv != null &&
-        !ref.read(conversationsProvider).any((item) => item.id == id)) {
+    final deleted =
+        await ref.read(conversationsProvider.notifier).deleteConversation(id);
+    if (deleted && conv != null) {
       await _cleanupConversationFiles(conv);
     }
   }
