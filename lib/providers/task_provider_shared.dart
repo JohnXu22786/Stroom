@@ -38,6 +38,9 @@ class SynthesisTask {
   /// 由语音合成页面选择，重试时沿用。
   final String folder;
 
+  /// Existing audio to remove after a replacement has been saved successfully.
+  final String? replaceRecordId;
+
   SynthesisTask({
     required this.id,
     required this.title,
@@ -55,6 +58,7 @@ class SynthesisTask {
     this.originalResponse,
     this.downloadedFilePath,
     this.folder = '',
+    this.replaceRecordId,
   }) : createdAt = createdAt ?? DateTime.now();
 
   SynthesisTask copyWith({
@@ -70,6 +74,7 @@ class SynthesisTask {
     Map<String, String>? customParams,
     bool clearDownloadedFilePath = false,
     String? folder,
+    String? replaceRecordId,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -95,6 +100,7 @@ class SynthesisTask {
           ? null
           : (downloadedFilePath ?? this.downloadedFilePath),
       folder: folder ?? this.folder,
+      replaceRecordId: replaceRecordId ?? this.replaceRecordId,
     );
   }
 
@@ -116,6 +122,7 @@ class SynthesisTask {
         if (downloadedFilePath != null)
           'downloadedFilePath': downloadedFilePath,
         'folder': folder,
+        if (replaceRecordId != null) 'replaceRecordId': replaceRecordId,
       };
 
   factory SynthesisTask.fromMap(Map<String, dynamic> map) => SynthesisTask(
@@ -145,5 +152,6 @@ class SynthesisTask {
         originalResponse: map['originalResponse'] as String?,
         downloadedFilePath: map['downloadedFilePath'] as String?,
         folder: map['folder'] as String? ?? '',
+        replaceRecordId: map['replaceRecordId'] as String?,
       );
 }
