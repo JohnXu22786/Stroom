@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:uuid/uuid.dart';
 import 'package:chewie/chewie.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -134,6 +135,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   bool _loading = true;
   _MediaPreviewError? _previewError;
   File? _tempFile;
+  bool _downloadInProgress = false;
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
@@ -190,9 +192,18 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
         RegExp(r'[^\w\-.]'),
         '_',
       );
-      _tempFile = File(p.join(tempDir.path, 'preview_$safeName.$ext'));
+      final downloadId = const Uuid().v4().replaceAll('-', '');
+      _tempFile = File(
+        p.join(tempDir.path, 'preview_${safeName}_$downloadId.$ext'),
+      );
 
-      await _downloadToFile(widget.resource.url, _tempFile!);
+      _downloadInProgress = true;
+      try {
+        await _downloadToFile(widget.resource.url, _tempFile!);
+      } finally {
+        _downloadInProgress = false;
+        if (!mounted) await _deleteTempFile();
+      }
 
       if (!mounted) return;
 
@@ -374,13 +385,22 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     }
   }
 
+  Future<void> _deleteTempFile() async {
+    try {
+      final file = _tempFile;
+      if (file != null && await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _disposeAudioPlayer();
     _chewieController?.dispose();
     _videoPlayerController?.dispose();
     try {
-      if (_tempFile != null && _tempFile!.existsSync()) {
+      if (!_downloadInProgress &&
+          _tempFile != null &&
+          _tempFile!.existsSync()) {
         _tempFile!.deleteSync();
       }
     } catch (_) {}
