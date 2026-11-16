@@ -777,7 +777,15 @@ void main() {
       final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
+      final deletedPaths = <String>[];
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deletedPaths.add(path);
+        final file = File(path);
+        if (file.existsSync()) file.deleteSync();
+        return true;
+      };
       addTearDown(() {
+        AttachmentStorage.resetOverridesForTesting();
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
         directory.deleteSync(recursive: true);
@@ -811,6 +819,7 @@ void main() {
       await tester.pump();
       await TaskFlowInputCleanup.waitForIdleForTesting();
       expect(copy.existsSync(), isFalse);
+      expect(deletedPaths, [copy.path]);
     });
 
     testWidgets(
