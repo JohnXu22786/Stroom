@@ -107,7 +107,8 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
       if (convId == null) return false;
-      final persisted = await ref.read(conversationsProvider.notifier).updateMessages(
+      final persisted =
+          await ref.read(conversationsProvider.notifier).updateMessages(
         convId,
         [...historySnapshot],
       );
@@ -224,7 +225,11 @@ extension _ChatPagePersistenceExt on _ChatPageState {
               }
               final json = jsonEncode(list);
               if (!await prefs.setString('conversations', json)) {
-                throw StateError('SharedPreferences Tier A save returned false');
+                await AppLogService.error(
+                  'ChatPage',
+                  '保存消息失败 (Tier A: SharedPreferences 写入返回 false)',
+                );
+                return false;
               }
               await AppLogService.warning(
                 'ChatPage',

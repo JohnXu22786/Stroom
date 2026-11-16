@@ -84,8 +84,8 @@ void main() {
     await tester.pumpAndSettle();
 
     Map<String, dynamic>? persistedAtDelete;
-    AttachmentStorage.readFileOverrideForTesting = (path) async =>
-        Uint8List.fromList([1, 2, 3, 4]);
+    AttachmentStorage.readFileOverrideForTesting =
+        (path) async => Uint8List.fromList([1, 2, 3, 4]);
     AttachmentStorage.deleteFileOverrideForTesting = (path) async {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('conversations');

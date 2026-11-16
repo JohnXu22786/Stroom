@@ -633,6 +633,27 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     return _persistNowChecked();
   }
 
+  /// Restores history after a failed destructive operation and records a
+  /// tombstone cancellation for any checkpointed messages in [restoredIds].
+  Future<bool> restoreMessagesChecked(
+    String conversationId,
+    List<ChatMessage> messages, {
+    required Iterable<String> restoredIds,
+  }) async {
+    if (!mounted ||
+        !state.any((conversation) => conversation.id == conversationId)) {
+      return false;
+    }
+    if (!await updateMessages(conversationId, messages)) return false;
+    try {
+      await _appendMessageRestorations(conversationId, restoredIds);
+    } catch (error) {
+      debugPrint('Failed to record restored message history: $error');
+      return false;
+    }
+    return _persistNowChecked();
+  }
+
   /// Queues a supersedable periodic stream checkpoint journal entry.
   /// Consecutive checkpoints share one queued persistence task; explicit
   /// writes remain ordering barriers in the normal persistence path.

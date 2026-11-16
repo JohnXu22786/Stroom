@@ -10,7 +10,8 @@ import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 
 class AttachmentDeleteRollbackException implements Exception {
-  const AttachmentDeleteRollbackException(this.deleteError, this.rollbackErrors);
+  const AttachmentDeleteRollbackException(
+      this.deleteError, this.rollbackErrors);
 
   final Object deleteError;
   final List<Object> rollbackErrors;

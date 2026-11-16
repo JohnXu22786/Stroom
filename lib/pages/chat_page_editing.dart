@@ -413,10 +413,12 @@ extension _ChatPageEditingExt on _ChatPageState {
       var persisted = false;
       try {
         persisted = activeId != null &&
-            await _saveMessages(
-              capturedConvId: activeId,
-              historyOverride: historyBeforeDelete,
-              requireNotifierPersistence: true,
+            await ref
+                .read(conversationsProvider.notifier)
+                .restoreMessagesChecked(
+              activeId,
+              historyBeforeDelete,
+              restoredIds: [messageId],
             );
       } finally {
         if (mounted &&
@@ -434,7 +436,8 @@ extension _ChatPageEditingExt on _ChatPageState {
     }
 
     Future<void> discardMessageFromView() async {
-      if (!mounted || ref.read(activeConversationIdProvider) != activeId) return;
+      if (!mounted || ref.read(activeConversationIdProvider) != activeId)
+        return;
       setState(() {
         _chatSegments.remove(messageId);
         _reasoningContents.remove(messageId);
@@ -442,8 +445,9 @@ extension _ChatPageEditingExt on _ChatPageState {
         _isReasoningCompletedForMsg.remove(messageId);
         _messageKeys.remove(messageId);
       });
-      final controllerMessage =
-          _controller?.messages.where((message) => message.id == messageId).firstOrNull;
+      final controllerMessage = _controller?.messages
+          .where((message) => message.id == messageId)
+          .firstOrNull;
       if (controllerMessage != null) {
         await _controller?.removeMessage(controllerMessage);
       }
@@ -518,7 +522,6 @@ extension _ChatPageEditingExt on _ChatPageState {
     }
 
     await discardMessageFromView();
-
   }
 
   void _confirmDeleteMessage(String messageId) {
