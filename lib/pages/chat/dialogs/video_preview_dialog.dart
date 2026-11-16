@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:stroom/utils/attachment_preview_lifecycle.dart';
 
 import '../../../widgets/constrained_text.dart';
 
@@ -27,10 +29,12 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _hasError = false;
+  late final AttachmentPreviewFileLifecycle _previewLifecycle;
 
   @override
   void initState() {
     super.initState();
+    _previewLifecycle = AttachmentPreviewFileLifecycle(widget.filePath);
     _initPlayer();
   }
 
@@ -39,6 +43,7 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
       final controller = VideoPlayerController.file(File(widget.filePath));
       _videoPlayerController = controller;
       await controller.initialize();
+      if (!mounted) return;
 
       _chewieController = ChewieController(
         videoPlayerController: controller,
@@ -56,16 +61,33 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[VideoPreview] init failed: $e');
-      _videoPlayerController?.dispose();
+      final controller = _videoPlayerController;
       _videoPlayerController = null;
+      _chewieController?.dispose();
+      _chewieController = null;
+      if (controller != null) {
+        await _releasePlayerAndDeletePreview(controller);
+      } else if (mounted) {
+        await _releasePlayerAndDeletePreview(null);
+      }
       if (mounted) setState(() => _hasError = true);
     }
+  }
+
+  Future<void> _releasePlayerAndDeletePreview(
+    VideoPlayerController? controller,
+  ) {
+    return _previewLifecycle.disposePlayerAndDelete(
+      () async => controller?.dispose(),
+    );
   }
 
   @override
   void dispose() {
     _chewieController?.dispose();
-    _videoPlayerController?.dispose();
+    final controller = _videoPlayerController;
+    _videoPlayerController = null;
+    unawaited(_releasePlayerAndDeletePreview(controller));
     super.dispose();
   }
 

@@ -227,12 +227,17 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
       return;
     }
 
-    if (!mounted) return;
+    final previewPath = filePath;
+    if (!mounted) {
+      await deleteAttachmentPreviewFile(previewPath);
+      return;
+    }
     // Show audio player dialog
-    showDialog(
+    await showAttachmentPreviewDialog(
       context: context,
+      filePath: previewPath,
       builder: (ctx) =>
-          AudioPreviewDialog(filePath: filePath!, fileName: att.fileName),
+          AudioPreviewDialog(filePath: previewPath, fileName: att.fileName),
     );
   }
 
@@ -253,12 +258,17 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
       return;
     }
 
-    if (!mounted) return;
+    final previewPath = filePath;
+    if (!mounted) {
+      await deleteAttachmentPreviewFile(previewPath);
+      return;
+    }
     // Show video player dialog
-    showDialog(
+    await showAttachmentPreviewDialog(
       context: context,
+      filePath: previewPath,
       builder: (ctx) =>
-          VideoPreviewDialog(filePath: filePath!, fileName: att.fileName),
+          VideoPreviewDialog(filePath: previewPath, fileName: att.fileName),
     );
   }
 }
