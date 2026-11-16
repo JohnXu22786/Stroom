@@ -37,6 +37,24 @@ class _GatedDocumentsPathProvider extends PathProviderPlatform {
   Future<String?> getApplicationDocumentsPath() => path;
 }
 
+class _RollbackObserver {
+  _RollbackObserver(ProviderContainer container) {
+    _subscription = container.listen(conversationsProvider, (_, next) {
+      if (next.isEmpty) {
+        _sawRemoval = true;
+      } else if (_sawRemoval && !restored.isCompleted) {
+        restored.complete();
+      }
+    });
+  }
+
+  final Completer<void> restored = Completer<void>();
+  late final ProviderSubscription<List<Conversation>> _subscription;
+  bool _sawRemoval = false;
+
+  void close() => _subscription.close();
+}
+
 const _journalName = 'conversation_stream_checkpoints.jsonl';
 
 Conversation _conversation() => Conversation(
@@ -81,7 +99,10 @@ Directory _blockConversationJournal() {
   return root;
 }
 
-Widget _app({required Widget home}) => ProviderScope(
+Widget _app({
+  required Widget home,
+}) =>
+    ProviderScope(
       overrides: [
         assistantProvider.overrideWith((ref) {
           final notifier = AssistantsNotifier();
@@ -112,9 +133,15 @@ Widget _app({required Widget home}) => ProviderScope(
     );
 
 Future<void> _pumpUi(WidgetTester tester) async {
-  for (var frame = 0; frame < 3; frame++) {
+  for (var frame = 0; frame < 5; frame++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
+}
+
+Future<void> _awaitSignal(WidgetTester tester, Future<void> signal) async {
+  await tester.runAsync(
+    () => signal.timeout(const Duration(seconds: 5)),
+  );
 }
 
 Future<void> _deleteBySelectionMode(WidgetTester tester) async {
@@ -125,7 +152,6 @@ Future<void> _deleteBySelectionMode(WidgetTester tester) async {
   await tester.tap(find.byIcon(Icons.delete).first);
   await _pumpUi(tester);
   await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-  await _pumpUi(tester);
 }
 
 void main() {
@@ -157,11 +183,19 @@ void main() {
       };
       await tester.pumpWidget(_app(home: const TopicSelectionPage()));
       await _pumpUi(tester);
+      final rollback = _RollbackObserver(
+        ProviderScope.containerOf(
+          tester.element(find.byType(TopicSelectionPage)),
+          listen: false,
+        ),
+      );
+      addTearDown(rollback.close);
       await tester.tap(find.byIcon(Icons.more_vert).first);
       await _pumpUi(tester);
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await _awaitSignal(tester, rollback.restored.future);
       await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
@@ -181,11 +215,19 @@ void main() {
       };
       await tester.pumpWidget(_app(home: const ConversationsPage()));
       await _pumpUi(tester);
+      final rollback = _RollbackObserver(
+        ProviderScope.containerOf(
+          tester.element(find.byType(ConversationsPage)),
+          listen: false,
+        ),
+      );
+      addTearDown(rollback.close);
       await tester.tap(find.byIcon(Icons.more_vert).first);
       await _pumpUi(tester);
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await _awaitSignal(tester, rollback.restored.future);
       await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
@@ -201,9 +243,11 @@ void main() {
       AppStorage.resetCache();
       addTearDown(() => root.deleteSync(recursive: true));
       final attemptedPaths = <String>[];
+      final cleanupComplete = Completer<void>();
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         attemptedPaths.add(path);
         if (path == 'attachments/file.txt') throw FileSystemException('failed');
+        if (!cleanupComplete.isCompleted) cleanupComplete.complete();
         return true;
       };
       await tester.pumpWidget(_app(home: const ConversationsPage()));
@@ -213,6 +257,7 @@ void main() {
       await tester.tap(find.text('Delete').last);
       await _pumpUi(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await _awaitSignal(tester, cleanupComplete.future);
       await _pumpUi(tester);
 
       expect(attemptedPaths, [
@@ -233,8 +278,12 @@ void main() {
       AppStorage.resetCache();
       addTearDown(() => root.deleteSync(recursive: true));
       final deletedPaths = <String>[];
+      final cleanupComplete = Completer<void>();
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deletedPaths.add(path);
+        if (deletedPaths.length == 2 && !cleanupComplete.isCompleted) {
+          cleanupComplete.complete();
+        }
         return true;
       };
       await tester.pumpWidget(_app(home: const ConversationsPage()));
@@ -247,6 +296,7 @@ void main() {
       await tester.pump();
       await tester.pumpWidget(const SizedBox.shrink());
       documentsPath.complete(root.path);
+      await _awaitSignal(tester, cleanupComplete.future);
       await _pumpUi(tester);
 
       expect(tester.takeException(), isNull);
@@ -266,7 +316,16 @@ void main() {
       };
       await tester.pumpWidget(_app(home: const TopicSelectionPage()));
       await _pumpUi(tester);
+      final rollback = _RollbackObserver(
+        ProviderScope.containerOf(
+          tester.element(find.byType(TopicSelectionPage)),
+          listen: false,
+        ),
+      );
+      addTearDown(rollback.close);
       await _deleteBySelectionMode(tester);
+      await _awaitSignal(tester, rollback.restored.future);
+      await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
@@ -285,7 +344,16 @@ void main() {
       };
       await tester.pumpWidget(_app(home: const ConversationsPage()));
       await _pumpUi(tester);
+      final rollback = _RollbackObserver(
+        ProviderScope.containerOf(
+          tester.element(find.byType(ConversationsPage)),
+          listen: false,
+        ),
+      );
+      addTearDown(rollback.close);
       await _deleteBySelectionMode(tester);
+      await _awaitSignal(tester, rollback.restored.future);
+      await _pumpUi(tester);
 
       expect(deletedPaths, isEmpty);
       expect(find.text('Delete test'), findsOneWidget);
