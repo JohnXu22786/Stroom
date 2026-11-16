@@ -282,6 +282,37 @@ void main() {
   // ==================================================================
 
   group('AppLogService — flush failure recovery', () {
+    test('retry does not duplicate hourly groups already written', () async {
+      final logDir = await AppLogService.getLogDir();
+      await logDir.create(recursive: true);
+
+      final firstHour = DateTime(2025, 6, 12, 10);
+      final failedHour = DateTime(2025, 6, 12, 11);
+      final firstFile = File('${logDir.path}/app_2025-06-12-10.log');
+      final failedFile = File('${logDir.path}/app_2025-06-12-11.log');
+
+      AppLogService.debugTimestampOverride = firstHour;
+      await AppLogService.info('Test', 'First hour entry');
+      AppLogService.debugTimestampOverride = failedHour;
+      await AppLogService.info('Test', 'Second hour entry');
+      AppLogService.debugTimestampOverride = null;
+
+      // A directory at the second file's path makes that group's append fail
+      // after the first hour has already been committed.
+      await Directory(failedFile.path).create(recursive: true);
+      await AppLogService.flush();
+      await Directory(failedFile.path).delete(recursive: true);
+
+      await AppLogService.flush();
+
+      final firstContent = await firstFile.readAsString();
+      final failedContent = await failedFile.readAsString();
+      expect('First hour entry'.allMatches(firstContent).length, 1);
+      expect('Second hour entry'.allMatches(failedContent).length, 1);
+
+      await logDir.delete(recursive: true);
+    });
+
     test('SAF failure keeps entries retryable and fallback logs readable',
         () async {
       const safUri = 'content://provider/tree/primary%3ADocuments';

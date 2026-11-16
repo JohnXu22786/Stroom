@@ -356,6 +356,7 @@ class AppLogService {
     // 原子性取出所有待写入条目
     final entries = List<_LogEntry>.from(_buffer);
     _buffer.clear();
+    var entriesToRetry = entries;
 
     try {
       // Android log writes use BackupLocationManager for SAF and local fallback.
@@ -363,18 +364,26 @@ class AppLogService {
 
       if (useSaf) {
         // SAF 模式：通过 BackupLocationManager 写入日志
-        final failedEntries = await _flushViaSaf(entries);
-        if (failedEntries.isNotEmpty) _buffer.insertAll(0, failedEntries);
+        entriesToRetry = await _flushViaSaf(entries);
       } else {
         // 标准模式：直接使用 dart:io
-        await _flushViaDartIO(entries);
+        entriesToRetry = await _flushViaDartIO(entries);
       }
-      if (_policy.maxStorageBytes != null) await cleanupOldLogs();
-      // 写入成功：entries 已从 _buffer 清除，无需额外操作
+
+      if (entriesToRetry.isNotEmpty) _buffer.insertAll(0, entriesToRetry);
+
+      if (_policy.maxStorageBytes != null) {
+        try {
+          await cleanupOldLogs();
+        } catch (e) {
+          // Cleanup failures do not make already-appended log entries retryable.
+          debugPrint('[AppLogService] 清理旧日志失败: $e');
+        }
+      }
     } catch (e) {
-      // 写入失败：将条目放回缓冲区前端，避免丢失
+      // A failure before a writer reports per-group results retains its input.
       debugPrint('[AppLogService] 写入日志文件失败: $e');
-      _buffer.insertAll(0, entries);
+      if (entriesToRetry.isNotEmpty) _buffer.insertAll(0, entriesToRetry);
     } finally {
       _isFlushing = false;
     }
@@ -426,7 +435,8 @@ class AppLogService {
   }
 
   /// dart:io 模式刷入：标准文件 I/O。
-  static Future<void> _flushViaDartIO(List<_LogEntry> entries) async {
+  static Future<List<_LogEntry>> _flushViaDartIO(
+      List<_LogEntry> entries) async {
     final logDir = await getLogDir();
     if (!await logDir.exists()) {
       await logDir.create(recursive: true);
@@ -440,7 +450,8 @@ class AppLogService {
       byHour.putIfAbsent(hourStr, () => []).add(entry);
     }
 
-    // 逐小时写入
+    // 逐小时写入；only failed groups remain retryable if a later append fails.
+    final failedEntries = <_LogEntry>[];
     for (final group in byHour.entries) {
       final hourStr = group.key;
       final hourEntries = group.value;
@@ -451,8 +462,14 @@ class AppLogService {
         sb.writeln(_serializeEntry(e));
       }
 
-      await logFile.writeAsString(sb.toString(), mode: FileMode.append);
+      try {
+        await logFile.writeAsString(sb.toString(), mode: FileMode.append);
+      } catch (e) {
+        debugPrint('[AppLogService] 写入日志文件失败: ${logFile.path}: $e');
+        failedEntries.addAll(hourEntries);
+      }
     }
+    return failedEntries;
   }
 
   static String _serializeEntry(_LogEntry entry) {
