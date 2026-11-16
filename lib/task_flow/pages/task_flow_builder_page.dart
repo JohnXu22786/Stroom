@@ -1241,9 +1241,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               _inputDisplayNames.remove(reference);
                               _mediaInputs.removeAt(i);
                             });
-                            if (_unsubmittedFileInputs.remove(reference)) {
+                            if (_unsubmittedFileInputs.contains(reference)) {
                               try {
                                 await AttachmentStorage.deleteFile(reference);
+                                _unsubmittedFileInputs.remove(reference);
                               } catch (error) {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(

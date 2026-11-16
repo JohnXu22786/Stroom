@@ -1,3 +1,5 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -20,6 +22,7 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
@@ -362,6 +365,69 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
       },
     );
+
+    testWidgets('failed removal retains ownership for dispose cleanup',
+        (tester) async {
+      final directory =
+          Directory.systemTemp.createTempSync('flow_file_cleanup_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('report');
+      final originalPicker = FilePickerPlatform.instance;
+      final originalDocuments = PathProviderPlatform.instance;
+      FilePickerPlatform.instance = _InputPicker(source.path);
+      PathProviderPlatform.instance = _Documents(directory.path);
+      final deletedPaths = <String>[];
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deletedPaths.add(path);
+        if (deletedPaths.length == 1) throw StateError('disk unavailable');
+        return true;
+      };
+      addTearDown(() {
+        AttachmentStorage.resetOverridesForTesting();
+        FilePickerPlatform.instance = originalPicker;
+        PathProviderPlatform.instance = originalDocuments;
+        directory.deleteSync(recursive: true);
+      });
+
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
+      );
+      await tester.tap(find.text('选择文件（可多选）'));
+      await tester.runAsync(() async {
+        final storage = Directory('${directory.path}/attachments');
+        for (var attempt = 0; attempt < 100; attempt++) {
+          if (storage.existsSync() &&
+              storage.listSync().whereType<File>().isNotEmpty) {
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        fail('The selected document was not copied into app storage');
+      });
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('移除'));
+      await tester.pumpAndSettle();
+      expect(deletedPaths, hasLength(1));
+      expect(find.text('notes.pdf'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        for (var attempt = 0;
+            attempt < 100 && deletedPaths.length < 2;
+            attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      expect(
+        deletedPaths,
+        hasLength(2),
+        reason: 'dispose retries cleanup after the explicit removal fails',
+      );
+      expect(deletedPaths.last, deletedPaths.first);
+    });
 
     testWidgets('oversized document metadata is rejected before copying', (
       tester,
