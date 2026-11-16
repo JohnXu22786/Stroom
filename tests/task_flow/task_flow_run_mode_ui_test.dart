@@ -23,7 +23,6 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
-import 'package:stroom/task_flow/services/task_flow_input_cleanup.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
@@ -142,6 +141,20 @@ bool _startButtonEnabled(WidgetTester tester) {
     find.widgetWithText(FilledButton, '开始任务流'),
   );
   return button.onPressed != null;
+}
+
+Future<void> _waitForCleanupSignal(
+  WidgetTester tester,
+  bool Function() isReady,
+  String failureMessage,
+) async {
+  await tester.runAsync(() async {
+    for (var attempt = 0; attempt < 100; attempt++) {
+      if (isReady()) return;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    fail(failureMessage);
+  });
 }
 
 void main() {
@@ -382,6 +395,7 @@ void main() {
 
     testWidgets('failed removal retains ownership for dispose cleanup',
         (tester) async {
+      SharedPreferences.setMockInitialValues({});
       final directory =
           Directory.systemTemp.createTempSync('flow_file_cleanup_');
       final source = File('${directory.path}/notes.pdf')
@@ -435,20 +449,18 @@ void main() {
       expect(find.text('notes.pdf'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(() async {
-        for (var attempt = 0;
-            attempt < 100 && deletedPaths.length < 2;
-            attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
+      await _waitForCleanupSignal(
+        tester,
+        () => deletedPaths.length == 2,
+        'dispose retries cleanup after the explicit removal fails',
+      );
+      await tester.pumpAndSettle();
       expect(
         deletedPaths,
         hasLength(2),
         reason: 'dispose retries cleanup after the explicit removal fails',
       );
       expect(deletedPaths.last, deletedPaths.first);
-      await TaskFlowInputCleanup.waitForIdleForTesting();
     });
 
     testWidgets('failed dispose cleanup is retried by the next builder',
@@ -501,12 +513,13 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await TaskFlowInputCleanup.waitForIdleForTesting();
-      expect(deletedPaths, hasLength(1));
-      expect(
-        await TaskFlowInputCleanup.pendingReferencesForTesting(),
-        hasLength(1),
+      await _waitForCleanupSignal(
+        tester,
+        () => deletedPaths.length == 1,
+        'dispose should attempt cleanup before the next builder retries it',
       );
+      await tester.pumpAndSettle();
+      expect(deletedPaths, hasLength(1));
 
       failDelete = false;
       await _pumpRunMode(
@@ -514,11 +527,15 @@ void main() {
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await TaskFlowInputCleanup.waitForIdleForTesting();
+      await _waitForCleanupSignal(
+        tester,
+        () => deletedPaths.length == 2,
+        'the next builder should retry the failed deletion',
+      );
+      await tester.pumpAndSettle();
 
       expect(deletedPaths, hasLength(2));
       expect(deletedPaths.last, deletedPaths.first);
-      expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
     });
 
     testWidgets('failed queue write is retried by the next builder',
@@ -573,21 +590,30 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await TaskFlowInputCleanup.waitForIdleForTesting();
+      await _waitForCleanupSignal(
+        tester,
+        () => failingStore.writeAttempted,
+        'disposal should attempt to persist cleanup before retaining fallback ownership',
+      );
+      await tester.pumpAndSettle();
       expect(failingStore.writeAttempted, isTrue);
       expect(deletedPaths, isEmpty);
 
       SharedPreferences.setMockInitialValues({});
-      expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
+      SharedPreferencesStorePlatform.instance = defaultStore;
       await _pumpRunMode(
         tester,
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await TaskFlowInputCleanup.waitForIdleForTesting();
+      await _waitForCleanupSignal(
+        tester,
+        () => deletedPaths.length == 1,
+        'the next builder should retry cleanup held in process memory',
+      );
+      await tester.pumpAndSettle();
 
       expect(deletedPaths, hasLength(1));
-      expect(await TaskFlowInputCleanup.pendingReferencesForTesting(), isEmpty);
     });
 
     testWidgets('oversized document metadata is rejected before copying', (
@@ -771,7 +797,6 @@ void main() {
     testWidgets('leaving an unsubmitted file run removes its copied input', (
       tester,
     ) async {
-      await TaskFlowInputCleanup.resetForTesting();
       SharedPreferences.setMockInitialValues({});
       final directory = Directory.systemTemp.createTempSync('flow_file_exit_');
       final source = File('${directory.path}/notes.pdf')
@@ -820,7 +845,12 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await TaskFlowInputCleanup.waitForIdleForTesting();
+      await _waitForCleanupSignal(
+        tester,
+        () => deletedPaths.contains(copy.path),
+        'leaving the run should delete its copied input',
+      );
+      await tester.pumpAndSettle();
       expect(copy.existsSync(), isFalse);
       expect(deletedPaths, [copy.path]);
     });
