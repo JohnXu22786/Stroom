@@ -12,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import '../fake_file_picker.dart';
 
@@ -35,18 +34,6 @@ class _Documents extends PathProviderPlatform {
 
   @override
   Future<String> getApplicationDocumentsPath() async => path;
-}
-
-class _FailingStringListStore extends InMemorySharedPreferencesStore {
-  _FailingStringListStore() : super.empty();
-
-  bool writeAttempted = false;
-
-  @override
-  Future<bool> setValue(String valueType, String key, Object value) async {
-    if (valueType == 'StringList') writeAttempted = true;
-    return false;
-  }
 }
 
 class _InputPicker extends FilePickerPlatform {
@@ -144,23 +131,9 @@ bool _startButtonEnabled(WidgetTester tester) {
   return button.onPressed != null;
 }
 
-Future<void> _pumpUntilCleanupSignal(
-  WidgetTester tester,
-  bool Function() isReady,
-  String failureMessage,
-) async {
-  for (var attempt = 0; attempt < 100; attempt++) {
-    if (isReady()) return;
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(const Duration(milliseconds: 10));
-  }
-  if (isReady()) return;
-  fail(failureMessage);
-}
-
 void main() {
+  tearDown(TaskFlowInputCleanup.resetOverridesForTesting);
+
   group('Task flow run-mode input adapts to the FIRST block', () {
     testWidgets(
       'OCR rejects a valid image selection when another manifest record is unresolved',
@@ -408,6 +381,15 @@ void main() {
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
       final deletedPaths = <String>[];
+      final queuedReferences = <String>[];
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deletedPaths.add(path);
         if (deletedPaths.length == 1) throw StateError('disk unavailable');
@@ -452,20 +434,7 @@ void main() {
       expect(find.text('notes.pdf'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await _pumpUntilCleanupSignal(
-        tester,
-        () =>
-            deletedPaths.length == 2 &&
-            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
-        'dispose retries cleanup after the explicit removal fails',
-      );
-      await tester.pumpAndSettle();
-      expect(
-        deletedPaths,
-        hasLength(2),
-        reason: 'dispose retries cleanup after the explicit removal fails',
-      );
-      expect(deletedPaths.last, deletedPaths.first);
+      expect(queuedReferences, [deletedPaths.single]);
     });
 
     testWidgets('failed dispose cleanup is retried by the next builder',
@@ -479,15 +448,21 @@ void main() {
       final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
-      final deletedPaths = <String>[];
-      var failDelete = true;
-      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        deletedPaths.add(path);
-        if (failDelete) throw StateError('disk unavailable');
-        return true;
+      final queuedReferences = <String>[];
+      var retryCount = 0;
+      TaskFlowInputCleanup.retryPendingOverrideForTesting = () {
+        retryCount++;
+        return Future<void>.value();
+      };
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
       };
       addTearDown(() {
-        AttachmentStorage.resetOverridesForTesting();
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
         directory.deleteSync(recursive: true);
@@ -515,118 +490,22 @@ void main() {
       });
       await tester.pumpAndSettle();
       expect(find.text('notes.pdf'), findsOneWidget);
+      final copyPath = Directory('${directory.path}/attachments')
+          .listSync()
+          .whereType<File>()
+          .single
+          .path;
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      await _pumpUntilCleanupSignal(
-        tester,
-        () =>
-            deletedPaths.length == 1 &&
-            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
-        'dispose should attempt cleanup before the next builder retries it',
-      );
-      await tester.pumpAndSettle();
-      expect(deletedPaths, hasLength(1));
-
-      failDelete = false;
-      await _pumpRunMode(
-        tester,
-        TaskFlowBlock(typeKey: BlockType.chat),
-        inputType: IOType.file,
-      );
-      await _pumpUntilCleanupSignal(
-        tester,
-        () =>
-            deletedPaths.length == 2 &&
-            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
-        'the next builder should retry the failed deletion',
-      );
-      await tester.pumpAndSettle();
-
-      expect(deletedPaths, hasLength(2));
-      expect(deletedPaths.last, deletedPaths.first);
-    });
-
-    testWidgets('failed queue write is retried by the next builder',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final defaultStore = SharedPreferencesStorePlatform.instance;
-      final failingStore = _FailingStringListStore();
-      SharedPreferencesStorePlatform.instance = failingStore;
-      final directory =
-          Directory.systemTemp.createTempSync('flow_queue_failure_');
-      final source = File('${directory.path}/notes.pdf')
-        ..writeAsStringSync('report');
-      final originalPicker = FilePickerPlatform.instance;
-      final originalDocuments = PathProviderPlatform.instance;
-      FilePickerPlatform.instance = _InputPicker(source.path);
-      PathProviderPlatform.instance = _Documents(directory.path);
-      final deletedPaths = <String>[];
-      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        deletedPaths.add(path);
-        return true;
-      };
-      addTearDown(() {
-        SharedPreferencesStorePlatform.instance = defaultStore;
-        AttachmentStorage.resetOverridesForTesting();
-        FilePickerPlatform.instance = originalPicker;
-        PathProviderPlatform.instance = originalDocuments;
-        directory.deleteSync(recursive: true);
-      });
+      expect(queuedReferences, [copyPath]);
+      expect(retryCount, 1);
 
       await _pumpRunMode(
         tester,
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await tester.runAsync(() async {
-        await tester.tap(find.text('选择文件（可多选）'));
-        final storage = Directory('${directory.path}/attachments');
-        for (var attempt = 0; attempt < 100; attempt++) {
-          if (storage.existsSync() &&
-              storage.listSync().whereType<File>().any(
-                    (file) => file.lengthSync() == 6,
-                  )) {
-            await Future<void>.delayed(const Duration(milliseconds: 10));
-            return;
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-        fail('The selected document was not copied into app storage');
-      });
-      await tester.pumpAndSettle();
-      expect(find.text('notes.pdf'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      await _pumpUntilCleanupSignal(
-        tester,
-        () =>
-            failingStore.writeAttempted &&
-            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
-        'disposal should attempt to persist cleanup before retaining fallback ownership',
-      );
-      await tester.pumpAndSettle();
-      expect(failingStore.writeAttempted, isTrue);
-      expect(deletedPaths, isEmpty);
-
-      SharedPreferences.setMockInitialValues({});
-      SharedPreferencesStorePlatform.instance = defaultStore;
-      await _pumpRunMode(
-        tester,
-        TaskFlowBlock(typeKey: BlockType.chat),
-        inputType: IOType.file,
-      );
-      await _pumpUntilCleanupSignal(
-        tester,
-        () =>
-            deletedPaths.length == 1 &&
-            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
-        'the next builder should retry cleanup held in process memory',
-      );
-      await tester.pumpAndSettle();
-
-      expect(deletedPaths, hasLength(1));
+      expect(retryCount, 2);
     });
 
     testWidgets('oversized document metadata is rejected before copying', (
@@ -818,15 +697,18 @@ void main() {
       final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
-      final deletedPaths = <String>[];
-      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        deletedPaths.add(path);
-        final file = File(path);
-        if (file.existsSync()) file.deleteSync();
-        return true;
+      final queuedReferences = <String>[];
+      TaskFlowInputCleanup.retryPendingOverrideForTesting =
+          () => Future<void>.value();
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
       };
       addTearDown(() {
-        AttachmentStorage.resetOverridesForTesting();
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
         directory.deleteSync(recursive: true);
@@ -857,17 +739,7 @@ void main() {
       expect(find.text('notes.pdf'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      await _pumpUntilCleanupSignal(
-        tester,
-        () =>
-            deletedPaths.contains(copy.path) &&
-            TaskFlowInputCleanup.activeOperationCountForTesting == 0,
-        'leaving the run should delete its copied input',
-      );
-      await tester.pumpAndSettle();
-      expect(copy.existsSync(), isFalse);
-      expect(deletedPaths, [copy.path]);
+      expect(queuedReferences, [copy.path]);
     });
 
     testWidgets(

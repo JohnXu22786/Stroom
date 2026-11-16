@@ -16,11 +16,15 @@ class _FailingStringListStore extends InMemorySharedPreferencesStore {
 
 void main() {
   setUp(() async {
+    TaskFlowInputCleanup.resetOverridesForTesting();
     SharedPreferences.setMockInitialValues({});
     AttachmentStorage.resetOverridesForTesting();
   });
 
-  tearDown(AttachmentStorage.resetOverridesForTesting);
+  tearDown(() {
+    TaskFlowInputCleanup.resetOverridesForTesting();
+    AttachmentStorage.resetOverridesForTesting();
+  });
 
   test(
     'successful cleanup deletes the file and clears its retry marker',

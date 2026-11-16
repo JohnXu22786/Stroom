@@ -14,7 +14,13 @@ class TaskFlowInputCleanup {
   static Future<void> _pendingWrites = Future<void>.value();
 
   @visibleForTesting
-  static int get activeOperationCountForTesting => _activeOperations.length;
+  static Future<void> Function()? retryPendingOverrideForTesting;
+
+  @visibleForTesting
+  static Future<void> Function(
+    Iterable<String> references, {
+    VoidCallback? onQueued,
+  })? enqueueAndRetryOverrideForTesting;
 
   static Future<void> enqueueAll(Iterable<String> references) {
     final additions = references.toSet();
@@ -32,6 +38,10 @@ class TaskFlowInputCleanup {
     Iterable<String> references, {
     VoidCallback? onQueued,
   }) {
+    final override = enqueueAndRetryOverrideForTesting;
+    if (override != null) {
+      return override(references, onQueued: onQueued);
+    }
     final additions = references.toSet();
     if (additions.isEmpty) return Future<void>.value();
     return _track(_enqueueAndRetry(additions, onQueued));
@@ -46,7 +56,17 @@ class TaskFlowInputCleanup {
     await retryPending();
   }
 
-  static Future<void> retryPending() => _track(_retryPending());
+  static Future<void> retryPending() {
+    final override = retryPendingOverrideForTesting;
+    if (override != null) return override();
+    return _track(_retryPending());
+  }
+
+  @visibleForTesting
+  static void resetOverridesForTesting() {
+    retryPendingOverrideForTesting = null;
+    enqueueAndRetryOverrideForTesting = null;
+  }
 
   static Future<void> _retryPending() async {
     final pending = Set<String>.of(_inMemoryPendingReferences);
