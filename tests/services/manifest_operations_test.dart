@@ -52,6 +52,9 @@ final class _FailingReplacementFile extends Fake implements File {
   }
 
   @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+
+  @override
   Future<File> rename(String newPath) => file.rename(newPath);
 }
 
