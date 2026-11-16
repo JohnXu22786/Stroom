@@ -86,6 +86,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       } catch (_) {}
 
       List<Map<String, dynamic>> existingEntries = [];
+      var skippedCorruptEntry = false;
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
           final decoded = jsonDecode(existingJson);
@@ -98,6 +99,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             // 兜底：使用 whereType 安全过滤非 Map 条目
             existingEntries =
                 decoded.whereType<Map<String, dynamic>>().toList();
+            skippedCorruptEntry = existingEntries.length != decoded.length;
           }
         } catch (_) {
           // 现有数据损坏，忽略并用空列表重新开始
@@ -110,7 +112,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
       // 只有可正常解析的自定义 LLM 条目才算已迁移；损坏条目不能阻止
       // 从 chat_configs 恢复仍可用的旧设置。
-      final hasUsableLlmEntry = existingEntries.any((entry) {
+      final usableLlmEntryIndex = existingEntries.indexWhere((entry) {
         if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') {
           return false;
         }
@@ -123,8 +125,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           return false;
         }
       });
-      var legacyConfigsPersisted = hasUsableLlmEntry;
-      if (!hasUsableLlmEntry) {
+      var legacyConfigsPersisted = usableLlmEntryIndex >= 0;
+      if (usableLlmEntryIndex < 0) {
         existingEntries.add({
           'id': 'migrated_llm',
           'type': 'llm',
@@ -136,6 +138,36 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           'provider_entries',
           jsonEncode(existingEntries),
         );
+      } else {
+        final existingEntry = existingEntries[usableLlmEntryIndex];
+        final parsedEntry = ProviderEntry.fromMap(existingEntry);
+        final representedConfigs = parsedEntry.configs
+            .map(_legacyConfigIdentity)
+            .toSet();
+        final unrepresentedConfigs = <ProviderConfigItem>[];
+        for (final config in migratedConfigs) {
+          if (representedConfigs.add(_legacyConfigIdentity(config))) {
+            unrepresentedConfigs.add(config);
+          }
+        }
+
+        if (unrepresentedConfigs.isNotEmpty) {
+          final rawConfigs = existingEntry['configs'];
+          final configs = rawConfigs is List
+              ? rawConfigs
+              : parsedEntry.configs.map((config) => config.toMap()).toList();
+          configs.addAll(unrepresentedConfigs.map((config) => config.toMap()));
+          existingEntry['configs'] = configs;
+          if (skippedCorruptEntry && existingJson != null) {
+            final backedUp =
+                await _backupCorruptProviderEntries(prefs, existingJson);
+            if (!backedUp) return;
+          }
+          legacyConfigsPersisted = await prefs.setString(
+            'provider_entries',
+            jsonEncode(existingEntries),
+          );
+        }
       }
 
       // 只有目标已存在或写入成功后才删除旧数据，避免偏好存储写入失败时
@@ -150,6 +182,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       debugPrint('Failed to migrate old chat configs: $e');
     }
   }
+
+  String _legacyConfigIdentity(ProviderConfigItem config) =>
+      jsonEncode([config.providerName, config.host, config.key]);
 
   Future<void> _migrateOldCustomParams(SharedPreferences prefs) async {
     try {
@@ -565,12 +600,13 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// _backupCorruptConversationsFile 模式）：结构性损坏或全部条目损坏
   /// 时把原始 JSON 存到独立 key，最多保留 [_maxCorruptProviderBackups] 份，
   /// 避免回退默认后后续 _persist 把含 API key 的原始配置永久覆盖。
-  Future<void> _backupCorruptProviderEntries(
+  Future<bool> _backupCorruptProviderEntries(
       SharedPreferences prefs, String corruptJson) async {
     try {
       final backupKey =
           'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
-      await prefs.setString(backupKey, corruptJson);
+      final saved = await prefs.setString(backupKey, corruptJson);
+      if (!saved) return false;
       // 只保留最近的 N 份
       final keys = prefs.getKeys().toList()
         ..sort()
@@ -580,8 +616,10 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
       debugPrint(
           '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey');
+      return true;
     } catch (e) {
       debugPrint('Failed to back up corrupt provider entries: $e');
+      return false;
     }
   }
 
