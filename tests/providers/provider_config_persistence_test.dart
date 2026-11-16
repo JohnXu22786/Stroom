@@ -182,7 +182,8 @@ void main() {
       );
     });
 
-    test('usable LLM entry does not suppress unmatched legacy configs', () async {
+    test('usable LLM entry does not suppress unmatched legacy configs',
+        () async {
       final existingEntriesJson = jsonEncode([
         {
           'id': 'existing_llm',
@@ -222,9 +223,8 @@ void main() {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
 
-      final llmEntries = notifier.state.entries
-          .where((entry) => entry.type == 'llm')
-          .toList();
+      final llmEntries =
+          notifier.state.entries.where((entry) => entry.type == 'llm').toList();
       expect(llmEntries, hasLength(1));
       expect(llmEntries.single.id, 'existing_llm');
       expect(llmEntries.single.configs, hasLength(2));

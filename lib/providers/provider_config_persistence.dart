@@ -141,9 +141,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       } else {
         final existingEntry = existingEntries[usableLlmEntryIndex];
         final parsedEntry = ProviderEntry.fromMap(existingEntry);
-        final representedConfigs = parsedEntry.configs
-            .map(_legacyConfigIdentity)
-            .toSet();
+        final representedConfigs =
+            parsedEntry.configs.map(_legacyConfigIdentity).toSet();
         final unrepresentedConfigs = <ProviderConfigItem>[];
         for (final config in migratedConfigs) {
           if (representedConfigs.add(_legacyConfigIdentity(config))) {
