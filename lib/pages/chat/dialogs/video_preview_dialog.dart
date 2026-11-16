@@ -63,6 +63,7 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
       debugPrint('[VideoPreview] init failed: $e');
       final controller = _videoPlayerController;
       _videoPlayerController = null;
+      if (mounted) setState(() => _hasError = true);
       _chewieController?.dispose();
       _chewieController = null;
       if (controller != null) {
@@ -70,7 +71,6 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
       } else if (mounted) {
         await _releasePlayerAndDeletePreview(null);
       }
-      if (mounted) setState(() => _hasError = true);
     }
   }
 
