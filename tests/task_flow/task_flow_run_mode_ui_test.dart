@@ -143,18 +143,17 @@ bool _startButtonEnabled(WidgetTester tester) {
   return button.onPressed != null;
 }
 
-Future<void> _waitForCleanupSignal(
+Future<void> _pumpUntilCleanupSignal(
   WidgetTester tester,
   bool Function() isReady,
   String failureMessage,
 ) async {
-  await tester.runAsync(() async {
-    for (var attempt = 0; attempt < 100; attempt++) {
-      if (isReady()) return;
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    fail(failureMessage);
-  });
+  for (var attempt = 0; attempt < 100; attempt++) {
+    if (isReady()) return;
+    await tester.pump(const Duration(milliseconds: 10));
+  }
+  if (isReady()) return;
+  fail(failureMessage);
 }
 
 void main() {
@@ -449,7 +448,7 @@ void main() {
       expect(find.text('notes.pdf'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await _waitForCleanupSignal(
+      await _pumpUntilCleanupSignal(
         tester,
         () => deletedPaths.length == 2,
         'dispose retries cleanup after the explicit removal fails',
@@ -513,7 +512,7 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await _waitForCleanupSignal(
+      await _pumpUntilCleanupSignal(
         tester,
         () => deletedPaths.length == 1,
         'dispose should attempt cleanup before the next builder retries it',
@@ -527,7 +526,7 @@ void main() {
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await _waitForCleanupSignal(
+      await _pumpUntilCleanupSignal(
         tester,
         () => deletedPaths.length == 2,
         'the next builder should retry the failed deletion',
@@ -590,7 +589,7 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await _waitForCleanupSignal(
+      await _pumpUntilCleanupSignal(
         tester,
         () => failingStore.writeAttempted,
         'disposal should attempt to persist cleanup before retaining fallback ownership',
@@ -606,7 +605,7 @@ void main() {
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
       );
-      await _waitForCleanupSignal(
+      await _pumpUntilCleanupSignal(
         tester,
         () => deletedPaths.length == 1,
         'the next builder should retry cleanup held in process memory',
@@ -845,7 +844,7 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
-      await _waitForCleanupSignal(
+      await _pumpUntilCleanupSignal(
         tester,
         () => deletedPaths.contains(copy.path),
         'leaving the run should delete its copied input',
