@@ -301,7 +301,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     await ref
         .read(conversationsProvider.notifier)
         .batchDelete(selectedIds.toList());
-    final remainingIds = ref.read(conversationsProvider).map((c) => c.id).toSet();
+    final remainingIds =
+        ref.read(conversationsProvider).map((c) => c.id).toSet();
     for (final conv in convs) {
       if (selectedIds.contains(conv.id) && !remainingIds.contains(conv.id)) {
         await _cleanupConversationFiles(conv);

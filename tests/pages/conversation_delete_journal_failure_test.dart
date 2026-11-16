@@ -30,37 +30,37 @@ class _DocumentsPathProvider extends PathProviderPlatform {
 const _journalName = 'conversation_stream_checkpoints.jsonl';
 
 Conversation _conversation() => Conversation(
-  id: 'delete-test',
-  title: 'Delete test',
-  assistantId: 'assistant',
-  messages: [
-    ChatMessage(
-      id: 'message',
-      role: 'user',
-      content: 'attached',
-      attachments: [
-        Attachment(
-          id: 'attachment',
-          fileName: 'file.txt',
-          mimeType: 'text/plain',
-          fileType: 'file',
-          hash: 'hash',
-          storagePath: 'attachments/file.txt',
-          fileSize: 4,
-        ),
-        Attachment(
-          id: 'attachment-2',
-          fileName: 'second.txt',
-          mimeType: 'text/plain',
-          fileType: 'file',
-          hash: 'hash-2',
-          storagePath: 'attachments/second.txt',
-          fileSize: 6,
+      id: 'delete-test',
+      title: 'Delete test',
+      assistantId: 'assistant',
+      messages: [
+        ChatMessage(
+          id: 'message',
+          role: 'user',
+          content: 'attached',
+          attachments: [
+            Attachment(
+              id: 'attachment',
+              fileName: 'file.txt',
+              mimeType: 'text/plain',
+              fileType: 'file',
+              hash: 'hash',
+              storagePath: 'attachments/file.txt',
+              fileSize: 4,
+            ),
+            Attachment(
+              id: 'attachment-2',
+              fileName: 'second.txt',
+              mimeType: 'text/plain',
+              fileType: 'file',
+              hash: 'hash-2',
+              storagePath: 'attachments/second.txt',
+              fileSize: 6,
+            ),
+          ],
         ),
       ],
-    ),
-  ],
-);
+    );
 
 Future<Directory> _blockConversationJournal() async {
   final root = await Directory.systemTemp.createTemp('stroom_delete_test_');
@@ -72,33 +72,33 @@ Future<Directory> _blockConversationJournal() async {
 }
 
 Widget _app({required Widget home}) => ProviderScope(
-  overrides: [
-    assistantProvider.overrideWith((ref) {
-      final notifier = AssistantsNotifier();
-      notifier.state = [
-        Assistant(
-          id: 'assistant',
-          name: 'Assistant',
-          prompt: 'Prompt',
-          emoji: '🤖',
-        ),
-      ];
-      return notifier;
-    }),
-    selectedAssistantIdProvider.overrideWith((ref) => 'assistant'),
-    conversationsProvider.overrideWith((ref) {
-      final notifier = ConversationsNotifier(ref);
-      notifier.state = [_conversation()];
-      return notifier;
-    }),
-  ],
-  child: MaterialApp(
-    locale: const Locale('en', 'US'),
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    home: home,
-  ),
-);
+      overrides: [
+        assistantProvider.overrideWith((ref) {
+          final notifier = AssistantsNotifier();
+          notifier.state = [
+            Assistant(
+              id: 'assistant',
+              name: 'Assistant',
+              prompt: 'Prompt',
+              emoji: '🤖',
+            ),
+          ];
+          return notifier;
+        }),
+        selectedAssistantIdProvider.overrideWith((ref) => 'assistant'),
+        conversationsProvider.overrideWith((ref) {
+          final notifier = ConversationsNotifier(ref);
+          notifier.state = [_conversation()];
+          return notifier;
+        }),
+      ],
+      child: MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: home,
+      ),
+    );
 
 Future<void> _deleteBySelectionMode(WidgetTester tester) async {
   await tester.tap(find.byIcon(Icons.checklist));
