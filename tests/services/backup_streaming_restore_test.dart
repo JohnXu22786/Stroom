@@ -249,7 +249,9 @@ void main() {
       );
 
       final archive = buildV2Archive(
-        files: {'pictures/incoming.jpg': Uint8List.fromList([1])},
+        files: {
+          'pictures/incoming.jpg': Uint8List.fromList([1])
+        },
       );
       final settings = utf8.encode(jsonEncode({'darkMode': false}));
       archive.addFile(ArchiveFile('settings.json', settings.length, settings));
