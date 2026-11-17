@@ -144,6 +144,8 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     WebFileStore.enableTestMode();
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
@@ -162,6 +164,8 @@ void main() {
 
   tearDown(() async {
     await background.pendingPersistence;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     if (executions.mounted) executions.dispose();
     background.dispose();
     WebFileStore.disableTestMode();
@@ -933,6 +937,96 @@ void main() {
       );
     },
   );
+
+  test('cancellation during OCR request removes the background task', () async {
+    final source = await File('${directory.path}/cancelled_request.png')
+        .writeAsBytes(_validPng());
+    final requestStarted = Completer<void>();
+    final releaseRequest = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (_, _) async {
+        requestStarted.complete();
+        await releaseRequest.future;
+        throw DioException(
+          requestOptions: RequestOptions(path: '/recognize'),
+          type: DioExceptionType.cancel,
+        );
+      },
+    );
+
+    await requestStarted.future;
+    executions.cancelExecution(execId);
+    releaseRequest.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during OCR text saving removes the background task',
+      () async {
+    final source = await File('${directory.path}/cancelled_save.png')
+        .writeAsBytes(_validPng());
+    final manifestReadStarted = Completer<void>();
+    final releaseManifestRead = Completer<void>();
+    ManifestDatabase.beforeWebDataSaveForTesting = () async {
+      if (!manifestReadStarted.isCompleted) {
+        manifestReadStarted.complete();
+        await releaseManifestRead.future;
+      }
+    };
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (_, _) async => 'recognized text',
+    );
+
+    await manifestReadStarted.future;
+    executions.cancelExecution(execId);
+    releaseManifestRead.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
 
   test('OCR rejects corrupt bytes before invoking its request', () async {
     final source = await File('${directory.path}/corrupt.png').writeAsBytes(
