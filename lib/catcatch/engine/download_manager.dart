@@ -610,8 +610,7 @@ class DownloadManager {
       for (final path in inputPaths) {
         final inputFile = File(path);
         if (!await inputFile.exists()) {
-          debugPrint('[DownloadManager] Warning: part file not found: $path');
-          continue;
+          throw FileSystemException('Segment part file not found', path);
         }
         await for (final chunk in inputFile.openRead()) {
           await raf.writeFrom(chunk);
