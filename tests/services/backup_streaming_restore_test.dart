@@ -157,25 +157,25 @@ void main() {
       );
 
       final files = {
-          'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
-          'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
-          'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
-          'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
-          'task_flows/executions.json': Uint8List.fromList(
-            utf8.encode(
-              jsonEncode([
-                {
-                  'id': executionId,
-                  'flowId': 'restored-flow',
-                  'flowName': 'Restored flow',
-                  'status': 'completed',
-                  'createdAt': DateTime(2026).toIso8601String(),
-                },
-              ]),
-            ),
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'restored-flow',
+                'flowName': 'Restored flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
           ),
-          restoredArtifact: Uint8List.fromList([2]),
-        };
+        ),
+        restoredArtifact: Uint8List.fromList([2]),
+      };
       final archive = buildV2Archive(
         dataParts: [DataParts.tasks],
         files: files,
@@ -275,6 +275,75 @@ void main() {
 
       expect(await WebFileStore.read(artifact), [9]);
       expect(await WebFileStore.read('task_flows/executions.json'), isNotNull);
+    },
+  );
+
+  test(
+    'restore cleans replaced execution artifacts when media files are excluded',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const executionId = 'replaced-without-media';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_inventory_without_media.zip',
+      );
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      expect(await WebFileStore.read(artifact), isNull);
     },
   );
 

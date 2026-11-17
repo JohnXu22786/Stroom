@@ -6639,7 +6639,7 @@ class BackupService {
             'task_state/app_launches.json',
           };
       const executionsFile = 'task_flows/executions.json';
-      final cleanupReplacedExecutionArtifacts = selection.includeMediaFiles &&
+      final cleanupReplacedExecutionArtifacts =
           taskFiles.contains(executionsFile);
       final replacedExecutionIds = cleanupReplacedExecutionArtifacts
           ? await _taskFlowExecutionIdsToReplace()
@@ -6693,7 +6693,8 @@ class BackupService {
         deleteFailed = true;
       }
       if (taskFiles.contains(executionsFile) &&
-          (!cleanupReplacedExecutionArtifacts || replacedExecutionIds != null)) {
+          (!cleanupReplacedExecutionArtifacts ||
+              replacedExecutionIds != null)) {
         if (await _deleteFile('task_flows', 'executions.json')) {
           for (final executionId in replacedExecutionIds ?? const <String>{}) {
             try {
