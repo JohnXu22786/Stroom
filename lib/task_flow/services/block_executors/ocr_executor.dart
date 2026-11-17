@@ -322,6 +322,20 @@ Future<String> executeOcrBlock({
       ? maxRequestImageBytes
       : maxFlowImageInputBytes;
 
+  String safePreflightError(String error) {
+    if (!OcrDiagnosticSnapshot.containsCredential(
+      error,
+      excludedValues: [config.key],
+    )) {
+      return error;
+    }
+    return _localizedSafeOcrTaskError(
+      error,
+      localizations: strings,
+      excludedValues: [config.key],
+    );
+  }
+
   BlockExecutionException oversizedInputException() {
     final limitLabel = maxRequestImageBytes < maxFlowImageInputBytes
         ? strings.taskFlowOcrRequestSizeLimit(
@@ -330,7 +344,9 @@ Future<String> executeOcrBlock({
         : strings.taskFlowImageInputSizeLimit(
             ocrRequestSizeBudgetMib(maxFlowImageInputBytes),
           );
-    final error = strings.taskFlowOcrInputTooLarge(limitLabel);
+    final error = safePreflightError(
+      strings.taskFlowOcrInputTooLarge(limitLabel),
+    );
     failSubTask(
       bgNotifier,
       taskId,
@@ -338,6 +354,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       error,
+      ocrCredentialValuesForSanitization: [config.key],
       localizations: strings,
     );
     return BlockExecutionException(
@@ -452,17 +469,19 @@ Future<String> executeOcrBlock({
       OcrImagePayloadFailure.orientationFailed =>
         strings.ocrImageOrientationFailed,
     };
+    final safeError = safePreflightError(localizedError);
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      localizedError,
+      safeError,
+      ocrCredentialValuesForSanitization: [config.key],
       localizations: strings,
     );
     throw BlockExecutionException(
-      localizedError,
+      safeError,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );

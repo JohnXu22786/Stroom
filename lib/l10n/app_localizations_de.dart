@@ -198,6 +198,27 @@ class AppLocalizationsDe extends AppLocalizations {
   String get builtInPromptMarketTitle => 'Assistenten-Marktplatz';
 
   @override
+  String get assistantAddTitle => 'Assistent hinzufügen';
+
+  @override
+  String get assistantBuiltInTab => 'Integriert';
+
+  @override
+  String get assistantImportTab => 'Importieren';
+
+  @override
+  String get assistantBuiltInHint =>
+      'Durchsuche fertige Assistenten und sieh sie dir vor dem Hinzufügen an.';
+
+  @override
+  String get assistantImportHint =>
+      'Verbinde einen Assistentenkatalog oder importiere eine Datei über ihre URL.';
+
+  @override
+  String get assistantImportAction =>
+      'Katalog verbinden oder Datei importieren';
+
+  @override
   String get builtInPromptClose => 'Schließen';
 
   @override
@@ -471,7 +492,8 @@ class AppLocalizationsDe extends AppLocalizations {
       'Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende \$...\$ für Inline-Formeln und \$\$...\$\$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.';
 
   @override
-  String get ocrDefaultImagesOnly => "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)";
+  String get ocrDefaultImagesOnly =>
+      'Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -543,7 +565,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.";
+      'Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.';
 
   @override
   String get ocrInstructionManageEmpty => 'Noch keine Anweisungen';
@@ -3332,12 +3354,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get topicItemPin => 'Anheften';
 
   @override
-  @override
   String get topicItemMarkUnread => 'Als ungelesen markieren';
 
   @override
   String get topicItemMarkRead => 'Als gelesen markieren';
 
+  @override
   String get topicItemRename => 'Umbenennen';
 
   @override
@@ -12362,6 +12384,27 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get builtInPromptMarketTitle => 'Assistenten-Marktplatz';
 
   @override
+  String get assistantAddTitle => 'Assistent hinzufügen';
+
+  @override
+  String get assistantBuiltInTab => 'Integriert';
+
+  @override
+  String get assistantImportTab => 'Importieren';
+
+  @override
+  String get assistantBuiltInHint =>
+      'Durchsuche fertige Assistenten und sieh sie dir vor dem Hinzufügen an.';
+
+  @override
+  String get assistantImportHint =>
+      'Verbinde einen Assistentenkatalog oder importiere eine Datei über ihre URL.';
+
+  @override
+  String get assistantImportAction =>
+      'Katalog verbinden oder Datei importieren';
+
+  @override
   String get builtInPromptClose => 'Schließen';
 
   @override
@@ -12635,7 +12678,8 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       'Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende \$...\$ für Inline-Formeln und \$\$...\$\$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.';
 
   @override
-  String get ocrDefaultImagesOnly => "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)";
+  String get ocrDefaultImagesOnly =>
+      'Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12707,7 +12751,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get ocrInstructionManageGuidance =>
-      "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.";
+      'Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.';
 
   @override
   String get ocrInstructionManageEmpty => 'Noch keine Anweisungen';
@@ -14312,6 +14356,11 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get chatErrorDetailEmpty => 'Keine Detaildaten verfügbar';
 
   @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[$count Zeichen in der Mitte ausgelassen]';
+  }
+
+  @override
   String get chatAudioPreviewClose => 'Schließen';
 
   @override
@@ -15491,12 +15540,12 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get topicItemPin => 'Anheften';
 
   @override
-  @override
   String get topicItemMarkUnread => 'Als ungelesen markieren';
 
   @override
   String get topicItemMarkRead => 'Als gelesen markieren';
 
+  @override
   String get topicItemRename => 'Umbenennen';
 
   @override
@@ -16019,6 +16068,9 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get folderPickerSubfolders => 'Unterordner';
+
+  @override
+  String get folderPickerNoFolders => 'Keine Ordner';
 
   @override
   String get folderPickerExistingFolders => 'Vorhandene Ordner';
@@ -22158,6 +22210,11 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'Die OCR-Anfrage ist $encodedBytes Byte groß und überschreitet das konfigurierte Limit von $budgetBytes Byte.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR fehlgeschlagen: $details';
   }
@@ -22922,6 +22979,99 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get appLogCopyDone => 'Alle Protokollinhalte kopiert';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Hintergrundaufgabe';
@@ -24213,4 +24363,16 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   @override
   String get providerMaxUploadSizePositive =>
       'Die maximale Uploadgröße muss eine positive Zahl sein.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Der gespeicherte Temperaturwert liegt außerhalb von 0–2. Passe den Regler an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Der gespeicherte top-P-Wert liegt außerhalb von 0–1. Passe den Regler an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.';
 }

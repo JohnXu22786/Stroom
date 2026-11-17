@@ -195,6 +195,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get builtInPromptMarketTitle => '어시스턴트 마켓';
 
   @override
+  String get assistantAddTitle => '어시스턴트 추가';
+
+  @override
+  String get assistantBuiltInTab => '내장';
+
+  @override
+  String get assistantImportTab => '가져오기';
+
+  @override
+  String get assistantBuiltInHint =>
+      '바로 사용할 수 있는 어시스턴트를 둘러보고 추가하기 전에 미리 볼 수 있습니다.';
+
+  @override
+  String get assistantImportHint => '원격 카탈로그에 연결하거나 어시스턴트 파일 URL에서 가져옵니다.';
+
+  @override
+  String get assistantImportAction => '카탈로그 연결 또는 파일 가져오기';
+
+  @override
   String get builtInPromptClose => '닫기';
 
   @override
@@ -456,7 +475,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '페이지에 보이는 모든 텍스트를 자연스러운 읽기 순서대로 옮기세요. 수식이 아닌 텍스트는 그대로 유지하고 수학 수식은 LaTeX로 표시하세요. 인라인 수식에는 \$...\$, 디스플레이 수식에는 \$\$...\$\$를 사용하세요. 설명이나 추론을 덧붙이지 말고 옮긴 내용만 반환하세요.';
 
   @override
-  String get ocrDefaultImagesOnly => "기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)";
+  String get ocrDefaultImagesOnly => '기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -527,7 +546,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      "이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.";
+      '이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.';
 
   @override
   String get ocrInstructionManageEmpty => '아직 지침이 없습니다';
@@ -3199,12 +3218,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get topicItemPin => '고정';
 
   @override
-  @override
   String get topicItemMarkUnread => '읽지 않음으로 표시';
 
   @override
   String get topicItemMarkRead => '읽음으로 표시';
 
+  @override
   String get topicItemRename => '이름 변경';
 
   @override
@@ -11873,6 +11892,25 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get builtInPromptMarketTitle => '어시스턴트 마켓';
 
   @override
+  String get assistantAddTitle => '어시스턴트 추가';
+
+  @override
+  String get assistantBuiltInTab => '내장';
+
+  @override
+  String get assistantImportTab => '가져오기';
+
+  @override
+  String get assistantBuiltInHint =>
+      '바로 사용할 수 있는 어시스턴트를 둘러보고 추가하기 전에 미리 볼 수 있습니다.';
+
+  @override
+  String get assistantImportHint => '원격 카탈로그에 연결하거나 어시스턴트 파일 URL에서 가져옵니다.';
+
+  @override
+  String get assistantImportAction => '카탈로그 연결 또는 파일 가져오기';
+
+  @override
   String get builtInPromptClose => '닫기';
 
   @override
@@ -12134,7 +12172,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
       '페이지에 보이는 모든 텍스트를 자연스러운 읽기 순서대로 옮기세요. 수식이 아닌 텍스트는 그대로 유지하고 수학 수식은 LaTeX로 표시하세요. 인라인 수식에는 \$...\$, 디스플레이 수식에는 \$\$...\$\$를 사용하세요. 설명이나 추론을 덧붙이지 말고 옮긴 내용만 반환하세요.';
 
   @override
-  String get ocrDefaultImagesOnly => "기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)";
+  String get ocrDefaultImagesOnly => '기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12205,7 +12243,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get ocrInstructionManageGuidance =>
-      "이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.";
+      '이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.';
 
   @override
   String get ocrInstructionManageEmpty => '아직 지침이 없습니다';
@@ -13185,6 +13223,10 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get unifiedTaskListConfirmClearFailedMessage => '실패한 작업을 모두 지울까요?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '완료된 작업을 모두 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
 
@@ -13735,6 +13777,11 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get chatErrorDetailEmpty => '사용할 수 있는 세부 정보가 없습니다';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[중간 내용 $count자 생략]';
+  }
 
   @override
   String get chatAudioPreviewClose => '닫기';
@@ -14868,12 +14915,12 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get topicItemPin => '고정';
 
   @override
-  @override
   String get topicItemMarkUnread => '읽지 않음으로 표시';
 
   @override
   String get topicItemMarkRead => '읽음으로 표시';
 
+  @override
   String get topicItemRename => '이름 변경';
 
   @override
@@ -15387,6 +15434,9 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get folderPickerSubfolders => '하위 폴더';
+
+  @override
+  String get folderPickerNoFolders => '폴더가 없습니다';
 
   @override
   String get folderPickerExistingFolders => '기존 폴더';
@@ -21256,6 +21306,11 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR 요청 JSON 크기 $encodedBytes바이트가 설정된 제한 $budgetBytes바이트를 초과했습니다.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR 실패: $details';
   }
@@ -22000,6 +22055,99 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get appLogCopyDone => '모든 로그 내용을 복사했습니다';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => '백그라운드 작업';
@@ -23237,4 +23385,16 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get providerMaxUploadSizePositive => '최대 업로드 크기는 양수여야 합니다.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '저장된 온도 값이 0–2 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '저장된 top-P 값이 0–1 범위를 벗어났습니다. 저장하기 전에 슬라이더를 조정하거나 이 옵션을 끄세요.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.';
 }

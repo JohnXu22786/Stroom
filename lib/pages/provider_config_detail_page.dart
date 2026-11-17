@@ -593,6 +593,12 @@ class _ProviderConfigDetailPageState
       // 视图与请求构建都依赖供应商级参数）。
       final base = configs[_configIndex];
       final models = List<ModelConfig>.from(base.models);
+      final connectivityTest =
+          models[modelIndex].typeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        result.typeConfig = Map<String, dynamic>.from(result.typeConfig)
+          ..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
+      }
       models[modelIndex] = result;
       configs[_configIndex] = ProviderConfigItem(
         id: base.id,

@@ -60,6 +60,25 @@ FlowFolderSource flowFolderSourceFor(BlockType typeKey, String paramKey) {
   return FlowFolderSource.file;
 }
 
+bool _isCredentialCustomParam(String name) {
+  final normalizedName = name
+      .replaceAllMapped(
+        RegExp(r'([A-Z])([A-Z][a-z])'),
+        (match) => '${match[1]}_${match[2]}',
+      )
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (match) => '${match[1]}_${match[2]}',
+      )
+      .toLowerCase();
+  return RegExp(
+    r'(?:^|[^a-z0-9])(?:api[_-]?key|access[_-]?key|key|authorization|auth|token|'
+    r'access[_-]?token|refresh[_-]?token|id[_-]?token|jwt|secret|client[_-]?secret|'
+    r'api[_-]?secret|password|passwd|credentials?|private[_-]?key|signing[_-]?key|'
+    r'signature|cookie|session(?:[_-]?(?:id|key|token))?|bearer)(?:$|[^a-z0-9])',
+  ).hasMatch(normalizedName);
+}
+
 /// Opens the block settings panel for editing a [TaskFlowBlock] instance.
 ///
 /// A bottom-sheet panel that renders every parameter defined in the
@@ -606,7 +625,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: ConstrainedText(
-                            '${cp.paramName}: ${cp.defaultValue}',
+                            '${cp.paramName}: '
+                            '${_isCredentialCustomParam(cp.paramName) ? '••••••' : cp.defaultValue}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,

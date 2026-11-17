@@ -567,20 +567,50 @@ class ManifestDatabase {
   /// decoding its full payload on the UI isolate.
   static Future<void> validateWebManifestForStartup() async {
     if (!kIsWeb) return;
+    final error = await webManifestIntegrityError();
+    if (error != null) {
+      throw StartupDataValidationUnavailable.migration(FormatException(error));
+    }
+  }
+
+  /// Returns a validation error for the persisted JSON manifest, if present.
+  ///
+  /// The JSON-backed test store uses a direct syntax check on native tests;
+  /// browsers validate the full manifest in the JSON worker.
+  static Future<String?> webManifestIntegrityError() async {
+    if (!_useJsonStore) return null;
     final Uint8List? raw;
     try {
       raw = await WebFileStore.read(_webStoreKey);
     } catch (error) {
       throw StartupDataValidationUnavailable.migration(error);
     }
-    if (raw == null || raw.isEmpty) return;
+    if (raw == null) {
+      try {
+        if (await WebFileStore.exists(_webStoreKey)) {
+          return 'Invalid Web manifest: persisted value is not byte data.';
+        }
+      } catch (error) {
+        throw StartupDataValidationUnavailable.migration(error);
+      }
+      return null;
+    }
+    if (raw.isEmpty) return 'Invalid Web manifest: stored data is empty.';
+
+    if (!kIsWeb) {
+      try {
+        jsonDecode(utf8.decode(raw));
+        return null;
+      } catch (error) {
+        return 'Invalid Web manifest: $error';
+      }
+    }
 
     final result = await json_parser.validateWebManifestData(raw);
     if (result['status'] != 'ok') {
-      throw StartupDataValidationUnavailable.migration(
-        FormatException('Invalid Web manifest: ${result['error']}'),
-      );
+      return 'Invalid Web manifest: ${result['error']}';
     }
+    return null;
   }
 
   static Future<void> _migrateLegacyFoldersWeb({

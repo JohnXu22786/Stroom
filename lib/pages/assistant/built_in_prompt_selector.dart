@@ -84,105 +84,226 @@ class _BuiltInPromptSelectorDialogState
     final cs = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
     final prompts = localizedBuiltInPrompts(strings);
+    final size = MediaQuery.sizeOf(context);
+    final panelHeight = (size.height - 48).clamp(0.0, 900.0).toDouble();
+    final panelWidth = (size.width - 48).clamp(0.0, 720.0).toDouble();
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // --- Header ---
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 4),
-              child: Row(
-                children: [
-                  Icon(Icons.storefront, size: 22, color: cs.primary),
-                  const SizedBox(width: 10),
-                  Text(
-                    strings.builtInPromptMarketTitle,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
+    return DefaultTabController(
+      length: 2,
+      child: Builder(
+        builder: (context) {
+          final panel = SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip:
+                            MaterialLocalizations.of(context).backButtonTooltip,
+                        onPressed: () {
+                          final tabs = DefaultTabController.of(context);
+                          if (tabs.index == 1) {
+                            tabs.animateTo(0);
+                          } else {
+                            Navigator.of(context).pop();
+                          }
+                        },
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      Expanded(
+                        child: ConstrainedText(
+                          strings.assistantAddTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: strings.builtInPromptClose,
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.add_link),
-                    tooltip:
-                        Localizations.localeOf(context).languageCode == 'zh'
-                            ? '接入远程助手'
-                            : 'Connect remote assistants',
-                    onPressed: () => showAssistantRemoteSourceDialog(
-                      context,
-                      ref,
-                      initialUrl: kDefaultAssistantCatalogUrl,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: strings.builtInPromptClose,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-
-            // --- Prompt list ---
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                itemCount: prompts.length,
-                itemBuilder: (context, index) {
-                  final prompt = prompts[index];
-                  final isAdding = _addingIndices.contains(index);
-
-                  return _PromptCard(
-                    prompt: prompt,
-                    isAdding: isAdding,
-                    onTap: isAdding
-                        ? null
-                        : () => _showPromptDetail(index, prompt),
-                    onInfo: isAdding ? null : () => _showPromptViewer(prompt),
-                    onAdd: isAdding ? null : () => _importPrompt(index, prompt),
-                  );
-                },
-              ),
-            ),
-
-            // --- Footer hint ---
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Text(
-                strings.builtInPromptImportHint,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: TabBar(
+                      dividerColor: Colors.transparent,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicatorPadding: const EdgeInsets.all(3),
+                      indicator: BoxDecoration(
+                        color: cs.primary,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      labelColor: cs.onPrimary,
+                      unselectedLabelColor: cs.onSurfaceVariant,
+                      tabs: [
+                        Tab(
+                          child: _AssistantSourceTab(
+                            icon: Icons.storefront_outlined,
+                            label: strings.assistantBuiltInTab,
+                          ),
+                        ),
+                        Tab(
+                          child: _AssistantSourceTab(
+                            icon: Icons.link,
+                            label: strings.assistantImportTab,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _BuiltInPromptList(
+                        prompts: prompts,
+                        addingIndices: _addingIndices,
+                        onPromptTap: _showPromptDetail,
+                        onPromptInfo: _showPromptViewer,
+                        onPromptAdd: _importPrompt,
+                      ),
+                      _AssistantImportTab(
+                        onImport: () => showAssistantRemoteSourceDialog(
+                          context,
+                          ref,
+                          initialUrl: kDefaultAssistantCatalogUrl,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+
+          if (size.width < 600) {
+            return Dialog.fullscreen(backgroundColor: cs.surface, child: panel);
+          }
+
+          return Dialog(
+            backgroundColor: cs.surface,
+            insetPadding: const EdgeInsets.all(24),
+            child: SizedBox(
+              width: panelWidth,
+              height: panelHeight,
+              child: panel,
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-/// A compact market card: emoji + name + description only. The prompt text
-/// stays hidden — it is shown via the info icon (or in the detail panel).
-class _PromptCard extends StatelessWidget {
+class _AssistantSourceTab extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _AssistantSourceTab({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 8),
+          Flexible(
+            child: ConstrainedText(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+}
+
+class _BuiltInPromptList extends StatelessWidget {
+  final List<BuiltInPrompt> prompts;
+  final Set<int> addingIndices;
+  final void Function(int index, BuiltInPrompt prompt) onPromptTap;
+  final void Function(BuiltInPrompt prompt) onPromptInfo;
+  final void Function(int index, BuiltInPrompt prompt) onPromptAdd;
+
+  const _BuiltInPromptList({
+    required this.prompts,
+    required this.addingIndices,
+    required this.onPromptTap,
+    required this.onPromptInfo,
+    required this.onPromptAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: ConstrainedText(
+            strings.assistantBuiltInHint,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: colorScheme.onSurfaceVariant),
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            itemCount: prompts.length,
+            separatorBuilder: (context, index) =>
+                const Divider(height: 1, indent: 16, endIndent: 8),
+            itemBuilder: (context, index) {
+              final prompt = prompts[index];
+              final isAdding = addingIndices.contains(index);
+              return _BuiltInPromptRow(
+                prompt: prompt,
+                isAdding: isAdding,
+                onTap: isAdding ? null : () => onPromptTap(index, prompt),
+                onInfo: isAdding ? null : () => onPromptInfo(prompt),
+                onAdd: isAdding ? null : () => onPromptAdd(index, prompt),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BuiltInPromptRow extends StatelessWidget {
   final BuiltInPrompt prompt;
   final bool isAdding;
   final VoidCallback? onTap;
   final VoidCallback? onInfo;
   final VoidCallback? onAdd;
 
-  const _PromptCard({
+  const _BuiltInPromptRow({
     required this.prompt,
     required this.isAdding,
     required this.onTap,
@@ -192,107 +313,135 @@ class _PromptCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      elevation: 0,
-      color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: 0.5),
-          width: 0.5,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              alignment: Alignment.center,
+              child: Text(prompt.emoji, style: const TextStyle(fontSize: 26)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ConstrainedText(
+                    prompt.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                        ),
+                  ),
+                  if (prompt.description.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    ConstrainedText(
+                      prompt.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: strings.builtInPromptView,
+              onPressed: onInfo,
+              icon: const Icon(Icons.info_outline),
+              visualDensity: VisualDensity.compact,
+            ),
+            if (isAdding)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: SizedBox.square(
+                  dimension: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+              )
+            else
+              FilledButton.tonalIcon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add, size: 18),
+                label: ConstrainedText(
+                  strings.builtInPromptAdd,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(48, 36),
+                ),
+              ),
+          ],
         ),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              // Emoji
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    prompt.emoji,
-                    style: const TextStyle(fontSize: 20),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Name and description (the prompt itself is not shown here)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      prompt.name,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                    if (prompt.description.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: ConstrainedText(
-                          prompt.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              // Info: view the full prompt
-              IconButton(
-                icon: const Icon(Icons.info_outline),
-                tooltip: strings.builtInPromptView,
-                onPressed: onInfo,
-              ),
-              const SizedBox(width: 4),
-              // Add button / loading indicator
-              if (isAdding)
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: cs.primary,
-                  ),
-                )
-              else
-                FilledButton.tonalIcon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(strings.builtInPromptAdd),
-                  style: FilledButton.styleFrom(
-                    // Compact so the card keeps room for the description
-                    // on narrow screens.
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    minimumSize: const Size(48, 36),
-                  ),
-                ),
-            ],
+    );
+  }
+}
+
+class _AssistantImportTab extends StatelessWidget {
+  final VoidCallback onImport;
+
+  const _AssistantImportTab({required this.onImport});
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 36, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(Icons.link, size: 48, color: colorScheme.primary),
+          const SizedBox(height: 20),
+          ConstrainedText(
+            strings.assistantImportTab,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall,
           ),
-        ),
+          const SizedBox(height: 12),
+          ConstrainedText(
+            strings.assistantImportHint,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodyLarge
+                ?.copyWith(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 28),
+          FilledButton.icon(
+            onPressed: onImport,
+            icon: const Icon(Icons.download),
+            label: ConstrainedText(
+              strings.assistantImportAction,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

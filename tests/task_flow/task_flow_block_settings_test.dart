@@ -378,6 +378,68 @@ void main() {
   }
 
   testWidgets(
+      'OCR block settings hide credential custom parameter values but show ordinary values',
+      (tester) async {
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'ocr-1',
+          type: 'ocr',
+          name: 'OCR',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'OpenAI',
+              host: 'https://api.openai.com',
+              key: 'provider-key',
+              models: [
+                ModelConfig(
+                  name: 'vision-model',
+                  modelId: 'vision-model',
+                  customParams: [
+                    CustomParam(
+                      paramName: 'api_key',
+                      defaultValue: 'opaque-custom-ocr-secret',
+                    ),
+                    CustomParam(
+                      paramName: 'accessKey',
+                      defaultValue: 'opaque-access-key-secret',
+                    ),
+                    CustomParam(
+                      paramName: 'jwt',
+                      defaultValue: 'opaque-jwt-secret',
+                    ),
+                    CustomParam(paramName: 'detail', defaultValue: 'high'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(
+        typeKey: BlockType.ocr,
+        params: {
+          'modelRef': providerModelReference(
+            flattenProviderModels(entries, 'ocr').single,
+          ),
+        },
+      ),
+      entries: entries,
+    );
+
+    expect(find.textContaining('opaque-custom-ocr-secret'), findsNothing);
+    expect(find.textContaining('opaque-access-key-secret'), findsNothing);
+    expect(find.textContaining('opaque-jwt-secret'), findsNothing);
+    expect(find.text('api_key: ••••••'), findsOneWidget);
+    expect(find.text('accessKey: ••••••'), findsOneWidget);
+    expect(find.text('jwt: ••••••'), findsOneWidget);
+    expect(find.text('detail: high'), findsOneWidget);
+  });
+
+  testWidgets(
       'ASR block panel lists MODELS as "modelName | providerName" '
       '(same granularity as the ASR page)', (tester) async {
     await pumpPanel(
