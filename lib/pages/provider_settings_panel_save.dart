@@ -229,6 +229,13 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
 
   ProviderConfigItem _buildConfig() {
     final typeConfig = <String, dynamic>{};
+    if (widget.config.models.isEmpty) {
+      final connectivityTest = widget.config.typeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        typeConfig['connectivityTest'] =
+            Map<String, dynamic>.from(connectivityTest);
+      }
+    }
 
     if (_enableTemperature) {
       typeConfig['temperature'] = _temperature;

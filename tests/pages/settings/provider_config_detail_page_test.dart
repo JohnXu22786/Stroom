@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +61,12 @@ class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
     state = ProviderEntriesState(
       entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
     );
+  }
+}
+
+class _PersistingProviderEntriesNotifier extends ProviderEntriesNotifier {
+  _PersistingProviderEntriesNotifier(ProviderEntry entry) {
+    state = ProviderEntriesState(entries: [entry]);
   }
 }
 
@@ -153,6 +161,78 @@ void main() {
       // Model list section visible
       expect(find.text('模型列表'), findsOneWidget);
     });
+
+    testWidgets(
+      'editing a model preserves connectivity test content through reload',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+
+        const connectivityTest = {
+          'method': 'tools/list',
+          'params': {'cursor': 'saved-cursor', 'limit': 7},
+          'metadata': [
+            'first',
+            {'enabled': true}
+          ],
+        };
+        final entry = _createTestEntry(
+          models: [
+            ModelConfig(
+              id: 'saved-model',
+              name: 'Original model',
+              modelId: 'original-model-id',
+              typeConfig: {
+                'context': 8192,
+                'connectivityTest': connectivityTest,
+                'customSetting': 'keep-existing-update-behavior',
+              },
+            ),
+          ],
+        );
+        final notifier = _PersistingProviderEntriesNotifier(entry);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              providerEntriesProvider.overrideWith((ref) => notifier),
+            ],
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: ProviderConfigDetailPage(
+                entryId: entry.id,
+                configIndex: 0,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Original model'));
+        await tester.pumpAndSettle();
+        expect(find.byType(LlmModelConfigPage), findsOneWidget);
+        await tester.enterText(
+          find.byType(TextField).at(1),
+          'edited-model-id',
+        );
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+        expect(find.byType(LlmModelConfigPage), findsNothing);
+
+        final prefs = await SharedPreferences.getInstance();
+        final persistedEntries = prefs.getString('provider_entries');
+        expect(persistedEntries, isNotNull);
+        final persisted = jsonDecode(persistedEntries!) as List;
+        final reloadedEntry = ProviderEntry.fromMap(
+          Map<String, dynamic>.from(persisted.single as Map),
+        );
+        final reloadedModel = reloadedEntry.configs.single.models.single;
+        expect(reloadedModel.modelId, 'edited-model-id');
+        expect(reloadedModel.typeConfig['connectivityTest'], connectivityTest);
+        expect(reloadedModel.typeConfig['customSetting'], isNull);
+      },
+    );
   });
 
   group('New config creation', () {
