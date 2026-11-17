@@ -251,6 +251,52 @@ void main() {
   );
 
   test(
+    'does not publish a resumed response that stops before the file end',
+    () async {
+      for (final response in [
+        (contentRange: 'bytes 7-10/20', body: 'part'),
+        (contentRange: 'bytes 7-19/20', body: 'part'),
+      ]) {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final serverDone = server.listen((request) async {
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            response.contentRange,
+          );
+          request.response.write(response.body);
+          await request.response.close();
+        });
+        final directory = await Directory.systemTemp.createTemp(
+          'truncated-resume-range-',
+        );
+        const fileName = 'download.bin';
+        final partial = File(
+          '${directory.path}/$fileName${DefaultRules.tempFileSuffix}',
+        )..writeAsStringSync('trusted');
+        final url = 'http://${server.address.address}:${server.port}/file';
+        try {
+          await expectLater(
+            DownloadManager.downloadFile(
+              url: url,
+              saveDir: directory.path,
+              fileName: fileName,
+            ),
+            throwsA(anything),
+          );
+
+          expect(await partial.readAsString(), 'trusted');
+          expect(await File('${directory.path}/$fileName').exists(), isFalse);
+        } finally {
+          await serverDone.cancel();
+          await server.close(force: true);
+          await directory.delete(recursive: true);
+        }
+      }
+    },
+  );
+
+  test(
     'keeps a resumable partial when publication fails and paths change',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

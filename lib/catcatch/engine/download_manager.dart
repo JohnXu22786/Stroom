@@ -254,9 +254,11 @@ class DownloadManager {
         throw StateError(
           'Expected a partial response when resuming, got ${response.statusCode}',
         );
-      } else if (startByte > 0) {
-        _validateResumeContentRange(response, startByte);
       }
+
+      final expectedResumeByteCount = startByte > 0
+          ? _validateResumeContentRange(response, startByte)
+          : null;
 
       // On web, File operations will fail - this is expected
       // We still try to write the file for native platforms
@@ -265,6 +267,7 @@ class DownloadManager {
         final raf = await file.open(
           mode: startByte > 0 ? FileMode.writeOnlyAppend : FileMode.write,
         );
+        var receivedResponseBytes = 0;
         try {
           final stream = response.data.stream as Stream<List<int>>;
           await for (final chunk in stream) {
@@ -276,7 +279,16 @@ class DownloadManager {
               }
             }
             await raf.writeFrom(chunk);
+            receivedResponseBytes += chunk.length;
             // Progress already handled by onReceiveProgress above
+          }
+          if (expectedResumeByteCount != null &&
+              receivedResponseBytes != expectedResumeByteCount) {
+            await raf.truncate(startByte);
+            throw StateError(
+              'Expected $expectedResumeByteCount resumed bytes, received '
+              '$receivedResponseBytes',
+            );
           }
         } finally {
           await raf.close();
@@ -337,7 +349,7 @@ class DownloadManager {
     }
   }
 
-  static void _validateResumeContentRange(
+  static int _validateResumeContentRange(
     Response<dynamic> response,
     int requestedStart,
   ) {
@@ -349,17 +361,19 @@ class DownloadManager {
     ).firstMatch(contentRange);
     final responseStart = int.tryParse(match?.group(1) ?? '');
     final responseEnd = int.tryParse(match?.group(2) ?? '');
-    final responseLength = int.tryParse(match?.group(3) ?? '');
+    final totalLength = int.tryParse(match?.group(3) ?? '');
     if (responseStart != requestedStart ||
         responseEnd == null ||
         responseEnd < requestedStart ||
-        (match?.group(3) != '*' &&
-            (responseLength == null || responseLength <= responseEnd))) {
+        totalLength == null ||
+        totalLength <= responseEnd ||
+        responseEnd != totalLength - 1) {
       throw StateError(
-        'Expected a valid Content-Range starting at byte $requestedStart, got '
+        'Expected a complete Content-Range starting at byte $requestedStart, got '
         '${contentRange.isEmpty ? '<missing or invalid>' : contentRange}',
       );
     }
+    return totalLength - requestedStart;
   }
 
   /// 下载多个分段并合并
