@@ -34,15 +34,17 @@ class IOTypeIndicator extends StatelessWidget {
       IOType.file => strings.taskFlowIoTypeFile,
       IOType.any => strings.taskFlowIoTypeAny,
     };
-    final typeLabel = labelOverride ?? localizedType;
-    final accessibilityLabel = isInput
-        ? strings.taskFlowUiInputLabel(typeLabel)
-        : strings.taskFlowUiOutputLabel(typeLabel);
+    final semanticTypeLabel = labelOverride ?? localizedType;
     final union = possibleTypes?.toSet();
-    final isAudioVideoUnion =
-        union != null &&
+    final isAudioVideoUnion = union != null &&
         union.contains(IOType.audio) &&
         union.contains(IOType.video);
+    final visibleTypeLabel = isAudioVideoUnion
+        ? '${strings.taskFlowIoTypeVideo} / ${strings.taskFlowIoTypeAudio}'
+        : localizedType;
+    final accessibilityLabel = isInput
+        ? strings.taskFlowUiInputLabel(semanticTypeLabel)
+        : strings.taskFlowUiOutputLabel(semanticTypeLabel);
     final (IconData icon, Color color) = isAudioVideoUnion
         ? (Icons.perm_media, const Color(0xFF673AB7))
         : _typeData(type);
@@ -65,7 +67,7 @@ class IOTypeIndicator extends StatelessWidget {
             const SizedBox(width: 4),
             Flexible(
               child: ConstrainedText(
-                typeLabel,
+                visibleTypeLabel,
                 style: TextStyle(
                   fontSize: 10,
                   color: color,

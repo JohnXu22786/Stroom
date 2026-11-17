@@ -184,7 +184,8 @@ void main() {
     );
 
     expect(find.byIcon(Icons.perm_media), findsOneWidget);
-    expect(find.text('视频或音频（按下游筛选）'), findsOneWidget);
+    expect(find.text('视频 / 音频'), findsOneWidget);
+    expect(find.text('视频或音频（按下游筛选）'), findsNothing);
     expect(
       find.byWidgetPredicate(
         (widget) =>
