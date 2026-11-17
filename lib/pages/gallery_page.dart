@@ -680,7 +680,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       var exportedCount = 0;
-      final exportPaths = <String>{};
 
       final selectedFolders = <String>{
         ...names,
@@ -698,6 +697,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             ),
           )
           .toList();
+      final outputPaths = await resolveNonClobberingExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        directory: outputDir,
+        folders: selectedFolders,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
       validateUserVisibleExportPaths(
         files: folderFiles.map(
           (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
@@ -708,19 +717,14 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await Directory(p.join(outputDir, folderName)).create(recursive: true);
       }
 
-      for (final file in folderFiles) {
+      for (var i = 0; i < folderFiles.length; i++) {
+        final file = folderFiles[i];
         final data = await ImageManifest.readFile(file.storagePath);
         if (data == null) continue;
-
-        final exportName = '${file.name}.${file.format}';
-        final relativePath = p.posix.join(file.folder, exportName);
-        if (!exportPaths.add(relativePath)) {
-          throw StateError('导出路径重复: $relativePath');
-        }
-        final fileDir = p.join(outputDir, file.folder);
+        final outputPath = outputPaths[i];
+        final fileDir = p.dirname(outputPath);
         await Directory(fileDir).create(recursive: true);
-        final outputPath = p.join(fileDir, exportName);
-        await File(outputPath).writeAsBytes(data);
+        await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }
 
