@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 /// Writes a native audio temp file unless its owner has been disposed.
 ///
@@ -13,12 +14,13 @@ Future<File?> writeAudioPlayerTempFile({
   required bool Function() isDisposed,
   Future<Directory> Function()? getTempDirectory,
   Future<void> Function(File file, List<int> bytes)? writeBytes,
+  DateTime Function()? now,
 }) async {
   final directory = await (getTempDirectory ?? getTemporaryDirectory)();
   if (isDisposed()) return null;
 
   final file = File(
-    '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.$extension',
+    '${directory.path}/${(now ?? DateTime.now)().millisecondsSinceEpoch}_${const Uuid().v4()}.$extension',
   );
   try {
     await (writeBytes ?? (file, bytes) => file.writeAsBytes(bytes))(
