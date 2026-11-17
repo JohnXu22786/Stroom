@@ -784,6 +784,10 @@ class OcrService {
       ...requestCredentialValues,
       ..._credentialValuesFromHeaders(error.requestOptions.headers),
       ..._credentialValuesFromHeaders(_dio.options.headers),
+      ..._credentialValuesFromHeaders(error.response?.headers.map),
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'body': error.response?.data,
+      }),
     }..removeWhere((credential) => credential.isEmpty);
 
     throwWrappedDioException(
