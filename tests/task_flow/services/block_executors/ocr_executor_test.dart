@@ -27,6 +27,7 @@ import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/ocr_executor.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/http_timeout.dart';
+import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
@@ -1003,6 +1004,57 @@ void main() {
     await readStarted.future;
     executions.cancelExecution(execId);
     releaseRead.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during failing OCR payload preparation removes the task',
+      () async {
+    final source = await File('${directory.path}/cancelled_payload.png')
+        .writeAsBytes(_validPng());
+    final preparationStarted = Completer<void>();
+    final releasePreparation = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      prepareImagePayload: (_) async {
+        preparationStarted.complete();
+        await releasePreparation.future;
+        throw const OcrImagePayloadException(
+          OcrImagePayloadFailure.decodeFailed,
+          'decode failed after cancellation',
+        );
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await preparationStarted.future;
+    executions.cancelExecution(execId);
+    releasePreparation.complete();
 
     await expectLater(
       execution,

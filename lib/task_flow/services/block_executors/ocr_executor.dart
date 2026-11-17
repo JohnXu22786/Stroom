@@ -153,6 +153,9 @@ Future<String> executeOcrBlock({
   /// Allows bounded reads to be observed in preflight limit tests.
   Future<Uint8List> Function(File, int)? readInputBytes,
 
+  /// Allows payload preparation to be held and released in cancellation tests.
+  Future<OcrImagePayload> Function(Uint8List)? prepareImagePayload,
+
   /// Shared Dio client for this request. The executor does not own or close it.
   Dio? ocrDio,
 }) async {
@@ -391,11 +394,20 @@ Future<String> executeOcrBlock({
 
   late final OcrImagePayload payload;
   try {
-    payload = await prepareOcrImagePayload(
-      imageBytes,
-      maxReencodedPngBytes: maxReencodedPngBytes,
-    );
+    payload = await (prepareImagePayload ??
+        (bytes) => prepareOcrImagePayload(
+              bytes,
+              maxReencodedPngBytes: maxReencodedPngBytes,
+            ))(imageBytes);
   } on OcrImagePayloadException catch (error) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     final localizedError = switch (error.failure) {
       OcrImagePayloadFailure.empty => strings.ocrImageEmpty,
       OcrImagePayloadFailure.unsupportedFormat =>
