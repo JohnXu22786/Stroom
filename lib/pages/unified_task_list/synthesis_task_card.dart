@@ -483,7 +483,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     color: cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
+                  child: ConstrainedText(
                     widget.task.text,
                     style: TextStyle(
                       fontSize: 13,

@@ -14,6 +14,8 @@ Future<void> _pumpFailedCard(
   double width, {
   double textScale = 1,
   bool darkMode = false,
+  String taskText = 'Sample synthesis request.',
+  bool settle = true,
 }) async {
   tester.view.physicalSize = Size(width, 844);
   tester.view.devicePixelRatio = 1;
@@ -27,7 +29,7 @@ Future<void> _pumpFailedCard(
     error: _error,
     createdAt: DateTime(2026, 11, 15, 8, 56),
     completedAt: DateTime(2026, 11, 15, 9),
-    text: 'Sample synthesis request.',
+    text: taskText,
     providerConfig: ProviderConfigItem(providerName: 'Example Provider'),
     modelConfig: ModelConfig(name: 'Example Voice', modelId: 'voice-v2'),
     originalRequest: '{"model":"voice-v2"}',
@@ -56,7 +58,11 @@ Future<void> _pumpFailedCard(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
 
 void main() {
@@ -85,6 +91,32 @@ void main() {
     final more = tester.getRect(find.byIcon(Icons.more_vert));
     expect(retry.right, lessThanOrEqualTo(390));
     expect(more.right, lessThanOrEqualTo(390));
+  });
+
+  testWidgets('long synthesis text remains vertically readable', (
+    tester,
+  ) async {
+    const longText =
+        'Synthesis output begins with a detailed account of the meeting. '
+        'The participants reviewed milestones, assigned owners, and discussed '
+        'open questions. The next section records decisions and follow-up '
+        'actions, including dates, dependencies, risks, and expected outcomes. '
+        'This closing section contains additional context that must remain '
+        'available after the preview reaches its four-line display limit.';
+    await _pumpFailedCard(
+      tester,
+      390,
+      taskText: longText,
+      settle: false,
+    );
+    expect(tester.takeException(), isNull);
+
+    final text = find.text(longText);
+    final initialTop = tester.getTopLeft(text).dy;
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.getTopLeft(text).dy, lessThan(initialTop - 5));
   });
 
   testWidgets('phone gives the error summary its own line above Details', (
