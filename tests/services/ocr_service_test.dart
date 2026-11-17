@@ -2458,6 +2458,63 @@ void main() {
         );
       });
 
+      test('recognize redacts credentials disclosed only by failed response',
+          () async {
+        const bodyCredential = 'response-only-secret-r78-01';
+        const headerCredential = 'response-header-secret-r78-01';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 403,
+                      data: {
+                        'api_key': bodyCredential,
+                        'error': {
+                          'message':
+                              'denied: $bodyCredential $headerCredential',
+                        },
+                      },
+                      headers: Headers.fromMap({
+                        'x-api-key': [headerCredential],
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(
+                contains('HTTP 403'),
+                isNot(contains(bodyCredential)),
+                isNot(contains(headerCredential)),
+              ),
+            ),
+          ),
+        );
+
+        final diagnostics = jsonEncode(service.diagnosticResponse());
+        expect(diagnostics, isNot(contains(bodyCredential)));
+        expect(diagnostics, isNot(contains(headerCredential)));
+      });
+
       test('recognizeBatch redacts interceptor Authorization credentials',
           () async {
         const credential = 'interceptor-ocr-secret-credential-102';
