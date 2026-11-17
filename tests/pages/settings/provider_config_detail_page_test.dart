@@ -376,6 +376,44 @@ void main() {
       expect(find.byType(TextField), findsNWidgets(3));
     });
 
+    testWidgets('new LLM config keeps the selected Anthropic endpoint type', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final endpointDropdown = find.byType(DropdownButtonFormField<String>);
+      expect(endpointDropdown, findsOneWidget);
+      await tester.tap(endpointDropdown);
+      await tester.pumpAndSettle();
+
+      final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
+      final anthropicLabel =
+          AppLocalizations.of(pageContext)!.providerEndpointAnthropic;
+      await tester.tap(find.text(anthropicLabel).last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), 'AnthropicProvider');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://api.anthropic.test',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'test-key');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      );
+      final savedConfig = container
+          .read(providerEntriesProvider)
+          .entries
+          .single
+          .configs
+          .firstWhere((config) => config.providerName == 'AnthropicProvider');
+      expect(savedConfig.endpointType, 'anthropic');
+    });
+
     testWidgets(
         'saving a new config stays on the model list page instead of '
         'popping back to the provider list', (tester) async {
