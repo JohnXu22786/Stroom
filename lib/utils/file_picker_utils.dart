@@ -230,10 +230,24 @@ Future<List<String>> resolveNonClobberingExportPaths({
 }
 
 /// Writes an export only when [path] does not already exist.
-Future<void> writeUserVisibleExportFile(String path, Uint8List bytes) async {
+Future<void> writeUserVisibleExportFile(
+  String path,
+  Uint8List bytes, {
+  Future<void> Function(File file, Uint8List bytes)? writeBytes,
+}) async {
   final file = File(path);
   await file.create(exclusive: true);
-  await file.writeAsBytes(bytes);
+  try {
+    await (writeBytes ?? (file, bytes) => file.writeAsBytes(bytes))(
+        file, bytes);
+  } catch (_) {
+    try {
+      await file.delete();
+    } catch (_) {
+      // Keep the original write error as the one reported to the caller.
+    }
+    rethrow;
+  }
 }
 
 /// Builds a portable archive using the logical paths shown in Stroom.
