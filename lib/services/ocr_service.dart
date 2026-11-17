@@ -145,6 +145,11 @@ class OcrRequestTooLargeException implements Exception {
 }
 
 class OcrService {
+  static final RegExp _recognizableCredentialValue = RegExp(
+    r'(?:Bearer\s+\S+|sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9_-]{8,}|gsk_[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|AIza[a-z0-9_-]{20,})',
+    caseSensitive: false,
+  );
+
   final OcrConfig config;
   final Dio _dio;
   final bool _usesInjectedDio;
@@ -219,6 +224,82 @@ class OcrService {
       }
     }
     return values.toList(growable: false);
+  }
+
+  static List<String> _recognizableCredentialValues(dynamic value) {
+    final values = <String>{};
+    void collect(dynamic current) {
+      if (current is String) {
+        for (final match in _recognizableCredentialValue.allMatches(current)) {
+          values.add(match.group(0)!);
+        }
+      } else if (current is Map) {
+        for (final entry in current.entries) {
+          collect(entry.key);
+          collect(entry.value);
+        }
+      } else if (current is Iterable) {
+        for (final item in current) {
+          collect(item);
+        }
+      }
+    }
+
+    collect(value);
+    return values.toList(growable: false);
+  }
+
+  static dynamic _redactResponseDiagnosticValue(
+    dynamic value,
+    Iterable<String> credentialValues,
+  ) {
+    if (value is String) {
+      var safeValue = value;
+      for (final credential in credentialValues.toList()
+        ..sort((a, b) => b.length.compareTo(a.length))) {
+        if (credential.isNotEmpty) {
+          safeValue = safeValue.replaceAll(credential, '[REDACTED]');
+        }
+      }
+      return safeValue.replaceAllMapped(
+        _recognizableCredentialValue,
+        (_) => '[REDACTED]',
+      );
+    }
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          _redactResponseDiagnosticValue(
+            entry.key.toString(),
+            credentialValues,
+          ) as String: _redactResponseDiagnosticValue(
+            entry.value,
+            credentialValues,
+          ),
+      };
+    }
+    if (value is Iterable) {
+      return value
+          .map((item) => _redactResponseDiagnosticValue(item, credentialValues))
+          .toList(growable: false);
+    }
+    return value;
+  }
+
+  static Map<String, List<String>>? _redactResponseDiagnosticHeaders(
+    Map<String, List<String>>? headers,
+    Iterable<String> credentialValues,
+  ) {
+    if (headers == null) return null;
+    return {
+      for (final entry in headers.entries)
+        entry.key: entry.value
+            .map((value) => _redactResponseDiagnosticValue(
+                  value,
+                  credentialValues,
+                ) as String)
+            .toList(growable: false),
+    };
   }
 
   List<String> get _diagnosticRequestCredentialValues => {
@@ -746,11 +827,21 @@ class OcrService {
       ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
         'body': e.response?.data,
       }),
+      ..._recognizableCredentialValues(e.response?.data),
+      ..._recognizableCredentialValues(e.response?.headers.map),
     }.toList(growable: false);
     if (e.response?.data is Map) {
-      lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+      lastResponseData = _redactResponseDiagnosticValue(
+        e.response!.data,
+        responseCredentialValues,
+      ) as Map<String, dynamic>;
     } else if (e.response?.data is String) {
-      lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
+      lastResponseData = <String, dynamic>{
+        'raw': _redactResponseDiagnosticValue(
+          e.response!.data,
+          responseCredentialValues,
+        ) as String,
+      };
     } else {
       lastResponseData = null;
     }
@@ -759,7 +850,10 @@ class OcrService {
       {'statusCode': e.response?.statusCode},
       excludedValues: [config.apiKey, ...responseCredentialValues],
     )?['statusCode'] as int?;
-    lastResponseHeaders = e.response?.headers.map;
+    lastResponseHeaders = _redactResponseDiagnosticHeaders(
+      e.response?.headers.map,
+      responseCredentialValues,
+    );
     _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
           excludedValues: [config.apiKey, ...responseCredentialValues],
@@ -788,6 +882,8 @@ class OcrService {
       ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
         'body': error.response?.data,
       }),
+      ..._recognizableCredentialValues(error.response?.data),
+      ..._recognizableCredentialValues(error.response?.headers.map),
     }..removeWhere((credential) => credential.isEmpty);
 
     throwWrappedDioException(
