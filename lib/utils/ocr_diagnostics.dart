@@ -173,6 +173,10 @@ class OcrDiagnosticSnapshot {
     r'(?:(?:api|access|private|secret(?:[_-]?access)?|subscription|client)[_-]?key|(?:^|[-_.])key(?:$|[-_.])|(?:^|[-_.])(?:access|refresh|id)?[_-]?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?(?:$|[-_.])|(?:^|[-_.])(?:client[_-]?)?secret(?:$|[-_.])|(?:^|[-_.])(?:pass(?:word|phrase)?|passwd|credentials?|cookie|signature|sig|jwt)(?:$|[-_.]))',
     caseSensitive: false,
   );
+  static final _tokenMetadataQueryParameter = RegExp(
+    r'(?:^|[-_.])(?:access|refresh|id)?[_-]?token[-_](?:expires?(?:[-_](?:at|in))?|expiry|expiration|issued(?:[-_]at)?|type|scope)(?:$|[-_.])',
+    caseSensitive: false,
+  );
 
   static String _normalizeCredentialQueryParameterName(String name) => name
       .replaceAllMapped(
@@ -212,6 +216,7 @@ class OcrDiagnosticSnapshot {
         final key = _normalizeCredentialQueryParameterName(
           Uri.decodeQueryComponent(rawKey),
         );
+        if (_tokenMetadataQueryParameter.hasMatch(key)) continue;
         if (!_credentialQueryParameter.hasMatch(key)) continue;
 
         final rawValue =

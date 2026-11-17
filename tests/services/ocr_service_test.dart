@@ -3576,6 +3576,36 @@ void main() {
       );
 
       test(
+        'success diagnostics retain request IDs beside token expiry metadata',
+        () async {
+          const requestId = '3600';
+          final dio = _mockDioWithSuccess({
+            'request_id': requestId,
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          });
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'test-key',
+              host: 'https://api.test.com/v1?accessTokenExpiresIn=$requestId',
+            ),
+            dio: dio,
+          );
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], requestId);
+        },
+      );
+
+      test(
         'customParams secretAccessKey echoes are excluded from diagnostics',
         () async {
           const credential = 'opaque-custom-secret-access-key-198';

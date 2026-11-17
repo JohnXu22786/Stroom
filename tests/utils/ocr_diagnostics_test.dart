@@ -635,11 +635,10 @@ void main() {
     }
   });
 
-  test('request URL extraction recognizes camel case API credentials only',
-      () {
+  test('request URL extraction recognizes camel case API credentials only', () {
     const url = 'https://ocr.test/v1?apiSecret=opaque-api-secret-191&'
         'apiToken=opaque-api-token-191&clientSecret=opaque-client-secret-191&'
-        'language=en&requestId=req-safe-191';
+        'accessTokenExpiresIn=3600&language=en&requestId=req-safe-191';
     final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
 
     expect(
@@ -651,6 +650,7 @@ void main() {
       ]),
     );
     expect(credentialValues, isNot(contains('en')));
+    expect(credentialValues, isNot(contains('3600')));
     expect(credentialValues, isNot(contains('req-safe-191')));
   });
 
