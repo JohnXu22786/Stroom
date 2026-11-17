@@ -1482,8 +1482,7 @@ void main() {
     expect(restored.taskById(taskId)!.error, isNot(contains(key)));
   });
 
-  test('oversized OCR input failure redacts the active provider key',
-      () async {
+  test('oversized OCR input failure redacts the active provider key', () async {
     final localizations = AppLocalizationsEn();
     const input = 'attachments/credential_oversized.png';
     await WebFileStore.write(input, Uint8List(800 * 1024));
