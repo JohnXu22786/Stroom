@@ -858,6 +858,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (_isEditing &&
         widget.modelIndex >= 0 &&
         widget.modelIndex < models.length) {
+      final connectivityTest =
+          models[widget.modelIndex].typeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        modelConfig
+            .typeConfig = Map<String, dynamic>.from(modelConfig.typeConfig)
+          ..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
+      }
       models[widget.modelIndex] = modelConfig;
     } else {
       models.insert(0, modelConfig);
