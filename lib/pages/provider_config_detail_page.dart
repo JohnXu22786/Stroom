@@ -213,6 +213,7 @@ class _ProviderConfigDetailPageState
             providerName: result.providerName,
             host: result.host,
             key: result.key,
+            endpointType: result.endpointType,
             models: result.models.isNotEmpty
                 ? result.models
                 : _pendingModels.map((m) => m.copy()).toList(),
