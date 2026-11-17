@@ -2417,7 +2417,8 @@ void main() {
         );
       });
 
-      test('recognize redacts configured API key echoed in HTTP errors', () async {
+      test('recognize redacts configured API key echoed in HTTP errors',
+          () async {
         const credential = 'configured-ocr-secret-credential-101';
         final service = OcrService(
           config: const OcrConfig(
@@ -2457,7 +2458,8 @@ void main() {
         );
       });
 
-      test('recognizeBatch redacts interceptor Authorization credentials', () async {
+      test('recognizeBatch redacts interceptor Authorization credentials',
+          () async {
         const credential = 'interceptor-ocr-secret-credential-102';
         final service = OcrService(
           config: const OcrConfig(
@@ -2490,7 +2492,9 @@ void main() {
 
         await expectLater(
           service.recognizeBatch(
-            imageBytesList: [(Uint8List.fromList([1, 2, 3]), 'jpeg')],
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg')
+            ],
           ),
           throwsA(
             isA<Exception>().having(
