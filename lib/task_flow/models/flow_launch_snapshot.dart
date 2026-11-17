@@ -31,6 +31,8 @@ class FlowLaunchSnapshot {
         'token',
         'credentials',
         'credential',
+        'clientkey',
+        'xclientkey',
         'clientsecret',
         'apisecret',
         'authtoken',
