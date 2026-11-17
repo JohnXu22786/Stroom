@@ -9,6 +9,7 @@ import 'package:file_picker_platform_interface/file_picker_platform_interface.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -300,7 +301,10 @@ void main() {
       'generic file input picks a real document for the submitted run',
       (tester) async {
         final directory = Directory.systemTemp.createTempSync('flow_file_ui_');
-        final source = File('${directory.path}/notes.pdf');
+        final sharedAttachmentDirectory = Directory(
+          '${directory.path}/attachments',
+        )..createSync();
+        final source = File('${sharedAttachmentDirectory.path}/notes.pdf');
         source.writeAsStringSync('report');
         final originalPicker = FilePickerPlatform.instance;
         final originalDocuments = PathProviderPlatform.instance;
@@ -328,9 +332,8 @@ void main() {
             await tester.tap(find.text('选择文件（可多选）'));
             for (var attempt = 0; attempt < 100; attempt++) {
               if (storage.existsSync() &&
-                  storage.listSync().whereType<File>().any(
-                        (file) => file.lengthSync() == 6,
-                      )) {
+                  storage.listSync().whereType<File>().any((file) =>
+                      file.path != source.path && file.lengthSync() == 6)) {
                 await Future<void>.delayed(const Duration(milliseconds: 10));
                 return;
               }
@@ -344,7 +347,11 @@ void main() {
         await pickFile();
         expect(find.text('notes.pdf'), findsOneWidget);
         expect(_startButtonEnabled(tester), isTrue);
-        final firstCopy = storage.listSync().whereType<File>().single;
+        final firstCopy = storage
+            .listSync()
+            .whereType<File>()
+            .singleWhere((file) => file.path != source.path);
+        expect(firstCopy.path, isNot(source.path));
         await tester.runAsync(() async {
           await tester.tap(find.byTooltip('移除'));
           for (var attempt = 0;
@@ -355,6 +362,12 @@ void main() {
         });
         await tester.pumpAndSettle();
         expect(firstCopy.existsSync(), isFalse);
+        expect(
+          source.existsSync(),
+          isTrue,
+          reason:
+              'Removing the flow-owned copy must preserve the shared attachment',
+        );
         expect(_startButtonEnabled(tester), isFalse);
 
         await pickFile();
@@ -497,7 +510,7 @@ void main() {
           .path;
 
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(queuedReferences, [copyPath]);
+      expect(queuedReferences, ['attachments/${p.basename(copyPath)}']);
       expect(retryCount, 1);
 
       await _pumpRunMode(
@@ -739,7 +752,7 @@ void main() {
       expect(find.text('notes.pdf'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(queuedReferences, [copy.path]);
+      expect(queuedReferences, ['attachments/${p.basename(copy.path)}']);
     });
 
     testWidgets(

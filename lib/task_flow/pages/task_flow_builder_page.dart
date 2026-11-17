@@ -230,10 +230,26 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   Future<void> _queueAndDiscardUnsubmittedInputs(
     List<String> references,
   ) async {
+    final ownedPaths = references
+        .map((reference) => _ownedStoragePaths[reference])
+        .whereType<String>()
+        .toSet();
+    if (ownedPaths.isEmpty) {
+      _unsubmittedFileInputs.removeAll(references);
+      for (final reference in references) {
+        _ownedStoragePaths.remove(reference);
+      }
+      return;
+    }
     try {
       await TaskFlowInputCleanup.enqueueAndRetry(
-        references,
-        onQueued: () => _unsubmittedFileInputs.removeAll(references),
+        ownedPaths,
+        onQueued: () {
+          _unsubmittedFileInputs.removeAll(references);
+          for (final reference in references) {
+            _ownedStoragePaths.remove(reference);
+          }
+        },
       );
     } catch (error) {
       debugPrint('Failed to queue unsubmitted flow input cleanup: $error');
@@ -253,13 +269,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
     for (final reference in List<String>.of(_unsubmittedFileInputs)) {
       final storagePath = _ownedStoragePaths[reference];
-      if (storagePath != null &&
-          execNotifier.referencesInputStoragePath(storagePath)) {
+      if (storagePath == null) {
+        _unsubmittedFileInputs.remove(reference);
+        continue;
+      }
+      if (execNotifier.referencesInputStoragePath(storagePath)) {
         _unsubmittedFileInputs.remove(reference);
         continue;
       }
       try {
-        await AttachmentStorage.deleteFile(storagePath ?? reference);
+        await AttachmentStorage.deleteFile(storagePath);
         _unsubmittedFileInputs.remove(reference);
         _mediaInputs.remove(reference);
         _inputDisplayNames.remove(reference);
@@ -1246,9 +1265,15 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               _mediaInputs.removeAt(i);
                             });
                             if (_unsubmittedFileInputs.contains(reference)) {
-                              try {
-                                await AttachmentStorage.deleteFile(reference);
+                              final storagePath = _ownedStoragePaths[reference];
+                              if (storagePath == null) {
                                 _unsubmittedFileInputs.remove(reference);
+                                return;
+                              }
+                              try {
+                                await AttachmentStorage.deleteFile(storagePath);
+                                _unsubmittedFileInputs.remove(reference);
+                                _ownedStoragePaths.remove(reference);
                               } catch (error) {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
