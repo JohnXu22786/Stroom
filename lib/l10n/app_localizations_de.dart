@@ -471,7 +471,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende \$...\$ für Inline-Formeln und \$\$...\$\$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Standard (nur Bilder senden)';
+  String get ocrDefaultImagesOnly => "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -543,7 +543,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird nur das Bild gesendet.';
+      "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.";
 
   @override
   String get ocrInstructionManageEmpty => 'Noch keine Anweisungen';
@@ -12635,7 +12635,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       'Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende \$...\$ für Inline-Formeln und \$\$...\$\$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Standard (nur Bilder senden)';
+  String get ocrDefaultImagesOnly => "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12707,7 +12707,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird nur das Bild gesendet.';
+      "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.";
 
   @override
   String get ocrInstructionManageEmpty => 'Noch keine Anweisungen';

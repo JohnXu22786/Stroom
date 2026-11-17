@@ -435,7 +435,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 \$...\$，独立公式使用 \$\$...\$\$。只返回转录结果，不添加说明或推断。';
 
   @override
-  String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+  String get ocrDefaultImagesOnly => "默认（不添加自定义指令；仍使用默认 OCR 提示）";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -502,7 +502,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+      "这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。";
 
   @override
   String get ocrInstructionManageEmpty => '暂无指令';
@@ -11799,7 +11799,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
       '请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 \$...\$，独立公式使用 \$\$...\$\$。只返回转录结果，不添加说明或推断。';
 
   @override
-  String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+  String get ocrDefaultImagesOnly => "默认（不添加自定义指令；仍使用默认 OCR 提示）";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -11866,7 +11866,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+      "这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。";
 
   @override
   String get ocrInstructionManageEmpty => '暂无指令';

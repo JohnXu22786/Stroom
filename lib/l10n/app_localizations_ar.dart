@@ -476,7 +476,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم \$...\$ للصيغ المضمنة و\$\$...\$\$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.';
 
   @override
-  String get ocrDefaultImagesOnly => 'الافتراضي (إرسال الصور فقط)';
+  String get ocrDefaultImagesOnly => "الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -547,7 +547,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.';
+      "تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.";
 
   @override
   String get ocrInstructionManageEmpty => 'لا توجد تعليمات بعد';
@@ -12587,7 +12587,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       'انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم \$...\$ للصيغ المضمنة و\$\$...\$\$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.';
 
   @override
-  String get ocrDefaultImagesOnly => 'الافتراضي (إرسال الصور فقط)';
+  String get ocrDefaultImagesOnly => "الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12658,7 +12658,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.';
+      "تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.";
 
   @override
   String get ocrInstructionManageEmpty => 'لا توجد تعليمات بعد';
