@@ -520,6 +520,15 @@ Future<String> executeOcrBlock({
     );
     return result;
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      if (e is BlockExecutionException) rethrow;
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     final safeError = _localizedSafeOcrTaskError(
       e,
