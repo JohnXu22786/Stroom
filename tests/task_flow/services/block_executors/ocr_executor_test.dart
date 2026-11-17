@@ -976,8 +976,7 @@ void main() {
     );
   });
 
-  test('missing WebFileStore read reports the localized input error',
-      () async {
+  test('missing WebFileStore read reports the localized input error', () async {
     const key = 'attachments/missing_taskflow_image.png';
     await WebFileStore.write(key, _validPng());
 

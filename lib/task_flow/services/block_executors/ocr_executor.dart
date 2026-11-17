@@ -342,8 +342,7 @@ Future<String> executeOcrBlock({
   try {
     if (usesWebFileStore) {
       final readWebFile = readWebFileBytes ?? WebFileStore.read;
-      final storedBytes =
-          await readWebFile(input, maxBytes: maxInputBytes);
+      final storedBytes = await readWebFile(input, maxBytes: maxInputBytes);
       if (storedBytes == null) {
         if (!isFlowExecutionActive(execNotifier, execId)) {
           throw BlockExecutionException(
