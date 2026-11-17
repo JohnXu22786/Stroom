@@ -354,8 +354,24 @@ Future<String> executeOcrBlock({
       throw oversizedInputException();
     }
   } on WebFileStoreReadLimitExceededException {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     throw oversizedInputException();
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     failSubTask(
       bgNotifier,
