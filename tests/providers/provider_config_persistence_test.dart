@@ -27,7 +27,7 @@ class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
   _FailingProviderEntriesStore(
     Map<String, Object> data, {
     this.failedKey = 'flutter.provider_entries',
-    this.failedWriteCount = 1,
+    this.failedWriteCount = 0,
   }) : super.withData(data);
 
   final String failedKey;
@@ -582,16 +582,18 @@ void main() {
       'mcp_provider_groups': initialGroups,
     });
     final previousStore = SharedPreferencesStorePlatform.instance;
-    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore(
+    final store = _FailingProviderEntriesStore(
       {
         'flutter.provider_entries': initialEntries,
         'flutter.mcp_provider_groups': initialGroups,
       },
       failedKey: 'flutter.mcp_provider_groups',
     );
+    SharedPreferencesStorePlatform.instance = store;
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      store.failedWriteCount = 1;
       final prefs = await SharedPreferences.getInstance();
       final savedEntriesBeforeRemoval = prefs.getString('provider_entries');
       final savedGroupsBeforeRemoval = prefs.getString('mcp_provider_groups');
@@ -703,12 +705,14 @@ void main() {
         '"name":"Before","configs":[]}]';
     SharedPreferences.setMockInitialValues({});
     final previousStore = SharedPreferencesStorePlatform.instance;
-    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore({
+    final store = _FailingProviderEntriesStore({
       'flutter.provider_entries': savedEntries,
     });
+    SharedPreferencesStorePlatform.instance = store;
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      store.failedWriteCount = 1;
 
       await expectLater(
         notifier.update(
@@ -742,13 +746,15 @@ void main() {
         '"name":"Before","configs":[]}]';
     SharedPreferences.setMockInitialValues({});
     final previousStore = SharedPreferencesStorePlatform.instance;
-    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore(
+    final store = _FailingProviderEntriesStore(
       {'flutter.provider_entries': savedEntries},
       failedKey: 'flutter.mcp_provider_groups',
     );
+    SharedPreferencesStorePlatform.instance = store;
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      store.failedWriteCount = 1;
 
       await notifier.update(
         'existing_llm',
