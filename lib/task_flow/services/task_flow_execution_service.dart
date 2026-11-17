@@ -645,18 +645,25 @@ class TaskFlowExecutionService {
       return;
     }
     try {
-      if (kIsWeb || WebFileStore.isTestMode) {
+      if (kIsWeb) {
         if ((await WebFileStore.read(path))?.isNotEmpty != true) {
           throw const FileSystemException();
         }
       } else {
-        final file = await File(path).open();
-        try {
-          if ((await file.read(1)).isEmpty) {
+        final nativeFile = File(path);
+        if (WebFileStore.isTestMode && !await nativeFile.exists()) {
+          if ((await WebFileStore.read(path))?.isNotEmpty != true) {
             throw const FileSystemException();
           }
-        } finally {
-          await file.close();
+        } else {
+          final file = await nativeFile.open();
+          try {
+            if ((await file.read(1)).isEmpty) {
+              throw const FileSystemException();
+            }
+          } finally {
+            await file.close();
+          }
         }
       }
     } catch (_) {

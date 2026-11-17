@@ -980,6 +980,9 @@ void main() {
     await service.startFlowMany(flowId, inputs);
     expect(received.map((payload) => payload.fileName),
         ['first.pdf', 'second.pdf']);
+    expect(received.map((payload) => payload.fileReference),
+        inputs.map((input) => input.text),
+        reason: 'native execution resolves the durable key to its local file');
     final original = executions.executions
         .where((entry) => entry.inputFileName == 'first.pdf')
         .single;

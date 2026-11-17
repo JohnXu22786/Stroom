@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../services/attachment_storage.dart';
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
@@ -260,7 +261,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// previously picked copy in this builder without handing it to the run.
   Future<void> _releaseInputsAfterLaunch(
     TaskFlowExecutionNotifier execNotifier,
+    bool hasExecutions,
   ) async {
+    // A launch implementation that returns no records has not taken ownership.
+    // Keep picker copies available to the caller until the builder is disposed.
+    if (!hasExecutions) return;
     if (!execNotifier.mounted) {
       // The saved owner cannot be inspected after app disposal. Retain copies.
       _unsubmittedFileInputs.clear();
@@ -1581,9 +1586,14 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         final bytes = await _readGenericFile(file);
         final storagePath = await AttachmentStorage.saveFile(file.name, bytes);
         savedPaths.add(storagePath);
-        // Keep the durable attachment reference in the run input. Native
-        // execution resolves it against the current app storage directory.
-        final reference = storagePath;
+        // Keep the local path expected by FlowRunInput callers. The separate
+        // ownedStoragePath remains the durable key used when persisting runs.
+        final reference = kIsWeb
+            ? storagePath
+            : p.join(
+                await AttachmentStorage.getStorageDirPath(),
+                p.basename(storagePath),
+              );
         selected[reference] = file.name;
         owned[reference] = storagePath;
       }
@@ -1988,7 +1998,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       executionIds = await ref
           .read(taskFlowExecutionServiceProvider)
           .launchFlowMany(_editingFlowId!, inputs);
-      await _releaseInputsAfterLaunch(execNotifier);
+      await _releaseInputsAfterLaunch(execNotifier, executionIds.isNotEmpty);
     } on TaskFlowValidationException catch (error) {
       if (mounted) {
         await _showValidationError(error);
