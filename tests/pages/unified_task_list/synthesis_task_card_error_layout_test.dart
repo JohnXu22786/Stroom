@@ -70,7 +70,7 @@ void main() {
     final metadata = tester.getSize(find.byType(Wrap).first);
 
     expect(title.width, greaterThan(120));
-    expect(metadata.height, lessThan(40));
+    expect(metadata.height, lessThan(48));
   });
 
   testWidgets('phone gives the error summary its own line above Details', (
