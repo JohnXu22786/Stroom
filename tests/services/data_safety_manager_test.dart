@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
@@ -12,6 +12,46 @@ import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/app_version.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
+
+final class _DocumentsDirectory extends PathProviderPlatform {
+  _DocumentsDirectory(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+final class _RealIO extends IOOverrides {}
+
+final class _FailingMigrationStagedFile extends Fake implements File {
+  _FailingMigrationStagedFile(this.file, this.destinationPath);
+
+  final File file;
+  final String destinationPath;
+
+  @override
+  String get path => file.path;
+
+  @override
+  Future<bool> exists() => file.exists();
+
+  @override
+  Future<File> rename(String newPath) async {
+    if (p.normalize(newPath) == p.normalize(destinationPath)) {
+      throw FileSystemException('Injected migration destination failure', path);
+    }
+    return file.rename(newPath);
+  }
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) =>
+      file.delete(recursive: recursive);
+
+  @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +59,7 @@ void main() {
   late String appDir;
   late Directory snapDir;
   late Directory isolatedAppDir;
+  late PathProviderPlatform originalPathProvider;
 
   setUp(() async {
     AppLogService.disableFileLogging();
@@ -28,13 +69,8 @@ void main() {
     isolatedAppDir = await Directory.systemTemp.createTemp(
       'stroom_data_safety_test_',
     );
-    // Other test files run in parallel and may write their own safety marker;
-    // keep this file's marker and integrity fixtures in a private app dir.
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => isolatedAppDir.path,
-    );
+    originalPathProvider = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsDirectory(isolatedAppDir.path);
     appDir = await AppStorage.directory;
     // 只扫描本测试隔离目录中的数据，避免其他并行测试的文件影响判断。
     for (final rel in [
@@ -63,11 +99,7 @@ void main() {
 
   tearDown(() async {
     SnapshotService.debugNow = null;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+    PathProviderPlatform.instance = originalPathProvider;
     AppStorage.resetCache();
     try {
       if (await snapDir.exists()) {
@@ -265,6 +297,71 @@ void main() {
       expect(await orphan.exists(), isFalse, reason: '无引用且超 3 天应删除');
       expect(await fresh.exists(), isTrue, reason: '3 天缓冲内的文件应保留');
     });
+
+    test(
+      'cleanupOrphans preserves legacy audio after migration write failure',
+      () async {
+        const hash = 'legacy_audio_hash';
+        const format = 'wa%v';
+        await ManifestDatabase.insertAudioRecord({
+          'id': 'legacy_audio_1',
+          'name': 'legacy audio',
+          'hash': hash,
+          'format': format,
+          'createdAt': DateTime.now().toIso8601String(),
+          'size': 100,
+          'folder': '',
+          'sourceText': '',
+          'duration': 1,
+        });
+        WebFileStore.disableTestMode();
+        addTearDown(WebFileStore.enableTestMode);
+        FileManifest.invalidateCache();
+
+        final audioDir = Directory(p.join(appDir, 'tts_audio'));
+        await audioDir.create(recursive: true);
+        const legacyName = '$hash.$format';
+        final legacyAudio = File(p.join(audioDir.path, legacyName));
+        await legacyAudio.writeAsString('only surviving audio copy');
+        final storageName = AudioRecord.storageFileNameFor(
+          hash: hash,
+          format: format,
+        );
+        final destinationPath = p.join(audioDir.path, storageName);
+        final realIO = IOOverrides.current ?? _RealIO();
+        await IOOverrides.runZoned(
+          () => FileManifest.loadRecords(),
+          createFile: (path) {
+            final file = realIO.createFile(path);
+            return p.basename(path).startsWith('.audio-migration-')
+                ? _FailingMigrationStagedFile(file, destinationPath)
+                : file;
+          },
+        );
+        expect(await legacyAudio.exists(), isTrue,
+            reason: 'failed destination migration must retain its source');
+        expect(await File(destinationPath).exists(), isFalse,
+            reason:
+                'the injected migration write failure blocks the destination');
+        await legacyAudio.setLastModified(
+          DateTime.now().subtract(const Duration(days: 10)),
+        );
+
+        await DataSafetyManager.cleanupOrphans();
+
+        expect(await legacyAudio.exists(), isTrue,
+            reason: 'the live record must keep its legacy source referenced');
+
+        FileManifest.invalidateCache();
+        await FileManifest.loadRecords();
+        expect(await legacyAudio.exists(), isFalse,
+            reason:
+                'a later successful migration retry removes the legacy file');
+        expect(await File(destinationPath).exists(), isTrue,
+            reason:
+                'a later successful migration retry writes the escaped file');
+      },
+    );
 
     test('cleanupOrphans keeps old audio with a Windows-invalid format',
         () async {
