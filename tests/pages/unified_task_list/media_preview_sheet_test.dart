@@ -62,10 +62,12 @@ void main() {
       addTearDown(() async {
         if (!responseGate.isCompleted) responseGate.complete();
         if (!closeResponseGate.isCompleted) closeResponseGate.complete();
-        await serverTask.cancel();
-        await server.close(force: true);
-        PathProviderPlatform.instance = previousPathProvider;
-        await tempDirectory.delete(recursive: true);
+        await tester.runAsync(() async {
+          await serverTask.cancel();
+          await server.close(force: true);
+          PathProviderPlatform.instance = previousPathProvider;
+          await tempDirectory.delete(recursive: true);
+        });
       });
 
       Widget previewWidget() => ProviderScope(
@@ -85,56 +87,67 @@ void main() {
             ),
           );
 
-      await tester.pumpWidget(previewWidget());
-      await tester.pump();
-      await requestReceived.future;
+      await HttpOverrides.runZoned(
+        () async {
+          await tester.pumpWidget(previewWidget());
+          await tester.pump();
+          await tester.runAsync(
+            () => requestReceived.future.timeout(const Duration(seconds: 10)),
+          );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      Future<List<File>> findPreviewFiles() async {
-        final files = <File>[];
-        await for (final entity in tempDirectory.list()) {
-          if (entity is File &&
-              p.basename(entity.path).startsWith('preview_sample_') &&
-              entity.path.endsWith('.mp4')) {
-            files.add(entity);
+          await tester.pumpWidget(const SizedBox.shrink());
+          List<File> findPreviewFiles() {
+            return tempDirectory
+                .listSync()
+                .whereType<File>()
+                .where(
+                  (file) =>
+                      p.basename(file.path).startsWith('preview_sample_') &&
+                      file.path.endsWith('.mp4'),
+                )
+                .toList();
           }
-        }
-        return files;
-      }
 
-      expect(await findPreviewFiles(), isEmpty);
+          expect(findPreviewFiles(), isEmpty);
 
-      responseGate.complete();
-      await tester.runAsync(() async {
-        for (var i = 0; i < 100 && (await findPreviewFiles()).isEmpty; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      final oldPreviewFile = (await findPreviewFiles()).single;
-      expect(await oldPreviewFile.exists(), isTrue);
+          responseGate.complete();
+          await tester.runAsync(() async {
+            for (var i = 0; i < 100 && findPreviewFiles().isEmpty; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+          });
+          final oldPreviewFile = findPreviewFiles().single;
+          expect(oldPreviewFile.existsSync(), isTrue);
 
-      await tester.pumpWidget(previewWidget());
-      await secondRequestReceived.future;
-      await tester.runAsync(() async {
-        for (var i = 0; i < 100 && (await findPreviewFiles()).length < 2; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      final previewFiles = await findPreviewFiles();
-      expect(previewFiles, hasLength(2));
-      final reopenedPreviewFile = previewFiles.singleWhere(
-        (file) => file.path != oldPreviewFile.path,
+          await tester.pumpWidget(previewWidget());
+          await tester.runAsync(
+            () => secondRequestReceived.future.timeout(
+              const Duration(seconds: 10),
+            ),
+          );
+          await tester.runAsync(() async {
+            for (var i = 0; i < 100 && findPreviewFiles().length < 2; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+          });
+          final previewFiles = findPreviewFiles();
+          expect(previewFiles, hasLength(2));
+          final reopenedPreviewFile = previewFiles.singleWhere(
+            (file) => file.path != oldPreviewFile.path,
+          );
+
+          closeResponseGate.complete();
+          await tester.runAsync(() async {
+            for (var i = 0; i < 100 && oldPreviewFile.existsSync(); i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+          });
+          expect(oldPreviewFile.existsSync(), isFalse);
+          expect(reopenedPreviewFile.existsSync(), isTrue);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+        createHttpClient: (_) => HttpClient(),
       );
-
-      closeResponseGate.complete();
-      await tester.runAsync(() async {
-        for (var i = 0; i < 100 && await oldPreviewFile.exists(); i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      expect(await oldPreviewFile.exists(), isFalse);
-      expect(await reopenedPreviewFile.exists(), isTrue);
-      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 }
