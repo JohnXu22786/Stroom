@@ -2515,6 +2515,103 @@ void main() {
         expect(diagnostics, isNot(contains(headerCredential)));
       });
 
+      test('recognize redacts recognizable key echoed only in error text',
+          () async {
+        const credential = 'sk-proj-r79-response-text-secret-7654321';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 403,
+                      data: {
+                        'error': {'message': 'invalid key $credential'},
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 403'), isNot(contains(credential))),
+            ),
+          ),
+        );
+      });
+
+      test('recognize redacts credentials from failed response diagnostics',
+          () async {
+        const bodyCredential = 'response-body-secret-r79-001';
+        const headerCredential = 'response-header-secret-r79-001';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 403,
+                      data: {
+                        'api_key': bodyCredential,
+                        'error': {'message': 'invalid API key'},
+                        'request_id': 'req-safe-r79-response-diagnostic',
+                      },
+                      headers: Headers.fromMap({
+                        'x-api-key': [headerCredential],
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(jsonEncode(service.lastResponseData),
+            isNot(contains(bodyCredential)));
+        expect(jsonEncode(service.lastResponseHeaders),
+            isNot(contains(headerCredential)));
+        expect(
+          service.lastResponseData?['error'],
+          {'message': 'invalid API key'},
+        );
+        expect(service.diagnosticResponse()['statusCode'], 403);
+        expect(service.diagnosticResponse()['requestId'],
+            'req-safe-r79-response-diagnostic');
+        final diagnostics = jsonEncode(service.diagnosticResponse());
+        expect(diagnostics, isNot(contains(bodyCredential)));
+        expect(diagnostics, isNot(contains(headerCredential)));
+      });
+
       test('recognizeBatch redacts interceptor Authorization credentials',
           () async {
         const credential = 'interceptor-ocr-secret-credential-102';
