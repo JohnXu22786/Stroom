@@ -184,7 +184,15 @@ void main() {
     );
 
     expect(find.byIcon(Icons.perm_media), findsOneWidget);
-    expect(find.text('输出: 视频或音频（按下游筛选）'), findsOneWidget);
+    expect(find.text('视频或音频（按下游筛选）'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == '输出: 视频或音频（按下游筛选）',
+      ),
+      findsOneWidget,
+    );
   });
 
   ProviderEntriesState _ttsEntries() {

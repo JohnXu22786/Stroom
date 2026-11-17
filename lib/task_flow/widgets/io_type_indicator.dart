@@ -34,43 +34,49 @@ class IOTypeIndicator extends StatelessWidget {
       IOType.file => strings.taskFlowIoTypeFile,
       IOType.any => strings.taskFlowIoTypeAny,
     };
+    final typeLabel = labelOverride ?? localizedType;
+    final accessibilityLabel = isInput
+        ? strings.taskFlowUiInputLabel(typeLabel)
+        : strings.taskFlowUiOutputLabel(typeLabel);
     final union = possibleTypes?.toSet();
-    final isAudioVideoUnion = union != null &&
+    final isAudioVideoUnion =
+        union != null &&
         union.contains(IOType.audio) &&
         union.contains(IOType.video);
     final (IconData icon, Color color) = isAudioVideoUnion
         ? (Icons.perm_media, const Color(0xFF673AB7))
         : _typeData(type);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Flexible(
-            child: ConstrainedText(
-              isInput
-                  ? strings.taskFlowUiInputLabel(localizedType)
-                  : strings.taskFlowUiOutputLabel(
-                      labelOverride ?? localizedType,
-                    ),
-              style: TextStyle(
-                fontSize: 10,
-                color: color,
-                fontWeight: FontWeight.w500,
+    return Semantics(
+      container: true,
+      label: accessibilityLabel,
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: ConstrainedText(
+                typeLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
