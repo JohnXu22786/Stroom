@@ -185,7 +185,8 @@ void main() {
           'fileInventories': {
             DataParts.tasks: [
               for (final entry in files.entries)
-                {'path': entry.key, 'size': entry.value.length},
+                if (entry.key.startsWith('task_flow_temporary/'))
+                  {'path': entry.key, 'size': entry.value.length},
             ],
           },
         },
@@ -344,6 +345,86 @@ void main() {
       await BackupService.restoreBackup(zipPath, selection: selection);
 
       expect(await WebFileStore.read(artifact), isNull);
+    },
+  );
+
+  test(
+    'failed restore without media preserves artifacts from the old execution inventory',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const executionId = 'rolled-back-execution';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([7]),
+      );
+      final oldExecution = {
+        'id': executionId,
+        'flowId': 'old-flow',
+        'flowName': 'Old flow',
+        'status': 'completed',
+        'createdAt': DateTime(2026).toIso8601String(),
+      };
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(jsonEncode([oldExecution])),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'failed_task_flow_inventory_without_media.zip',
+      );
+      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+        throw StateError('injected restore publish failure');
+      };
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await WebFileStore.read(artifact), [7]);
+      final restoredExecutions = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      expect(restoredExecutions.single['id'], executionId);
     },
   );
 

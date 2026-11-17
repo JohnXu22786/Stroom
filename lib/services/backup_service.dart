@@ -2363,6 +2363,12 @@ class BackupService {
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
     );
+    final deferredTaskFlowExecutionIds =
+        await _taskFlowExecutionIdsToCleanupAfterRestore(
+      restoreSelection,
+      metadata.taskFilesToReplace,
+      skipRollbackSnapshot: skipRollbackSnapshot,
+    );
     await _validateAttachmentRestoreTargets(
       restoreSelection,
       archive.files.map((file) => file.name),
@@ -2521,6 +2527,7 @@ class BackupService {
       }
       Error.throwWithStackTrace(restoreError, restoreStackTrace);
     }
+    await _deleteTaskFlowTemporaryArtifacts(deferredTaskFlowExecutionIds);
     onProgress?.call(1.0);
     return metadata.skippedLabels;
   }
@@ -2600,6 +2607,12 @@ class BackupService {
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
         taskFilesToReplace: metadata.taskFilesToReplace,
+      );
+      final deferredTaskFlowExecutionIds =
+          await _taskFlowExecutionIdsToCleanupAfterRestore(
+        restoreSelection,
+        metadata.taskFilesToReplace,
+        skipRollbackSnapshot: skipRollbackSnapshot,
       );
       await _validateAttachmentRestoreTargets(
         restoreSelection,
@@ -2777,6 +2790,9 @@ class BackupService {
               !skipAnkiMigrationMarkerInvalidation) {
             await _invalidateAnkiSyncMetadataMigrationMarker();
           }
+          await _deleteTaskFlowTemporaryArtifacts(
+            deferredTaskFlowExecutionIds,
+          );
           onProgress?.call(1.0);
           return metadata.skippedLabels;
         } catch (restoreError, restoreStackTrace) {
@@ -6258,6 +6274,40 @@ class BackupService {
     }
   }
 
+  static Future<Set<String>> _taskFlowExecutionIdsToCleanupAfterRestore(
+    BackupSelection selection,
+    Set<String> taskFilesToReplace, {
+    required bool skipRollbackSnapshot,
+  }) async {
+    if (skipRollbackSnapshot ||
+        selection.includeMediaFiles ||
+        !taskFilesToReplace.contains('task_flows/executions.json')) {
+      return const <String>{};
+    }
+    final executionIds = await _taskFlowExecutionIdsToReplace();
+    if (executionIds == null) {
+      throw const DataManagementPreflightException(
+        '无法安全识别待替换任务流的临时输出，已取消恢复以避免数据丢失。',
+      );
+    }
+    return executionIds;
+  }
+
+  static Future<bool> _deleteTaskFlowTemporaryArtifacts(
+    Iterable<String> executionIds,
+  ) async {
+    var deleteFailed = false;
+    for (final executionId in executionIds) {
+      try {
+        await FlowTemporaryArtifactStorage.deleteExecution(executionId);
+      } catch (e) {
+        debugPrint('删除被替换任务流的临时输出失败: $e');
+        deleteFailed = true;
+      }
+    }
+    return deleteFailed;
+  }
+
   static bool get _isBackupFlutterTest {
     try {
       return Platform.environment['FLUTTER_TEST'] == 'true';
@@ -6696,13 +6746,10 @@ class BackupService {
           (!cleanupReplacedExecutionArtifacts ||
               replacedExecutionIds != null)) {
         if (await _deleteFile('task_flows', 'executions.json')) {
-          for (final executionId in replacedExecutionIds ?? const <String>{}) {
-            try {
-              await FlowTemporaryArtifactStorage.deleteExecution(executionId);
-            } catch (e) {
-              debugPrint('删除被替换任务流的临时输出失败: $e');
-              deleteFailed = true;
-            }
+          if (await _deleteTaskFlowTemporaryArtifacts(
+            replacedExecutionIds ?? const <String>{},
+          )) {
+            deleteFailed = true;
           }
         } else {
           deleteFailed = true;
