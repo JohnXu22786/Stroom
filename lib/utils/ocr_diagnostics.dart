@@ -173,6 +173,20 @@ class OcrDiagnosticSnapshot {
     r'(?:(?:api|access|private|secret(?:[_-]?access)?|subscription|client)[_-]?key|(?:^|[-_.])key(?:$|[-_.])|(?:^|[-_.])(?:access|refresh|id)?[_-]?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?(?:$|[-_.])|(?:^|[-_.])(?:client[_-]?)?secret(?:$|[-_.])|(?:^|[-_.])(?:pass(?:word|phrase)?|passwd|credentials?|cookie|signature|sig|jwt)(?:$|[-_.]))',
     caseSensitive: false,
   );
+  static final _tokenMetadataQueryParameter = RegExp(
+    r'(?:^|[-_.])(?:access|refresh|id)?[_-]?token[-_](?:expires?(?:[-_](?:at|in))?|expiry|expiration|issued(?:[-_]at)?|type|scope)(?:$|[-_.])',
+    caseSensitive: false,
+  );
+
+  static String _normalizeCredentialQueryParameterName(String name) => name
+      .replaceAllMapped(
+        RegExp(r'([A-Z]+)([A-Z][a-z])'),
+        (match) => '${match[1]}_${match[2]}',
+      )
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (match) => '${match[1]}_${match[2]}',
+      );
 
   /// Extracted values may contain full secrets. Use them only as transient
   /// sanitizer exclusions; never expose or persist the returned values.
@@ -199,7 +213,10 @@ class OcrDiagnosticSnapshot {
           separator < 0 ? component : component.substring(0, separator);
       if (rawKey.isEmpty) continue;
       try {
-        final key = Uri.decodeQueryComponent(rawKey);
+        final key = _normalizeCredentialQueryParameterName(
+          Uri.decodeQueryComponent(rawKey),
+        );
+        if (_tokenMetadataQueryParameter.hasMatch(key)) continue;
         if (!_credentialQueryParameter.hasMatch(key)) continue;
 
         final rawValue =

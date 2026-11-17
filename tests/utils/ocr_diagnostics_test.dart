@@ -635,6 +635,25 @@ void main() {
     }
   });
 
+  test('request URL extraction recognizes camel case API credentials only', () {
+    const url = 'https://ocr.test/v1?apiSecret=opaque-api-secret-191&'
+        'apiToken=opaque-api-token-191&clientSecret=opaque-client-secret-191&'
+        'accessTokenExpiresIn=3600&language=en&requestId=req-safe-191';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+
+    expect(
+      credentialValues,
+      containsAll([
+        'opaque-api-secret-191',
+        'opaque-api-token-191',
+        'opaque-client-secret-191',
+      ]),
+    );
+    expect(credentialValues, isNot(contains('en')));
+    expect(credentialValues, isNot(contains('3600')));
+    expect(credentialValues, isNot(contains('req-safe-191')));
+  });
+
   test(
     'X-Auth header secrets exclude echoed diagnostics but keep safe IDs',
     () {
