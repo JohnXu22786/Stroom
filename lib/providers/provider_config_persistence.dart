@@ -745,6 +745,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       attemptedEntriesWrite = true;
       final entriesSaved = await prefs.setString('provider_entries', json);
       if (rethrowOnFailure && !entriesSaved) {
+        // A false result means this key was not saved; only successful or
+        // throwing writes need compensation.
+        attemptedEntriesWrite = false;
         throw StateError('Failed to persist provider configuration.');
       }
       if (persistMcpGroups) {
@@ -756,6 +759,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           ),
         );
         if (rethrowOnFailure && !groupsSaved) {
+          attemptedGroupsWrite = false;
           throw StateError('Failed to persist provider configuration.');
         }
       }

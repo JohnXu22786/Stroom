@@ -47,6 +47,9 @@ void main() {
       tester.element(find.byType(ProviderConfigPage)),
     )!;
 
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Custom group'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip(l10n.providerDeleteTooltip));
     await tester.pumpAndSettle();
     await tester.tap(find.text(l10n.providerDeleteGroup).last);
