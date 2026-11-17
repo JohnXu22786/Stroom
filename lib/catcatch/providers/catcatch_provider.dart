@@ -641,11 +641,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         ),
     ];
     try {
-      for (final entity in Directory(downloadDir).listSync(followLinks: false)) {
+      for (final entity
+          in Directory(downloadDir).listSync(followLinks: false)) {
         final name = p.basename(entity.path);
         if ((entity is File && partialPattern.hasMatch(name)) ||
             (entity is Directory &&
-                playlistPartsPatterns.any((pattern) => pattern.hasMatch(name)))) {
+                playlistPartsPatterns
+                    .any((pattern) => pattern.hasMatch(name)))) {
           artifacts.add(entity);
         }
       }

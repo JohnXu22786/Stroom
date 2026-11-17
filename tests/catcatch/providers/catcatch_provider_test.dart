@@ -2750,7 +2750,8 @@ void main() {
       },
     );
 
-    test('cleanup removes task artifacts under reserved output names', () async {
+    test('cleanup removes task artifacts under reserved output names',
+        () async {
       const media = MediaResource(
         url: 'https://example.com/video.mp4',
         name: 'video',
