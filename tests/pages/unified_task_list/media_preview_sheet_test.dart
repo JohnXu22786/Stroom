@@ -69,21 +69,21 @@ void main() {
       });
 
       Widget previewWidget() => ProviderScope(
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: MediaPreviewSheet(
-              resource: MediaResource(
-                url: 'http://127.0.0.1:${server.port}/preview.mp4',
-                name: 'sample',
-                ext: 'mp4',
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: MediaPreviewSheet(
+                  resource: MediaResource(
+                    url: 'http://127.0.0.1:${server.port}/preview.mp4',
+                    name: 'sample',
+                    ext: 'mp4',
+                  ),
+                  taskTitle: 'Preview',
+                ),
               ),
-              taskTitle: 'Preview',
             ),
-          ),
-        ),
-      );
+          );
 
       await tester.pumpWidget(previewWidget());
       await tester.pump();
