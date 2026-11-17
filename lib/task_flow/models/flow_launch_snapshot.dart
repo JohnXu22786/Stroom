@@ -21,11 +21,13 @@ class FlowLaunchSnapshot {
   static bool _credentialName(String name) => const {
         'key',
         'apikey',
+        'apitoken',
         'xapikey',
         'authorization',
         'password',
         'secret',
         'accesstoken',
+        'accesskey',
         'token',
         'credentials',
         'credential',
