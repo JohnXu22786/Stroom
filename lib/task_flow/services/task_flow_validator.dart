@@ -259,12 +259,13 @@ Future<void> validateTaskFlow(
 
     if (error == null && text.trim().isEmpty) {
       error = '输入为空，请重新输入或选择文件';
-    } else if (error == null && [
-      IOType.audio,
-      IOType.image,
-      IOType.video,
-      IOType.file,
-    ].contains(inputType)) {
+    } else if (error == null &&
+        [
+          IOType.audio,
+          IOType.image,
+          IOType.video,
+          IOType.file,
+        ].contains(inputType)) {
       try {
         if (kIsWeb) {
           final bytes = await WebFileStore.read(text);

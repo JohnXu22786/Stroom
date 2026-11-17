@@ -532,20 +532,18 @@ class TaskFlowExecutionService {
   Future<List<String>> retryExecution(String id,
       {bool useLatestConfiguration = false}) async {
     final path = _execution(id)?.inputStoragePath;
-    return _notifier.withInputStoragePathLock(
-        path,
-        () async {
-          try {
-            return await _retryExecution(id,
-                useLatestConfiguration: useLatestConfiguration);
-          } on TaskFlowValidationException catch (error) {
-            final original = _execution(id);
-            if (original?.inputStoragePath != null && error.isInputError) {
-              await _persistRetryInputFailure(original!, error);
-            }
-            rethrow;
-          }
-        });
+    return _notifier.withInputStoragePathLock(path, () async {
+      try {
+        return await _retryExecution(id,
+            useLatestConfiguration: useLatestConfiguration);
+      } on TaskFlowValidationException catch (error) {
+        final original = _execution(id);
+        if (original?.inputStoragePath != null && error.isInputError) {
+          await _persistRetryInputFailure(original!, error);
+        }
+        rethrow;
+      }
+    });
   }
 
   Future<void> _persistRetryInputFailure(

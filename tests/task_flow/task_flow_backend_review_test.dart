@@ -1663,9 +1663,15 @@ void main() {
       'owned file input resolves from durable attachment storage on retry and resume',
       () async {
     final mediaBytes = Uint8List.fromList([
-      0, 0, 0, 24,
+      0,
+      0,
+      0,
+      24,
       ...ascii.encode('ftypisom'),
-      0, 0, 0, 1,
+      0,
+      0,
+      0,
+      1,
       ...ascii.encode('isommp41'),
     ]);
     final storagePath =
@@ -1698,7 +1704,8 @@ void main() {
     final notifier = container.read(taskFlowExecutionsProvider.notifier);
     await _waitFor(
         () =>
-            notifier.execution(ids.single)?.status == FlowExecutionStatus.completed,
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.completed,
         'owned file initial launch');
 
     var saved = notifier.execution(ids.single)!;
@@ -1710,7 +1717,9 @@ void main() {
     ];
     final retryIds = await service.retryExecution(ids.single);
     await _waitFor(
-        () => notifier.execution(retryIds.single)?.status == FlowExecutionStatus.completed,
+        () =>
+            notifier.execution(retryIds.single)?.status ==
+            FlowExecutionStatus.completed,
         'owned file retry');
     expect(notifier.execution(retryIds.single)!.inputText, storagePath);
 
@@ -1721,7 +1730,8 @@ void main() {
       throwsA(isA<TaskFlowValidationException>()),
     );
     final failedRetry = notifier.executions.firstWhere(
-      (execution) => execution.id != ids.single && execution.id != retryIds.single,
+      (execution) =>
+          execution.id != ids.single && execution.id != retryIds.single,
     );
     expect(failedRetry.status, FlowExecutionStatus.failed);
     expect(failedRetry.inputStoragePath, storagePath);
@@ -1747,7 +1757,8 @@ void main() {
     await service.resumeExecution(ids.single);
     await _waitFor(
         () =>
-            notifier.execution(ids.single)?.status == FlowExecutionStatus.completed,
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.completed,
         'owned file prefix-zero resume');
 
     expect(received, hasLength(3));
@@ -1797,7 +1808,9 @@ void main() {
         _FailOnDocumentsLookup(directory.path, failOnCall: 2);
     await service.resumeExecution(ids.single);
     await _waitFor(
-        () => notifier.execution(ids.single)?.status == FlowExecutionStatus.failed,
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.failed,
         'owned file resolution failure handling');
     expect(received, hasLength(3));
     PathProviderPlatform.instance = _Documents(directory.path);
@@ -1850,12 +1863,14 @@ void main() {
     ]);
     await service.restorePendingExecutions();
     await _waitFor(
-        () => notifier.execution('cold-owned-input')?.status == FlowExecutionStatus.failed,
+        () =>
+            notifier.execution('cold-owned-input')?.status ==
+            FlowExecutionStatus.failed,
         'cold restored missing owned file');
     expect(received, hasLength(3));
 
-    final checkpointFile = await File('${directory.path}/checkpoint.mp4')
-        .writeAsBytes(mediaBytes);
+    final checkpointFile =
+        await File('${directory.path}/checkpoint.mp4').writeAsBytes(mediaBytes);
     final checkpointFlow = TaskFlowDefinition(
       id: 'checkpoint-flow',
       inputType: IOType.audio,
@@ -1909,7 +1924,9 @@ void main() {
     ]);
     await service.restorePendingExecutions();
     await _waitFor(
-        () => notifier.execution('checkpoint-owned-input')?.status == FlowExecutionStatus.completed,
+        () =>
+            notifier.execution('checkpoint-owned-input')?.status ==
+            FlowExecutionStatus.completed,
         'cold restored owned-file checkpoint');
     expect(received, hasLength(4));
     expect(received.last.value, checkpointFile.path);
