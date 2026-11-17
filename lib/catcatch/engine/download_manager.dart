@@ -585,13 +585,14 @@ class DownloadManager {
     String outputPath, {
     void Function(int delta)? onBytes,
   }) async {
-    final outputFile = File(outputPath);
-    if (await outputFile.exists()) {
-      await outputFile.delete();
-    }
-
-    final raf = await outputFile.open(mode: FileMode.write);
+    final stagingFile = File(
+      '$outputPath.merge-$pid-${DateTime.now().microsecondsSinceEpoch}.tmp',
+    );
+    RandomAccessFile? raf;
+    Object? failure;
+    StackTrace? failureStackTrace;
     try {
+      raf = await stagingFile.open(mode: FileMode.write);
       for (final path in inputPaths) {
         final inputFile = File(path);
         if (!await inputFile.exists()) {
@@ -603,8 +604,30 @@ class DownloadManager {
           onBytes?.call(chunk.length);
         }
       }
-    } finally {
       await raf.close();
+      raf = null;
+      await stagingFile.rename(outputPath);
+    } catch (error, stackTrace) {
+      failure = error;
+      failureStackTrace = stackTrace;
+    } finally {
+      if (raf != null) {
+        try {
+          await raf.close();
+        } catch (error, stackTrace) {
+          failure ??= error;
+          failureStackTrace ??= stackTrace;
+        }
+      }
+      try {
+        if (await stagingFile.exists()) await stagingFile.delete();
+      } catch (error, stackTrace) {
+        failure ??= error;
+        failureStackTrace ??= stackTrace;
+      }
+    }
+    if (failure != null) {
+      Error.throwWithStackTrace(failure, failureStackTrace!);
     }
   }
 
