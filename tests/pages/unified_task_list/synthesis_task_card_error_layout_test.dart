@@ -60,6 +60,19 @@ Future<void> _pumpFailedCard(
 }
 
 void main() {
+  testWidgets('very narrow phone keeps failed task header readable', (
+    tester,
+  ) async {
+    await _pumpFailedCard(tester, 280);
+    expect(tester.takeException(), isNull);
+
+    final title = tester.getSize(find.text('Long meeting notes recording'));
+    final metadata = tester.getSize(find.byType(Wrap).first);
+
+    expect(title.width, greaterThan(120));
+    expect(metadata.height, lessThan(40));
+  });
+
   testWidgets('phone gives the error summary its own line above Details', (
     tester,
   ) async {

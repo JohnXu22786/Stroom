@@ -72,51 +72,52 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  if (widget.isUnread)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  _buildStatusIcon(),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.task.title.isNotEmpty
-                              ? widget.task.title
-                              : AppLocalizations.of(context)!
-                                  .unifiedTaskUnnamedRecording,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isVeryNarrow = constraints.maxWidth < 320;
+                  final taskTitle = widget.task.title.isNotEmpty
+                      ? widget.task.title
+                      : AppLocalizations.of(context)!
+                          .unifiedTaskUnnamedRecording;
+                  final titleAndMetadata = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        taskTitle,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            buildStatusChip(
-                              widget.task.status,
+                        maxLines: isVeryNarrow ? 2 : 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          buildStatusChip(
+                            widget.task.status,
+                            AppLocalizations.of(context)!,
+                          ),
+                          Text(
+                            formatRelativeTime(
+                              widget.task.createdAt,
                               AppLocalizations.of(context)!,
                             ),
-                            Text(
-                              formatRelativeTime(
-                                widget.task.createdAt,
-                                AppLocalizations.of(context)!,
-                              ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                          if (widget.task.status == TaskStatus.running) ...[
+                            // Live elapsed time — lets the user see a
+                            // slow-but-working synthesis is still alive.
+                            RunningElapsedLabel(
+                              startedAt: widget.task.createdAt,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Theme.of(context)
@@ -124,38 +125,72 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                                     .onSurfaceVariant,
                               ),
                             ),
-                            if (widget.task.status == TaskStatus.running) ...[
-                              // Live elapsed time — lets the user see a
-                              // slow-but-working synthesis is still alive.
-                              RunningElapsedLabel(
-                                startedAt: widget.task.createdAt,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                          ],
+                        ],
+                      ),
+                    ],
+                  );
+                  final leading = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.isUnread)
+                        Container(
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      _buildStatusIcon(),
+                      const SizedBox(width: 12),
+                    ],
+                  );
+                  final trailing = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildHeaderActions(context),
+                      const SizedBox(width: 4),
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(
+                          Icons.expand_more,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  );
+
+                  if (isVeryNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            leading,
+                            Expanded(child: titleAndMetadata),
                           ],
                         ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: trailing,
+                        ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // ── Action buttons for running/paused/failed/completed ──
-                  _buildHeaderActions(context),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.expand_more,
-                      color: colorScheme.onSurfaceVariant,
-                      size: 24,
-                    ),
-                  ),
-                ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      leading,
+                      Expanded(child: titleAndMetadata),
+                      const SizedBox(width: 8),
+                      trailing,
+                    ],
+                  );
+                },
               ),
             ),
           ),
