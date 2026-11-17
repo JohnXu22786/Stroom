@@ -141,6 +141,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   bool _downloadInProgress = false;
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
+  Future<void>? _videoPreviewDisposal;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
   bool _isAudioPlaying = false;
   Duration _audioPosition = Duration.zero;
@@ -236,8 +237,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       }
     } catch (e) {
       // Dispose controller to prevent resource leak on init failure
-      _videoPlayerController?.dispose();
-      _videoPlayerController = null;
+      await _disposeVideoPreview();
       _disposeAudioPlayer();
       if (!mounted) return;
       setState(() {
@@ -398,18 +398,23 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     } catch (_) {}
   }
 
+  Future<void> _disposeVideoPreview() =>
+      _videoPreviewDisposal ??= _disposeVideoPreviewAndFile();
+
+  Future<void> _disposeVideoPreviewAndFile() async {
+    _chewieController?.dispose();
+    _chewieController = null;
+    try {
+      await _videoPlayerController?.dispose();
+    } catch (_) {}
+    _videoPlayerController = null;
+    if (!_downloadInProgress) await _deleteTempFile();
+  }
+
   @override
   void dispose() {
     _disposeAudioPlayer();
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
-    try {
-      if (!_downloadInProgress &&
-          _tempFile != null &&
-          _tempFile!.existsSync()) {
-        _tempFile!.deleteSync();
-      }
-    } catch (_) {}
+    unawaited(_disposeVideoPreview());
     super.dispose();
   }
 

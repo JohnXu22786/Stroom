@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/unified_task_list/media_preview_sheet.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 class _TemporaryDirectoryPathProvider extends PathProviderPlatform {
   _TemporaryDirectoryPathProvider(this.path);
@@ -86,4 +88,207 @@ void main() {
       expect(previewFile.existsSync(), isFalse);
     },
   );
+
+  testWidgets(
+    'waits for video player disposal before deleting downloaded preview file',
+    (tester) async {
+      final temporaryDirectory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('media_preview_video_'),
+      );
+      final tempDir = temporaryDirectory!;
+      final previousPathProvider = PathProviderPlatform.instance;
+      final previousVideoPlatform = VideoPlayerPlatform.instance;
+      final videoPlatform = _BlockingDisposalVideoPlayerPlatform();
+      PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
+        tempDir.path,
+      );
+      VideoPlayerPlatform.instance = videoPlatform;
+      addTearDown(() {
+        if (!videoPlatform.finishDispose.isCompleted) {
+          videoPlatform.finishDispose.complete();
+        }
+        PathProviderPlatform.instance = previousPathProvider;
+        VideoPlayerPlatform.instance = previousVideoPlatform;
+        tempDir.deleteSync(recursive: true);
+      });
+
+      File? previewFile;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: MediaPreviewSheet(
+                resource: MediaResource(
+                  url: 'https://example.com/preview.mp4',
+                  name: 'sample',
+                  ext: 'mp4',
+                ),
+                taskTitle: 'Preview',
+                downloadToFile: (_, file) async {
+                  previewFile = file;
+                  file.writeAsBytesSync([1, 2, 3, 4]);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await videoPlatform.playerInitialized.future;
+
+      expect(previewFile, isNotNull);
+      expect(previewFile!.existsSync(), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await videoPlatform.disposeStarted.future;
+      expect(previewFile!.existsSync(), isTrue);
+
+      videoPlatform.finishDispose.complete();
+      for (var i = 0; i < 100 && previewFile!.existsSync(); i++) {
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(previewFile!.existsSync(), isFalse);
+    },
+  );
+
+  testWidgets(
+    'waits for failed video initialization cleanup before deleting preview',
+    (tester) async {
+      final temporaryDirectory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('media_preview_video_error_'),
+      );
+      final tempDir = temporaryDirectory!;
+      final previousPathProvider = PathProviderPlatform.instance;
+      final previousVideoPlatform = VideoPlayerPlatform.instance;
+      final videoPlatform = _BlockingDisposalVideoPlayerPlatform(
+        failInitialization: true,
+      );
+      PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
+        tempDir.path,
+      );
+      VideoPlayerPlatform.instance = videoPlatform;
+      addTearDown(() {
+        if (!videoPlatform.finishDispose.isCompleted) {
+          videoPlatform.finishDispose.complete();
+        }
+        PathProviderPlatform.instance = previousPathProvider;
+        VideoPlayerPlatform.instance = previousVideoPlatform;
+        tempDir.deleteSync(recursive: true);
+      });
+
+      File? previewFile;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: MediaPreviewSheet(
+                resource: MediaResource(
+                  url: 'https://example.com/preview.mp4',
+                  name: 'sample',
+                  ext: 'mp4',
+                ),
+                taskTitle: 'Preview',
+                downloadToFile: (_, file) async {
+                  previewFile = file;
+                  file.writeAsBytesSync([1, 2, 3, 4]);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await videoPlatform.disposeStarted.future;
+      expect(previewFile!.existsSync(), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(previewFile!.existsSync(), isTrue);
+
+      videoPlatform.finishDispose.complete();
+      for (var i = 0; i < 100 && previewFile!.existsSync(); i++) {
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(previewFile!.existsSync(), isFalse);
+    },
+  );
+}
+
+class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
+  _BlockingDisposalVideoPlayerPlatform({this.failInitialization = false});
+
+  final bool failInitialization;
+  final Completer<void> disposeStarted = Completer<void>();
+  final Completer<void> finishDispose = Completer<void>();
+  final Completer<void> playerInitialized = Completer<void>();
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<int?> createWithOptions(VideoCreationOptions options) async => 1;
+
+  @override
+  Stream<VideoEvent> videoEventsFor(int playerId) {
+    if (failInitialization) {
+      return Stream.error(
+        PlatformException(
+            code: 'init_failed', message: 'Initialization failed'),
+      );
+    }
+    return Stream.value(
+      VideoEvent(
+        eventType: VideoEventType.initialized,
+        duration: const Duration(seconds: 1),
+        size: const Size(640, 360),
+      ),
+    ).map((event) {
+      playerInitialized.complete();
+      return event;
+    });
+  }
+
+  @override
+  Widget buildView(int playerId) => const SizedBox.shrink();
+
+  @override
+  Future<void> setLooping(int playerId, bool looping) async {}
+
+  @override
+  Future<void> play(int playerId) async {}
+
+  @override
+  Future<void> pause(int playerId) async {}
+
+  @override
+  Future<void> setVolume(int playerId, double volume) async {}
+
+  @override
+  Future<void> seekTo(int playerId, Duration position) async {}
+
+  @override
+  Future<void> setPlaybackSpeed(int playerId, double speed) async {}
+
+  @override
+  Future<Duration> getPosition(int playerId) async => Duration.zero;
+
+  @override
+  Future<void> setMixWithOthers(bool mixWithOthers) async {}
+
+  @override
+  Future<void> dispose(int playerId) async {
+    disposeStarted.complete();
+    await finishDispose.future;
+  }
 }
