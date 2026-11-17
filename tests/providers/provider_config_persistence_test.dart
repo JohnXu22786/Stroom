@@ -90,6 +90,23 @@ void main() {
   });
 
   group('ProviderEntriesNotifier.load - corrupt data handling', () {
+    test('non-list legacy chat_configs are backed up before removal', () async {
+      const legacyJson = '{"providerName":"Recover me","key":"secret"}';
+      SharedPreferences.setMockInitialValues({'chat_configs': legacyJson});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), legacyJson);
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test(
         'non-array provider_entries is quarantined before migration '
         'overwrite', () async {
