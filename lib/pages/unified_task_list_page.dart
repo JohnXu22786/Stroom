@@ -567,7 +567,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 value: 'clear_failed',
                 child: ListTile(
                   leading: Icon(
-                    Icons.error_outline,
+                    Icons.delete_outline,
                     size: 20,
                     color: Colors.red,
                   ),

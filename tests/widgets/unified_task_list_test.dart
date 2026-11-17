@@ -677,6 +677,35 @@ void main() {
           reason: 'confirmed clearing must remove completed tasks');
     });
 
+    testWidgets(
+        'clearing failed tasks uses a trash icon and requires confirmation',
+        (tester) async {
+      await pumpPage(tester, [_createFailedTask(id: 'failed-1')]);
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      final clearFailedItem = find.ancestor(
+        of: find.text('清除失败任务'),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        find.descendant(
+          of: clearFailedItem,
+          matching: find.byIcon(Icons.delete_outline),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('清除失败任务'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认清除'), findsOneWidget);
+      expect(find.text('确定要清除所有失败任务吗？'), findsOneWidget);
+      expect(find.text('失败 failed-1'), findsOneWidget,
+          reason: 'failed tasks must remain until the user confirms');
+    });
+
     testWidgets('failed background task can be deleted via delete button',
         (tester) async {
       await pumpPageWithBackground(tester, [
