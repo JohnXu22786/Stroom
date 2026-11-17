@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +44,40 @@ void main() {
     // Android 实现（默认实例在测试环境中未注册，访问会抛错）。
     FlutterLocalNotificationsPlatform.instance =
         AndroidFlutterLocalNotificationsPlugin();
+  });
+
+  testWidgets('iOS notification permission request returns the system result', (tester) async {
+    const channel = MethodChannel('flutter.baseflow.com/permissions/methods');
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    var requestResult = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 0;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: requestResult};
+      }
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final service = NotificationService();
+    expect(
+      await service.requestPermission(usageReason: 'test'),
+      isFalse,
+      reason: 'a denied system response must not be treated as permission',
+    );
+
+    requestResult = 1;
+    expect(
+      await service.requestPermission(usageReason: 'test'),
+      isTrue,
+      reason: 'a granted system response should enable notifications',
+    );
+    debugDefaultTargetPlatformOverride = null;
   });
 
   test(
