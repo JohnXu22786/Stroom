@@ -29,12 +29,20 @@ class UpdateDialog extends ConsumerStatefulWidget {
 }
 
 class _UpdateDialogState extends ConsumerState<UpdateDialog> {
+  final ScrollController _releaseNotesController = ScrollController();
+
   /// Whether the download URL points to a GitHub release page (not a direct asset).
   /// When true, the "立即更新" button is replaced with "前往浏览器下载".
   bool get _isHtmlUrlFallback {
     final url = ref.read(updateProvider).downloadUrl;
     if (url == null) return false;
     return url.contains('/releases/tag/');
+  }
+
+  @override
+  void dispose() {
+    _releaseNotesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -88,7 +96,19 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text(state.releaseNotes!),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+                  ),
+                  child: Scrollbar(
+                    controller: _releaseNotesController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _releaseNotesController,
+                      child: Text(state.releaseNotes!),
+                    ),
+                  ),
+                ),
               ],
               // Installing state — shown briefly while the app auto-installs
               if (state.isInstalling) ...[
@@ -269,29 +289,9 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
 
     // Initial state: check if the download URL is a release page (html fallback)
     if (_isHtmlUrlFallback) {
-      return [
-        TextButton(
-          onPressed: () {
-            if (state.latestVersion != null) {
-              notifier.skipVersion(state.latestVersion!);
-            }
-            Navigator.of(context).pop();
-          },
-          child: ConstrainedText(
-            strings.updateSkipVersion,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: ConstrainedText(
-            strings.updateRemindLater,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        FilledButton(
+      return _buildInitialActions(
+        state,
+        primaryAction: FilledButton(
           onPressed: () => _openInBrowser(state.downloadUrl!),
           child: ConstrainedText(
             strings.updateOpenBrowser,
@@ -299,39 +299,86 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-      ];
+      );
     }
 
     // Initial state with direct download URL: show all action buttons
-    return [
-      TextButton(
-        onPressed: () {
-          if (state.latestVersion != null) {
-            notifier.skipVersion(state.latestVersion!);
-          }
-          Navigator.of(context).pop();
-        },
-        child: ConstrainedText(
-          strings.updateSkipVersion,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: ConstrainedText(
-          strings.updateRemindLater,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      FilledButton(
+    return _buildInitialActions(
+      state,
+      primaryAction: FilledButton(
         onPressed: () => notifier.downloadUpdate(),
         child: ConstrainedText(
           strings.updateNow,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+      ),
+    );
+  }
+
+  List<Widget> _buildInitialActions(
+    UpdateState state, {
+    required Widget primaryAction,
+  }) {
+    final strings = AppLocalizations.of(context)!;
+    final notifier = ref.read(updateProvider.notifier);
+    final skipAction = TextButton(
+      onPressed: () {
+        if (state.latestVersion != null) {
+          notifier.skipVersion(state.latestVersion!);
+        }
+        Navigator.of(context).pop();
+      },
+      child: ConstrainedText(
+        strings.updateSkipVersion,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+    final remindAction = TextButton(
+      onPressed: () => Navigator.of(context).pop(),
+      child: ConstrainedText(
+        strings.updateRemindLater,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    if (viewportWidth >= 600 && textScale <= 1.2) {
+      return [skipAction, remindAction, primaryAction];
+    }
+
+    if (viewportWidth < 360 || textScale > 1.2) {
+      return [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(width: double.infinity, child: skipAction),
+            SizedBox(width: double.infinity, child: remindAction),
+            const SizedBox(height: 4),
+            SizedBox(width: double.infinity, child: primaryAction),
+          ],
+        ),
+      ];
+    }
+
+    return [
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(child: skipAction),
+              Expanded(child: remindAction),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SizedBox(width: double.infinity, child: primaryAction),
+        ],
       ),
     ];
   }
