@@ -75,4 +75,20 @@ void main() {
       expect(await secondFile.exists(), isFalse);
     },
   );
+
+  test('external preview cleanup waits for the viewer grace period', () async {
+    final directory = await Directory.systemTemp.createTemp('preview-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/external.pdf');
+    await file.writeAsString('preview');
+
+    final cleanup = deleteAttachmentPreviewFileAfterDelay(
+      file.path,
+      delay: const Duration(milliseconds: 20),
+    );
+
+    expect(await file.exists(), isTrue);
+    await cleanup;
+    expect(await file.exists(), isFalse);
+  });
 }

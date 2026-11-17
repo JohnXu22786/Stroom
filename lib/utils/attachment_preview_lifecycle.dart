@@ -2,6 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+/// Keeps externally opened attachment copies available while the OS viewer
+/// starts and reads them before removing the temporary copy.
+const externalAttachmentPreviewGracePeriod = Duration(hours: 1);
+
 /// Shows a media preview dialog and removes its temporary copy if route
 /// creation fails. A successful preview owns cleanup after player disposal.
 Future<T?> showAttachmentPreviewDialog<T>({
@@ -25,6 +29,16 @@ Future<void> deleteAttachmentPreviewFile(String filePath) async {
   } catch (e) {
     debugPrint('[AttachmentPreview] temp file cleanup failed: $e');
   }
+}
+
+/// Removes an externally opened preview after its viewer has had time to read
+/// the file. The OS does not report when an external viewer is finished.
+Future<void> deleteAttachmentPreviewFileAfterDelay(
+  String filePath, {
+  Duration delay = externalAttachmentPreviewGracePeriod,
+}) async {
+  await Future<void>.delayed(delay);
+  await deleteAttachmentPreviewFile(filePath);
 }
 
 /// Removes a partial preview copy when writing its contents fails.
