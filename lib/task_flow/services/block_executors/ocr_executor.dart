@@ -153,6 +153,9 @@ Future<String> executeOcrBlock({
   /// Allows bounded reads to be observed in preflight limit tests.
   Future<Uint8List> Function(File, int)? readInputBytes,
 
+  /// Allows WebFileStore reads to be held and released in cancellation tests.
+  Future<Uint8List?> Function(String, {int? maxBytes})? readWebFileBytes,
+
   /// Allows the input-existence check to be held in cancellation tests.
   Future<bool> Function(String)? checkInputExists,
 
@@ -338,9 +341,17 @@ Future<String> executeOcrBlock({
 
   try {
     if (usesWebFileStore) {
+      final readWebFile = readWebFileBytes ?? WebFileStore.read;
       final storedBytes =
-          await WebFileStore.read(input, maxBytes: maxInputBytes);
+          await readWebFile(input, maxBytes: maxInputBytes);
       if (storedBytes == null) {
+        if (!isFlowExecutionActive(execNotifier, execId)) {
+          throw BlockExecutionException(
+            '任务流已结束或删除',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
         failSubTask(
           bgNotifier,
           taskId,
