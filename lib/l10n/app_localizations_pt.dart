@@ -470,7 +470,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Transcreva todo o texto visível na página, seguindo a ordem natural de leitura. Preserve o texto que não for fórmula e represente as fórmulas matemáticas em LaTeX; use \$...\$ para fórmulas em linha e \$\$...\$\$ para fórmulas em bloco. Retorne somente a transcrição; não acrescente explicações nem inferências.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Padrão (enviar somente imagens)';
+  String get ocrDefaultImagesOnly => "Padrão (sem instrução personalizada; o prompt OCR padrão é usado)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -542,7 +542,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, somente a imagem será enviada.';
+      "Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, nenhuma instrução personalizada será adicionada; o prompt OCR padrão continuará sendo usado.";
 
   @override
   String get ocrInstructionManageEmpty => 'Ainda não há instruções';
@@ -12631,7 +12631,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
       'Transcreva todo o texto visível na página, seguindo a ordem natural de leitura. Preserve o texto que não for fórmula e represente as fórmulas matemáticas em LaTeX; use \$...\$ para fórmulas em linha e \$\$...\$\$ para fórmulas em bloco. Retorne somente a transcrição; não acrescente explicações nem inferências.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Padrão (enviar somente imagens)';
+  String get ocrDefaultImagesOnly => "Padrão (sem instrução personalizada; o prompt OCR padrão é usado)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12703,7 +12703,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, somente a imagem será enviada.';
+      "Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, nenhuma instrução personalizada será adicionada; o prompt OCR padrão continuará sendo usado.";
 
   @override
   String get ocrInstructionManageEmpty => 'Ainda não há instruções';

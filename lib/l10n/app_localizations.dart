@@ -886,7 +886,7 @@ abstract class AppLocalizations {
   /// No description provided for @ocrDefaultImagesOnly.
   ///
   /// In en, this message translates to:
-  /// **'Default (send images only)'**
+  /// **'Default (no custom instruction; default OCR prompt used)'**
   String get ocrDefaultImagesOnly;
 
   /// No description provided for @ocrDefaultSystemPrompt.
@@ -1012,7 +1012,7 @@ abstract class AppLocalizations {
   /// No description provided for @ocrInstructionManageGuidance.
   ///
   /// In en, this message translates to:
-  /// **'These instructions apply to all recognition models. If none is selected, only the image is sent.'**
+  /// **'These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.'**
   String get ocrInstructionManageGuidance;
 
   /// No description provided for @ocrInstructionManageEmpty.

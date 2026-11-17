@@ -467,7 +467,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use \$...\$ for inline formulas and \$\$...\$\$ for display formulas. Return only the transcription; do not add explanations or inferences.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Default (send images only)';
+  String get ocrDefaultImagesOnly => "Default (no custom instruction; default OCR prompt used)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -538,7 +538,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+      "These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.";
 
   @override
   String get ocrInstructionManageEmpty => 'No instructions yet';
@@ -12465,7 +12465,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use \$...\$ for inline formulas and \$\$...\$\$ for display formulas. Return only the transcription; do not add explanations or inferences.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Default (send images only)';
+  String get ocrDefaultImagesOnly => "Default (no custom instruction; default OCR prompt used)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12536,7 +12536,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+      "These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.";
 
   @override
   String get ocrInstructionManageEmpty => 'No instructions yet';

@@ -452,7 +452,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には \$...\$ を使用し、表示式には \$\$...\$\$ を使用します。転写のみを返します。説明や推論を追加しないでください。';
 
   @override
-  String get ocrDefaultImagesOnly => 'デフォルト（画像のみ送信）';
+  String get ocrDefaultImagesOnly => "デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -522,7 +522,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。';
+      "これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。";
 
   @override
   String get ocrInstructionManageEmpty => 'まだ指示がありません';
@@ -12140,7 +12140,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
       '表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には \$...\$ を使用し、表示式には \$\$...\$\$ を使用します。転写のみを返します。説明や推論を追加しないでください。';
 
   @override
-  String get ocrDefaultImagesOnly => 'デフォルト（画像のみ送信）';
+  String get ocrDefaultImagesOnly => "デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12210,7 +12210,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。';
+      "これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。";
 
   @override
   String get ocrInstructionManageEmpty => 'まだ指示がありません';
