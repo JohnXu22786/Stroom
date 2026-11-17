@@ -8,6 +8,7 @@ import 'package:file_selector_platform_interface/file_selector_platform_interfac
     as selector_platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stroom/utils/file_picker_utils.dart';
 
 import '../fake_file_picker.dart';
@@ -161,6 +162,36 @@ void main() {
       expect(await existing.readAsString(), 'keep $name');
       expect(await File(outputPaths.single).readAsString(), 'new $name');
     }
+  });
+
+  test('folder exports preserve existing files at nested paths', () async {
+    final directory = await Directory.systemTemp.createTemp('folder_export_');
+    addTearDown(() => directory.delete(recursive: true));
+    final folder = Directory('${directory.path}/photos/nested');
+    await folder.create(recursive: true);
+    final existing = File('${folder.path}/scene.jpg');
+    await existing.writeAsString('keep existing photo');
+
+    final outputPaths = await resolveNonClobberingExportPaths(
+      files: ['photos/nested/scene.jpg'],
+      directory: directory.path,
+      folders: ['photos', 'photos/nested'],
+      pathExists: (path) async =>
+          await FileSystemEntity.type(path, followLinks: false) !=
+          FileSystemEntityType.notFound,
+    );
+
+    expect(
+      outputPaths.single,
+      endsWith(p.join('photos', 'nested', 'scene (1).jpg')),
+    );
+    await writeUserVisibleExportFile(
+      outputPaths.single,
+      Uint8List.fromList('new photo'.codeUnits),
+    );
+
+    expect(await existing.readAsString(), 'keep existing photo');
+    expect(await File(outputPaths.single).readAsString(), 'new photo');
   });
 
   test('desktop save applies the extension filter and writes selected bytes',
