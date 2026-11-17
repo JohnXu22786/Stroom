@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
@@ -19,6 +20,14 @@ void main() {
     expect(
       localizedBlockTypeName(BlockType.chat, AppLocalizationsZh()),
       '助手对话',
+    );
+  });
+
+  test('Spanish OCR block labels use the standard OCR name', () {
+    expect(localizedBlockTypeName(BlockType.ocr, AppLocalizationsEs()), 'OCR');
+    expect(
+      localizedBlockTypeName(BlockType.ocr, AppLocalizationsEsEs()),
+      'OCR',
     );
   });
 

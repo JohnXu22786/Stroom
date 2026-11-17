@@ -395,7 +395,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get taskFlowBlockOcr => 'LOC';
+  String get taskFlowBlockOcr => 'OCR';
 
   @override
   String get taskFlowBlockAsr => 'Reconocimiento de voz';
@@ -12611,7 +12611,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   }
 
   @override
-  String get taskFlowBlockOcr => 'LOC';
+  String get taskFlowBlockOcr => 'OCR';
 
   @override
   String get taskFlowBlockAsr => 'Reconocimiento de voz';
