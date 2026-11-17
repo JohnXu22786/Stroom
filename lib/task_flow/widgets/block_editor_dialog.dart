@@ -626,7 +626,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                           padding: const EdgeInsets.only(top: 2),
                           child: ConstrainedText(
                             '${cp.paramName}: '
-                                '${_isCredentialCustomParam(cp.paramName) ? '••••••' : cp.defaultValue}',
+                            '${_isCredentialCustomParam(cp.paramName) ? '••••••' : cp.defaultValue}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
