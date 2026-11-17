@@ -9,6 +9,7 @@ import 'package:file_picker_platform_interface/file_picker_platform_interface.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -509,7 +510,7 @@ void main() {
           .path;
 
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(queuedReferences, [copyPath]);
+      expect(queuedReferences, ['attachments/${p.basename(copyPath)}']);
       expect(retryCount, 1);
 
       await _pumpRunMode(
@@ -751,7 +752,7 @@ void main() {
       expect(find.text('notes.pdf'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(queuedReferences, [copy.path]);
+      expect(queuedReferences, ['attachments/${p.basename(copy.path)}']);
     });
 
     testWidgets(

@@ -1265,8 +1265,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               _mediaInputs.removeAt(i);
                             });
                             if (_unsubmittedFileInputs.contains(reference)) {
-                              final storagePath =
-                                  _ownedStoragePaths[reference];
+                              final storagePath = _ownedStoragePaths[reference];
                               if (storagePath == null) {
                                 _unsubmittedFileInputs.remove(reference);
                                 return;
