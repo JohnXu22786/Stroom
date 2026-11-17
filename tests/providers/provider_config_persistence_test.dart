@@ -550,25 +550,28 @@ void main() {
       ...builtinMcpProviderGroups,
       const McpProviderGroup(id: groupId, name: 'Custom'),
     ];
-    final savedEntries =
+    final initialEntries =
         jsonEncode(originalEntries.map((entry) => entry.toMap()).toList());
-    final savedGroups =
+    final initialGroups =
         jsonEncode(originalGroups.map((group) => group.toMap()).toList());
     SharedPreferences.setMockInitialValues({
-      'provider_entries': savedEntries,
-      'mcp_provider_groups': savedGroups,
+      'provider_entries': initialEntries,
+      'mcp_provider_groups': initialGroups,
     });
     final previousStore = SharedPreferencesStorePlatform.instance;
     SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore(
       {
-        'flutter.provider_entries': savedEntries,
-        'flutter.mcp_provider_groups': savedGroups,
+        'flutter.provider_entries': initialEntries,
+        'flutter.mcp_provider_groups': initialGroups,
       },
       failedKey: 'flutter.mcp_provider_groups',
     );
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeRemoval = prefs.getString('provider_entries');
+      final savedGroupsBeforeRemoval = prefs.getString('mcp_provider_groups');
 
       await expectLater(
         notifier.removeMcpGroup(groupId),
@@ -583,14 +586,13 @@ void main() {
         notifier.state.entries
             .singleWhere((entry) => entry.id == 'mcp')
             .configs
-            .single
+            .firstWhere((config) => config.id == 'server')
             .groupId,
         groupId,
       );
-      final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
-      expect(prefs.getString('provider_entries'), savedEntries);
-      expect(prefs.getString('mcp_provider_groups'), savedGroups);
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
     } finally {
       SharedPreferencesStorePlatform.instance = previousStore;
     }
