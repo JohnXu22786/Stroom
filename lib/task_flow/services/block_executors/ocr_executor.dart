@@ -153,6 +153,9 @@ Future<String> executeOcrBlock({
   /// Allows bounded reads to be observed in preflight limit tests.
   Future<Uint8List> Function(File, int)? readInputBytes,
 
+  /// Allows the input-existence check to be held in cancellation tests.
+  Future<bool> Function(String)? checkInputExists,
+
   /// Allows payload preparation to be held and released in cancellation tests.
   Future<OcrImagePayload> Function(Uint8List)? prepareImagePayload,
 
@@ -181,12 +184,21 @@ Future<String> executeOcrBlock({
   try {
     if (kIsWeb) {
       usesWebFileStore = true;
-      inputExists = await WebFileStore.exists(input);
+      inputExists = await (checkInputExists ?? WebFileStore.exists)(input);
     } else {
       final existsInWebFileStore =
           WebFileStore.isTestMode && await WebFileStore.exists(input);
       usesWebFileStore = existsInWebFileStore;
-      inputExists = existsInWebFileStore || await file.exists();
+      inputExists = existsInWebFileStore ||
+          await (checkInputExists ?? ((_) => file.exists()))(input);
+    }
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
     if (!inputExists) {
       failSubTask(

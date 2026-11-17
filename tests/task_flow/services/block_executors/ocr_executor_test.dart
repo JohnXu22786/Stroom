@@ -1025,6 +1025,51 @@ void main() {
     );
   });
 
+  test('cancellation during missing OCR input check removes the task',
+      () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<bool>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/missing_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) {
+        checkStarted.complete();
+        return releaseCheck.future;
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete(false);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
   test('cancellation during failing OCR payload preparation removes the task',
       () async {
     final source = await File('${directory.path}/cancelled_payload.png')
