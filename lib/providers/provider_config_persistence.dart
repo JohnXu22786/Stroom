@@ -762,31 +762,40 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     } catch (e) {
       debugPrint('Failed to persist provider entries: $e');
       if (rethrowOnFailure) {
+        var rollbackFailed = false;
         if (prefs != null) {
           if (attemptedEntriesWrite) {
             try {
-              if (previousEntries == null) {
-                await prefs.remove('provider_entries');
-              } else {
-                await prefs.setString('provider_entries', previousEntries);
+              final restored = previousEntries == null
+                  ? await prefs.remove('provider_entries')
+                  : await prefs.setString('provider_entries', previousEntries);
+              if (!restored) {
+                rollbackFailed = true;
+                debugPrint('Failed to roll back provider entries.');
               }
             } catch (rollbackError) {
+              rollbackFailed = true;
               debugPrint(
                   'Failed to roll back provider entries: $rollbackError');
             }
           }
           if (attemptedGroupsWrite) {
             try {
-              if (previousGroups == null) {
-                await prefs.remove('mcp_provider_groups');
-              } else {
-                await prefs.setString('mcp_provider_groups', previousGroups);
+              final restored = previousGroups == null
+                  ? await prefs.remove('mcp_provider_groups')
+                  : await prefs.setString(
+                      'mcp_provider_groups', previousGroups);
+              if (!restored) {
+                rollbackFailed = true;
+                debugPrint('Failed to roll back MCP groups.');
               }
             } catch (rollbackError) {
+              rollbackFailed = true;
               debugPrint('Failed to roll back MCP groups: $rollbackError');
             }
           }
         }
+        if (rollbackFailed) throw const ProviderEntriesRollbackException();
         rethrow;
       }
     }

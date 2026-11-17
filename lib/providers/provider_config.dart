@@ -45,6 +45,10 @@ class ProviderEntriesState {
   });
 }
 
+class ProviderEntriesRollbackException implements Exception {
+  const ProviderEntriesRollbackException();
+}
+
 bool isMcpProviderConfigEnabled(
   ProviderConfigItem config,
   List<McpProviderGroup> groups,

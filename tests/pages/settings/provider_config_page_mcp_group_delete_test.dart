@@ -18,7 +18,7 @@ class _FailingGroupRemovalNotifier extends ProviderEntriesNotifier {
 
   @override
   Future<void> removeMcpGroup(String id) async {
-    throw StateError('Failed to persist provider configuration.');
+    throw const ProviderEntriesRollbackException();
   }
 }
 
