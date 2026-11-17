@@ -90,6 +90,25 @@ void main() {
     expect(await File(paths[1]).readAsBytes(), [1, 2, 3]);
   });
 
+  test('file exports reserve names using Unicode case folding', () async {
+    final directory = await Directory.systemTemp.createTemp('unicode_export_');
+    addTearDown(() => directory.delete(recursive: true));
+    await File('${directory.path}/σ.txt').writeAsBytes([1]);
+
+    final paths = await resolveNonClobberingExportPaths(
+      files: const ['σ.txt', 'ς (1).txt'],
+      directory: directory.path,
+      pathExists: (path) async =>
+          await FileSystemEntity.type(path, followLinks: false) !=
+          FileSystemEntityType.notFound,
+    );
+
+    expect(paths, [
+      '${directory.path}${Platform.pathSeparator}σ (2).txt',
+      '${directory.path}${Platform.pathSeparator}ς (1).txt',
+    ]);
+  });
+
   test('image, video, and text exports preserve same-named destination files',
       () async {
     final directory = await Directory.systemTemp.createTemp('batch_export_');

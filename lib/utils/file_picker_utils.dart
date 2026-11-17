@@ -63,6 +63,22 @@ String filePickerLocationLabel(Uri location) {
   return location.toString();
 }
 
+// Normalize canonical Unicode equivalents and case variants to one key.
+// Decomposition exposes Greek iota-subscript case folds. Avoid uppercase
+// expansions elsewhere when they merge distinct names.
+String _exportPathComparisonKey(String path) => unorm.nfc(
+      unorm.nfd(path).runes.map((rune) {
+        if (rune == 0x0345) return 'ι';
+        final character = String.fromCharCode(rune);
+        final uppercase = character.toUpperCase();
+        final expands = uppercase.runes.length > 1;
+        final isGreek = rune >= 0x1F00 && rune <= 0x1FFF;
+        return expands && !isGreek
+            ? character.toLowerCase()
+            : uppercase.toLowerCase();
+      }).join(),
+    );
+
 /// Rejects file/file and file/directory collisions before an export writes.
 void validateUserVisibleExportPaths({
   required Iterable<String> files,
@@ -99,22 +115,6 @@ void validateUserVisibleExportPaths({
     return segments.join('/');
   }
 
-  // Normalize canonical Unicode equivalents and case variants to one key.
-  // Decomposition exposes Greek iota-subscript case folds.
-  // Avoid uppercase expansions elsewhere when they merge distinct names.
-  String comparisonPath(String path) => unorm.nfc(
-        unorm.nfd(path).runes.map((rune) {
-          if (rune == 0x0345) return 'ι';
-          final character = String.fromCharCode(rune);
-          final uppercase = character.toUpperCase();
-          final expands = uppercase.runes.length > 1;
-          final isGreek = rune >= 0x1F00 && rune <= 0x1FFF;
-          return expands && !isGreek
-              ? character.toLowerCase()
-              : uppercase.toLowerCase();
-        }).join(),
-      );
-
   final filePaths = <String>{};
   final directoryPaths = <String>{};
   final directoryNamesByComparisonPath = <String, String>{};
@@ -123,7 +123,7 @@ void validateUserVisibleExportPaths({
     final segments = path.split('/');
     for (var i = 1; i <= segments.length; i++) {
       final directoryPath = segments.take(i).join('/');
-      final comparison = comparisonPath(directoryPath);
+      final comparison = _exportPathComparisonKey(directoryPath);
       final existingPath = directoryNamesByComparisonPath[comparison];
       if (existingPath != null && existingPath != directoryPath) {
         throw StateError('Duplicate export folder path: $directoryPath');
@@ -138,7 +138,7 @@ void validateUserVisibleExportPaths({
   }
   for (final file in files) {
     final path = safePath(file);
-    if (!filePaths.add(comparisonPath(path))) {
+    if (!filePaths.add(_exportPathComparisonKey(path))) {
       throw StateError('Duplicate export file path: $path');
     }
     final segments = path.split('/');
@@ -172,16 +172,16 @@ Future<List<String>> resolveNonClobberingExportPaths({
   final folderPaths = folders.toList();
   validateUserVisibleExportPaths(files: paths, folders: folderPaths);
 
-  final inputPaths = paths.map((path) => path.toLowerCase()).toSet();
+  final inputPaths = paths.map(_exportPathComparisonKey).toSet();
   final reservedFolderPaths = folderPaths
       .where((path) => path.isNotEmpty)
-      .map((path) => path.toLowerCase())
+      .map(_exportPathComparisonKey)
       .toSet();
   final reserved = <String>{};
   final resolved = <String>[];
 
   bool conflictsWithPlannedPath(String candidate, String originalPath) {
-    final candidateKey = candidate.toLowerCase();
+    final candidateKey = _exportPathComparisonKey(candidate);
     for (final plannedPath in {...inputPaths, ...reserved}) {
       if (candidateKey == plannedPath &&
           candidate == originalPath &&
@@ -213,7 +213,7 @@ Future<List<String>> resolveNonClobberingExportPaths({
     var candidate = path;
     var suffix = 1;
     while (true) {
-      final candidateKey = candidate.toLowerCase();
+      final candidateKey = _exportPathComparisonKey(candidate);
       final candidatePath = p.joinAll([directory, ...candidate.split('/')]);
       if (!conflictsWithPlannedPath(candidate, path) &&
           !await pathExists(candidatePath)) {
