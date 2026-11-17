@@ -2417,6 +2417,95 @@ void main() {
         );
       });
 
+      test('recognize redacts configured API key echoed in HTTP errors',
+          () async {
+        const credential = 'configured-ocr-secret-credential-101';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: credential,
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 401,
+                      data: {
+                        'error': {'message': 'invalid key: $credential'},
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 401'), isNot(contains(credential))),
+            ),
+          ),
+        );
+      });
+
+      test('recognizeBatch redacts interceptor Authorization credentials',
+          () async {
+        const credential = 'interceptor-ocr-secret-credential-102';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  options.headers['Authorization'] = 'Bearer $credential';
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 403,
+                        data: {
+                          'error': {'message': 'denied: $credential'},
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg')
+            ],
+          ),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 403'), isNot(contains(credential))),
+            ),
+          ),
+        );
+      });
+
       test(
         'error diagnostics exclude credentials in JSON string response bodies',
         () async {
