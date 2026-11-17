@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
@@ -13,6 +13,15 @@ import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/app_version.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+final class _DocumentsDirectory extends PathProviderPlatform {
+  _DocumentsDirectory(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
 
 final class _RealIO extends IOOverrides {}
 
@@ -50,6 +59,7 @@ void main() {
   late String appDir;
   late Directory snapDir;
   late Directory isolatedAppDir;
+  late PathProviderPlatform originalPathProvider;
 
   setUp(() async {
     AppLogService.disableFileLogging();
@@ -59,13 +69,8 @@ void main() {
     isolatedAppDir = await Directory.systemTemp.createTemp(
       'stroom_data_safety_test_',
     );
-    // Other test files run in parallel and may write their own safety marker;
-    // keep this file's marker and integrity fixtures in a private app dir.
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => isolatedAppDir.path,
-    );
+    originalPathProvider = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsDirectory(isolatedAppDir.path);
     appDir = await AppStorage.directory;
     // 只扫描本测试隔离目录中的数据，避免其他并行测试的文件影响判断。
     for (final rel in [
@@ -94,11 +99,7 @@ void main() {
 
   tearDown(() async {
     SnapshotService.debugNow = null;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+    PathProviderPlatform.instance = originalPathProvider;
     AppStorage.resetCache();
     try {
       if (await snapDir.exists()) {
@@ -340,7 +341,8 @@ void main() {
         expect(await legacyAudio.exists(), isTrue,
             reason: 'failed destination migration must retain its source');
         expect(await File(destinationPath).exists(), isFalse,
-            reason: 'the injected migration write failure blocks the destination');
+            reason:
+                'the injected migration write failure blocks the destination');
         await legacyAudio.setLastModified(
           DateTime.now().subtract(const Duration(days: 10)),
         );
@@ -353,9 +355,11 @@ void main() {
         FileManifest.invalidateCache();
         await FileManifest.loadRecords();
         expect(await legacyAudio.exists(), isFalse,
-            reason: 'a later successful migration retry removes the legacy file');
+            reason:
+                'a later successful migration retry removes the legacy file');
         expect(await File(destinationPath).exists(), isTrue,
-            reason: 'a later successful migration retry writes the escaped file');
+            reason:
+                'a later successful migration retry writes the escaped file');
       },
     );
 
