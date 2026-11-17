@@ -12,6 +12,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_playback_web.dart';
 
 void main() {
+  test(
+    'load settles when the player is disposed before audio is ready',
+    () async {
+      final player = AudioPlayerAdapter();
+      final load = player.load('data:audio/wav;base64,');
+
+      player.dispose();
+
+      await expectLater(load.timeout(const Duration(seconds: 1)), completes);
+    },
+  );
+
   test('downloadAudioFile defers Blob URL revocation', () async {
     final urlConstructor =
         JSObject.fromInteropObject(html.window)['URL']! as JSObject;
@@ -19,8 +31,8 @@ void main() {
     final revokedUrls = <String>[];
 
     urlConstructor['revokeObjectURL'] = ((JSString url) => revokedUrls.add(
-          url.toDart,
-        )).toJS;
+      url.toDart,
+    )).toJS;
     addTearDown(() {
       urlConstructor['revokeObjectURL'] = originalRevoke;
       for (final url in revokedUrls) {
