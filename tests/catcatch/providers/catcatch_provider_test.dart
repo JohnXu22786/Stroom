@@ -2750,6 +2750,37 @@ void main() {
       },
     );
 
+    test('cleanup removes task artifacts under reserved output names', () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      const taskId = 'reserved-output-cleanup';
+      final downloadDir = Directory('${directory.path}/catcatch/downloads')
+        ..createSync(recursive: true);
+      final taskSuffix =
+          base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
+      final reservedPartial = File(
+        '${downloadDir.path}/video (2).mp4.$taskSuffix.catcatch_tmp',
+      )..writeAsStringSync('interrupted download');
+      final reservedParts = Directory(
+        '${downloadDir.path}/.video_merged (1).ts_parts',
+      )..createSync(recursive: true);
+      File('${reservedParts.path}/part_0').writeAsStringSync('playlist part');
+      final unrelatedOutput = File('${downloadDir.path}/video (2).mp4')
+        ..writeAsStringSync('user file');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        task(taskId).copyWith(selectedMedia: media),
+        appDirPath: directory.path,
+      );
+
+      expect(await reservedPartial.exists(), isFalse);
+      expect(await reservedParts.exists(), isFalse);
+      expect(await unrelatedOutput.readAsString(), 'user file');
+    });
+
     test('removal cleanup rechecks owners selected during its async gap',
         () async {
       const media = MediaResource(

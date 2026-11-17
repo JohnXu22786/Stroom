@@ -609,7 +609,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final tempSuffix = DefaultRules.tempFileSuffix;
     final taskSuffix =
         base64Url.encode(utf8.encode(task.id)).replaceAll('=', '');
-    return [
+    final artifacts = <FileSystemEntity>[
       File(p.join(downloadDir, '$fileName$tempSuffix')),
       File(p.join(downloadDir, '$fileName.$taskSuffix$tempSuffix')),
       File(p.join(downloadDir, '.$fileName$tempSuffix')),
@@ -621,6 +621,39 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       // Playlist conversions use the merged file basename for the output.
       File(p.join(convertDir, '$convertBase.mp4')),
     ];
+
+    // DownloadManager reserves `name (N).ext` when the requested output name
+    // already exists. Its resumable single-file partial and playlist parts
+    // directory use that reserved name too, so include matching on-disk
+    // variants when cleaning up a task.
+    final outputName = p.basenameWithoutExtension(fileName);
+    final outputExtension = p.extension(fileName);
+    final partialPattern = RegExp(
+      '^${RegExp.escape(outputName)}(?: \\(\\d+\\))?'
+      '${RegExp.escape(outputExtension)}'
+      '${RegExp.escape('.$taskSuffix$tempSuffix')}\$',
+    );
+    final playlistPartsPatterns = <RegExp>[
+      for (final extension in ['ts', 'mp4'])
+        RegExp(
+          '^\\.${RegExp.escape(mergedBaseName)}(?: \\(\\d+\\))?'
+          '\\.${extension}_parts\$',
+        ),
+    ];
+    try {
+      for (final entity in Directory(downloadDir).listSync(followLinks: false)) {
+        final name = p.basename(entity.path);
+        if ((entity is File && partialPattern.hasMatch(name)) ||
+            (entity is Directory &&
+                playlistPartsPatterns.any((pattern) => pattern.hasMatch(name)))) {
+          artifacts.add(entity);
+        }
+      }
+    } on FileSystemException {
+      // The directory may not exist yet; the canonical fixed paths above are
+      // still sufficient for cleanup in that case.
+    }
+    return artifacts;
   }
 
   /// 删除文件（尽力而为，失败时短暂重试）。
