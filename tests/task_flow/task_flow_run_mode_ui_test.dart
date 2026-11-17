@@ -376,7 +376,9 @@ void main() {
         await tester.pump();
         final submitted = control.submitted;
         expect(submitted, hasLength(1));
-        expect(submitted!.single.text, isNot(source.path));
+        expect(p.isAbsolute(submitted!.single.text), isTrue,
+            reason: 'native run inputs keep a usable local path');
+        expect(submitted.single.text, isNot(source.path));
         expect(File(submitted.single.text).readAsStringSync(), 'report');
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -612,6 +614,8 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
       await tester.pump();
       final reference = control.submitted!.single.text;
+      expect(p.isAbsolute(reference), isTrue,
+          reason: 'native run inputs keep a usable local path');
       final copy = File(reference);
       expect(copy.lengthSync(), maxAttachmentBytes + 1);
       final copied = copy.openSync();
