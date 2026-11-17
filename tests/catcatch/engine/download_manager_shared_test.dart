@@ -607,6 +607,38 @@ void main() {
   });
 
   test(
+    'fails and discards staged output when a segment part is missing',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('missing-part-');
+      final firstPart = File(p.join(directory.path, 'first.part'))
+        ..writeAsStringSync('first segment');
+      final missingPartPath = p.join(directory.path, 'missing.part');
+      final output = File(p.join(directory.path, 'merged.ts'));
+      try {
+        await expectLater(
+          DownloadManager.mergeFiles([
+            firstPart.path,
+            missingPartPath,
+          ], output.path),
+          throwsA(isA<FileSystemException>()),
+        );
+
+        expect(await output.exists(), isFalse);
+        expect(await firstPart.readAsString(), 'first segment');
+        expect(
+          Directory(directory.path)
+              .listSync()
+              .map((entry) => p.basename(entry.path))
+              .toSet(),
+          {'first.part'},
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
     'downloads and merges repeated URL byte ranges in playlist order',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
