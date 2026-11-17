@@ -252,23 +252,38 @@ class OcrDiagnosticSnapshot {
       }
     }
 
-    void collect(dynamic value, {bool credentialField = false}) {
+    void collect(
+      dynamic value, {
+      bool credentialField = false,
+      String credentialPath = '',
+    }) {
       if (credentialField && value is String) {
         _addCredentialValue(values, value);
       }
       if (value is Map) {
         for (final entry in value.entries) {
           if (entry.key is String) {
+            final key = _normalizeCredentialQueryParameterName(
+              entry.key as String,
+            );
+            final path =
+                credentialPath.isEmpty ? key : '${credentialPath}_$key';
+            if (_tokenMetadataQueryParameter.hasMatch(path)) continue;
             collect(
               entry.value,
-              credentialField: credentialField ||
-                  _credentialQueryParameter.hasMatch(entry.key as String),
+              credentialField:
+                  credentialField || _credentialQueryParameter.hasMatch(key),
+              credentialPath: path,
             );
           }
         }
       } else if (value is List) {
         for (final item in value) {
-          collect(item, credentialField: credentialField);
+          collect(
+            item,
+            credentialField: credentialField,
+            credentialPath: credentialPath,
+          );
         }
       }
     }
