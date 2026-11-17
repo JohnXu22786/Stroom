@@ -470,7 +470,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Transcreva todo o texto visível na página, seguindo a ordem natural de leitura. Preserve o texto que não for fórmula e represente as fórmulas matemáticas em LaTeX; use \$...\$ para fórmulas em linha e \$\$...\$\$ para fórmulas em bloco. Retorne somente a transcrição; não acrescente explicações nem inferências.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Padrão (enviar somente imagens)';
+  String get ocrDefaultImagesOnly => "Padrão (sem instrução personalizada; o prompt OCR padrão é usado)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -542,7 +542,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, somente a imagem será enviada.';
+      "Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, nenhuma instrução personalizada será adicionada; o prompt OCR padrão continuará sendo usado.";
 
   @override
   String get ocrInstructionManageEmpty => 'Ainda não há instruções';
@@ -1567,6 +1567,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Tem certeza de que deseja limpar todas as tarefas com falha?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Tem certeza de que deseja limpar todas as tarefas concluídas? Esta ação não pode ser desfeita.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.';
 
@@ -2137,6 +2141,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'Nenhum dado detalhado disponível';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[conteúdo do meio omitido, $count caracteres]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Fechar';
@@ -10670,6 +10679,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appLogDelete => 'Excluir';
 
   @override
+  String get appLogDeleteUnconfirmed =>
+      'Não foi possível confirmar a exclusão.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirmar exclusão';
 
   @override
@@ -12618,7 +12631,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
       'Transcreva todo o texto visível na página, seguindo a ordem natural de leitura. Preserve o texto que não for fórmula e represente as fórmulas matemáticas em LaTeX; use \$...\$ para fórmulas em linha e \$\$...\$\$ para fórmulas em bloco. Retorne somente a transcrição; não acrescente explicações nem inferências.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Padrão (enviar somente imagens)';
+  String get ocrDefaultImagesOnly => "Padrão (sem instrução personalizada; o prompt OCR padrão é usado)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12690,7 +12703,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, somente a imagem será enviada.';
+      "Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, nenhuma instrução personalizada será adicionada; o prompt OCR padrão continuará sendo usado.";
 
   @override
   String get ocrInstructionManageEmpty => 'Ainda não há instruções';
@@ -22808,6 +22821,10 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get appLogDelete => 'Excluir';
+
+  @override
+  String get appLogDeleteUnconfirmed =>
+      'Não foi possível confirmar a exclusão.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirmar exclusão';

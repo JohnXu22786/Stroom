@@ -127,7 +127,7 @@
   "ocrTemplateTableContent": "Retranscris tout le texte visible sur la page dans son ordre de lecture naturel. Pour les tableaux, conserve les en-têtes, les relations entre lignes et colonnes ainsi que les cellules vides, et restitue-les sous forme de tableaux Markdown. Présente le reste du contenu sous forme de texte ordinaire. Renvoie uniquement la transcription ; n’ajoute aucune explication ni déduction.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "Retranscris tout le texte visible sur la page dans son ordre de lecture naturel. Conserve le texte hors formules et représente les formules mathématiques en LaTeX ; utilise $...$ pour les formules en ligne et $$...$$ pour les formules en bloc. Renvoie uniquement la transcription ; n’ajoute aucune explication ni déduction.",
-  "ocrDefaultImagesOnly": "Par défaut (envoyer uniquement les images)",
+  "ocrDefaultImagesOnly": "Par défaut (sans instruction personnalisée ; le prompt OCR par défaut est utilisé)",
   "ocrDefaultSystemPrompt": "Extrais tout le texte de l’image en conservant sa mise en forme et sa disposition d’origine. Renvoie uniquement le texte extrait ; n’ajoute aucune explication.",
   "ocrSavedInstructionSnapshot": "Copie des instructions enregistrées",
   "ocrPageTitle": "Reconnaissance de texte dans une image",
@@ -148,7 +148,7 @@
   "ocrSelectModel": "Sélectionner un modèle",
   "ocrInstructionLabel": "Instruction",
   "ocrManageInstructions": "Gérer les instructions de reconnaissance",
-  "ocrInstructionManageGuidance": "Ces instructions s’appliquent à tous les modèles de reconnaissance. Si aucune instruction n’est sélectionnée, seule l’image est envoyée.",
+  "ocrInstructionManageGuidance": "Ces instructions s’appliquent à tous les modèles de reconnaissance. Si aucune instruction n’est sélectionnée, aucune instruction personnalisée n’est ajoutée ; le prompt OCR par défaut est toujours utilisé.",
   "ocrInstructionManageEmpty": "Aucune instruction pour le moment",
   "ocrInstructionEditTooltip": "Modifier l’instruction",
   "ocrInstructionDeleteTooltip": "Supprimer l’instruction",
@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "Arrêtées",
   "unifiedTaskListConfirmClear": "Confirmer l’effacement",
   "unifiedTaskListConfirmClearFailedMessage": "Voulez-vous vraiment effacer toutes les tâches échouées ?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Voulez-vous vraiment effacer toutes les tâches terminées ? Cette action est irréversible.",
   "unifiedTaskListConfirmClearAllMessage": "Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.",
   "unifiedTaskListCancel": "Annuler",
   "unifiedTaskListConfirm": "Confirmer",
@@ -775,6 +776,15 @@
   "chatErrorDetailResponseHeaders": "En-têtes de la réponse",
   "chatErrorDetailResponseBody": "Corps de la réponse",
   "chatErrorDetailEmpty": "Aucune donnée détaillée disponible",
+  "chatErrorDetailOmittedContentMarker": "[contenu central omis, {count} caractères]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Fermer",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6060,6 +6070,7 @@
   "appLogWillBeCreated": "Les journaux sont générés pendant l’exécution de l’application",
   "appLogExport": "Exporter",
   "appLogDelete": "Supprimer",
+  "appLogDeleteUnconfirmed": "La suppression n’a pas pu être confirmée.",
   "appLogConfirmDeleteTitle": "Confirmer la suppression",
   "appLogConfirmDeleteMessage": "Supprimer le fichier journal \"{fileName}\" ?",
   "@appLogConfirmDeleteMessage": {

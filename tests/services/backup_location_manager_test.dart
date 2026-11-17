@@ -1,9 +1,29 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/backup_location_manager.dart';
+
+Future<String> _createUnwritableLogRoot(String prefix) async {
+  final directory = await Directory.systemTemp.createTemp(prefix);
+  await directory.delete();
+  await File(directory.path).create();
+  return directory.path;
+}
+
+Future<void> _makeLogRootWritable(String path) async {
+  final file = File(path);
+  if (await file.exists()) await file.delete();
+  await Directory(path).create(recursive: true);
+}
+
+Future<void> _deleteLogRootFixture(String path) async {
+  final file = File(path);
+  if (await file.exists()) await file.delete();
+  final directory = Directory(path);
+  if (await directory.exists()) await directory.delete(recursive: true);
+}
 
 /// Helper: creates test UUID-like strings for SAF URI testing.
 String _fakeUri(int id) => 'content://com.android.externalstorage.documents/'
@@ -14,6 +34,9 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    BackupLocationManager.debugClearPendingCompleteLogContent();
+    BackupLocationManager.debugAppLocalLogsRootPath = null;
+    BackupLocationManager.debugPendingLogRootPath = null;
   });
 
   tearDownAll(() async {
@@ -21,7 +44,8 @@ void main() {
     // do not accumulate directories in systemTemp.
     for (final root in [
       BackupLocationManager.testBackupRoot,
-      BackupLocationManager.testLogRoot
+      BackupLocationManager.testLogRoot,
+      BackupLocationManager.testPendingLogRoot,
     ]) {
       final dir = Directory(root);
       if (await dir.exists()) {
@@ -169,8 +193,9 @@ void main() {
 
       // 清理
       await BackupLocationManager.deleteBackupFile(testFileName);
-      final afterDelete =
-          await BackupLocationManager.readBackupFile(testFileName);
+      final afterDelete = await BackupLocationManager.readBackupFile(
+        testFileName,
+      );
       expect(afterDelete, isNull);
     });
 
@@ -204,8 +229,9 @@ void main() {
     });
 
     test('readBackupFile returns null for non-existent file', () async {
-      final bytes =
-          await BackupLocationManager.readBackupFile('nonexistent.zip');
+      final bytes = await BackupLocationManager.readBackupFile(
+        'nonexistent.zip',
+      );
       expect(bytes, isNull);
     });
 
@@ -271,8 +297,971 @@ void main() {
       if (backupPath != null) {
         final backupLastSep = backupPath.lastIndexOf(RegExp(r'[/\\]'));
         final backupParent = backupPath.substring(0, backupLastSep);
-        expect(logsParent, backupParent,
-            reason: 'Logs and AutoBackups must share the same Stroom parent');
+        expect(
+          logsParent,
+          backupParent,
+          reason: 'Logs and AutoBackups must share the same Stroom parent',
+        );
+      }
+    });
+  });
+
+  group('SAF log write fallback', () {
+    test('returns fallback metadata when SAF listing fails', () async {
+      const safUri = 'content://provider/tree/primary%3ADocuments';
+      const fileName = 'app_2026-01-01-10.log';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('backup_saf_uri', safUri);
+      BackupLocationManager.debugIsAndroidOverride = true;
+      final logRoot = await Directory.systemTemp.createTemp(
+        'stroom_saf_metadata_failure_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+      await File('${logRoot.path}/$fileName').writeAsString('local fallback');
+
+      const channel = MethodChannel('com.johntsui.stroom/saf');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'listLogMetadata') {
+          throw PlatformException(code: 'list_metadata_failed');
+        }
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
+
+      try {
+        final metadata = await BackupLocationManager.getLogFileMetadata();
+        expect(metadata, hasLength(1));
+        expect(metadata.single.name, fileName);
+        expect(metadata.single.sizeBytes, 'local fallback'.length);
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await logRoot.delete(recursive: true);
+      }
+    });
+
+    test('propagates SAF metadata failure when no fallback inventory exists',
+        () async {
+      const safUri = 'content://provider/tree/primary%3ADocuments';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('backup_saf_uri', safUri);
+      BackupLocationManager.debugIsAndroidOverride = true;
+      final logRoot = await Directory.systemTemp.createTemp(
+        'stroom_saf_metadata_empty_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+      const channel = MethodChannel('com.johntsui.stroom/saf');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'listLogMetadata') {
+          throw PlatformException(code: 'list_metadata_failed');
+        }
+        throw MissingPluginException('Unexpected SAF method: ${call.method}');
+      });
+
+      try {
+        await expectLater(
+          BackupLocationManager.getLogFileMetadata(),
+          throwsA(isA<PlatformException>()),
+        );
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await logRoot.delete(recursive: true);
+      }
+    });
+
+    test(
+      'does not return partial metadata for malformed SAF entries',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        var includeMissingSize = true;
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'listLogMetadata') {
+            return [
+              {
+                'name': 'app_2026-01-01-10.log',
+                'sizeBytes': 12,
+                'modifiedAtMillis': 1,
+              },
+              includeMissingSize
+                  ? {'name': 'app_2026-01-01-11.log'}
+                  : {
+                      'name': 'app_2026-01-01-11.log',
+                      'sizeBytes': -1,
+                      'modifiedAtMillis': 1,
+                    },
+            ];
+          }
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          await expectLater(
+            BackupLocationManager.getLogFileMetadata(),
+            throwsA(isA<FormatException>()),
+          );
+          includeMissingSize = false;
+          await expectLater(
+            BackupLocationManager.getLogFileMetadata(),
+            throwsA(isA<FormatException>()),
+          );
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+        }
+      },
+    );
+
+    test(
+      'does not report deletion success when SAF still has the log',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        const fileName = 'app_2026-01-01-10.log';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        final logRoot = await Directory.systemTemp.createTemp(
+          'stroom_saf_delete_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+        BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+        final fallbackFile = File('${logRoot.path}/$fileName');
+        await fallbackFile.writeAsString('local fallback');
+
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deleteLog') return false;
+          if (call.method == 'listLogs') return <String>[fileName];
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
+          expect(await fallbackFile.exists(), isFalse);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          await logRoot.delete(recursive: true);
+        }
+      },
+    );
+
+    test('verifies absence when SAF reports delete success', () async {
+      const safUri = 'content://provider/tree/primary%3ADocuments';
+      const fileName = 'app_2026-01-01-10.log';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('backup_saf_uri', safUri);
+      BackupLocationManager.debugIsAndroidOverride = true;
+      final logRoot = await Directory.systemTemp.createTemp(
+        'stroom_saf_delete_unconfirmed_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+      final fallbackFile = File('${logRoot.path}/$fileName');
+      await fallbackFile.writeAsString('local fallback');
+
+      const channel = MethodChannel('com.johntsui.stroom/saf');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'deleteLog') return true;
+        if (call.method == 'listLogs') return <String>[fileName];
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
+
+      try {
+        expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
+        expect(await fallbackFile.exists(), isFalse);
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await logRoot.delete(recursive: true);
+      }
+    });
+
+    test(
+      'does not treat SAF listing failure as deletion confirmation',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        const fileName = 'app_2026-01-01-10.log';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        final logRoot = await Directory.systemTemp.createTemp(
+          'stroom_saf_delete_list_failure_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+        BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+        final fallbackFile = File('${logRoot.path}/$fileName');
+        await fallbackFile.writeAsString('local fallback');
+
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deleteLog') return true;
+          if (call.method == 'listLogs') {
+            throw PlatformException(code: 'list_failed');
+          }
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
+          expect(await fallbackFile.exists(), isFalse);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          await logRoot.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'reports success when the fallback is deleted and SAF confirms absence',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        const fileName = 'app_2026-01-01-10.log';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        final logRoot = await Directory.systemTemp.createTemp(
+          'stroom_saf_delete_absent_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+        BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+        final fallbackFile = File('${logRoot.path}/$fileName');
+        await fallbackFile.writeAsString('local fallback');
+
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deleteLog') return true;
+          if (call.method == 'listLogs') return <String>[];
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          expect(await BackupLocationManager.deleteLogFile(fileName), isTrue);
+          expect(await fallbackFile.exists(), isFalse);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          await logRoot.delete(recursive: true);
+        }
+      },
+    );
+
+    test('deletes pending completion marker with SAF configured', () async {
+      const safUri = 'content://provider/tree/primary%3ADocuments';
+      const fileName = 'app_2026-01-01-10.log';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('backup_saf_uri', safUri);
+      BackupLocationManager.debugIsAndroidOverride = true;
+      final localRoot = await Directory.systemTemp.createTemp(
+        'stroom_saf_delete_local_marker_',
+      );
+      final pendingRoot = await Directory.systemTemp.createTemp(
+        'stroom_saf_delete_pending_marker_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = localRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = pendingRoot.path;
+      await File('${localRoot.path}/$fileName').writeAsString('local log');
+      await File('${pendingRoot.path}/$fileName').writeAsString('pending log');
+      final pendingMarker = File('${pendingRoot.path}/$fileName.saf_pending');
+      await pendingMarker.writeAsString('complete');
+      const channel = MethodChannel('com.johntsui.stroom/saf');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'deleteLog') return true;
+        if (call.method == 'listLogs') return <String>[];
+        throw MissingPluginException('Unexpected SAF method: ${call.method}');
+      });
+
+      try {
+        expect(await BackupLocationManager.deleteLogFile(fileName), isTrue);
+        expect(await File('$pendingRoot/$fileName').exists(), isFalse);
+        expect(await pendingMarker.exists(), isFalse);
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await _deleteLogRootFixture(localRoot.path);
+        await _deleteLogRootFixture(pendingRoot.path);
+      }
+    });
+
+    test('deletes pending completion marker without SAF configured', () async {
+      const fileName = 'app_2026-01-01-10.log';
+      BackupLocationManager.debugIsAndroidOverride = true;
+      final localRoot = await Directory.systemTemp.createTemp(
+        'stroom_no_saf_delete_local_marker_',
+      );
+      final pendingRoot = await Directory.systemTemp.createTemp(
+        'stroom_no_saf_delete_pending_marker_',
+      );
+      BackupLocationManager.debugAppLocalLogsRootPath = localRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = pendingRoot.path;
+      await File('${localRoot.path}/$fileName').writeAsString('local log');
+      await File('${pendingRoot.path}/$fileName').writeAsString('pending log');
+      final pendingMarker = File('${pendingRoot.path}/$fileName.saf_pending');
+      await pendingMarker.writeAsString('complete');
+
+      try {
+        expect(await BackupLocationManager.deleteLogFile(fileName), isTrue);
+        expect(await File('$pendingRoot/$fileName').exists(), isFalse);
+        expect(await pendingMarker.exists(), isFalse);
+      } finally {
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        await _deleteLogRootFixture(localRoot.path);
+        await _deleteLogRootFixture(pendingRoot.path);
+      }
+    });
+
+    test(
+      'does not confirm deletion when SAF reports a retained temp failure',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        const fileName = 'app_2026-01-01-10.log';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        final logRoot = await Directory.systemTemp.createTemp(
+          'stroom_saf_delete_temp_failure_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+        BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+        final fallbackFile = File('${logRoot.path}/$fileName');
+        await fallbackFile.writeAsString('local fallback');
+
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deleteLog') return false;
+          if (call.method == 'listLogs') return <String>[];
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          expect(await BackupLocationManager.deleteLogFile(fileName), isFalse);
+          expect(await fallbackFile.exists(), isFalse);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          await logRoot.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'SAF failures preserve complete log content in local storage',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const combinedContent = '[2026-01-01 10:00:00] [INFO] [Test] Earlier\n'
+            '[2026-01-01 10:00:10] [INFO] [Test] New entry\n';
+        const updatedCombinedContent = '$combinedContent'
+            '[2026-01-01 10:00:20] [INFO] [Test] Retry entry\n';
+        var writes = 0;
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'writeLog') {
+            writes++;
+            throw PlatformException(
+              code: 'LOG_TARGET_REMOVED',
+              details: writes == 1 ? combinedContent : updatedCombinedContent,
+            );
+          }
+          if (call.method == 'listLogs') return <String>[];
+          if (call.method == 'readLog') return null;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          final logRoot = Directory(BackupLocationManager.testLogRoot);
+          if (await logRoot.exists()) await logRoot.delete(recursive: true);
+
+          expect(
+            await BackupLocationManager.writeLogContent(
+              fileName,
+              'New entry\n',
+            ),
+            isTrue,
+          );
+          expect(
+            await BackupLocationManager.listLogFiles(),
+            contains(fileName),
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            combinedContent,
+          );
+          expect(
+            await BackupLocationManager.writeLogContent(
+              fileName,
+              '[2026-01-01 10:00:20] [INFO] [Test] Retry entry\n',
+            ),
+            isTrue,
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            updatedCombinedContent,
+          );
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+        }
+      },
+    );
+
+    test(
+      'partial PendingLogs fallback appends without replacing existing SAF logs',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        const fileName = 'app_2026-01-01-10.log';
+        const existingContent =
+            '[2026-01-01 10:00:00] [INFO] [Test] Existing SAF entry\n';
+        const pendingBatch =
+            '[2026-01-01 10:00:10] [INFO] [Test] Pending batch\n';
+        const retryBatch = '[2026-01-01 10:00:20] [INFO] [Test] Retry batch\n';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        final appLocalFailurePath = await _createUnwritableLogRoot(
+          'stroom_partial_pending_local_failure_',
+        );
+        final pendingRoot = await Directory.systemTemp.createTemp(
+          'stroom_partial_pending_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = appLocalFailurePath;
+        BackupLocationManager.debugPendingLogRootPath = pendingRoot.path;
+        var writes = 0;
+        var remoteContent = existingContent;
+        String? contentSentOnRetry;
+        bool? replaceExistingOnRetry;
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'writeLog') {
+            writes++;
+            if (writes == 1) {
+              throw PlatformException(code: 'TEMPORARY_WRITE_FAILURE');
+            }
+            contentSentOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            remoteContent = replaceExistingOnRetry!
+                ? contentSentOnRetry!
+                : '$remoteContent$contentSentOnRetry';
+            return null;
+          }
+          if (call.method == 'readLog') return remoteContent;
+          if (call.method == 'listLogs') return [fileName];
+          throw MissingPluginException('Unexpected SAF method: ${call.method}');
+        });
+
+        try {
+          expect(
+            await BackupLocationManager.writeLogContent(fileName, pendingBatch),
+            isTrue,
+          );
+          expect(await File('${pendingRoot.path}/$fileName').readAsString(),
+              pendingBatch);
+          expect(
+            await File(
+              '${pendingRoot.path}/$fileName.saf_pending',
+            ).exists(),
+            isFalse,
+          );
+
+          expect(
+            await BackupLocationManager.writeLogContent(fileName, retryBatch),
+            isTrue,
+          );
+          expect(replaceExistingOnRetry, isFalse);
+          expect(contentSentOnRetry, '$pendingBatch$retryBatch');
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            '$existingContent$pendingBatch$retryBatch',
+          );
+          expect(await File('${pendingRoot.path}/$fileName').exists(), isFalse);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          await _deleteLogRootFixture(appLocalFailurePath);
+          await _deleteLogRootFixture(pendingRoot.path);
+        }
+      },
+    );
+
+    test(
+      'complete SAF content remains retryable when local fallback fails',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const completeContent = '[2026-01-01 10:00:00] [INFO] [Test] Earlier\n'
+            '[2026-01-01 10:00:10] [INFO] [Test] Current batch\n';
+        const retryContent =
+            '[2026-01-01 10:00:20] [INFO] [Test] Retried batch\n';
+        var calls = 0;
+        String? contentSentOnRetry;
+        bool? replaceExistingOnRetry;
+        final failurePath = await _createUnwritableLogRoot(
+          'stroom_saf_retry_failure_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = failurePath;
+        BackupLocationManager.debugPendingLogRootPath = failurePath;
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'writeLog') {
+            calls++;
+            if (calls == 1) {
+              throw PlatformException(
+                code: 'LOG_TARGET_REMOVED',
+                details: completeContent,
+              );
+            }
+            contentSentOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            return null;
+          }
+          if (call.method == 'listLogs') return <String>[];
+          if (call.method == 'readLog') return null;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          expect(
+            await BackupLocationManager.writeLogContent(
+              fileName,
+              '[2026-01-01 10:00:10] [INFO] [Test] Current batch\n',
+            ),
+            isFalse,
+          );
+          expect(
+            await BackupLocationManager.listLogFiles(),
+            contains(fileName),
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            completeContent,
+          );
+          await _makeLogRootWritable(failurePath);
+          expect(
+            await BackupLocationManager.writeLogContent(fileName, retryContent),
+            isTrue,
+          );
+          expect(contentSentOnRetry, '$completeContent$retryContent');
+          expect(replaceExistingOnRetry, isTrue);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          BackupLocationManager.debugClearPendingCompleteLogContent();
+          await _deleteLogRootFixture(failurePath);
+        }
+      },
+    );
+
+    test(
+      'complete log payload has a durable fallback if Documents fails',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const completeContent =
+            '[2026-01-01 10:00:00] [INFO] [Test] Earlier entry\n'
+            '[2026-01-01 10:00:10] [INFO] [Test] Current entry\n';
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        final failurePath = await _createUnwritableLogRoot(
+          'stroom_saf_durable_failure_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = failurePath;
+        var writes = 0;
+        String? contentWrittenOnRetry;
+        bool? replaceExistingOnRetry;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'writeLog') {
+            writes++;
+            if (writes == 1) {
+              throw PlatformException(
+                code: 'CREATE_FILE_FAILED',
+                details: completeContent,
+              );
+            }
+            contentWrittenOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            return null;
+          }
+          if (call.method == 'listLogs') {
+            return contentWrittenOnRetry == null ? <String>[] : [fileName];
+          }
+          if (call.method == 'readLog') return contentWrittenOnRetry;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          final pendingRoot = Directory(
+            BackupLocationManager.testPendingLogRoot,
+          );
+          if (await pendingRoot.exists()) {
+            await pendingRoot.delete(recursive: true);
+          }
+
+          expect(
+            await BackupLocationManager.writeLogContent(
+              fileName,
+              '[2026-01-01 10:00:10] [INFO] [Test] Current entry\n',
+            ),
+            isTrue,
+          );
+          expect(
+            await BackupLocationManager.listLogFiles(),
+            contains(fileName),
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            completeContent,
+          );
+          expect(
+            await File(
+              '${pendingRoot.path}/$fileName.saf_pending',
+            ).exists(),
+            isTrue,
+          );
+
+          const retryContent =
+              '[2026-01-01 10:00:20] [INFO] [Test] Retried after restart\n';
+          expect(
+            await BackupLocationManager.writeLogContent(fileName, retryContent),
+            isTrue,
+          );
+          expect(contentWrittenOnRetry, '$completeContent$retryContent');
+          expect(replaceExistingOnRetry, isTrue);
+          expect(await File('${pendingRoot.path}/$fileName').exists(), isFalse);
+          expect(
+            await File(
+              '${pendingRoot.path}/$fileName.saf_pending',
+            ).exists(),
+            isFalse,
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            '$completeContent$retryContent',
+          );
+
+          BackupLocationManager.debugClearPendingCompleteLogContent();
+          expect(
+            await BackupLocationManager.listLogFiles(),
+            contains(fileName),
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            '$completeContent$retryContent',
+          );
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          await _deleteLogRootFixture(failurePath);
+        }
+      },
+    );
+
+    test(
+      'complete Documents fallback is retried after PendingLogs fails',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const completeContent =
+            '[2026-01-01 10:00:00] [INFO] [Test] Earlier entry\n'
+            '[2026-01-01 10:00:10] [INFO] [Test] Current entry\n';
+        const retryContent =
+            '[2026-01-01 10:00:20] [INFO] [Test] Retried after restart\n';
+        final localRoot = await Directory.systemTemp.createTemp(
+          'stroom_saf_docs_retry_',
+        );
+        final pendingFailurePath = await _createUnwritableLogRoot(
+          'stroom_saf_pending_failure_',
+        );
+        BackupLocationManager.debugAppLocalLogsRootPath = localRoot.path;
+        BackupLocationManager.debugPendingLogRootPath = pendingFailurePath;
+        var writes = 0;
+        String? contentWrittenOnRetry;
+        bool? replaceExistingOnRetry;
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'writeLog') {
+            writes++;
+            if (writes == 1) {
+              throw PlatformException(
+                code: 'CREATE_FILE_FAILED',
+                details: completeContent,
+              );
+            }
+            contentWrittenOnRetry = call.arguments['content'] as String;
+            replaceExistingOnRetry = call.arguments['replaceExisting'] as bool;
+            return null;
+          }
+          if (call.method == 'listLogs') return [fileName];
+          if (call.method == 'readLog') return contentWrittenOnRetry;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          expect(
+            await BackupLocationManager.writeLogContent(
+              fileName,
+              '[2026-01-01 10:00:10] [INFO] [Test] Current entry\n',
+            ),
+            isTrue,
+          );
+          expect(await File('${localRoot.path}/$fileName').exists(), isTrue);
+          expect(
+            await File('${localRoot.path}/$fileName.saf_pending').exists(),
+            isTrue,
+          );
+
+          BackupLocationManager.debugClearPendingCompleteLogContent();
+          expect(
+            await BackupLocationManager.writeLogContent(fileName, retryContent),
+            isTrue,
+          );
+          expect(contentWrittenOnRetry, '$completeContent$retryContent');
+          expect(replaceExistingOnRetry, isTrue);
+          expect(await File('${localRoot.path}/$fileName').exists(), isFalse);
+          expect(
+            await File('${localRoot.path}/$fileName.saf_pending').exists(),
+            isFalse,
+          );
+          expect(
+            await BackupLocationManager.readLogContent(fileName),
+            '$completeContent$retryContent',
+          );
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+          BackupLocationManager.debugAppLocalLogsRootPath = null;
+          BackupLocationManager.debugPendingLogRootPath = null;
+          await _deleteLogRootFixture(localRoot.path);
+          await _deleteLogRootFixture(pendingFailurePath);
+        }
+      },
+    );
+
+    test(
+      'failed replacement keeps the SAF copy and falls back with new content',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const existingContent =
+            '[2026-01-01 10:00:00] [INFO] [Test] Existing entry\n';
+        const newContent = '[2026-01-01 10:01:00] [INFO] [Test] New entry\n';
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'writeLog') {
+            throw PlatformException(
+              code: 'LOG_REPLACE_FAILED',
+              details: newContent,
+            );
+          }
+          if (call.method == 'listLogs') return [fileName];
+          if (call.method == 'readLog') return existingContent;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          final logRoot = Directory(BackupLocationManager.testLogRoot);
+          if (await logRoot.exists()) await logRoot.delete(recursive: true);
+
+          expect(
+            await BackupLocationManager.writeLogContent(fileName, newContent),
+            isTrue,
+          );
+          final merged = await BackupLocationManager.readLogContent(fileName);
+          expect(merged, '$existingContent$newContent');
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+        }
+      },
+    );
+
+    test(
+      'merging precise records preserves duplicates and multiline content',
+      () async {
+        const safUri = 'content://provider/tree/primary%3ADocuments';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('backup_saf_uri', safUri);
+        BackupLocationManager.debugIsAndroidOverride = true;
+        const fileName = 'app_2026-01-01-10.log';
+        const content =
+            '[2026-01-01 10:00:00.000001] [INFO] [Test] Same message\n'
+            '  [2026-01-01 09:00:00.000003] [ERROR] [Other] Embedded header\n'
+            '[2026-01-01 10:00:00.000002] [INFO] [Test] Same message\n';
+        final logRoot = Directory(BackupLocationManager.testLogRoot);
+        if (await logRoot.exists()) await logRoot.delete(recursive: true);
+        final fallbackFile = File('${logRoot.path}/$fileName');
+        await fallbackFile.parent.create(recursive: true);
+        await fallbackFile.writeAsString(content);
+        var safContent = content;
+
+        const channel = MethodChannel('com.johntsui.stroom/saf');
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'readLog') return safContent;
+          throw MissingPluginException(
+            'Unexpected SAF method: ${call.method}',
+          );
+        });
+
+        try {
+          final merged = await BackupLocationManager.readLogContent(fileName);
+          expect(merged, isNotNull);
+          expect('Same message'.allMatches(merged!).length, 2);
+          expect(
+            merged,
+            contains(
+              '  [2026-01-01 09:00:00.000003] [ERROR] [Other] Embedded header\n'
+              '[2026-01-01 10:00:00.000002] [INFO] [Test] Same message',
+            ),
+          );
+
+          const legacyContent =
+              '[2026-01-01 10:00:00] [INFO] [Test] Repeated legacy entry\n'
+              '[2026-01-01 10:00:00] [INFO] [Test] Repeated legacy entry\n';
+          safContent = legacyContent;
+          await fallbackFile.writeAsString(legacyContent);
+          final mergedLegacy = await BackupLocationManager.readLogContent(
+            fileName,
+          );
+          expect('Repeated legacy entry'.allMatches(mergedLegacy!).length, 2);
+        } finally {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null);
+          BackupLocationManager.debugIsAndroidOverride = null;
+        }
+      },
+    );
+
+    test('orders equal-timestamp merged log records by sequence', () async {
+      const safUri = 'content://provider/tree/primary%3ADocuments';
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('backup_saf_uri', safUri);
+      BackupLocationManager.debugIsAndroidOverride = true;
+      const fileName = 'app_2026-01-01-10.log';
+      const firstEntry =
+          '[2026-01-01 10:00:00.000001] [INFO] [Test] [seq:1] first\n';
+      const secondEntry =
+          '[2026-01-01 10:00:00.000001] [INFO] [Test] [seq:2] second\n';
+      final logRoot = Directory(BackupLocationManager.testLogRoot);
+      if (await logRoot.exists()) await logRoot.delete(recursive: true);
+      final fallbackFile = File('${logRoot.path}/$fileName');
+      await fallbackFile.parent.create(recursive: true);
+      await fallbackFile.writeAsString(firstEntry);
+
+      const channel = MethodChannel('com.johntsui.stroom/saf');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'readLog') return secondEntry;
+        throw MissingPluginException(
+          'Unexpected SAF method: ${call.method}',
+        );
+      });
+
+      try {
+        final merged = await BackupLocationManager.readLogContent(fileName);
+        expect(merged, isNotNull);
+        expect(merged!.indexOf('[seq:1]'), lessThan(merged.indexOf('[seq:2]')));
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        BackupLocationManager.debugIsAndroidOverride = null;
+        await logRoot.delete(recursive: true);
       }
     });
   });

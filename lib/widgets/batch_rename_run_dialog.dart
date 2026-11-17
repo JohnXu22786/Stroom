@@ -8,6 +8,8 @@ import '../utils/batch_rename.dart';
 import '../utils/batch_rename_execution.dart';
 import '../utils/manifest_bridge.dart';
 
+import 'constrained_text.dart';
+
 Future<BatchRenameExecution?> showBatchRenameRunDialog({
   required BuildContext context,
   BatchRenamePlan? plan,
@@ -195,7 +197,7 @@ class _RunDialogState extends State<_RunDialog> {
         },
         child: AlertDialog(
           key: const Key('batch_run_dialog'),
-          title: Text(
+          title: ConstrainedText(
             _running
                 ? AppLocalizations.of(context)!.batchRunWorking(
                     _undoing
@@ -203,6 +205,8 @@ class _RunDialogState extends State<_RunDialog> {
                         : AppLocalizations.of(context)!.batchRunRename,
                   )
                 : AppLocalizations.of(context)!.batchRunTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           content: SizedBox(
             width: 540,
@@ -218,8 +222,11 @@ class _RunDialogState extends State<_RunDialog> {
                     ),
                     const SizedBox(height: 12),
                     Text('$_done / $_total'),
-                    Text(_current,
-                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ConstrainedText(
+                      _current,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (!_undoing)
                       Text(AppLocalizations.of(context)!.batchRunStoppedRetain),
                   ] else ...[
@@ -270,11 +277,13 @@ class _RunDialogState extends State<_RunDialog> {
                       key: const Key('batch_run_cancel'),
                       onPressed:
                           _cancel ? null : () => setState(() => _cancel = true),
-                      child: Text(
+                      child: ConstrainedText(
                         _cancel
                             ? AppLocalizations.of(context)!.batchRunStopping
                             : AppLocalizations.of(context)!
                                 .batchRunStopRemaining,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ]
@@ -282,26 +291,35 @@ class _RunDialogState extends State<_RunDialog> {
                   if (_result != null)
                     TextButton(
                       onPressed: _copyReport,
-                      child: Text(
-                          AppLocalizations.of(context)!.batchRunCopyReport),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.batchRunCopyReport,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   if (_history?.canUndo == true)
                     TextButton(
                       key: const Key('batch_run_undo'),
                       onPressed: () => _run(true),
-                      child: Text(
+                      child: ConstrainedText(
                         _undone
                             ? AppLocalizations.of(context)!
                                 .batchRunUndoRemaining(
                                     _history!.completed.length)
                             : AppLocalizations.of(context)!
                                 .batchRunUndoCompleted,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   FilledButton(
                     key: const Key('batch_run_close'),
                     onPressed: _close,
-                    child: Text(AppLocalizations.of(context)!.batchRunDone),
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.batchRunDone,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
         ),

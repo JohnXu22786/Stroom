@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart'
         visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -992,9 +993,34 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   Future<void> _extractZip(String zipPath, String outputDir) async {
     final bytes = await File(zipPath).readAsBytes();
     final archive = ZipDecoder().decodeBytes(bytes);
+    final outputRoot = p.normalize(p.absolute(outputDir));
 
     for (final entry in archive) {
-      final entryPath = '$outputDir/${entry.name}';
+      // ZIP names use forward slashes, but treat backslashes as separators too
+      // so archives cannot traverse paths when extracted on another platform.
+      final entryName = entry.name.replaceAll('\\', '/');
+      if (p.posix.isAbsolute(entryName) || p.windows.isAbsolute(entry.name)) {
+        throw FormatException('ZIP entry path is absolute: ${entry.name}');
+      }
+
+      final entryPath = p.normalize(p.join(outputRoot, entryName));
+      final relativePath = p.relative(entryPath, from: outputRoot);
+      // Windows removes trailing dots and spaces from path components, so
+      // validate that interpretation too (for example, ".. \\outside.txt").
+      final windowsEntryName = entryName
+          .split('/')
+          .map((part) => part.replaceFirst(RegExp(r'[ .]+$'), ''))
+          .join('/');
+      final windowsEntryPath =
+          p.normalize(p.join(outputRoot, windowsEntryName));
+      final windowsRelativePath =
+          p.relative(windowsEntryPath, from: outputRoot);
+      if (_escapesDirectory(relativePath) ||
+          _escapesDirectory(windowsRelativePath)) {
+        throw FormatException(
+            'ZIP entry path escapes extraction directory: ${entry.name}');
+      }
+
       if (entry.isFile) {
         final file = File(entryPath);
         await file.parent.create(recursive: true);
@@ -1004,6 +1030,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       }
     }
   }
+
+  bool _escapesDirectory(String relativePath) =>
+      relativePath == '..' ||
+      relativePath.startsWith('..${p.separator}') ||
+      p.isAbsolute(relativePath);
+
+  @visibleForTesting
+  Future<void> extractZipForTesting(String zipPath, String outputDir) =>
+      _extractZip(zipPath, outputDir);
 
   String _fileName(String path) => path.split(Platform.pathSeparator).last;
 

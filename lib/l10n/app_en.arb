@@ -127,7 +127,7 @@
   "ocrTemplateTableContent": "Transcribe all visible text in the page’s natural reading order. For tables, preserve the headers, row and column relationships, and empty cells, and output them as Markdown tables. Keep other content as ordinary text. Return only the transcription; do not add explanations or inferences.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use $...$ for inline formulas and $$...$$ for display formulas. Return only the transcription; do not add explanations or inferences.",
-  "ocrDefaultImagesOnly": "Default (send images only)",
+  "ocrDefaultImagesOnly": "Default (no custom instruction; default OCR prompt used)",
   "ocrDefaultSystemPrompt": "Extract all text from the image, preserving its original formatting and layout. Return only the extracted text; do not add any explanation.",
   "ocrSavedInstructionSnapshot": "Saved instruction snapshot",
   "ocrPageTitle": "Image Text Recognition",
@@ -148,7 +148,7 @@
   "ocrSelectModel": "Select a model",
   "ocrInstructionLabel": "Instruction",
   "ocrManageInstructions": "Manage recognition instructions",
-  "ocrInstructionManageGuidance": "These instructions apply to all recognition models. If none is selected, only the image is sent.",
+  "ocrInstructionManageGuidance": "These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.",
   "ocrInstructionManageEmpty": "No instructions yet",
   "ocrInstructionEditTooltip": "Edit instruction",
   "ocrInstructionDeleteTooltip": "Delete instruction",
@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "Stopped",
   "unifiedTaskListConfirmClear": "Confirm clear",
   "unifiedTaskListConfirmClearFailedMessage": "Are you sure you want to clear all failed tasks?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Are you sure you want to clear all completed tasks? This action cannot be undone.",
   "unifiedTaskListConfirmClearAllMessage": "Are you sure you want to clear all tasks? This action cannot be undone.",
   "unifiedTaskListCancel": "Cancel",
   "unifiedTaskListConfirm": "Confirm",
@@ -775,6 +776,15 @@
   "chatErrorDetailResponseHeaders": "Response Headers",
   "chatErrorDetailResponseBody": "Response Body",
   "chatErrorDetailEmpty": "No detail data available",
+  "chatErrorDetailOmittedContentMarker": "[middle content omitted, {count} characters]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Close",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6060,6 +6070,7 @@
   "appLogWillBeCreated": "Logs are generated while the app is running",
   "appLogExport": "Export",
   "appLogDelete": "Delete",
+  "appLogDeleteUnconfirmed": "Deletion could not be confirmed.",
   "appLogConfirmDeleteTitle": "Confirm deletion",
   "appLogConfirmDeleteMessage": "Delete log file \"{fileName}\"?",
   "@appLogConfirmDeleteMessage": {

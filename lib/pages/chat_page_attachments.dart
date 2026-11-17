@@ -82,10 +82,11 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     final data = await AttachmentStorage.readFile(att.storagePath);
     if (data == null || data.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(AppLocalizations.of(context)!.chatCannotLoadFile)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatCannotLoadFile),
+          ),
+        );
       }
       return;
     }
@@ -148,8 +149,9 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
                   const Icon(Icons.description_outlined, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: ConstrainedText(
                       att.fileName,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 16,
@@ -188,18 +190,36 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
   /// PDF viewer via [url_launcher]. Falls back to file info dialog if
   /// the launcher is unavailable.
   Future<void> _showPdfPreview(Attachment att, Uint8List data) async {
+    String? tempFilePath;
     try {
       // Try to save to a temp file and open with system handler
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, att.fileName));
-      await tempFile.writeAsBytes(data);
-      final uri = Uri.file(tempFile.path);
+      final previewPath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
+      );
+      tempFilePath = previewPath;
+      await writeAttachmentPreviewFile(
+        previewPath,
+        (file) => file.writeAsBytes(data),
+      );
+      final uri = Uri.file(previewPath);
       if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          unawaited(deleteAttachmentPreviewFileAfterDelay(previewPath));
+          return;
+        }
       }
     } catch (e) {
       debugPrint('[ChatPage] PDF preview failed: $e');
+    }
+    if (tempFilePath != null) {
+      await deleteAttachmentPreviewFile(tempFilePath);
     }
     // Fallback: show file info
     if (mounted) _showFileInfoPreview(att);
@@ -212,21 +232,32 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, att.fileName));
-      await tempFile.writeAsBytes(data);
-      filePath = tempFile.path;
+      filePath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
+      );
+      await writeAttachmentPreviewFile(
+        filePath,
+        (file) => file.writeAsBytes(data),
+      );
     } catch (e) {
       debugPrint('[ChatPage] Audio preview temp file failed: $e');
       if (mounted) _showFileInfoPreview(att);
       return;
     }
 
-    if (!mounted) return;
+    final previewPath = filePath;
+    if (!mounted) {
+      await deleteAttachmentPreviewFile(previewPath);
+      return;
+    }
     // Show audio player dialog
-    showDialog(
+    await showAttachmentPreviewDialog(
       context: context,
+      filePath: previewPath,
       builder: (ctx) =>
-          AudioPreviewDialog(filePath: filePath!, fileName: att.fileName),
+          AudioPreviewDialog(filePath: previewPath, fileName: att.fileName),
     );
   }
 
@@ -236,21 +267,32 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     String? filePath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, att.fileName));
-      await tempFile.writeAsBytes(data);
-      filePath = tempFile.path;
+      filePath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
+      );
+      await writeAttachmentPreviewFile(
+        filePath,
+        (file) => file.writeAsBytes(data),
+      );
     } catch (e) {
       debugPrint('[ChatPage] Video preview temp file failed: $e');
       if (mounted) _showFileInfoPreview(att);
       return;
     }
 
-    if (!mounted) return;
+    final previewPath = filePath;
+    if (!mounted) {
+      await deleteAttachmentPreviewFile(previewPath);
+      return;
+    }
     // Show video player dialog
-    showDialog(
+    await showAttachmentPreviewDialog(
       context: context,
+      filePath: previewPath,
       builder: (ctx) =>
-          VideoPreviewDialog(filePath: filePath!, fileName: att.fileName),
+          VideoPreviewDialog(filePath: previewPath, fileName: att.fileName),
     );
   }
 }

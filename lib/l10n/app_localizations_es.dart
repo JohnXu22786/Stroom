@@ -467,14 +467,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Para las tablas, conserve los encabezados, las relaciones de filas y columnas, y las celdas vacías, y generelos como tablas Markdown. Mantenga el resto del contenido como texto normal. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateLatexLabel => 'Látex';
+  String get ocrTemplateLatexLabel => 'LaTeX';
 
   @override
   String get ocrTemplateLatexContent =>
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Preservar texto sin fórmulas y representar fórmulas matemáticas en LaTeX; use \$...\$ para fórmulas en línea y \$\$...\$\$ para fórmulas de visualización. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Predeterminado (enviar solo imágenes)';
+  String get ocrDefaultImagesOnly => "Predeterminado (sin instrucción personalizada; se usa la indicación OCR predeterminada)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -548,7 +548,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguno, solo se envía la imagen.';
+      "Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguna, no se añade ninguna instrucción personalizada; se sigue usando la indicación OCR predeterminada.";
 
   @override
   String get ocrInstructionManageEmpty => 'Aún no hay instrucciones';
@@ -1577,6 +1577,10 @@ class AppLocalizationsEs extends AppLocalizations {
       '¿Está seguro de que desea borrar todas las tareas fallidas?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '¿Seguro que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.';
 
@@ -2148,6 +2152,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'No hay datos detallados disponibles';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[se omitieron $count caracteres intermedios]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Cerrar';
@@ -10706,6 +10715,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get appLogDelete => 'Borrar';
 
   @override
+  String get appLogDeleteUnconfirmed => 'No se pudo confirmar la eliminación.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirmar eliminación';
 
   @override
@@ -12650,14 +12662,14 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Para las tablas, conserve los encabezados, las relaciones de filas y columnas, y las celdas vacías, y generelos como tablas Markdown. Mantenga el resto del contenido como texto normal. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateLatexLabel => 'Látex';
+  String get ocrTemplateLatexLabel => 'LaTeX';
 
   @override
   String get ocrTemplateLatexContent =>
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Preservar texto sin fórmulas y representar fórmulas matemáticas en LaTeX; use \$...\$ para fórmulas en línea y \$\$...\$\$ para fórmulas de visualización. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Predeterminado (enviar solo imágenes)';
+  String get ocrDefaultImagesOnly => "Predeterminado (sin instrucción personalizada; se usa la indicación OCR predeterminada)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12731,7 +12743,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguno, solo se envía la imagen.';
+      "Estas instrucciones se aplican a todos los modelos de reconocimiento. Si no se selecciona ninguna, no se añade ninguna instrucción personalizada; se sigue usando la indicación OCR predeterminada.";
 
   @override
   String get ocrInstructionManageEmpty => 'Aún no hay instrucciones';
@@ -22879,6 +22891,9 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get appLogDelete => 'Borrar';
+
+  @override
+  String get appLogDeleteUnconfirmed => 'No se pudo confirmar la eliminación.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirmar eliminación';

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/tts_models.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';

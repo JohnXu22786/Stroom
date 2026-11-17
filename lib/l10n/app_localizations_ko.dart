@@ -456,7 +456,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '페이지에 보이는 모든 텍스트를 자연스러운 읽기 순서대로 옮기세요. 수식이 아닌 텍스트는 그대로 유지하고 수학 수식은 LaTeX로 표시하세요. 인라인 수식에는 \$...\$, 디스플레이 수식에는 \$\$...\$\$를 사용하세요. 설명이나 추론을 덧붙이지 말고 옮긴 내용만 반환하세요.';
 
   @override
-  String get ocrDefaultImagesOnly => '기본값(이미지만 전송)';
+  String get ocrDefaultImagesOnly => "기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -527,7 +527,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 이미지만 전송됩니다.';
+      "이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.";
 
   @override
   String get ocrInstructionManageEmpty => '아직 지침이 없습니다';
@@ -1507,6 +1507,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unifiedTaskListConfirmClearFailedMessage => '실패한 작업을 모두 지울까요?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '완료된 작업을 모두 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
 
@@ -2057,6 +2061,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => '사용할 수 있는 세부 정보가 없습니다';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[중간 내용 $count자 생략]';
+  }
 
   @override
   String get chatAudioPreviewClose => '닫기';
@@ -10245,6 +10254,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appLogDelete => '삭제';
 
   @override
+  String get appLogDeleteUnconfirmed => '삭제 여부를 확인할 수 없습니다.';
+
+  @override
   String get appLogConfirmDeleteTitle => '삭제 확인';
 
   @override
@@ -12122,7 +12134,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
       '페이지에 보이는 모든 텍스트를 자연스러운 읽기 순서대로 옮기세요. 수식이 아닌 텍스트는 그대로 유지하고 수학 수식은 LaTeX로 표시하세요. 인라인 수식에는 \$...\$, 디스플레이 수식에는 \$\$...\$\$를 사용하세요. 설명이나 추론을 덧붙이지 말고 옮긴 내용만 반환하세요.';
 
   @override
-  String get ocrDefaultImagesOnly => '기본값(이미지만 전송)';
+  String get ocrDefaultImagesOnly => "기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12193,7 +12205,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 이미지만 전송됩니다.';
+      "이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.";
 
   @override
   String get ocrInstructionManageEmpty => '아직 지침이 없습니다';
@@ -21901,6 +21913,9 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get appLogDelete => '삭제';
+
+  @override
+  String get appLogDeleteUnconfirmed => '삭제 여부를 확인할 수 없습니다.';
 
   @override
   String get appLogConfirmDeleteTitle => '삭제 확인';

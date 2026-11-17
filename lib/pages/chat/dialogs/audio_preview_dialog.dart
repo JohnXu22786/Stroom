@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:stroom/utils/attachment_preview_lifecycle.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 /// Audio preview dialog — plays an audio file using [just_audio].
 /// Shows the file name with play/pause controls.
@@ -27,10 +30,12 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   final List<StreamSubscription> _subscriptions = [];
+  late final AttachmentPreviewFileLifecycle _previewLifecycle;
 
   @override
   void initState() {
     super.initState();
+    _previewLifecycle = AttachmentPreviewFileLifecycle(widget.filePath);
     _initPlayer();
   }
 
@@ -39,33 +44,45 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
       final player = AudioPlayer();
       _player = player;
       await player.setFilePath(widget.filePath);
+      if (!mounted) return;
       _duration = player.duration ?? Duration.zero;
       _isInitialized = true;
 
-      _subscriptions.add(player.positionStream.listen((pos) {
-        if (mounted) setState(() => _position = pos);
-      }));
+      _subscriptions.add(
+        player.positionStream.listen((pos) {
+          if (mounted) setState(() => _position = pos);
+        }),
+      );
 
-      _subscriptions.add(player.playerStateStream.listen((state) {
-        if (mounted) {
-          setState(() {
-            _isPlaying = state.playing;
-          });
-        }
-      }));
+      _subscriptions.add(
+        player.playerStateStream.listen((state) {
+          if (mounted) {
+            setState(() {
+              _isPlaying = state.playing;
+            });
+          }
+        }),
+      );
 
-      _subscriptions.add(player.processingStateStream.listen((state) {
-        if (state == ProcessingState.completed && mounted) {
-          setState(() => _isPlaying = false);
-          player.seek(Duration.zero);
-        }
-      }));
+      _subscriptions.add(
+        player.processingStateStream.listen((state) {
+          if (state == ProcessingState.completed && mounted) {
+            setState(() => _isPlaying = false);
+            player.seek(Duration.zero);
+          }
+        }),
+      );
 
       if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[AudioPreview] init failed: $e');
-      _player?.dispose();
+      final player = _player;
       _player = null;
+      if (player != null) {
+        await _releasePlayerAndDeletePreview(player);
+      } else if (mounted) {
+        await _releasePlayerAndDeletePreview(null);
+      }
       if (mounted) setState(() {});
     }
   }
@@ -79,12 +96,20 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
     }
   }
 
+  Future<void> _releasePlayerAndDeletePreview(AudioPlayer? player) {
+    return _previewLifecycle.disposePlayerAndDelete(
+      () async => player?.dispose(),
+    );
+  }
+
   @override
   void dispose() {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
-    _player?.dispose();
+    final player = _player;
+    _player = null;
+    unawaited(_releasePlayerAndDeletePreview(player));
     super.dispose();
   }
 
@@ -120,7 +145,7 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
+            ConstrainedText(
               widget.fileName,
               textAlign: TextAlign.center,
               maxLines: 2,
@@ -139,7 +164,8 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
                     : 0.0,
                 onChanged: (v) {
                   final pos = Duration(
-                      milliseconds: (v * _duration.inMilliseconds).round());
+                    milliseconds: (v * _duration.inMilliseconds).round(),
+                  );
                   _player?.seek(pos);
                 },
               ),
@@ -190,7 +216,11 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text(AppLocalizations.of(context)!.chatAudioPreviewClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.chatAudioPreviewClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

@@ -467,7 +467,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use \$...\$ for inline formulas and \$\$...\$\$ for display formulas. Return only the transcription; do not add explanations or inferences.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Default (send images only)';
+  String get ocrDefaultImagesOnly => "Default (no custom instruction; default OCR prompt used)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -538,7 +538,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+      "These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.";
 
   @override
   String get ocrInstructionManageEmpty => 'No instructions yet';
@@ -1550,6 +1550,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Are you sure you want to clear all failed tasks?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Are you sure you want to clear all completed tasks? This action cannot be undone.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Are you sure you want to clear all tasks? This action cannot be undone.';
 
@@ -2116,6 +2120,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Close';
@@ -10531,6 +10540,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appLogDelete => 'Delete';
 
   @override
+  String get appLogDeleteUnconfirmed => 'Deletion could not be confirmed.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirm deletion';
 
   @override
@@ -12453,7 +12465,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use \$...\$ for inline formulas and \$\$...\$\$ for display formulas. Return only the transcription; do not add explanations or inferences.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Default (send images only)';
+  String get ocrDefaultImagesOnly => "Default (no custom instruction; default OCR prompt used)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12524,7 +12536,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+      "These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.";
 
   @override
   String get ocrInstructionManageEmpty => 'No instructions yet';
@@ -14102,6 +14114,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Close';
@@ -22507,6 +22524,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get appLogDelete => 'Delete';
+
+  @override
+  String get appLogDeleteUnconfirmed => 'Deletion could not be confirmed.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirm deletion';

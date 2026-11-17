@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
+
 import '../config/default_rules.dart';
 import 'download_manager_shared.dart';
 
@@ -23,8 +25,11 @@ class DownloadManager {
   static bool _reserveLegacyPartial(String? path) {
     if (path == null) return false;
     final canUsePartial = !_activeLegacyPartialUsers.containsKey(path);
-    _activeLegacyPartialUsers.update(path, (users) => users + 1,
-        ifAbsent: () => 1);
+    _activeLegacyPartialUsers.update(
+      path,
+      (users) => users + 1,
+      ifAbsent: () => 1,
+    );
     return canUsePartial;
   }
 
@@ -48,18 +53,15 @@ class DownloadManager {
   }
 
   static String _reserveOutputPath(String outputPath) {
-    if (_activeDownloadPaths.add(outputPath)) return outputPath;
-
     final directory = p.dirname(outputPath);
     final extension = p.extension(outputPath);
     final baseName = p.basenameWithoutExtension(outputPath);
+    var candidate = outputPath;
     var suffix = 1;
-    late String candidate;
-    do {
+    while (_activeDownloadPaths.contains(candidate) || _pathExists(candidate)) {
       candidate = p.join(directory, '$baseName ($suffix)$extension');
       suffix++;
-    } while (
-        _activeDownloadPaths.contains(candidate) || _pathExists(candidate));
+    }
     _activeDownloadPaths.add(candidate);
     return candidate;
   }
@@ -70,12 +72,15 @@ class DownloadManager {
   /// [url] 目标 URL
   /// [headers] 自定义 HTTP 头
   /// 返回 `true` 表示服务器支持范围请求（可续传）。
-  static Future<bool> checkServerResumeSupport(String url,
-      {Map<String, String>? headers}) async {
+  static Future<bool> checkServerResumeSupport(
+    String url, {
+    Map<String, String>? headers,
+  }) async {
     final dio = Dio();
     try {
-      final mergedHeaders =
-          Map<String, String>.from(DefaultRules.defaultHeaders);
+      final mergedHeaders = Map<String, String>.from(
+        DefaultRules.defaultHeaders,
+      );
       if (headers != null) mergedHeaders.addAll(headers);
       final response = await dio.head(
         url,
@@ -147,13 +152,24 @@ class DownloadManager {
     String taskId = '',
   }) async {
     final requestedOutputPath = p.join(saveDir, fileName);
+    final sameNameDownloadIsActive = _activeDownloadPaths.contains(
+      requestedOutputPath,
+    );
     final outputPath = _reserveOutputPath(requestedOutputPath);
-    final sameNameDownloadIsActive = outputPath != requestedOutputPath;
     final taskSuffix =
         base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
     final tempPath = taskId.isEmpty
         ? '$outputPath${DefaultRules.tempFileSuffix}'
+        : '$outputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
+    final previousTaskPartialPath = taskId.isEmpty
+        ? null
         : '$requestedOutputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
+    final hasPreviousTaskPartialReservation = !sameNameDownloadIsActive &&
+        previousTaskPartialPath != null &&
+        previousTaskPartialPath != tempPath;
+    final ownsPreviousTaskPartialReservation =
+        hasPreviousTaskPartialReservation &&
+            _reserveLegacyPartial(previousTaskPartialPath);
     final hasExistingPartialReservation =
         existingPath != null && existingPath != tempPath;
     final ownsExistingPartialReservation =
@@ -175,6 +191,12 @@ class DownloadManager {
     int startByte = 0;
     try {
       final tempFile = File(tempPath);
+      if (!await tempFile.exists() && ownsPreviousTaskPartialReservation) {
+        final previousTaskPartialFile = File(previousTaskPartialPath);
+        if (await previousTaskPartialFile.exists()) {
+          await previousTaskPartialFile.copy(tempPath);
+        }
+      }
       if (!await tempFile.exists() &&
           existingPath != null &&
           existingPath != tempPath &&
@@ -195,9 +217,12 @@ class DownloadManager {
     final dio = Dio();
     cancelToken?.whenCancel.then((_) => dio.close());
 
+    var downloadCompleted = false;
+    var transferCompleted = false;
     try {
-      final mergedHeaders =
-          Map<String, String>.from(DefaultRules.defaultHeaders);
+      final mergedHeaders = Map<String, String>.from(
+        DefaultRules.defaultHeaders,
+      );
       if (headers != null) mergedHeaders.addAll(headers);
       if (startByte > 0) {
         mergedHeaders['Range'] = 'bytes=$startByte-';
@@ -231,6 +256,10 @@ class DownloadManager {
         );
       }
 
+      final expectedResumeByteCount = startByte > 0
+          ? _validateResumeContentRange(response, startByte)
+          : null;
+
       // On web, File operations will fail - this is expected
       // We still try to write the file for native platforms
       try {
@@ -238,6 +267,7 @@ class DownloadManager {
         final raf = await file.open(
           mode: startByte > 0 ? FileMode.writeOnlyAppend : FileMode.write,
         );
+        var receivedResponseBytes = 0;
         try {
           final stream = response.data.stream as Stream<List<int>>;
           await for (final chunk in stream) {
@@ -249,17 +279,26 @@ class DownloadManager {
               }
             }
             await raf.writeFrom(chunk);
+            receivedResponseBytes += chunk.length;
             // Progress already handled by onReceiveProgress above
+          }
+          if (expectedResumeByteCount != null &&
+              receivedResponseBytes != expectedResumeByteCount) {
+            await raf.truncate(startByte);
+            throw StateError(
+              'Expected $expectedResumeByteCount resumed bytes, received '
+              '$receivedResponseBytes',
+            );
           }
         } finally {
           await raf.close();
         }
 
-        // Rename temp to final
-        if (await File(outputPath).exists()) {
-          await File(outputPath).delete();
-        }
+        transferCompleted = true;
+        // The output path was reserved before the request, so publication
+        // never deletes a file that existed before this download.
         await file.rename(outputPath);
+        downloadCompleted = true;
         if (canUseExistingPartial && existingPath != tempPath) {
           try {
             await File(existingPath).delete();
@@ -270,7 +309,8 @@ class DownloadManager {
       } catch (e) {
         if (kIsWeb) {
           debugPrint(
-              '[DownloadManager] File write failed (expected on web): $e');
+            '[DownloadManager] File write failed (expected on web): $e',
+          );
           // Return temp path or output path as best-effort
           return tempPath;
         }
@@ -278,11 +318,62 @@ class DownloadManager {
       }
     } finally {
       dio.close();
-      _activeDownloadPaths.remove(outputPath);
+      if (!downloadCompleted && transferCompleted) {
+        try {
+          await File(tempPath).delete();
+        } catch (_) {}
+      } else if (!downloadCompleted && _pathExists(tempPath)) {
+        if (ownsPreviousTaskPartialReservation) {
+          try {
+            await File(tempPath).copy(previousTaskPartialPath);
+          } catch (_) {}
+        }
+        if (ownsExistingPartialReservation &&
+            existingPath != previousTaskPartialPath) {
+          try {
+            await File(tempPath).copy(existingPath);
+          } catch (_) {}
+        }
+      } else if (downloadCompleted && ownsPreviousTaskPartialReservation) {
+        try {
+          await File(previousTaskPartialPath).delete();
+        } catch (_) {}
+      }
       if (hasExistingPartialReservation) {
         _releaseLegacyPartial(existingPath);
       }
+      if (hasPreviousTaskPartialReservation) {
+        _releaseLegacyPartial(previousTaskPartialPath);
+      }
+      _activeDownloadPaths.remove(outputPath);
     }
+  }
+
+  static int _validateResumeContentRange(
+    Response<dynamic> response,
+    int requestedStart,
+  ) {
+    final contentRange =
+        response.headers.value(HttpHeaders.contentRangeHeader)?.trim() ?? '';
+    final match = RegExp(
+      r'^bytes (\d+)-(\d+)/(\d+|\*)$',
+      caseSensitive: false,
+    ).firstMatch(contentRange);
+    final responseStart = int.tryParse(match?.group(1) ?? '');
+    final responseEnd = int.tryParse(match?.group(2) ?? '');
+    final totalLength = int.tryParse(match?.group(3) ?? '');
+    if (responseStart != requestedStart ||
+        responseEnd == null ||
+        responseEnd < requestedStart ||
+        totalLength == null ||
+        totalLength <= responseEnd ||
+        responseEnd != totalLength - 1) {
+      throw StateError(
+        'Expected a complete Content-Range starting at byte $requestedStart, got '
+        '${contentRange.isEmpty ? '<missing or invalid>' : contentRange}',
+      );
+    }
+    return totalLength - requestedStart;
   }
 
   /// 下载多个分段并合并
@@ -373,9 +464,9 @@ class DownloadManager {
       final savedSegments = saved?['completedSegments'];
       if (savedSegments is List) {
         completedSegments.addAll(
-          savedSegments
-              .whereType<int>()
-              .where((index) => index >= 0 && index < total),
+          savedSegments.whereType<int>().where(
+                (index) => index >= 0 && index < total,
+              ),
         );
         debugPrint(
           '[DownloadManager] Restored progress: ${completedSegments.length}/$total',
@@ -412,9 +503,9 @@ class DownloadManager {
     final semaphore = Semaphore(concurrency);
     final futures = <Future<void>>[];
     var progressWrite = Future<void>.value();
-    // Total bytes across all segments (monotonic; no awaits inside the
-    // accumulation, so the single-threaded event loop keeps it atomic).
-    // Seeded above from restored parts.
+    // Accumulated bytes across restored parts and current segment attempts.
+    // Rejected ranged attempts correct the byte count when their part is
+    // discarded.
 
     for (int i = 0; i < total; i++) {
       if (completedSegments.contains(i)) continue;
@@ -508,26 +599,48 @@ class DownloadManager {
     String outputPath, {
     void Function(int delta)? onBytes,
   }) async {
-    final outputFile = File(outputPath);
-    if (await outputFile.exists()) {
-      await outputFile.delete();
-    }
-
-    final raf = await outputFile.open(mode: FileMode.write);
+    final stagingFile = File(
+      '$outputPath.merge-$pid-${DateTime.now().microsecondsSinceEpoch}.tmp',
+    );
+    RandomAccessFile? raf;
+    Object? failure;
+    StackTrace? failureStackTrace;
     try {
+      raf = await stagingFile.open(mode: FileMode.write);
       for (final path in inputPaths) {
         final inputFile = File(path);
         if (!await inputFile.exists()) {
-          debugPrint('[DownloadManager] Warning: part file not found: $path');
-          continue;
+          throw FileSystemException('Segment part file not found', path);
         }
         await for (final chunk in inputFile.openRead()) {
           await raf.writeFrom(chunk);
           onBytes?.call(chunk.length);
         }
       }
-    } finally {
       await raf.close();
+      raf = null;
+      await stagingFile.rename(outputPath);
+    } catch (error, stackTrace) {
+      failure = error;
+      failureStackTrace = stackTrace;
+    } finally {
+      if (raf != null) {
+        try {
+          await raf.close();
+        } catch (error, stackTrace) {
+          failure ??= error;
+          failureStackTrace ??= stackTrace;
+        }
+      }
+      try {
+        if (await stagingFile.exists()) await stagingFile.delete();
+      } catch (error, stackTrace) {
+        failure ??= error;
+        failureStackTrace ??= stackTrace;
+      }
+    }
+    if (failure != null) {
+      Error.throwWithStackTrace(failure, failureStackTrace!);
     }
   }
 

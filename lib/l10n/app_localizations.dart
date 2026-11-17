@@ -886,7 +886,7 @@ abstract class AppLocalizations {
   /// No description provided for @ocrDefaultImagesOnly.
   ///
   /// In en, this message translates to:
-  /// **'Default (send images only)'**
+  /// **'Default (no custom instruction; default OCR prompt used)'**
   String get ocrDefaultImagesOnly;
 
   /// No description provided for @ocrDefaultSystemPrompt.
@@ -1012,7 +1012,7 @@ abstract class AppLocalizations {
   /// No description provided for @ocrInstructionManageGuidance.
   ///
   /// In en, this message translates to:
-  /// **'These instructions apply to all recognition models. If none is selected, only the image is sent.'**
+  /// **'These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.'**
   String get ocrInstructionManageGuidance;
 
   /// No description provided for @ocrInstructionManageEmpty.
@@ -2662,6 +2662,8 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to clear all failed tasks?'**
   String get unifiedTaskListConfirmClearFailedMessage;
 
+  String get unifiedTaskListConfirmClearCompletedMessage;
+
   /// No description provided for @unifiedTaskListConfirmClearAllMessage.
   ///
   /// In en, this message translates to:
@@ -3604,6 +3606,9 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No detail data available'**
   String get chatErrorDetailEmpty;
+
+  /// Clickable marker for omitted text in a Request Body preview.
+  String chatErrorDetailOmittedContentMarker(int count);
 
   /// No description provided for @chatAudioPreviewClose.
   ///
@@ -17461,6 +17466,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete'**
   String get appLogDelete;
+
+  /// No description provided for @appLogDeleteUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion could not be confirmed.'**
+  String get appLogDeleteUnconfirmed;
 
   /// No description provided for @appLogConfirmDeleteTitle.
   ///

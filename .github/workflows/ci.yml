@@ -29,6 +29,7 @@ jobs:
           node-version: 22
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
       - run: node --test tests/catcatch/js_hook_script_test.cjs
+      - run: node --test tests/services/data_migration_legacy_configs_worker_test.cjs
 
   ocr-benchmark:
     name: "OCR Benchmark Validation"
@@ -128,6 +129,9 @@ jobs:
               lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
                 ;;
+              lib/utils/audio_playback_stub.dart)
+                test_f="tests/utils/audio_source_uri_test.dart"
+                ;;
               lib/services/sse_client_web_error.dart|\
               lib/services/sse_client_io.dart)
                 test_f="tests/services/sse_client_web_test.dart"
@@ -157,6 +161,11 @@ jobs:
               lib/pages/chat/dialogs/mermaid_preview_web_controls_stub.dart|\
               lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart)
                 test_f="tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart"
+                ;;
+              lib/pages/video_gallery_web_source.dart|\
+              lib/pages/video_gallery_web_source_stub.dart|\
+              lib/pages/video_gallery_web_source_web.dart)
+                test_f="tests/pages/video_gallery_web_source_test.dart"
                 ;;
               *)
                 test_f="tests/${file#lib/}"
@@ -255,6 +264,8 @@ jobs:
           gradle-version: '8.14'
       - name: Test standalone scheduling module
         run: gradle -p android/keep_alive_schedule test
+      - name: Test SAF log append module
+        run: gradle -p android/saf_log_content test
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:
@@ -294,15 +305,25 @@ jobs:
       - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui' || matrix.suite == 'built-in-components'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
       - name: Run Mermaid preview web controls regression
         if: matrix.suite == 'chat-ai-ui'
         run: flutter test --reporter expanded --platform chrome --plain-name 'renders clickable HTML controls above the fullscreen web preview' test/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Web video playback regression in Chrome
+        if: matrix.suite == 'built-in-components'
+        run: flutter test --reporter expanded --platform chrome test/pages/video_gallery_web_source_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Web audio download URL lifetime regression in Chrome
+        if: matrix.suite == 'built-in-components'
+        run: flutter test --reporter expanded --platform chrome test/utils/audio_playback_web_test.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Mermaid preview loading regressions in Chrome

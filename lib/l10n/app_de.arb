@@ -125,7 +125,7 @@
   "ocrTemplateTableContent": "Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre bei Tabellen Überschriften sowie Zeilen- und Spaltenzuordnungen und leere Zellen und gib sie als Markdown-Tabellen aus. Gib andere Inhalte als gewöhnlichen Text wieder. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende $...$ für Inline-Formeln und $$...$$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.",
-  "ocrDefaultImagesOnly": "Standard (nur Bilder senden)",
+  "ocrDefaultImagesOnly": "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)",
   "ocrDefaultSystemPrompt": "Extrahiere den gesamten Text aus dem Bild und bewahre dabei die ursprüngliche Formatierung und das Layout. Gib ausschließlich den extrahierten Text zurück, ohne Erklärungen.",
   "ocrSavedInstructionSnapshot": "Gespeicherte Anweisungskopie",
   "ocrPageTitle": "Texterkennung im Bild",
@@ -146,7 +146,7 @@
   "ocrSelectModel": "Modell auswählen",
   "ocrInstructionLabel": "Anweisung",
   "ocrManageInstructions": "Erkennungsanweisungen verwalten",
-  "ocrInstructionManageGuidance": "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird nur das Bild gesendet.",
+  "ocrInstructionManageGuidance": "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.",
   "ocrInstructionManageEmpty": "Noch keine Anweisungen",
   "ocrInstructionEditTooltip": "Anweisung bearbeiten",
   "ocrInstructionDeleteTooltip": "Anweisung löschen",
@@ -434,6 +434,7 @@
   "unifiedTaskListTabStopped": "Angehalten",
   "unifiedTaskListConfirmClear": "Leeren bestätigen",
   "unifiedTaskListConfirmClearFailedMessage": "Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListConfirmClearAllMessage": "Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListCancel": "Abbrechen",
   "unifiedTaskListConfirm": "Bestätigen",
@@ -773,6 +774,15 @@
   "chatErrorDetailResponseHeaders": "Antwort-Header",
   "chatErrorDetailResponseBody": "Antwortinhalt",
   "chatErrorDetailEmpty": "Keine Detaildaten verfügbar",
+  "chatErrorDetailOmittedContentMarker": "[{count} Zeichen in der Mitte ausgelassen]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Schließen",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6058,6 +6068,7 @@
   "appLogWillBeCreated": "Protokolle werden erstellt, während die App läuft",
   "appLogExport": "Exportieren",
   "appLogDelete": "Löschen",
+  "appLogDeleteUnconfirmed": "Löschen konnte nicht bestätigt werden.",
   "appLogConfirmDeleteTitle": "Löschen bestätigen",
   "appLogConfirmDeleteMessage": "Protokolldatei „{fileName}“ löschen?",
   "@appLogConfirmDeleteMessage": {

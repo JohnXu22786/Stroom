@@ -11,6 +11,94 @@ import 'package:stroom/catcatch/engine/download_manager.dart';
 import 'package:stroom/services/storage_service.dart';
 
 void main() {
+  Future<void> verifyRangeRetry({
+    required String rejectedContentRange,
+    required String rejectedBody,
+    bool rejectByStreamError = false,
+    bool expectByteCorrection = false,
+  }) async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requests = 0;
+    String? requestedRange;
+    final serverDone = server.listen((request) async {
+      requests++;
+      requestedRange = request.headers.value(HttpHeaders.rangeHeader);
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers.set(
+        HttpHeaders.contentRangeHeader,
+        requests == 1 ? rejectedContentRange : 'bytes 2-4/10',
+      );
+      if (requests == 1 && rejectByStreamError) {
+        request.response.contentLength = 3;
+      }
+      request.response.write(requests == 1 ? rejectedBody : 'cde');
+      try {
+        await request.response.close();
+      } catch (_) {
+        // A deliberately truncated Content-Length closes the first stream
+        // with an error so the downloader exercises its retry path.
+      }
+    });
+    final directory = await Directory.systemTemp.createTemp('range-retry-');
+    final partFiles = <String?>[null];
+    final errors = <int, String>{};
+    final byteDeltas = <int>[];
+    var completedSegments = 0;
+    try {
+      await downloadSingleSegment(
+        index: 0,
+        url: 'http://${server.address.address}:${server.port}/segment',
+        rangeStart: 2,
+        rangeLength: 3,
+        tempDir: directory.path,
+        partFiles: partFiles,
+        semaphore: Semaphore(1),
+        errors: errors,
+        onSegmentComplete: (_) async => completedSegments++,
+        onBytesDelta: byteDeltas.add,
+      );
+
+      expect(requestedRange, 'bytes=2-4');
+      expect(requests, 2);
+      expect(errors, isEmpty);
+      expect(completedSegments, 1);
+      expect(await File(partFiles.single!).readAsString(), 'cde');
+      expect(byteDeltas.where((delta) => delta > 0), isNotEmpty);
+      expect(byteDeltas.any((delta) => delta < 0), expectByteCorrection);
+      expect(byteDeltas.fold<int>(0, (total, delta) => total + delta), 3);
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  }
+
+  test('retries ranged responses with a mismatched Content-Range', () async {
+    await verifyRangeRetry(
+      rejectedContentRange: 'bytes 1-3/10',
+      rejectedBody: 'bcd',
+    );
+  });
+
+  test('retries ranged responses with a short body', () async {
+    await verifyRangeRetry(
+      rejectedContentRange: 'bytes 2-4/10',
+      rejectedBody: 'cd',
+      expectByteCorrection: true,
+    );
+  });
+
+  test(
+    'retries a ranged stream failure without correcting unreported bytes',
+    () async {
+      await verifyRangeRetry(
+        rejectedContentRange: 'bytes 2-4/10',
+        rejectedBody: 'cd',
+        rejectByStreamError: true,
+      );
+    },
+  );
+
   test('confines progress files for traversal task IDs', () async {
     const taskId = '../../catcatch_progress_escape_test';
     final appDir = await AppStorage.directory;
@@ -111,6 +199,211 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test(
+    'does not append a resumed response with invalid Content-Range',
+    () async {
+      for (final contentRange in [
+        'bytes 0-7/8',
+        'bytes 8-7/8',
+        'bytes\t8-14/15',
+      ]) {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        String? requestedRange;
+        final serverDone = server.listen((request) async {
+          requestedRange = request.headers.value(HttpHeaders.rangeHeader);
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            contentRange,
+          );
+          request.response.write('corrupt');
+          await request.response.close();
+        });
+        final directory = await Directory.systemTemp.createTemp(
+          'wrong-resume-range-',
+        );
+        const fileName = 'download.bin';
+        final partial = File(
+          '${directory.path}/$fileName${DefaultRules.tempFileSuffix}',
+        )..writeAsStringSync('trusted-');
+        final url = 'http://${server.address.address}:${server.port}/file';
+        try {
+          await expectLater(
+            DownloadManager.downloadFile(
+              url: url,
+              saveDir: directory.path,
+              fileName: fileName,
+            ),
+            throwsA(anything),
+          );
+
+          expect(requestedRange, 'bytes=${'trusted-'.length}-');
+          expect(await partial.readAsString(), 'trusted-');
+          expect(await File('${directory.path}/$fileName').exists(), isFalse);
+        } finally {
+          await serverDone.cancel();
+          await server.close(force: true);
+          await directory.delete(recursive: true);
+        }
+      }
+    },
+  );
+
+  test(
+    'does not publish a resumed response that stops before the file end',
+    () async {
+      for (final response in [
+        (contentRange: 'bytes 7-10/20', body: 'part'),
+        (contentRange: 'bytes 7-19/20', body: 'part'),
+      ]) {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        final serverDone = server.listen((request) async {
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            response.contentRange,
+          );
+          request.response.write(response.body);
+          await request.response.close();
+        });
+        final directory = await Directory.systemTemp.createTemp(
+          'truncated-resume-range-',
+        );
+        const fileName = 'download.bin';
+        final partial = File(
+          '${directory.path}/$fileName${DefaultRules.tempFileSuffix}',
+        )..writeAsStringSync('trusted');
+        final url = 'http://${server.address.address}:${server.port}/file';
+        try {
+          await expectLater(
+            DownloadManager.downloadFile(
+              url: url,
+              saveDir: directory.path,
+              fileName: fileName,
+            ),
+            throwsA(anything),
+          );
+
+          expect(await partial.readAsString(), 'trusted');
+          expect(await File('${directory.path}/$fileName').exists(), isFalse);
+        } finally {
+          await serverDone.cancel();
+          await server.close(force: true);
+          await directory.delete(recursive: true);
+        }
+      }
+    },
+  );
+
+  test(
+    'keeps a resumable partial when publication fails and paths change',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final requestedRanges = <String?>[];
+      var requests = 0;
+      final serverDone = server.listen((request) async {
+        requests++;
+        requestedRanges.add(request.headers.value(HttpHeaders.rangeHeader));
+        if (requests == 1) {
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes 8-17/18',
+          );
+          request.response.contentLength = 'continued-'.length;
+          request.response.write('continued-');
+        } else {
+          request.response.statusCode = HttpStatus.partialContent;
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes 8-14/15',
+          );
+          request.response.write('content');
+        }
+        await request.response.close();
+      });
+      final directory = await Directory.systemTemp.createTemp('task-resume-');
+      const taskId = 'resume-task';
+      const fileName = 'download.bin';
+      final occupiedOutput = File(p.join(directory.path, fileName))
+        ..writeAsStringSync('keep existing');
+      final taskSuffix =
+          base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
+      final partial = File(
+        '${directory.path}/$fileName.$taskSuffix${DefaultRules.tempFileSuffix}',
+      )..writeAsStringSync('partial-');
+      final url = 'http://${server.address.address}:${server.port}/file';
+      try {
+        var createdBlocker = false;
+        await expectLater(
+          DownloadManager.downloadFile(
+            url: url,
+            saveDir: directory.path,
+            fileName: fileName,
+            taskId: taskId,
+            onProgress: (received, total) {
+              if (received > 0 && !createdBlocker) {
+                createdBlocker = true;
+                Directory(p.join(directory.path, 'download (1).bin'))
+                    .createSync();
+              }
+            },
+          ),
+          throwsA(anything),
+        );
+
+        final outputPath = await DownloadManager.downloadFile(
+          url: url,
+          saveDir: directory.path,
+          fileName: fileName,
+          taskId: taskId,
+        );
+
+        expect(outputPath, p.join(directory.path, 'download (2).bin'));
+        expect(requestedRanges.first, 'bytes=${'partial-'.length}-');
+        expect(requestedRanges.last, 'bytes=${'partial-'.length}-');
+        expect(await File(outputPath).readAsString(), 'partial-content');
+        expect(await occupiedOutput.readAsString(), 'keep existing');
+        expect(await partial.exists(), isFalse);
+      } finally {
+        await serverDone.cancel();
+        await server.close(force: true);
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test('preserves an existing single-download output path', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.write('new download');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('existing-file-');
+    final existing = File(p.join(directory.path, 'download.bin'))
+      ..writeAsStringSync('keep existing');
+    final occupiedAlternate = File(p.join(directory.path, 'download (1).bin'))
+      ..writeAsStringSync('also keep');
+    final url = 'http://${server.address.address}:${server.port}/file';
+    try {
+      final outputPath = await DownloadManager.downloadFile(
+        url: url,
+        saveDir: directory.path,
+        fileName: 'download.bin',
+      );
+
+      expect(outputPath, p.join(directory.path, 'download (2).bin'));
+      expect(await existing.readAsString(), 'keep existing');
+      expect(await occupiedAlternate.readAsString(), 'also keep');
+      expect(await File(outputPath).readAsString(), 'new download');
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('isolates concurrent downloads with the same output filename', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final serverDone = server.listen((request) async {
@@ -122,6 +415,10 @@ void main() {
           RegExp(r'bytes=(\d+)-').firstMatch(range)![1]!,
         );
         request.response.statusCode = HttpStatus.partialContent;
+        request.response.headers.set(
+          HttpHeaders.contentRangeHeader,
+          'bytes $startByte-${contents.length - 1}/${contents.length}',
+        );
         request.response.write(contents.substring(startByte));
       } else {
         request.response.write(contents);
@@ -184,8 +481,8 @@ void main() {
         fileName: 'shared.bin',
         firstContent: 'first-content',
         secondContent: 'second-content',
-        firstTaskId: 'first-task',
-        secondTaskId: 'second-task',
+        firstTaskId: 'same-task',
+        secondTaskId: 'same-task',
       );
       await verifyPair(
         fileName: 'shared-default.bin',
@@ -251,6 +548,96 @@ void main() {
     }
   });
 
+  test('preserves an existing segmented-download output path', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.write(request.uri.pathSegments.last);
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('existing-merge-');
+    final outputPath = p.join(directory.path, 'merged.ts');
+    final existing = File(outputPath)..writeAsStringSync('keep merged output');
+    final occupiedAlternate = Directory(p.join(directory.path, 'merged (1).ts'))
+      ..createSync();
+    final origin = 'http://${server.address.address}:${server.port}';
+    try {
+      final resolvedPath = await DownloadManager.downloadSegmentsAndMerge(
+        segmentUrls: ['$origin/first.ts', '$origin/second.ts'],
+        outputPath: outputPath,
+      );
+
+      expect(resolvedPath, p.join(directory.path, 'merged (2).ts'));
+      expect(await existing.readAsString(), 'keep merged output');
+      expect(await occupiedAlternate.exists(), isTrue);
+      expect(await File(resolvedPath).readAsString(), 'first.tssecond.ts');
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('does not publish a partial file when segment merging fails', () async {
+    final directory = await Directory.systemTemp.createTemp('failed-merge-');
+    final firstPart = File(p.join(directory.path, 'first.part'))
+      ..writeAsStringSync('partial output');
+    final secondPart = File(p.join(directory.path, 'second.part'))
+      ..writeAsStringSync('remaining output');
+    final output = File(p.join(directory.path, 'merged.ts'));
+    try {
+      await expectLater(
+        DownloadManager.mergeFiles([
+          firstPart.path,
+          secondPart.path,
+        ], output.path, onBytes: (_) => throw StateError('merge failed')),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await output.exists(), isFalse);
+      expect(
+        Directory(directory.path)
+            .listSync()
+            .map((entry) => p.basename(entry.path))
+            .toSet(),
+        {'first.part', 'second.part'},
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test(
+    'fails and discards staged output when a segment part is missing',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('missing-part-');
+      final firstPart = File(p.join(directory.path, 'first.part'))
+        ..writeAsStringSync('first segment');
+      final missingPartPath = p.join(directory.path, 'missing.part');
+      final output = File(p.join(directory.path, 'merged.ts'));
+      try {
+        await expectLater(
+          DownloadManager.mergeFiles([
+            firstPart.path,
+            missingPartPath,
+          ], output.path),
+          throwsA(isA<FileSystemException>()),
+        );
+
+        expect(await output.exists(), isFalse);
+        expect(await firstPart.readAsString(), 'first segment');
+        expect(
+          Directory(directory.path)
+              .listSync()
+              .map((entry) => p.basename(entry.path))
+              .toSet(),
+          {'first.part'},
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
   test(
     'downloads and merges repeated URL byte ranges in playlist order',
     () async {
@@ -265,6 +652,12 @@ void main() {
           _ => 'abcdefg',
         };
         request.response.statusCode = range == null ? HttpStatus.ok : 206;
+        if (range != null) {
+          request.response.headers.set(
+            HttpHeaders.contentRangeHeader,
+            'bytes ${range == 'bytes=2-4' ? '2-4' : '5-6'}/7',
+          );
+        }
         request.response.write(bytes);
         await request.response.close();
       });

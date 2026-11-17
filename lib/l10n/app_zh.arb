@@ -127,7 +127,7 @@
   "ocrTemplateTableContent": "请按页面的自然阅读顺序转录所有可见文字。遇到表格时完整保留表头、行列关系及空单元格，并以 Markdown 表格输出；其他内容按普通文本保留。只返回转录结果，不添加说明或推断。",
   "ocrTemplateLatexLabel": "LaTeX 模板",
   "ocrTemplateLatexContent": "请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 $...$，独立公式使用 $$...$$。只返回转录结果，不添加说明或推断。",
-  "ocrDefaultImagesOnly": "默认（仅发送图片）",
+  "ocrDefaultImagesOnly": "默认（不添加自定义指令；仍使用默认 OCR 提示）",
   "ocrDefaultSystemPrompt": "请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。",
   "ocrSavedInstructionSnapshot": "已保存的指令快照",
   "ocrPageTitle": "文字识别",
@@ -148,7 +148,7 @@
   "ocrSelectModel": "请选择模型",
   "ocrInstructionLabel": "指令",
   "ocrManageInstructions": "管理识别指令",
-  "ocrInstructionManageGuidance": "这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。",
+  "ocrInstructionManageGuidance": "这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。",
   "ocrInstructionManageEmpty": "暂无指令",
   "ocrInstructionEditTooltip": "编辑指令",
   "ocrInstructionDeleteTooltip": "删除指令",
@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "已停止",
   "unifiedTaskListConfirmClear": "确认清除",
   "unifiedTaskListConfirmClearFailedMessage": "确定要清除所有失败任务吗？",
+  "unifiedTaskListConfirmClearCompletedMessage": "确定要清除所有已完成任务吗？此操作不可撤销。",
   "unifiedTaskListConfirmClearAllMessage": "确定要清除所有任务吗？此操作不可撤销。",
   "unifiedTaskListCancel": "取消",
   "unifiedTaskListConfirm": "确定",
@@ -775,6 +776,15 @@
   "chatErrorDetailResponseHeaders": "响应标头",
   "chatErrorDetailResponseBody": "响应正文",
   "chatErrorDetailEmpty": "暂无详细信息",
+  "chatErrorDetailOmittedContentMarker": "[中间内容已省略，共 {count} 字]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6060,6 +6070,7 @@
   "appLogWillBeCreated": "应用运行后将自动生成日志",
   "appLogExport": "导出",
   "appLogDelete": "删除",
+  "appLogDeleteUnconfirmed": "无法确认删除结果。",
   "appLogConfirmDeleteTitle": "确认删除",
   "appLogConfirmDeleteMessage": "确定要删除日志文件 \"{fileName}\" 吗？",
   "@appLogConfirmDeleteMessage": {

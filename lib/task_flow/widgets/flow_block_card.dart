@@ -9,6 +9,8 @@ import '../utils/task_flow_localization.dart';
 import 'io_type_indicator.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// A card representing a single block in the task flow builder.
 ///
 /// Shows the block's icon, label, input/output types, and a brief
@@ -460,6 +462,7 @@ class FlowBlockCard extends ConsumerWidget {
       PopupMenuItem(
         value: action,
         enabled: callback != null,
-        child: Text(label),
+        child: ConstrainedText(label,
+            maxLines: 1, overflow: TextOverflow.ellipsis),
       );
 }

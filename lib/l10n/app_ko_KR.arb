@@ -130,7 +130,7 @@
   "ocrTemplateTableContent": "페이지에 보이는 모든 텍스트를 자연스러운 읽기 순서대로 옮기세요. 표에서는 머리글, 행과 열의 관계, 빈 셀을 유지하고 Markdown 표로 출력하세요. 나머지 내용은 일반 텍스트로 작성하세요. 설명이나 추론을 덧붙이지 말고 옮긴 내용만 반환하세요.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "페이지에 보이는 모든 텍스트를 자연스러운 읽기 순서대로 옮기세요. 수식이 아닌 텍스트는 그대로 유지하고 수학 수식은 LaTeX로 표시하세요. 인라인 수식에는 $...$, 디스플레이 수식에는 $$...$$를 사용하세요. 설명이나 추론을 덧붙이지 말고 옮긴 내용만 반환하세요.",
-  "ocrDefaultImagesOnly": "기본값(이미지만 전송)",
+  "ocrDefaultImagesOnly": "기본값(사용자 지정 지침 없음, 기본 OCR 프롬프트 사용)",
   "ocrDefaultSystemPrompt": "이미지의 모든 텍스트를 원래 서식과 레이아웃을 유지해 추출하세요. 설명을 덧붙이지 말고 추출한 텍스트만 반환하세요.",
   "ocrSavedInstructionSnapshot": "저장된 지침 스냅샷",
   "ocrPageTitle": "이미지 텍스트 인식",
@@ -151,7 +151,7 @@
   "ocrSelectModel": "모델 선택",
   "ocrInstructionLabel": "지침",
   "ocrManageInstructions": "인식 지침 관리",
-  "ocrInstructionManageGuidance": "이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 이미지만 전송됩니다.",
+  "ocrInstructionManageGuidance": "이 지침은 모든 인식 모델에 적용됩니다. 선택한 지침이 없으면 사용자 지정 지침이 추가되지 않으며 기본 OCR 프롬프트가 계속 사용됩니다.",
   "ocrInstructionManageEmpty": "아직 지침이 없습니다",
   "ocrInstructionEditTooltip": "지침 편집",
   "ocrInstructionDeleteTooltip": "지침 삭제",
@@ -439,6 +439,7 @@
   "unifiedTaskListTabStopped": "중지됨",
   "unifiedTaskListConfirmClear": "지우기 확인",
   "unifiedTaskListConfirmClearFailedMessage": "실패한 작업을 모두 지울까요?",
+  "unifiedTaskListConfirmClearCompletedMessage": "완료된 작업을 모두 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.",
   "unifiedTaskListConfirmClearAllMessage": "작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.",
   "unifiedTaskListCancel": "취소",
   "unifiedTaskListConfirm": "확인",
@@ -778,6 +779,15 @@
   "chatErrorDetailResponseHeaders": "응답 헤더",
   "chatErrorDetailResponseBody": "응답 본문",
   "chatErrorDetailEmpty": "사용할 수 있는 세부 정보가 없습니다",
+  "chatErrorDetailOmittedContentMarker": "[중간 내용 {count}자 생략]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "닫기",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6063,6 +6073,7 @@
   "appLogWillBeCreated": "앱이 실행 중일 때 로그가 생성됩니다",
   "appLogExport": "내보내기",
   "appLogDelete": "삭제",
+  "appLogDeleteUnconfirmed": "삭제 여부를 확인할 수 없습니다.",
   "appLogConfirmDeleteTitle": "삭제 확인",
   "appLogConfirmDeleteMessage": "로그 파일 ‘{fileName}’을(를) 삭제하시겠습니까?",
   "@appLogConfirmDeleteMessage": {

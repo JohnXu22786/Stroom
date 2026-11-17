@@ -72,9 +72,9 @@ Future<void> downloadSingleSegment({
   required Map<int, String> errors,
   required Future<void> Function(int index) onSegmentComplete,
 
-  /// Byte-granularity progress: called with the chunk size after each
-  /// chunk is written. The caller aggregates this into a total so
-  /// stall detection sees progress even when percent stays flat.
+  /// Byte-granularity progress: called with each chunk size after it is
+  /// written. A negative correction removes bytes from a rejected ranged
+  /// response after its streamed byte count is found to be invalid.
   void Function(int delta)? onBytesDelta,
   String taskId = '',
 }) async {
@@ -94,8 +94,9 @@ Future<void> downloadSingleSegment({
         final dio = Dio();
         cancelToken?.whenCancel.then((_) => dio.close());
         try {
-          final mergedHeaders =
-              Map<String, String>.from(DefaultRules.defaultHeaders);
+          final mergedHeaders = Map<String, String>.from(
+            DefaultRules.defaultHeaders,
+          );
           if (headers != null) mergedHeaders.addAll(headers);
           if (rangeStart != null && rangeLength != null) {
             mergedHeaders[HttpHeaders.rangeHeader] =
@@ -123,7 +124,11 @@ Future<void> downloadSingleSegment({
               message: 'HTTP ${response.statusCode}',
             );
           }
+          if (isRangeRequest) {
+            _validateRangeResponse(response, rangeStart, rangeLength);
+          }
 
+          var receivedBytes = 0;
           try {
             final file = File(partPath);
             final raf = await file.open(mode: FileMode.write);
@@ -137,12 +142,22 @@ Future<void> downloadSingleSegment({
                   }
                 }
                 await raf.writeFrom(chunk);
+                receivedBytes += chunk.length;
                 onBytesDelta?.call(chunk.length);
+              }
+              if (isRangeRequest && receivedBytes != rangeLength) {
+                throw StateError(
+                  'Expected $rangeLength bytes for range starting at '
+                  '$rangeStart, received $receivedBytes',
+                );
               }
             } finally {
               await raf.close();
             }
           } catch (e) {
+            if (isRangeRequest && receivedBytes > 0) {
+              onBytesDelta?.call(-receivedBytes);
+            }
             if (retries < DefaultRules.maxRetriesPerSegment) {
               retries++;
               continue;
@@ -168,6 +183,35 @@ Future<void> downloadSingleSegment({
     }
   } finally {
     semaphore.release();
+  }
+}
+
+void _validateRangeResponse(
+  Response<dynamic> response,
+  int? rangeStart,
+  int? rangeLength,
+) {
+  final start = rangeStart!;
+  final length = rangeLength!;
+  final end = start + length - 1;
+  final contentRange = response.headers.value(HttpHeaders.contentRangeHeader);
+  final match = RegExp(
+    r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$',
+    caseSensitive: false,
+  ).firstMatch(contentRange?.trim() ?? '');
+  final responseStart = int.tryParse(match?.group(1) ?? '');
+  final responseEnd = int.tryParse(match?.group(2) ?? '');
+  final total = int.tryParse(match?.group(3) ?? '');
+
+  if (responseStart != start ||
+      responseEnd != end ||
+      (match?.group(3) != '*' && (total == null || total <= end))) {
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      message: 'Invalid Content-Range for requested bytes $start-$end: '
+          '${contentRange ?? '<missing>'}',
+    );
   }
 }
 

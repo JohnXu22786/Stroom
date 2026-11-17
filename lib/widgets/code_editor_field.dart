@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
 
+import 'constrained_text.dart';
+
 // ============================================================================
 // 代码编辑辅助（自定义参数 JSON 值编辑器共享组件）
 // ============================================================================
@@ -529,8 +531,10 @@ Future<void> showJsonValueEditorDialog(
                     const SizedBox(width: 8),
                     Text(
                       AppLocalizations.of(ctx)!.codeEditorTitle,
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     if (type == 'json') ...[
                       Container(
@@ -555,7 +559,11 @@ Future<void> showJsonValueEditorDialog(
                       const SizedBox(width: 8),
                       TextButton.icon(
                         icon: const Icon(Icons.format_align_left, size: 16),
-                        label: Text(AppLocalizations.of(ctx)!.codeEditorFormat),
+                        label: ConstrainedText(
+                          AppLocalizations.of(ctx)!.codeEditorFormat,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         style: TextButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -656,12 +664,20 @@ Future<void> showJsonValueEditorDialog(
                       onPressed: () {
                         Navigator.pop(ctx);
                       },
-                      child: Text(AppLocalizations.of(ctx)!.codeEditorCancel),
+                      child: ConstrainedText(
+                        AppLocalizations.of(ctx)!.codeEditorCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       icon: const Icon(Icons.check, size: 18),
-                      label: Text(AppLocalizations.of(ctx)!.codeEditorConfirm),
+                      label: ConstrainedText(
+                        AppLocalizations.of(ctx)!.codeEditorConfirm,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       onPressed: liveError != null
                           ? null
                           : () {

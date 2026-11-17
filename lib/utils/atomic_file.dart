@@ -52,16 +52,37 @@ class AtomicFile {
         }
       });
 
+  /// Writes [file] from an asynchronous producer using a sibling staged file,
+  /// then atomically replaces the destination after the producer completes.
+  static Future<void> writeFrom(
+    File file,
+    Future<void> Function(File stagedFile) write, {
+    void Function()? beforeCommit,
+    Future<void> Function()? afterCommit,
+  }) =>
+      _enqueue(
+        file,
+        write,
+        beforeCommit: beforeCommit,
+        afterCommit: afterCommit,
+      );
+
   static Future<void> _enqueue(
     File file,
     Future<void> Function(File) write, {
     void Function()? beforeCommit,
+    Future<void> Function()? afterCommit,
   }) {
     final path = p.normalize(file.absolute.path);
     final key = atomic_file_platform.isWindows ? _windowsPathKey(path) : path;
     final previous = _pendingWrites[key] ?? Future<void>.value();
     final operation = previous.then(
-      (_) => _write(file, write, beforeCommit: beforeCommit),
+      (_) => _write(
+        file,
+        write,
+        beforeCommit: beforeCommit,
+        afterCommit: afterCommit,
+      ),
     );
     // 调用方收到原始异常；队列本身始终继续，失败不会阻塞后续重试。
     late final Future<void> settled;
@@ -115,11 +136,16 @@ class AtomicFile {
     File file,
     Future<void> Function(File) write, {
     void Function()? beforeCommit,
+    Future<void> Function()? afterCommit,
   }) async {
     final tempDir = await file.parent.createTemp(
       '.${p.basename(file.path)}.tmp-',
     );
     final tmpFile = File(p.join(tempDir.path, 'data'));
+    final previousFile = File(p.join(tempDir.path, 'previous'));
+    var hadPreviousFile = false;
+    var published = false;
+    var keepTempDir = false;
     try {
       await write(tmpFile);
       for (var attempt = 0; attempt < 3; attempt++) {
@@ -127,18 +153,41 @@ class AtomicFile {
           // rename 自身替换已有文件，不能先删除目标或回退到直接覆盖。
           beforeCommit?.call();
           await atomic_file_platform.preservePermissions(file, tmpFile);
+          if (afterCommit != null && await file.exists()) {
+            await file.copy(previousFile.path);
+            hadPreviousFile = true;
+          }
           await tmpFile.rename(file.path);
+          published = true;
+          await afterCommit?.call();
           return;
         } on FileSystemException {
+          if (published) rethrow;
           if (attempt == 2) rethrow;
           // Windows 上文件可能被防病毒扫描短暂锁定。
           await Future<void>.delayed(const Duration(milliseconds: 20));
         }
       }
+    } catch (_) {
+      if (published && afterCommit != null) {
+        try {
+          if (hadPreviousFile) {
+            await previousFile.rename(file.path);
+          } else if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (_) {
+          // Keep the prior bytes available if rollback itself is blocked.
+          keepTempDir = hadPreviousFile;
+        }
+      }
+      rethrow;
     } finally {
-      try {
-        await tempDir.delete(recursive: true);
-      } catch (_) {}
+      if (!keepTempDir) {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {}
+      }
     }
   }
 }

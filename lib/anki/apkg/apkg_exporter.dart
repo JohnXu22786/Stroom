@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 
 import 'apkg_result.dart';
 
@@ -17,7 +19,10 @@ class AnkiApkgExporter {
   /// Export the Anki database at [dbPath] to an .apkg file.
   ///
   /// Returns the path of the created .apkg file.
-  static Future<String> export({String? dbPath}) async {
+  static Future<String> export({
+    String? dbPath,
+    @visibleForTesting Future<void> Function(File, List<int>)? writeBytes,
+  }) async {
     final docsDir = await getApplicationDocumentsDirectory();
     final src = dbPath ?? p.join(docsDir.path, 'collection.anki2');
 
@@ -59,13 +64,30 @@ class AnkiApkgExporter {
 
     // Write to downloads directory
     final dlDir = await getApplicationDocumentsDirectory();
-    final timestamp =
-        DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+    final timestamp = DateTime.now().toIso8601String().replaceAll(
+          RegExp(r'[:.]'),
+          '-',
+        );
     final outPath = p.join(dlDir.path, 'stroom_anki_$timestamp.apkg');
+    Directory? tempDir;
     try {
-      await File(outPath).writeAsBytes(encoded);
+      tempDir = await Directory(dlDir.path).createTemp('.stroom_anki_export_');
+      final tempFile = File(p.join(tempDir.path, 'export.apkg.part'));
+      await (writeBytes ?? (file, bytes) => file.writeAsBytes(bytes))(
+        tempFile,
+        encoded,
+      );
+      await tempFile.rename(outPath);
     } catch (_) {
       throw AnkiApkgException.unexpectedError(outPath);
+    } finally {
+      if (tempDir != null) {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {
+          // A successful rename leaves the published file outside this directory.
+        }
+      }
     }
 
     return outPath;

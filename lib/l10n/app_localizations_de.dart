@@ -471,7 +471,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende \$...\$ für Inline-Formeln und \$\$...\$\$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Standard (nur Bilder senden)';
+  String get ocrDefaultImagesOnly => "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -543,7 +543,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird nur das Bild gesendet.';
+      "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.";
 
   @override
   String get ocrInstructionManageEmpty => 'Noch keine Anweisungen';
@@ -1570,6 +1570,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
 
@@ -2142,6 +2146,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'Keine Detaildaten verfügbar';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[$count Zeichen in der Mitte ausgelassen]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Schließen';
@@ -10676,6 +10685,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get appLogDelete => 'Löschen';
 
   @override
+  String get appLogDeleteUnconfirmed =>
+      'Löschen konnte nicht bestätigt werden.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Löschen bestätigen';
 
   @override
@@ -12622,7 +12635,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       'Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende \$...\$ für Inline-Formeln und \$\$...\$\$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Standard (nur Bilder senden)';
+  String get ocrDefaultImagesOnly => "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12694,7 +12707,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird nur das Bild gesendet.';
+      "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.";
 
   @override
   String get ocrInstructionManageEmpty => 'Noch keine Anweisungen';
@@ -13719,6 +13732,10 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   @override
   String get unifiedTaskListConfirmClearFailedMessage =>
       'Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
@@ -22817,6 +22834,10 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get appLogDelete => 'Löschen';
+
+  @override
+  String get appLogDeleteUnconfirmed =>
+      'Löschen konnte nicht bestätigt werden.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Löschen bestätigen';
