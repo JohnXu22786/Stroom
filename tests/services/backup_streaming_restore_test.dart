@@ -441,6 +441,99 @@ void main() {
     },
   );
 
+  test(
+    'no-media restore reports a failure to clean replaced temporary artifacts',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      addTearDown(() {
+        FlowTemporaryArtifactStorage.beforeDeleteExecutionForTesting = null;
+      });
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const oldExecutionId = 'cleanup-failure-old-execution';
+      final oldArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: oldExecutionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': oldExecutionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': 'replacement-execution',
+                'flowId': 'new-flow',
+                'flowName': 'New flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'task_flow_cleanup_failure_without_media.zip',
+      );
+      FlowTemporaryArtifactStorage.beforeDeleteExecutionForTesting =
+          (_) async => throw StateError('injected artifact cleanup failure');
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await WebFileStore.read(oldArtifact), [9]);
+      final restoredExecutions = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      expect(restoredExecutions.single['id'], 'replacement-execution');
+    },
+  );
+
   // ==================================================================
   // store 模式大文件：流式恢复逐字节一致（主回归）
   // ==================================================================

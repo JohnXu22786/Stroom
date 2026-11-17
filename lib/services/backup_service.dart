@@ -76,6 +76,14 @@ class DataManagementPreflightException implements Exception {
   String toString() => message;
 }
 
+class _RestoreTemporaryArtifactCleanupException extends StateError {
+  _RestoreTemporaryArtifactCleanupException()
+      : super(
+          'Restore completed, but some replaced TaskFlow temporary artifacts '
+          'could not be removed.',
+        );
+}
+
 /// 恢复中途（已删除选中类别的现有数据之后）发现归档条目损坏时抛出。
 ///
 /// 与 [BackupValidationException] 区分：校验期失败意味着"什么都没动"，
@@ -2527,7 +2535,11 @@ class BackupService {
       }
       Error.throwWithStackTrace(restoreError, restoreStackTrace);
     }
-    await _deleteTaskFlowTemporaryArtifacts(deferredTaskFlowExecutionIds);
+    if (await _deleteTaskFlowTemporaryArtifacts(
+      deferredTaskFlowExecutionIds,
+    )) {
+      throw _RestoreTemporaryArtifactCleanupException();
+    }
     onProgress?.call(1.0);
     return metadata.skippedLabels;
   }
@@ -2790,13 +2802,16 @@ class BackupService {
               !skipAnkiMigrationMarkerInvalidation) {
             await _invalidateAnkiSyncMetadataMigrationMarker();
           }
-          await _deleteTaskFlowTemporaryArtifacts(
+          if (await _deleteTaskFlowTemporaryArtifacts(
             deferredTaskFlowExecutionIds,
-          );
+          )) {
+            throw _RestoreTemporaryArtifactCleanupException();
+          }
           onProgress?.call(1.0);
           return metadata.skippedLabels;
         } catch (restoreError, restoreStackTrace) {
-          if (skipRollbackSnapshot) {
+          if (skipRollbackSnapshot ||
+              restoreError is _RestoreTemporaryArtifactCleanupException) {
             Error.throwWithStackTrace(restoreError, restoreStackTrace);
           }
           Object? rollbackError;

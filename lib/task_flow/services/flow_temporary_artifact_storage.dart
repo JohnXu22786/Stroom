@@ -3,7 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 
 import '../../services/storage_service.dart';
@@ -19,6 +20,10 @@ const String flowTemporaryBlockIdKey = '_flowTemporaryBlockId';
 /// under the app data directory; web references are private WebFileStore keys.
 class FlowTemporaryArtifactStorage {
   FlowTemporaryArtifactStorage._();
+
+  @visibleForTesting
+  static Future<void> Function(String executionId)?
+      beforeDeleteExecutionForTesting;
 
   static const _storageRoot = 'task_flow_temporary';
 
@@ -181,6 +186,7 @@ class FlowTemporaryArtifactStorage {
   /// Used after the execution record is durably deleted and before restored
   /// artifacts for the same ID are published.
   static Future<void> deleteExecution(String executionId) async {
+    await beforeDeleteExecutionForTesting?.call(executionId);
     if (_useWebStore) {
       final prefix = _webExecutionPrefix(executionId);
       final keys = await WebFileStore.keysWithPrefix(prefix);
