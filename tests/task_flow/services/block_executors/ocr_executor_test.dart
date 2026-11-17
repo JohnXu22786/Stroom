@@ -1444,6 +1444,86 @@ void main() {
     );
   });
 
+  test('OCR payload conversion failure redacts the active provider key',
+      () async {
+    final localizations = AppLocalizationsEn();
+    final key = localizations.ocrImageDecodeFailed;
+    final source = await File('${directory.path}/credential_corrupt.png')
+        .writeAsBytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+
+    BlockExecutionException? thrown;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: key),
+        localizations: localizations,
+      );
+    } on BlockExecutionException catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown, isNotNull);
+    expect(thrown!.message, isNot(contains(key)));
+    final taskId = executions.execution(execId)!.subTasks.single.subTaskId;
+    expect(background.taskById(taskId)!.error, isNot(contains(key)));
+    await background.pendingPersistence;
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(taskId)!.error, isNot(contains(key)));
+  });
+
+  test('oversized OCR input failure redacts the active provider key',
+      () async {
+    final localizations = AppLocalizationsEn();
+    const input = 'attachments/credential_oversized.png';
+    await WebFileStore.write(input, Uint8List(800 * 1024));
+    const limitLabel = 'OCR request size budget (1.00 MiB)';
+    final key = localizations.taskFlowOcrInputTooLarge(limitLabel);
+
+    BlockExecutionException? thrown;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: input,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          key: key,
+          requestSizeBudgetBytes: 1024 * 1024,
+        ),
+        localizations: localizations,
+      );
+    } on BlockExecutionException catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown, isNotNull);
+    expect(thrown!.message, isNot(contains(key)));
+    final taskId = executions.execution(execId)!.subTasks.single.subTaskId;
+    expect(background.taskById(taskId)!.error, isNot(contains(key)));
+    await background.pendingPersistence;
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(taskId)!.error, isNot(contains(key)));
+  });
+
   test('OCR localizes corrupt image payload errors in Simplified Chinese',
       () async {
     final source = await File('${directory.path}/corrupt.png').writeAsBytes(
