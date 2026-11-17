@@ -168,6 +168,7 @@ class FlowBlockCard extends ConsumerWidget {
       if (!readOnly) _buildMenu(context),
     ];
     final cardHeader = LayoutBuilder(
+      key: const ValueKey('flowBlockCardHeader'),
       builder: (context, constraints) {
         final icon = Container(
           width: 32,

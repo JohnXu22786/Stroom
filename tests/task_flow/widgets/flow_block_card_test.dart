@@ -18,13 +18,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final card = find.byType(FlowBlockCard);
-    final headerLayout = find
-        .ancestor(
-          of: find.text('1. Audio Separation'),
-          matching: find.byType(LayoutBuilder),
-        )
-        .first;
+    final headerLayout = find.byKey(const ValueKey('flowBlockCardHeader'));
     final context = tester.element(card);
+    final headerBox = tester.renderObject<RenderBox>(headerLayout);
     final title = tester.getRect(find.text('1. Audio Separation'));
     final temporaryOutput = tester.getRect(find.byType(Checkbox));
     final alignmentGap = (title.center.dy - temporaryOutput.center.dy).abs();
@@ -37,6 +33,8 @@ void main() {
         'media=${MediaQuery.sizeOf(context)} '
         'scale=${MediaQuery.textScalerOf(context).scale(1)} '
         'card=${tester.getRect(find.byType(Card))} '
+        'headerConstraints=${headerBox.constraints} '
+        'headerSize=${headerBox.size} '
         'header=${tester.getRect(headerLayout)}',
       );
     }
