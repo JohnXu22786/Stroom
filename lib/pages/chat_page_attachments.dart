@@ -190,20 +190,36 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
   /// PDF viewer via [url_launcher]. Falls back to file info dialog if
   /// the launcher is unavailable.
   Future<void> _showPdfPreview(Attachment att, Uint8List data) async {
+    String? tempFilePath;
     try {
       // Try to save to a temp file and open with system handler
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(
-        attachmentPreviewPath(tempDir.path, att.id, att.fileName),
+      final previewPath = attachmentPreviewPathForPreview(
+        tempDir.path,
+        att.id,
+        att.fileName,
       );
-      await tempFile.writeAsBytes(data);
-      final uri = Uri.file(tempFile.path);
+      tempFilePath = previewPath;
+      await writeAttachmentPreviewFile(
+        previewPath,
+        (file) => file.writeAsBytes(data),
+      );
+      final uri = Uri.file(previewPath);
       if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          unawaited(deleteAttachmentPreviewFileAfterDelay(previewPath));
+          return;
+        }
       }
     } catch (e) {
       debugPrint('[ChatPage] PDF preview failed: $e');
+    }
+    if (tempFilePath != null) {
+      await deleteAttachmentPreviewFile(tempFilePath);
     }
     // Fallback: show file info
     if (mounted) _showFileInfoPreview(att);
