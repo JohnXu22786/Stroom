@@ -178,7 +178,8 @@ class FlowTemporaryArtifactStorage {
   }
 
   /// Removes only the private storage namespace derived from an execution ID.
-  /// Used after the execution record is durably deleted.
+  /// Used after the execution record is durably deleted and before restored
+  /// artifacts for the same ID are published.
   static Future<void> deleteExecution(String executionId) async {
     if (_useWebStore) {
       final prefix = _webExecutionPrefix(executionId);

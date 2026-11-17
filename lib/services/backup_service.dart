@@ -41,6 +41,8 @@ import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
 import '../task_flow/models/flow_payload.dart' show FlowPayload;
+import '../task_flow/services/flow_temporary_artifact_storage.dart'
+    show FlowTemporaryArtifactStorage;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -6218,6 +6220,44 @@ class BackupService {
     }
   }
 
+  /// Reads the execution IDs whose persisted inventory is about to be replaced.
+  /// A null result means the current file could not be parsed safely, so its
+  /// artifact namespaces must be retained.
+  static Future<Set<String>?> _taskFlowExecutionIdsToReplace() async {
+    try {
+      final isWebStore = kIsWeb || WebFileStore.isTestMode;
+      final appDir = isWebStore ? null : await AppStorage.directory;
+      final file = isWebStore
+          ? null
+          : File(p.join(appDir!, 'task_flows', 'executions.json'));
+      if (isWebStore) {
+        if (!await WebFileStore.exists('task_flows/executions.json')) {
+          return <String>{};
+        }
+      } else if (!await file!.exists()) {
+        return <String>{};
+      }
+
+      final data = isWebStore
+          ? await WebFileStore.read('task_flows/executions.json')
+          : await file!.readAsBytes();
+      if (data == null) return null;
+      final decoded = jsonDecode(utf8.decode(data));
+      if (decoded is! List) return null;
+
+      final executionIds = <String>{};
+      for (final value in decoded) {
+        if (value is! Map) return null;
+        final id = value['id'];
+        if (id is String && id.isNotEmpty) executionIds.add(id);
+      }
+      return executionIds;
+    } catch (e) {
+      debugPrint('读取待替换的任务流执行记录失败，保留临时输出: $e');
+      return null;
+    }
+  }
+
   static bool get _isBackupFlutterTest {
     try {
       return Platform.environment['FLUTTER_TEST'] == 'true';
@@ -6598,6 +6638,15 @@ class BackupService {
             'task_state/task_list_last_read.json',
             'task_state/app_launches.json',
           };
+      const executionsFile = 'task_flows/executions.json';
+      final cleanupReplacedExecutionArtifacts = selection.includeMediaFiles &&
+          taskFiles.contains(executionsFile);
+      final replacedExecutionIds = cleanupReplacedExecutionArtifacts
+          ? await _taskFlowExecutionIdsToReplace()
+          : const <String>{};
+      if (cleanupReplacedExecutionArtifacts && replacedExecutionIds == null) {
+        deleteFailed = true;
+      }
       if (!selection.chatRecordsAndAttachments &&
           selection.includeMediaFiles &&
           (completeFileInventories == null ||
@@ -6643,9 +6692,20 @@ class BackupService {
           !await _deleteFile('task_flows', 'flows.json')) {
         deleteFailed = true;
       }
-      if (taskFiles.contains('task_flows/executions.json') &&
-          !await _deleteFile('task_flows', 'executions.json')) {
-        deleteFailed = true;
+      if (taskFiles.contains(executionsFile) &&
+          (!cleanupReplacedExecutionArtifacts || replacedExecutionIds != null)) {
+        if (await _deleteFile('task_flows', 'executions.json')) {
+          for (final executionId in replacedExecutionIds ?? const <String>{}) {
+            try {
+              await FlowTemporaryArtifactStorage.deleteExecution(executionId);
+            } catch (e) {
+              debugPrint('删除被替换任务流的临时输出失败: $e');
+              deleteFailed = true;
+            }
+          }
+        } else {
+          deleteFailed = true;
+        }
       }
       if (taskFiles.contains('task_state/task_list_last_read.json') &&
           !await _deleteFile('', 'task_list_last_read.json')) {
