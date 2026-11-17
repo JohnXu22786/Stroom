@@ -306,7 +306,9 @@ function prepareLegacyChatConfigs(json) {
     const rawModels = oldItem.models;
     const oldModels = Array.isArray(rawModels) ? rawModels.filter(isRecord) : [];
     const models = oldModels.map(function (model) {
-      const typeConfig = {};
+      const typeConfig = isRecord(model.typeConfig)
+        ? {...model.typeConfig}
+        : {};
       if (model.temperature != null) typeConfig.temperature = model.temperature;
       const context = model.maxTokens != null ? model.maxTokens : model.context;
       if (context != null) typeConfig.context = context;
@@ -337,7 +339,20 @@ function prepareLegacyChatConfigs(json) {
 }
 
 function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
-  const migratedConfigs = JSON.parse(migratedConfigsJson);
+  const decodedMigratedConfigs = JSON.parse(migratedConfigsJson);
+  const migratedConfigs = [];
+  const migratedIdentities = new Set();
+  if (Array.isArray(decodedMigratedConfigs)) {
+    for (const config of decodedMigratedConfigs) {
+      if (!isRecord(config)) continue;
+      const identity = legacyChatConfigIdentity(config);
+      if (!migratedIdentities.has(identity)) {
+        migratedIdentities.add(identity);
+        migratedConfigs.push(config);
+      }
+    }
+  }
+
   let existingEntries = [];
   let corruptExisting = false;
   if (typeof existingJson === 'string' && existingJson.length > 0) {
@@ -353,7 +368,7 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
     }
   }
 
-  const hasUsableLlmEntry = existingEntries.some((entry) => {
+  const usableLlmEntryIndex = existingEntries.findIndex((entry) => {
     if (!isRecord(entry) || entry.type !== 'llm' ||
         entry.id === 'builtin_llm' || typeof entry.id !== 'string' ||
         !isOptionalType(entry.type, 'string') ||
@@ -370,8 +385,40 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
       Array.isArray(entry.configs) && entry.configs.length > 0 &&
       entry.configs.every(isUsableProviderConfig);
   });
-  if (hasUsableLlmEntry) {
-    return { metadata: { status: 'alreadyMigrated', corruptExisting } };
+  if (usableLlmEntryIndex >= 0) {
+    const existingEntry = existingEntries[usableLlmEntryIndex];
+    const configs = Array.isArray(existingEntry.configs)
+      ? existingEntry.configs
+      : JSON.parse(prepareLegacyChatConfigs(JSON.stringify([existingEntry])).payload);
+    const representedConfigs = Array.isArray(existingEntry.configs)
+      ? configs
+      : [existingEntry];
+    const representedIdentities = new Set(
+      representedConfigs.filter(isRecord).map((config) =>
+        legacyChatConfigIdentity(
+          config,
+          !Array.isArray(existingEntry.configs),
+        ),
+      ),
+    );
+    const unrepresentedConfigs = migratedConfigs.filter((config) => {
+      const identity = legacyChatConfigIdentity(config);
+      if (representedIdentities.has(identity)) return false;
+      representedIdentities.add(identity);
+      return true;
+    });
+    if (unrepresentedConfigs.length === 0) {
+      return { metadata: { status: 'alreadyMigrated', corruptExisting } };
+    }
+    if (Array.isArray(existingEntry.configs)) {
+      existingEntry.configs.push(...unrepresentedConfigs);
+    } else {
+      existingEntry.configs = [...configs, ...unrepresentedConfigs];
+    }
+    return {
+      metadata: { status: 'write', corruptExisting },
+      payload: JSON.stringify(existingEntries),
+    };
   }
 
   existingEntries.push({
@@ -384,6 +431,42 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
     metadata: { status: 'write', corruptExisting },
     payload: JSON.stringify(existingEntries),
   };
+}
+
+function legacyChatConfigIdentity(config, legacyFormat = false) {
+  const models = Array.isArray(config.models) ? config.models : [];
+  return JSON.stringify([
+    typeof config.providerName === 'string' ? config.providerName : '',
+    typeof config.host === 'string' ? config.host : '',
+    typeof config.key === 'string' ? config.key : '',
+    models.filter(isRecord).map((model) => {
+      const typeConfig = isRecord(model.typeConfig)
+        ? {...model.typeConfig}
+        : {};
+      if (model.temperature != null) typeConfig.temperature = model.temperature;
+      const context = model.maxTokens ?? model.context;
+      if (context != null) typeConfig.context = context;
+      return [
+        typeof model.modelId === 'string' ? model.modelId : '',
+        typeof model.supportStream === 'boolean'
+          ? model.supportStream
+          : legacyFormat,
+        canonicalLegacyIdentityValue(typeConfig),
+      ];
+    }),
+  ]);
+}
+
+function canonicalLegacyIdentityValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalLegacyIdentityValue);
+  if (isRecord(value)) {
+    const canonical = {};
+    for (const key of Object.keys(value).sort()) {
+      canonical[key] = canonicalLegacyIdentityValue(value[key]);
+    }
+    return canonical;
+  }
+  return value;
 }
 
 function isUsableProviderConfig(config) {

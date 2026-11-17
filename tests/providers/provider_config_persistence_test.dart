@@ -243,7 +243,7 @@ void main() {
             'host': 'https://legacy.example.com',
             'key': 'legacy-key',
             'models': [
-              {'modelId': 'legacy-model'},
+              {'modelId': 'legacy-model', 'supportStream': true},
             ],
           },
           {
@@ -251,7 +251,7 @@ void main() {
             'host': 'https://legacy.example.com',
             'key': 'legacy-key',
             'models': [
-              {'modelId': 'legacy-model'},
+              {'modelId': 'legacy-model', 'supportStream': true},
             ],
           },
         ]),
@@ -326,6 +326,170 @@ void main() {
       }
     });
 
+    test('legacy configs with distinct model settings are preserved once',
+        () async {
+      final representedConfig = {
+        'id': 'existing_config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {
+            'modelId': 'legacy-model',
+            'typeConfig': {
+              'temperature': 0.2,
+              'customSetting': 0.2,
+            },
+          },
+        ],
+      };
+      Map<String, dynamic> legacyConfig(double temperature) => {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': temperature,
+                'typeConfig': {'customSetting': temperature},
+              },
+            ],
+          };
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Custom LLM',
+            'configs': [representedConfig],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          legacyConfig(0.2),
+          legacyConfig(0.7),
+          legacyConfig(0.7),
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(3));
+      expect(
+        llmEntry.configs
+            .map((config) => config.models.single.typeConfig['temperature']),
+        orderedEquals([0.2, 0.2, 0.7]),
+      );
+      expect(
+        llmEntry.configs
+            .map((config) => config.models.single.typeConfig['customSetting']),
+        orderedEquals([0.2, 0.2, 0.7]),
+      );
+      expect(
+        llmEntry.configs.map((config) => config.models.single.supportStream),
+        orderedEquals([false, true, true]),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('legacy LLM entries preserve represented model settings', () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Legacy LLM',
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': 0.2,
+                'typeConfig': {'context': 4000},
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.2},
+            ],
+          },
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.7},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(3));
+      expect(
+        llmEntry.configs
+            .map((config) => config.models.single.typeConfig['temperature']),
+        orderedEquals([0.2, 0.2, 0.7]),
+      );
+      expect(
+        llmEntry.configs.first.models.single.typeConfig['context'],
+        4000,
+      );
+      expect(
+        llmEntry.configs[1].models.single.typeConfig['context'],
+        isNull,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('new migrated entry deduplicates identical legacy configs', () async {
+      final legacyConfig = {
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {
+            'modelId': 'legacy-model',
+            'temperature': 0.7,
+          },
+        ],
+      };
+      SharedPreferences.setMockInitialValues({
+        'chat_configs': jsonEncode([legacyConfig, legacyConfig]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final migrated = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'migrated_llm',
+      );
+      expect(migrated.configs, hasLength(1));
+      expect(
+        migrated.configs.single.models.single.typeConfig['temperature'],
+        0.7,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test('represented legacy configs are not duplicated during migration',
         () async {
       final config = {
@@ -334,7 +498,7 @@ void main() {
         'host': 'https://legacy.example.com',
         'key': 'legacy-key',
         'models': [
-          {'modelId': 'legacy-model'},
+          {'modelId': 'legacy-model', 'supportStream': true},
         ],
       };
       SharedPreferences.setMockInitialValues({
@@ -352,7 +516,7 @@ void main() {
             'host': 'https://legacy.example.com',
             'key': 'legacy-key',
             'models': [
-              {'modelId': 'legacy-model'},
+              {'modelId': 'legacy-model', 'supportStream': true},
             ],
           },
         ]),
