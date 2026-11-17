@@ -754,6 +754,59 @@ void main() {
     },
   );
 
+  test('startup restores an interrupted file restore from its durable snapshot',
+      () async {
+    WebFileStore.disableTestMode();
+    final previousPathProvider = PathProviderPlatform.instance;
+    final appDir = '$workDir/restore_app_data';
+    PathProviderPlatform.instance = _RestoreTestPathProvider(appDir);
+    AppStorage.resetCache();
+    addTearDown(() {
+      PathProviderPlatform.instance = previousPathProvider;
+      AppStorage.resetCache();
+    });
+    await Directory(appDir).create(recursive: true);
+    await Directory('$appDir/pictures').create(recursive: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([1, 2, 3]);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('darkMode', true);
+
+    const selection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final snapshotPath = '$workDir/pre-restore.zip';
+    await BackupService.createBackup(
+      outputPath: snapshotPath,
+      selection: selection,
+      useStartupPreferenceAdapter: true,
+    );
+    final recoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-test',
+    );
+    await recoveryDirectory.create();
+    await File(snapshotPath).copy('${recoveryDirectory.path}/pre-restore.zip');
+    await File('${recoveryDirectory.path}/restore-in-progress')
+        .writeAsString('startup-preferences', flush: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([9]);
+    await File('$appDir/pictures/new.jpg').writeAsBytes([8]);
+    await prefs.setBool('darkMode', false);
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
+    expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
+    expect(prefs.getBool('darkMode'), isTrue);
+    expect(await recoveryDirectory.exists(), isFalse);
+  });
+
   test(
     'restoreFromBytes keeps selected data unchanged when a later binary write fails',
     () async {

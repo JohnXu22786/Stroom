@@ -238,6 +238,10 @@ class BackupService {
   static bool restorePathsWindowsSeparatorsForTesting = false;
   @visibleForTesting
   static void Function(int entryIndex)? beforeRestoreBinaryPublishForTesting;
+  static const _restoreRollbackDirectoryPrefix = '.stroom-restore-rollback-';
+  static const _restoreInProgressMarker = 'restore-in-progress';
+  static const _startupPreferenceRestoreMarker = 'startup-preferences';
+  static const _sharedPreferenceRestoreMarker = 'shared-preferences';
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
     r'^recording_\d+\.m4a$',
@@ -365,6 +369,57 @@ class BackupService {
         stackTrace,
       );
       rethrow;
+    }
+  }
+
+  /// Rolls back a restore interrupted by process termination.
+  ///
+  /// A completed snapshot is marked immediately before selected data can be
+  /// changed. The marker remains until the restore (or its in-process rollback)
+  /// completes, so startup can safely replay the snapshot after a crash.
+  static Future<void> recoverInterruptedRestores() async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+
+    final appDirectory = Directory(await AppStorage.directory);
+    if (!await appDirectory.exists()) return;
+
+    await for (final entity in appDirectory.list(followLinks: false)) {
+      if (entity is! Directory ||
+          !p
+              .basename(entity.path)
+              .startsWith(_restoreRollbackDirectoryPrefix)) {
+        continue;
+      }
+      final marker = File(p.join(entity.path, _restoreInProgressMarker));
+      if (!await marker.exists()) {
+        // Snapshot creation had not finished, so the restore had not begun.
+        await entity.delete(recursive: true);
+        continue;
+      }
+
+      final archivePath = p.join(entity.path, 'pre-restore.zip');
+      if (!await File(archivePath).exists()) {
+        throw StateError(
+          'Interrupted restore recovery archive is missing: $archivePath',
+        );
+      }
+      final preferenceMode = await marker.readAsString();
+      final useStartupPreferenceAdapter = switch (preferenceMode) {
+        _startupPreferenceRestoreMarker => true,
+        _sharedPreferenceRestoreMarker => false,
+        _ => throw StateError(
+            'Interrupted restore recovery marker is invalid: ${marker.path}',
+          ),
+      };
+      await _restoreFromZipFile(
+        archivePath,
+        skipPostRestoreMigration: true,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        skipAnkiMigrationMarkerInvalidation: true,
+        skipAnkiSyncIndexClear: true,
+        skipRollbackSnapshot: true,
+      );
+      await entity.delete(recursive: true);
     }
   }
 
@@ -2700,9 +2755,12 @@ class BackupService {
         // staged file cannot be published, the restore can roll back files,
         // manifest records, and selected preferences together.
         String? rollbackArchivePath;
+        File? rollbackMarker;
         if (!skipRollbackSnapshot) {
-          rollbackDirectory = await Directory.systemTemp.createTemp(
-            '.stroom-restore-rollback-$pid-',
+          final rollbackParent =
+              appDir == null ? Directory.systemTemp : Directory(appDir);
+          rollbackDirectory = await rollbackParent.createTemp(
+            '$_restoreRollbackDirectoryPrefix$pid-',
           );
           rollbackArchivePath =
               p.join(rollbackDirectory.path, 'pre-restore.zip');
@@ -2712,6 +2770,17 @@ class BackupService {
             useStartupPreferenceAdapter: useStartupPreferenceAdapter,
             skipMissingSelectedFiles: true,
           );
+          if (appDir != null) {
+            rollbackMarker = File(
+              p.join(rollbackDirectory.path, _restoreInProgressMarker),
+            );
+            await rollbackMarker.writeAsString(
+              useStartupPreferenceAdapter
+                  ? _startupPreferenceRestoreMarker
+                  : _sharedPreferenceRestoreMarker,
+              flush: true,
+            );
+          }
         }
 
         try {
@@ -2807,11 +2876,19 @@ class BackupService {
           )) {
             throw _RestoreTemporaryArtifactCleanupException();
           }
+          if (rollbackMarker != null && await rollbackMarker.exists()) {
+            await rollbackMarker.delete();
+          }
           onProgress?.call(1.0);
           return metadata.skippedLabels;
         } catch (restoreError, restoreStackTrace) {
-          if (skipRollbackSnapshot ||
-              restoreError is _RestoreTemporaryArtifactCleanupException) {
+          if (skipRollbackSnapshot) {
+            Error.throwWithStackTrace(restoreError, restoreStackTrace);
+          }
+          if (restoreError is _RestoreTemporaryArtifactCleanupException) {
+            if (rollbackMarker != null && await rollbackMarker.exists()) {
+              await rollbackMarker.delete();
+            }
             Error.throwWithStackTrace(restoreError, restoreStackTrace);
           }
           Object? rollbackError;
@@ -2826,6 +2903,9 @@ class BackupService {
               skipAnkiSyncIndexClear: true,
               skipRollbackSnapshot: true,
             );
+            if (rollbackMarker != null && await rollbackMarker.exists()) {
+              await rollbackMarker.delete();
+            }
           } catch (error, stackTrace) {
             rollbackError = error;
             rollbackStackTrace = stackTrace;
