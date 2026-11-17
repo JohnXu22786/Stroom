@@ -12,33 +12,35 @@ void main() {
   ) async {
     // Keep this case at the regular text size; larger text has its own layout
     // coverage below and intentionally stacks the header.
-    tester.platformDispatcher.textScaleFactorTestValue = 1;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(_cardAtWidth(358));
     await tester.pumpAndSettle();
 
     final card = find.byType(FlowBlockCard);
-    final headerLayout = find.descendant(
-      of: card,
-      matching: find.byType(LayoutBuilder),
-    );
+    final headerLayout = find
+        .ancestor(
+          of: find.text('1. Audio Separation'),
+          matching: find.byType(LayoutBuilder),
+        )
+        .first;
     final context = tester.element(card);
-    debugPrint(
-      'phone header geometry: view=${tester.view.physicalSize} '
-      'dpr=${tester.view.devicePixelRatio} '
-      'media=${MediaQuery.sizeOf(context)} '
-      'scale=${MediaQuery.textScalerOf(context).scale(1)} '
-      'card=${tester.getRect(find.byType(Card))} '
-      'header=${tester.getRect(headerLayout)}',
-    );
-
     final title = tester.getRect(find.text('1. Audio Separation'));
     final temporaryOutput = tester.getRect(find.byType(Checkbox));
+    final alignmentGap = (title.center.dy - temporaryOutput.center.dy).abs();
 
     expect(find.text('Temporary'), findsOneWidget);
-    expect((title.center.dy - temporaryOutput.center.dy).abs(), lessThan(20));
+    if (alignmentGap >= 20) {
+      debugPrint(
+        'phone header geometry: view=${tester.view.physicalSize} '
+        'dpr=${tester.view.devicePixelRatio} '
+        'media=${MediaQuery.sizeOf(context)} '
+        'scale=${MediaQuery.textScalerOf(context).scale(1)} '
+        'card=${tester.getRect(find.byType(Card))} '
+        'header=${tester.getRect(headerLayout)}',
+      );
+    }
+    expect(alignmentGap, lessThan(20));
   });
 
   testWidgets('very narrow phone stacks the title above action controls', (
@@ -76,7 +78,9 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(_cardAtWidth(358, theme: ThemeData.dark()));
+    await tester.pumpWidget(
+      _cardAtWidth(358, theme: ThemeData.dark(), textScaleFactor: 1.6),
+    );
     await tester.pumpAndSettle();
 
     final title = tester.getRect(find.text('1. Audio Separation'));
@@ -167,30 +171,42 @@ void main() {
   });
 }
 
-Widget _cardAtWidth(double width, {ThemeData? theme}) => ProviderScope(
+Widget _cardAtWidth(
+  double width, {
+  ThemeData? theme,
+  double textScaleFactor = 1,
+}) =>
+    ProviderScope(
       child: MaterialApp(
         theme: theme,
         locale: const Locale('en', 'US'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: width,
-              child: FlowBlockCard(
-                block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
-                index: 1,
-                isFirst: true,
-                isLast: false,
-                onTemporaryOutputChanged: (_) {},
-                onSettings: () {},
-                onReplace: () {},
-                onDelete: () {},
-                onDuplicate: () {},
-                onMoveUp: () {},
-                onMoveDown: () {},
-                onInsertBefore: () {},
-                onInsertAfter: () {},
+        home: MediaQuery(
+          data: MediaQueryData(
+            size: Size(width + 32, 844),
+            devicePixelRatio: 1,
+            textScaler: TextScaler.linear(textScaleFactor),
+          ),
+          child: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: width,
+                child: FlowBlockCard(
+                  block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+                  index: 1,
+                  isFirst: true,
+                  isLast: false,
+                  onTemporaryOutputChanged: (_) {},
+                  onSettings: () {},
+                  onReplace: () {},
+                  onDelete: () {},
+                  onDuplicate: () {},
+                  onMoveUp: () {},
+                  onMoveDown: () {},
+                  onInsertBefore: () {},
+                  onInsertAfter: () {},
+                ),
               ),
             ),
           ),
