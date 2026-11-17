@@ -953,9 +953,8 @@ class OcrService {
       );
       final userInfoEnd = authority.lastIndexOf('@');
       if (userInfoEnd >= 0) {
-        for (final component in authority
-            .substring(0, userInfoEnd)
-            .split(':')) {
+        for (final component
+            in authority.substring(0, userInfoEnd).split(':')) {
           try {
             final value = Uri.decodeComponent(component);
             if (urlCredentials.contains(value)) {

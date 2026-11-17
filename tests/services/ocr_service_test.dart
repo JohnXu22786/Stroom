@@ -2639,8 +2639,7 @@ void main() {
                     options.path =
                         '${options.path}?access_token=%6f$percentEncodedCredential';
                     interceptedUrl = options.path;
-                    final echoedUrl =
-                        options.path.replaceAll('%2F', '%2f');
+                    final echoedUrl = options.path.replaceAll('%2F', '%2f');
                     handler.reject(
                       DioException(
                         requestOptions: options,
@@ -2650,8 +2649,7 @@ void main() {
                           statusCode: 403,
                           data: {
                             'error': {
-                              'message':
-                                  'denied: $bodyCredential $echoedUrl',
+                              'message': 'denied: $bodyCredential $echoedUrl',
                             },
                           },
                         ),
@@ -2725,7 +2723,8 @@ void main() {
         () async {
           const bodyCredential = 'batch-interceptor-body-secret-opaque-2026';
           const urlCredential = 'batch/interceptor-url-secret-opaque-2026';
-          const percentEncodedCredential = 'batch-paque-url-percent-secret-2026';
+          const percentEncodedCredential =
+              'batch-paque-url-percent-secret-2026';
           const userInfoCredential = 'batch-paque-userinfo-secret-2026';
           String? interceptedUrl;
           final service = OcrService(
@@ -2747,8 +2746,7 @@ void main() {
                     options.path =
                         '${options.path}?access_token=%6f$percentEncodedCredential';
                     interceptedUrl = options.path;
-                    final echoedUrl =
-                        options.path.replaceAll('%2F', '%2f');
+                    final echoedUrl = options.path.replaceAll('%2F', '%2f');
                     handler.reject(
                       DioException(
                         requestOptions: options,
@@ -2758,8 +2756,7 @@ void main() {
                           statusCode: 403,
                           data: {
                             'error': {
-                              'message':
-                                  'denied: $bodyCredential $echoedUrl',
+                              'message': 'denied: $bodyCredential $echoedUrl',
                             },
                           },
                         ),
