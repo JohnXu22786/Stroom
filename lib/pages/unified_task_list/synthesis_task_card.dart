@@ -7,6 +7,7 @@ import '../tts_create_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
 import '../../widgets/running_elapsed_label.dart';
+import '../../widgets/constrained_text.dart';
 
 // =============================================================================
 // 合成任务卡片
@@ -36,7 +37,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
     super.initState();
     // Failed tasks used to show their error box in the header unconditionally;
     // expand by default so the error stays visible in the collapsible design.
-    _expanded = widget.task.status == TaskStatus.running ||
+    _expanded =
+        widget.task.status == TaskStatus.running ||
         widget.task.status == TaskStatus.failed;
   }
 
@@ -78,17 +80,17 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   final taskTitle = widget.task.title.isNotEmpty
                       ? widget.task.title
                       : AppLocalizations.of(context)!
-                          .unifiedTaskUnnamedRecording;
+                            .unifiedTaskUnnamedRecording;
                   final titleAndMetadata = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         taskTitle,
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
                         ),
-                        maxLines: isVeryNarrow ? 2 : 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
@@ -276,9 +278,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 ),
                 title: Text(
                   AppLocalizations.of(context)!.unifiedTaskClearTask,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -540,15 +540,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .error
+                    color: Theme.of(context).colorScheme.error
                         .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
+                      color: Theme.of(context).colorScheme.error
                           .withValues(alpha: 0.25),
                     ),
                   ),
@@ -567,7 +563,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                           ),
                         ),
                       );
-                      final hasDetails = widget.task.originalRequest != null ||
+                      final hasDetails =
+                          widget.task.originalRequest != null ||
                           widget.task.originalResponse != null;
                       final details = hasDetails
                           ? GestureDetector(
@@ -706,9 +703,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
+                      color: Theme.of(context).colorScheme.onSurface
                           .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -737,9 +732,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .error
+                      color: Theme.of(context).colorScheme.error
                           .withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
                     ),

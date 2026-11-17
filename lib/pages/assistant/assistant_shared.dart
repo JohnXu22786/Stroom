@@ -5,6 +5,8 @@ import '../../models/assistant.dart';
 import '../../utils/emojis.dart';
 import '../../widgets/llm/assistant_avatar.dart';
 
+import '../../widgets/constrained_text.dart';
+
 class AssistantCard extends StatelessWidget {
   final Assistant assistant;
   final VoidCallback onTap;
@@ -55,7 +57,7 @@ class AssistantCard extends StatelessWidget {
                 children: [
                   AssistantAvatar(assistant: assistant, size: 56),
                   const SizedBox(height: 12),
-                  Text(
+                  ConstrainedText(
                     assistant.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -68,7 +70,7 @@ class AssistantCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   if (assistant.description.isNotEmpty)
-                    Text(
+                    ConstrainedText(
                       assistant.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -222,9 +224,11 @@ class _EmojiPickerPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   l10n.assistantChooseEmoji,
                   style: theme.textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               IconButton(
@@ -390,9 +394,11 @@ class CategorizedEmojiPicker extends StatelessWidget {
               indicatorSize: TabBarIndicatorSize.label,
               tabs: categories.map((cat) {
                 return Tab(
-                  child: Text(
+                  child: ConstrainedText(
                     _emojiCategoryLabel(l10n, cat.type),
                     style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 );
               }).toList(),

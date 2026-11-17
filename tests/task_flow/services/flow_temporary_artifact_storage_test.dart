@@ -33,6 +33,40 @@ class _GatedDocuments extends PathProviderPlatform {
   }
 }
 
+final class _RealIO extends IOOverrides {}
+
+class _FailingWriteFile extends Fake implements File {
+  _FailingWriteFile(this.file);
+
+  final File file;
+
+  @override
+  String get path => file.path;
+
+  @override
+  File get absolute => file.absolute;
+
+  @override
+  Directory get parent => file.parent;
+
+  @override
+  Future<bool> exists() => file.exists();
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) =>
+      file.delete(recursive: recursive);
+
+  @override
+  Future<File> writeAsBytes(
+    List<int> bytes, {
+    FileMode mode = FileMode.write,
+    bool flush = false,
+  }) async {
+    await file.writeAsBytes(bytes.take(2).toList(), mode: mode, flush: flush);
+    throw FileSystemException('Injected storage failure', path);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -141,6 +175,124 @@ void main() {
 
     expect(await File(first).exists(), isFalse);
     expect(await File(second).readAsBytes(), [2]);
+  });
+
+  test('failed repeated byte write preserves the prior artifact', () async {
+    final reference = await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'block-1',
+      fileName: 'voice.wav',
+      bytes: Uint8List.fromList([1, 2, 3, 4]),
+    );
+    var injectedFailure = false;
+    final realIO = _RealIO();
+
+    await IOOverrides.runZoned(
+      () async {
+        await expectLater(
+          FlowTemporaryArtifactStorage.writeBytes(
+            executionId: 'execution-1',
+            blockId: 'block-1',
+            fileName: 'voice.wav',
+            bytes: Uint8List.fromList([9, 8, 7, 6]),
+          ),
+          throwsA(isA<FileSystemException>()),
+        );
+      },
+      createFile: (path) {
+        if (!path.contains('task_flow_temporary')) {
+          return IOOverrides.runWithIOOverrides(() => File(path), realIO);
+        }
+        injectedFailure = true;
+        return _FailingWriteFile(
+          IOOverrides.runWithIOOverrides(() => File(path), realIO),
+        );
+      },
+    );
+
+    expect(injectedFailure, isTrue);
+    expect(await File(reference).readAsBytes(), [1, 2, 3, 4]);
+    final blockDirectory = Directory(File(reference).parent.path);
+    expect(blockDirectory.listSync().map((entry) => entry.path), [reference]);
+
+    await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'block-1',
+      fileName: 'voice.wav',
+      bytes: Uint8List.fromList([5, 6]),
+    );
+    expect(await File(reference).readAsBytes(), [5, 6]);
+  });
+
+  test('cancelled repeated native copy preserves artifact and source',
+      () async {
+    final reference = await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'block-1',
+      fileName: 'source.wav',
+      bytes: Uint8List.fromList([1, 2, 3, 4]),
+    );
+    final sourceBytes = Uint8List(2 * 1024 * 1024);
+    for (var index = 0; index < sourceBytes.length; index++) {
+      sourceBytes[index] = index % 251;
+    }
+    final source = File('${documents.path}/source.wav')
+      ..writeAsBytesSync(sourceBytes);
+    var cancellationChecks = 0;
+
+    await expectLater(
+      FlowTemporaryArtifactStorage.copyNativeFile(
+        sourcePath: source.path,
+        executionId: 'execution-1',
+        blockId: 'block-1',
+        cancelled: () => ++cancellationChecks > 1,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(cancellationChecks, greaterThan(1));
+    expect(await File(reference).readAsBytes(), [1, 2, 3, 4]);
+    expect(await source.readAsBytes(), sourceBytes);
+    final blockDirectory = Directory(File(reference).parent.path);
+    expect(blockDirectory.listSync().map((entry) => entry.path), [reference]);
+
+    final smallSource = File('${documents.path}/small-source.wav')
+      ..writeAsBytesSync([7, 8]);
+    var lateCancellationChecks = 0;
+    await expectLater(
+      FlowTemporaryArtifactStorage.copyNativeFile(
+        sourcePath: smallSource.path,
+        executionId: 'execution-1',
+        blockId: 'block-1',
+        cancelled: () => ++lateCancellationChecks > 2,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(lateCancellationChecks, 3);
+    expect(await File(reference).readAsBytes(), [1, 2, 3, 4]);
+    expect(await smallSource.readAsBytes(), [7, 8]);
+    expect(blockDirectory.listSync().map((entry) => entry.path), [reference]);
+
+    await expectLater(
+      FlowTemporaryArtifactStorage.copyNativeFile(
+        sourcePath: source.path,
+        executionId: 'execution-1',
+        blockId: 'block-1',
+        afterPublish: () async => throw StateError('cancelled after publish'),
+      ),
+      throwsStateError,
+    );
+    expect(await File(reference).readAsBytes(), [1, 2, 3, 4]);
+    expect(await source.readAsBytes(), sourceBytes);
+    expect(blockDirectory.listSync().map((entry) => entry.path), [reference]);
+
+    await FlowTemporaryArtifactStorage.copyNativeFile(
+      sourcePath: source.path,
+      executionId: 'execution-1',
+      blockId: 'block-1',
+    );
+    expect(await File(reference).readAsBytes(), sourceBytes);
+    expect(await source.readAsBytes(), sourceBytes);
   });
 
   test('deletion guard is rechecked after async ownership validation',

@@ -54,6 +54,12 @@
   "builtInSystemCompactionDescription": "把长对话压缩为结构化锚定摘要，释放上下文空间",
   "builtInSystemCompactionPrompt": "你是一个锚定上下文摘要助手，负责把长对话压缩为结构化摘要。\n\n只总结给你的对话历史。最近的新消息可能保持原文不变，所以请聚焦于\n仍然重要的旧上下文。\n\n如果提示中包含 <previous-summary> 块，把它当作当前锚定摘要：\n保留仍然成立的内容，删除过时的内容，合并新的事实。\n\n严格按照下面的结构输出，保持小节顺序不变，每个小节都要保留（即使为空）：\n<template>\n## Objective\n- [用户想要达成的目标，一到两句话]\n\n## Important Details\n- [约束/偏好、决策及原因、重要事实/假设、继续所需的确切上下文；没有则写 (none)]\n\n## Work State\n### Completed\n- [已完成的工作、已验证的事实或已做的修改；没有则写 (none)]\n\n### Active\n- [当前工作、部分修改或调查状态；没有则写 (none)]\n\n### Blocked\n- [阻塞项、失败的命令或未知数；没有则写 (none)]\n\n## Next Move\n1. [下一步具体行动，或 (none)]\n2. [已知的后续行动，或 (none)]\n\n## Relevant Files\n- [文件或目录路径：为什么重要；没有则写 (none)]\n</template>\n\n规则：\n- 每个小节都要保留，即使为空\n- 用简洁的要点，不要用段落\n- 保留准确的文件路径、符号、命令、错误信息、URL 和标识符\n- 不要提及你在总结、压缩或合并上下文\n- 使用与对话相同的语言",
   "builtInPromptMarketTitle": "助手市场",
+  "assistantAddTitle": "添加助手",
+  "assistantBuiltInTab": "内置助手",
+  "assistantImportTab": "导入助手",
+  "assistantBuiltInHint": "浏览可直接使用的内置助手，点击条目可预览后再添加。",
+  "assistantImportHint": "连接远程助手目录，或通过助手文件 URL 导入。",
+  "assistantImportAction": "连接目录或导入文件",
   "builtInPromptClose": "关闭",
   "builtInPromptImportHint": "选择后将添加为普通助手，之后可自由编辑",
   "builtInPromptView": "查看提示词",
@@ -127,7 +133,7 @@
   "ocrTemplateTableContent": "请按页面的自然阅读顺序转录所有可见文字。遇到表格时完整保留表头、行列关系及空单元格，并以 Markdown 表格输出；其他内容按普通文本保留。只返回转录结果，不添加说明或推断。",
   "ocrTemplateLatexLabel": "LaTeX 模板",
   "ocrTemplateLatexContent": "请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 $...$，独立公式使用 $$...$$。只返回转录结果，不添加说明或推断。",
-  "ocrDefaultImagesOnly": "默认（仅发送图片）",
+  "ocrDefaultImagesOnly": "默认（不添加自定义指令；仍使用默认 OCR 提示）",
   "ocrDefaultSystemPrompt": "请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。",
   "ocrSavedInstructionSnapshot": "已保存的指令快照",
   "ocrPageTitle": "文字识别",
@@ -148,7 +154,7 @@
   "ocrSelectModel": "请选择模型",
   "ocrInstructionLabel": "指令",
   "ocrManageInstructions": "管理识别指令",
-  "ocrInstructionManageGuidance": "这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。",
+  "ocrInstructionManageGuidance": "这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。",
   "ocrInstructionManageEmpty": "暂无指令",
   "ocrInstructionEditTooltip": "编辑指令",
   "ocrInstructionDeleteTooltip": "删除指令",
@@ -436,6 +442,7 @@
   "unifiedTaskListTabStopped": "已停止",
   "unifiedTaskListConfirmClear": "确认清除",
   "unifiedTaskListConfirmClearFailedMessage": "确定要清除所有失败任务吗？",
+  "unifiedTaskListConfirmClearCompletedMessage": "确定要清除所有已完成任务吗？此操作不可撤销。",
   "unifiedTaskListConfirmClearAllMessage": "确定要清除所有任务吗？此操作不可撤销。",
   "unifiedTaskListCancel": "取消",
   "unifiedTaskListConfirm": "确定",
@@ -775,6 +782,15 @@
   "chatErrorDetailResponseHeaders": "响应标头",
   "chatErrorDetailResponseBody": "响应正文",
   "chatErrorDetailEmpty": "暂无详细信息",
+  "chatErrorDetailOmittedContentMarker": "[中间内容已省略，共 {count} 字]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6060,6 +6076,7 @@
   "appLogWillBeCreated": "应用运行后将自动生成日志",
   "appLogExport": "导出",
   "appLogDelete": "删除",
+  "appLogDeleteUnconfirmed": "无法确认删除结果。",
   "appLogConfirmDeleteTitle": "确认删除",
   "appLogConfirmDeleteMessage": "确定要删除日志文件 \"{fileName}\" 吗？",
   "@appLogConfirmDeleteMessage": {

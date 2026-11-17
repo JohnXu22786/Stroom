@@ -33,6 +33,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
 
       final migratedConfigs = <ProviderConfigItem>[];
+      final migratedConfigIdentities = <String>{};
       for (final oldItem in oldList) {
         // 兜底：安全过滤 oldItem['models']。
         // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
@@ -44,7 +45,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             : <Map<String, dynamic>>[];
 
         final models = oldModels.map((m) {
-          final typeConfig = <String, dynamic>{};
+          final typeConfig = m['typeConfig'] is Map
+              ? Map<String, dynamic>.from(m['typeConfig'] as Map)
+              : <String, dynamic>{};
           // 与 startup 迁移副本保持一致：迁移 per-model 的
           // context/maxTokens（旧数据把压缩阈值挂在 model 上，
           // 不迁移则老用户的自动压缩静默失效）。
@@ -65,16 +68,18 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           );
         }).toList();
 
-        migratedConfigs.add(
-          ProviderConfigItem(
-            providerName: oldItem['providerName'] is String
-                ? oldItem['providerName']
-                : '',
-            host: oldItem['host'] is String ? oldItem['host'] : '',
-            key: oldItem['key'] is String ? oldItem['key'] : '',
-            models: models,
-          ),
+        final migratedConfig = ProviderConfigItem(
+          providerName:
+              oldItem['providerName'] is String ? oldItem['providerName'] : '',
+          host: oldItem['host'] is String ? oldItem['host'] : '',
+          key: oldItem['key'] is String ? oldItem['key'] : '',
+          models: models,
         );
+        if (migratedConfigIdentities.add(
+          _legacyConfigIdentity(migratedConfig),
+        )) {
+          migratedConfigs.add(migratedConfig);
+        }
       }
 
       if (migratedConfigs.isEmpty) return;
@@ -86,6 +91,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       } catch (_) {}
 
       List<Map<String, dynamic>> existingEntries = [];
+      var skippedCorruptEntry = false;
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
           final decoded = jsonDecode(existingJson);
@@ -98,6 +104,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             // 兜底：使用 whereType 安全过滤非 Map 条目
             existingEntries =
                 decoded.whereType<Map<String, dynamic>>().toList();
+            skippedCorruptEntry = existingEntries.length != decoded.length;
           }
         } catch (_) {
           // 现有数据损坏，忽略并用空列表重新开始
@@ -108,11 +115,23 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         }
       }
 
-      // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry = existingEntries.any(
-        (e) => e['type'] == 'llm' && e['id'] != 'builtin_llm',
-      );
-      if (!hasLlmEntry) {
+      // 只有可正常解析的自定义 LLM 条目才算已迁移；损坏条目不能阻止
+      // 从 chat_configs 恢复仍可用的旧设置。
+      final usableLlmEntryIndex = existingEntries.indexWhere((entry) {
+        if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') {
+          return false;
+        }
+        try {
+          final parsed = ProviderEntry.fromMap(entry);
+          if (parsed.configs.isEmpty) return false;
+          jsonEncode(parsed.toMap());
+          return true;
+        } catch (_) {
+          return false;
+        }
+      });
+      var legacyConfigsPersisted = usableLlmEntryIndex >= 0;
+      if (usableLlmEntryIndex < 0) {
         existingEntries.add({
           'id': 'migrated_llm',
           'type': 'llm',
@@ -120,10 +139,66 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           'configs': migratedConfigs.map((c) => c.toMap()).toList(),
         });
 
-        await prefs.setString('provider_entries', jsonEncode(existingEntries));
+        legacyConfigsPersisted = await prefs.setString(
+          'provider_entries',
+          jsonEncode(existingEntries),
+        );
+      } else {
+        final existingEntry = existingEntries[usableLlmEntryIndex];
+        final parsedEntry = ProviderEntry.fromMap(existingEntry);
+        final rawConfigs = existingEntry['configs'];
+        final representedConfigs = <String>{};
+        for (var i = 0; i < parsedEntry.configs.length; i++) {
+          final rawConfig = rawConfigs is List &&
+                  i < rawConfigs.length &&
+                  rawConfigs[i] is Map<String, dynamic>
+              ? rawConfigs[i] as Map<String, dynamic>
+              : rawConfigs is List
+                  ? null
+                  : existingEntry;
+          representedConfigs.add(
+            _legacyConfigIdentity(
+              parsedEntry.configs[i],
+              storedConfig: rawConfig,
+              legacyFormat: rawConfigs is! List,
+            ),
+          );
+        }
+        final unrepresentedConfigs = <ProviderConfigItem>[];
+        for (final config in migratedConfigs) {
+          if (representedConfigs.add(_legacyConfigIdentity(config))) {
+            unrepresentedConfigs.add(config);
+          }
+        }
+
+        if (unrepresentedConfigs.isNotEmpty) {
+          final configs = rawConfigs is List
+              ? rawConfigs
+              : parsedEntry.configs
+                  .map((config) =>
+                      _legacyProviderEntryConfig(existingEntry, config).toMap())
+                  .toList();
+          configs.addAll(
+            unrepresentedConfigs.map<Map<String, dynamic>>(
+              (config) => config.toMap(),
+            ),
+          );
+          existingEntry['configs'] = configs;
+          if (skippedCorruptEntry && existingJson != null) {
+            final backedUp =
+                await _backupCorruptProviderEntries(prefs, existingJson);
+            if (!backedUp) return;
+          }
+          legacyConfigsPersisted = await prefs.setString(
+            'provider_entries',
+            jsonEncode(existingEntries),
+          );
+        }
       }
 
-      // 删除旧数据，防止重复迁移
+      // 只有目标已存在或写入成功后才删除旧数据，避免偏好存储写入失败时
+      // 丢失唯一一份可恢复的供应商配置。
+      if (!legacyConfigsPersisted) return;
       await prefs.remove('chat_configs');
       await prefs.remove('chat_selected_config_id');
       debugPrint(
@@ -132,6 +207,81 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     } catch (e) {
       debugPrint('Failed to migrate old chat configs: $e');
     }
+  }
+
+  String _legacyConfigIdentity(
+    ProviderConfigItem config, {
+    Map<String, dynamic>? storedConfig,
+    bool legacyFormat = false,
+  }) {
+    final storedModels = storedConfig?['models'];
+    return jsonEncode([
+      config.providerName,
+      config.host,
+      config.key,
+      config.models.asMap().entries.map((entry) {
+        final storedModel =
+            storedModels is List && entry.key < storedModels.length
+                ? storedModels[entry.key]
+                : null;
+        final supportStream = storedModel is Map<String, dynamic> &&
+                storedModel['supportStream'] is bool
+            ? storedModel['supportStream'] as bool
+            : legacyFormat
+                ? true
+                : entry.value.supportStream;
+        final typeConfig = Map<String, dynamic>.from(entry.value.typeConfig);
+        if (storedModel is Map<String, dynamic>) {
+          final temperature = storedModel['temperature'];
+          if (temperature != null) typeConfig['temperature'] = temperature;
+          final context = storedModel['maxTokens'] ?? storedModel['context'];
+          if (context != null) typeConfig['context'] = context;
+        }
+        return [
+          entry.value.modelId,
+          supportStream,
+          _canonicalLegacyIdentityValue(typeConfig),
+        ];
+      }).toList(),
+    ]);
+  }
+
+  ProviderConfigItem _legacyProviderEntryConfig(
+    Map<String, dynamic> legacyEntry,
+    ProviderConfigItem parsedConfig,
+  ) {
+    final config = parsedConfig.copy();
+    final rawModels = legacyEntry['models'];
+    if (rawModels is! List) return config;
+
+    for (var i = 0; i < config.models.length && i < rawModels.length; i++) {
+      final rawModel = rawModels[i];
+      if (rawModel is! Map<String, dynamic>) continue;
+      final model = config.models[i];
+      final typeConfig = Map<String, dynamic>.from(model.typeConfig);
+      final temperature = rawModel['temperature'];
+      if (temperature != null) typeConfig['temperature'] = temperature;
+      final context = rawModel['maxTokens'] ?? rawModel['context'];
+      if (context != null) typeConfig['context'] = context;
+      model.typeConfig = typeConfig;
+      model.supportStream = rawModel['supportStream'] is bool
+          ? rawModel['supportStream'] as bool
+          : true;
+    }
+    return config;
+  }
+
+  Object? _canonicalLegacyIdentityValue(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.whereType<String>().toList()..sort();
+      return {
+        for (final key in keys) key: _canonicalLegacyIdentityValue(value[key]),
+      };
+    }
+    if (value is List) {
+      return value.map(_canonicalLegacyIdentityValue).toList();
+    }
+    return value;
   }
 
   Future<void> _migrateOldCustomParams(SharedPreferences prefs) async {
@@ -548,12 +698,13 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// _backupCorruptConversationsFile 模式）：结构性损坏或全部条目损坏
   /// 时把原始 JSON 存到独立 key，最多保留 [_maxCorruptProviderBackups] 份，
   /// 避免回退默认后后续 _persist 把含 API key 的原始配置永久覆盖。
-  Future<void> _backupCorruptProviderEntries(
+  Future<bool> _backupCorruptProviderEntries(
       SharedPreferences prefs, String corruptJson) async {
     try {
       final backupKey =
           'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
-      await prefs.setString(backupKey, corruptJson);
+      final saved = await prefs.setString(backupKey, corruptJson);
+      if (!saved) return false;
       // 只保留最近的 N 份
       final keys = prefs.getKeys().toList()
         ..sort()
@@ -563,26 +714,90 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
       debugPrint(
           '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey');
+      return true;
     } catch (e) {
       debugPrint('Failed to back up corrupt provider entries: $e');
+      return false;
     }
   }
 
-  Future<void> _persist({bool rethrowOnFailure = false}) async {
+  Future<void> _persist({
+    bool rethrowOnFailure = false,
+    bool persistMcpGroups = true,
+    ProviderEntriesState? stateToPersist,
+  }) async {
+    SharedPreferences? prefs;
+    String? previousEntries;
+    String? previousGroups;
+    var attemptedEntriesWrite = false;
+    var attemptedGroupsWrite = false;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
+      prefs = await SharedPreferences.getInstance();
+      if (rethrowOnFailure) {
+        previousEntries = prefs.getString('provider_entries');
+        if (persistMcpGroups) {
+          previousGroups = prefs.getString('mcp_provider_groups');
+        }
+      }
+      final persistedState = stateToPersist ?? state;
+      final json =
+          jsonEncode(persistedState.entries.map((e) => e.toMap()).toList());
+      attemptedEntriesWrite = true;
       final entriesSaved = await prefs.setString('provider_entries', json);
-      final groupsSaved = await prefs.setString(
-        'mcp_provider_groups',
-        jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList()),
-      );
-      if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
+      if (rethrowOnFailure && !entriesSaved) {
         throw StateError('Failed to persist provider configuration.');
+      }
+      if (persistMcpGroups) {
+        attemptedGroupsWrite = true;
+        final groupsSaved = await prefs.setString(
+          'mcp_provider_groups',
+          jsonEncode(
+            persistedState.mcpGroups.map((group) => group.toMap()).toList(),
+          ),
+        );
+        if (rethrowOnFailure && !groupsSaved) {
+          throw StateError('Failed to persist provider configuration.');
+        }
       }
     } catch (e) {
       debugPrint('Failed to persist provider entries: $e');
-      if (rethrowOnFailure) rethrow;
+      if (rethrowOnFailure) {
+        var rollbackFailed = false;
+        if (prefs != null) {
+          if (attemptedEntriesWrite) {
+            try {
+              final restored = previousEntries == null
+                  ? await prefs.remove('provider_entries')
+                  : await prefs.setString('provider_entries', previousEntries);
+              if (!restored) {
+                rollbackFailed = true;
+                debugPrint('Failed to roll back provider entries.');
+              }
+            } catch (rollbackError) {
+              rollbackFailed = true;
+              debugPrint(
+                  'Failed to roll back provider entries: $rollbackError');
+            }
+          }
+          if (attemptedGroupsWrite) {
+            try {
+              final restored = previousGroups == null
+                  ? await prefs.remove('mcp_provider_groups')
+                  : await prefs.setString(
+                      'mcp_provider_groups', previousGroups);
+              if (!restored) {
+                rollbackFailed = true;
+                debugPrint('Failed to roll back MCP groups.');
+              }
+            } catch (rollbackError) {
+              rollbackFailed = true;
+              debugPrint('Failed to roll back MCP groups: $rollbackError');
+            }
+          }
+        }
+        if (rollbackFailed) throw const ProviderEntriesRollbackException();
+        rethrow;
+      }
     }
   }
 }

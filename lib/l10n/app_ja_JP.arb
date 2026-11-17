@@ -54,6 +54,12 @@
   "builtInSystemCompactionDescription": "長い会話を構造化されたアンカー付きの要約に凝縮し、自由なコンテキスト スペースを確保します。",
   "builtInSystemCompactionPrompt": "あなたはアンカーされたコンテキストの要約アシスタントです。長い会話を構造化された要約に凝縮します。\n\n提供された会話履歴のみを要約します。最近のメッセージはそのまま保存される場合があるため、依然として重要な古いコンテキストに注目してください。\n\nプロンプトに <previous-summary> ブロックが含まれている場合は、それを現在のアンカーされた概要として扱います。つまり、依然として真実である内容を保持し、古い内容を削除し、新しい事実を統合します。\n\nこの構造に正確に従ってください。セクションの順序を維持し、空であってもすべてのセクションを含めます。\n<テンプレート>\n## 目的\n- [ユーザーの目標を 1 ～ 2 文で説明]\n\n## 重要な詳細\n- [制約/好み、決定と理由、重要な事実/仮定、続行に必要な正確な背景。空の場合は(なし)を書き込みます]\n\n## 作業状態\n### 完了\n- [完了した作業、確認された事実、または行われた変更。空の場合は(なし)を書き込みます]\n\n### アクティブ\n- [現在の作業、一部変更、または調査;空の場合は(なし)を書き込みます]\n\n### ブロックされました\n- [ブロッカー、失敗したコマンド、または未知のもの。空の場合は(なし)を書き込みます]\n\n## 次の動き\n1. [次の特定のアクション、または (なし)]\n2. [既知のフォローアップアクション、または (なし)]\n\n## 関連ファイル\n- [ファイルまたはディレクトリのパスとそれが重要な理由;空の場合は(なし)を書き込みます]\n</テンプレート>\n\nルール:\n- 空の場合でも、すべてのセクションを含めます。\n- 段落ではなく、簡潔な箇条書きを使用します。\n- 正確なファイル パス、シンボル、コマンド、エラー メッセージ、URL、識別子を保存します。\n- コンテキストを要約、圧縮、または結合していることには触れないでください。\n- 会話と同じ言語を使用します。",
   "builtInPromptMarketTitle": "アシスタントマーケット",
+  "assistantAddTitle": "アシスタントを追加",
+  "assistantBuiltInTab": "内蔵",
+  "assistantImportTab": "インポート",
+  "assistantBuiltInHint": "すぐに使えるアシスタントを閲覧し、追加する前にプレビューできます。",
+  "assistantImportHint": "リモートカタログに接続するか、アシスタントファイルの URL から読み込みます。",
+  "assistantImportAction": "カタログに接続またはファイルを読み込む",
   "builtInPromptClose": "閉じる",
   "builtInPromptImportHint": "インポートされたプロンプトは、自由に編集できる通常のアシスタントになります。",
   "builtInPromptView": "プロンプトを表示",
@@ -127,7 +133,7 @@
   "ocrTemplateTableContent": "表示されているすべてのテキストをページの自然な読み順で書き写します。テーブルの場合、ヘッダー、行と列の関係、空のセルを保持し、Markdown テーブルとして出力します。他のコンテンツは通常のテキストとして保持します。転写のみを返します。説明や推論を追加しないでください。",
   "ocrTemplateLatexLabel": "ラテックス",
   "ocrTemplateLatexContent": "表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には $...$ を使用し、表示式には $$...$$ を使用します。転写のみを返します。説明や推論を追加しないでください。",
-  "ocrDefaultImagesOnly": "デフォルト（画像のみ送信）",
+  "ocrDefaultImagesOnly": "デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）",
   "ocrDefaultSystemPrompt": "元の書式とレイアウトを維持したまま、画像からすべてのテキストを抽出します。抽出されたテキストのみを返します。何も説明を加えないでください。",
   "ocrSavedInstructionSnapshot": "保存された命令のスナップショット",
   "ocrPageTitle": "画像テキスト認識",
@@ -148,7 +154,7 @@
   "ocrSelectModel": "モデルを選択してください",
   "ocrInstructionLabel": "命令",
   "ocrManageInstructions": "認識指示の管理",
-  "ocrInstructionManageGuidance": "これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。",
+  "ocrInstructionManageGuidance": "これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。",
   "ocrInstructionManageEmpty": "まだ指示がありません",
   "ocrInstructionEditTooltip": "編集命令",
   "ocrInstructionDeleteTooltip": "削除命令",
@@ -424,6 +430,7 @@
   "unifiedTaskListTabStopped": "停止しました",
   "unifiedTaskListConfirmClear": "クリアを確認する",
   "unifiedTaskListConfirmClearFailedMessage": "失敗したタスクをすべてクリアしてもよろしいですか?",
+  "unifiedTaskListConfirmClearCompletedMessage": "完了したタスクをすべてクリアしますか？この操作は取り消せません。",
   "unifiedTaskListConfirmClearAllMessage": "すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。",
   "unifiedTaskListCancel": "キャンセル",
   "unifiedTaskListConfirm": "確認する",
@@ -580,6 +587,15 @@
   "chatErrorDetailResponseHeaders": "応答ヘッダー",
   "chatErrorDetailResponseBody": "応答本文",
   "chatErrorDetailEmpty": "詳細なデータはありません",
+  "chatErrorDetailOmittedContentMarker": "[中間を{count}文字省略]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "閉じる",
   "chatPreviewClose": "プレビューを閉じる",
   "actionBack": "戻る",
@@ -2886,6 +2902,7 @@
   "appLogWillBeCreated": "アプリの実行中にログが生成される",
   "appLogExport": "輸出",
   "appLogDelete": "消去",
+  "appLogDeleteUnconfirmed": "削除を確認できませんでした。",
   "appLogConfirmDeleteTitle": "削除の確認",
   "appLogConfirmDeleteMessage": "ログファイル「{fileName}」を削除しますか?",
   "appLogCancel": "キャンセル",

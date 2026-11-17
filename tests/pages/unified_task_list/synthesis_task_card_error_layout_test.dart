@@ -73,6 +73,20 @@ void main() {
     expect(metadata.height, lessThan(48));
   });
 
+  testWidgets('phone wraps the task title without hiding failed task actions', (
+    tester,
+  ) async {
+    await _pumpFailedCard(tester, 390);
+    expect(tester.takeException(), isNull);
+
+    final title = find.text('Long meeting notes recording');
+    expect(tester.getSize(title).height, greaterThan(24));
+    final retry = tester.getRect(find.byIcon(Icons.refresh));
+    final more = tester.getRect(find.byIcon(Icons.more_vert));
+    expect(retry.right, lessThanOrEqualTo(390));
+    expect(more.right, lessThanOrEqualTo(390));
+  });
+
   testWidgets('phone gives the error summary its own line above Details', (
     tester,
   ) async {

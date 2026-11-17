@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Result from the video picker containing both the record and its data bytes.
 class VideoPickerResult {
@@ -55,9 +56,13 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
       },
       subtitleBuilder: (record) => Row(
         children: [
-          Text(
-            record.format.toUpperCase(),
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          Flexible(
+            child: ConstrainedText(
+              record.format.toUpperCase(),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           const SizedBox(width: 6),
           Container(
@@ -69,9 +74,13 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            _formatSize(record.size),
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          Flexible(
+            child: ConstrainedText(
+              _formatSize(record.size),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (record.duration > 0) ...[
             const SizedBox(width: 6),
@@ -84,9 +93,13 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              _formatDuration(context, record.duration),
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            Flexible(
+              child: ConstrainedText(
+                _formatDuration(context, record.duration),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ],

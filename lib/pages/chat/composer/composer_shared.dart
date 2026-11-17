@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 // ═══════════════════════════════════════════════════════════════
 // Character-based truncation helpers
 // ═══════════════════════════════════════════════════════════════
@@ -84,9 +86,11 @@ class SettingsChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 16,
-                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color),
+            Icon(
+              icon,
+              size: 16,
+              color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -126,10 +130,7 @@ class ChipBadge extends StatelessWidget {
       width: 14,
       height: 14,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       child: FittedBox(
         fit: BoxFit.scaleDown,
         child: Text(
@@ -207,11 +208,13 @@ class ModelNameChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 16,
-                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color),
+            Icon(
+              Icons.smart_toy_outlined,
+              size: 16,
+              color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color,
+            ),
             const SizedBox(width: 4),
-            Text(
+            ConstrainedText(
               displayText,
               style: style,
               maxLines: 1,

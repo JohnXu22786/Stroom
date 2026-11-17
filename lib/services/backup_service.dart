@@ -41,6 +41,8 @@ import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
 import '../task_flow/models/flow_payload.dart' show FlowPayload;
+import '../task_flow/services/flow_temporary_artifact_storage.dart'
+    show FlowTemporaryArtifactStorage;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -72,6 +74,14 @@ class DataManagementPreflightException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class _RestoreTemporaryArtifactCleanupException extends StateError {
+  _RestoreTemporaryArtifactCleanupException()
+      : super(
+          'Restore completed, but some replaced TaskFlow temporary artifacts '
+          'could not be removed.',
+        );
 }
 
 /// 恢复中途（已删除选中类别的现有数据之后）发现归档条目损坏时抛出。
@@ -355,6 +365,69 @@ class BackupService {
         stackTrace,
       );
       rethrow;
+    }
+  }
+
+  static bool _isSelectedWebStoreKey(
+    String key,
+    BackupSelection selection,
+  ) {
+    final rootKey = key.startsWith('/') ? key.substring(1) : key;
+    if (selection.tasks &&
+        const {'task_list_last_read.json', 'app_launches.json'}
+            .contains(rootKey)) {
+      return true;
+    }
+    if (selection.ankiData &&
+        (rootKey == 'collection.anki2' ||
+            (selection.includeMediaFiles &&
+                rootKey.startsWith('collection.media/')))) {
+      return true;
+    }
+    if (selection.browserCookies && rootKey == 'browser_cookies.json') {
+      return true;
+    }
+    if ((selection.chatRecordsAndAttachments || selection.tasks) &&
+        selection.includeMediaFiles &&
+        (key.startsWith('attachments/') || key.startsWith('temp_edited/'))) {
+      return true;
+    }
+    for (final dir in _restoreKnownDirs) {
+      if (key.startsWith('$dir/')) {
+        if (dir == 'attachments' &&
+            selection.tasks &&
+            selection.includeMediaFiles) {
+          return true;
+        }
+        return _shouldRestoreDir(dir, selection);
+      }
+    }
+    return false;
+  }
+
+  static Future<Map<String, Uint8List>> _snapshotSelectedWebStoreFiles(
+    BackupSelection selection,
+  ) async {
+    final snapshot = <String, Uint8List>{};
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (!_isSelectedWebStoreKey(key, selection)) continue;
+      final bytes = await WebFileStore.read(key);
+      if (bytes != null) snapshot[key] = bytes;
+    }
+    return snapshot;
+  }
+
+  static Future<void> _restoreSelectedWebStoreFiles(
+    BackupSelection selection,
+    Map<String, Uint8List> snapshot,
+  ) async {
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (_isSelectedWebStoreKey(key, selection)) {
+        await WebFileStore.delete(key);
+      }
+    }
+    for (final entry in snapshot.entries) {
+      await WebFileStore.write(entry.key, entry.value);
     }
   }
 
@@ -2243,6 +2316,8 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
+    bool skipRollbackSnapshot = false,
+    bool skipAnkiMigrationMarkerInvalidation = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2296,6 +2371,12 @@ class BackupService {
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
     );
+    final deferredTaskFlowExecutionIds =
+        await _taskFlowExecutionIdsToCleanupAfterRestore(
+      restoreSelection,
+      metadata.taskFilesToReplace,
+      skipRollbackSnapshot: skipRollbackSnapshot,
+    );
     await _validateAttachmentRestoreTargets(
       restoreSelection,
       archive.files.map((file) => file.name),
@@ -2323,74 +2404,142 @@ class BackupService {
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
-    // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
-    // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
-    // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
-    // 与清除功能的行为一致。
-    await _prepareSelectedFilesForRestore(
-      restoreSelection,
-      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
-      taskFilesToReplace: metadata.taskFilesToReplace,
-      completeFileInventories: metadata.completeFileInventories,
-    );
-
-    // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
-    debugPrint('[BackupService] _restoreFromBytes: restoring database');
-    await _restoreRecordsAndPrefs(metadata, restoreSelection);
-    onProgress?.call(0.55);
-    await _yieldToEventLoop();
-
-    // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
-    // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
-    // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
-    debugPrint(
-      '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
-    );
-    var restoreIndex = 0;
+    // Resolve every archive entry to its destination and retain its bytes
+    // before clearing selected live data.
+    final stagedEntries =
+        <({String subDir, String fileName, Uint8List bytes})>[];
     for (final entry in fileMap.entries) {
-      final handled = await _restoreArchiveEntry(entry.key, restoreSelection, (
-        subDir,
-        fileName,
-      ) async {
-        final builder = BytesBuilder(copy: false);
-        builder.add(entry.value);
-        await writeBackupFile(subDir, fileName, builder.takeBytes());
-      });
-      if (handled) {
-        restoreIndex++;
-        // 每处理 20 个文件让出事件循环
-        if (restoreIndex % 20 == 0) await _yieldToEventLoop();
-      }
-    }
-    await _restorePortableTaskPaths(
-      restoreSelection,
-      taskFilesToRestore: metadata.taskFilesToReplace,
-    );
-
-    // 数据迁移：确保恢复后的数据格式是最新的
-    // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
-    // 需要迁移到当前数据格式才能正常使用。
-    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-    final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-    final deferVersionCommit =
-        !skipPostRestoreMigration && !_isBackupFlutterTest;
-    final restoredPartVersions =
-        await DataMigrationService.mergeRestoredPartVersions(
-      backupVersions: metadata.dataPartVersions,
-      restoredParts: restoredPartIds,
-      deferCommit: deferVersionCommit,
-    );
-    if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
-      await DataMigrationService.migrateDataFormatIfNeeded(
-        onlyParts: restoredPartIds,
-        restoredPartVersions: deferVersionCommit ? restoredPartVersions : null,
-        validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+      await _restoreArchiveEntry(
+        entry.key,
+        restoreSelection,
+        (subDir, fileName) async {
+          stagedEntries.add((
+            subDir: subDir,
+            fileName: fileName,
+            bytes: entry.value,
+          ));
+        },
+        deferAnkiMigrationMarkerInvalidation: true,
       );
     }
-    await _restoreBrowserCookiesAfterDataRestore(
-      restoreSelection,
-      metadata.browserCookiesData,
-    );
+
+    final rollbackBytes = skipRollbackSnapshot
+        ? null
+        : await _buildBackupBytes(selection: restoreSelection);
+    final webStoreSnapshot =
+        skipRollbackSnapshot || !(kIsWeb || WebFileStore.isTestMode)
+            ? null
+            : await _snapshotSelectedWebStoreFiles(restoreSelection);
+    try {
+      // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
+      // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
+      await _prepareSelectedFilesForRestore(
+        restoreSelection,
+        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+        taskFilesToReplace: metadata.taskFilesToReplace,
+        completeFileInventories: metadata.completeFileInventories,
+        deferAnkiMigrationMarkerInvalidation: true,
+      );
+
+      // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+      debugPrint('[BackupService] _restoreFromBytes: restoring database');
+      await _restoreRecordsAndPrefs(metadata, restoreSelection);
+      onProgress?.call(0.55);
+      await _yieldToEventLoop();
+
+      // Restore selected binary files and task files from the staged entries.
+      debugPrint(
+        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
+      );
+      for (var restoreIndex = 0;
+          restoreIndex < stagedEntries.length;
+          restoreIndex++) {
+        final entry = stagedEntries[restoreIndex];
+        beforeRestoreBinaryPublishForTesting?.call(restoreIndex);
+        await writeBackupFile(entry.subDir, entry.fileName, entry.bytes);
+        if ((restoreIndex + 1) % 20 == 0) await _yieldToEventLoop();
+      }
+      await _restorePortableTaskPaths(
+        restoreSelection,
+        taskFilesToRestore: metadata.taskFilesToReplace,
+      );
+
+      // 数据迁移：确保恢复后的数据格式是最新的
+      final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+      final deferVersionCommit =
+          !skipPostRestoreMigration && !_isBackupFlutterTest;
+      final restoredPartVersions =
+          await DataMigrationService.mergeRestoredPartVersions(
+        backupVersions: metadata.dataPartVersions,
+        restoredParts: restoredPartIds,
+        deferCommit: deferVersionCommit,
+      );
+      if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+        await DataMigrationService.migrateDataFormatIfNeeded(
+          onlyParts: restoredPartIds,
+          restoredPartVersions:
+              deferVersionCommit ? restoredPartVersions : null,
+          validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+        );
+      }
+      if (restoreSelection.ankiData && !skipAnkiMigrationMarkerInvalidation) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
+      await _restoreBrowserCookiesAfterDataRestore(
+        restoreSelection,
+        metadata.browserCookiesData,
+      );
+    } catch (restoreError, restoreStackTrace) {
+      if (rollbackBytes != null) {
+        final publishHook = beforeRestoreBinaryPublishForTesting;
+        beforeRestoreBinaryPublishForTesting = null;
+        Object? rollbackError;
+        StackTrace? rollbackStackTrace;
+        try {
+          try {
+            await _restoreFromBytes(
+              rollbackBytes,
+              selection: restoreSelection,
+              skipPostRestoreMigration: true,
+              skipMissingCategories: true,
+              skipRollbackSnapshot: true,
+              skipAnkiMigrationMarkerInvalidation: true,
+            );
+          } catch (error, stackTrace) {
+            rollbackError = error;
+            rollbackStackTrace = stackTrace;
+          }
+          if (webStoreSnapshot != null) {
+            try {
+              await _restoreSelectedWebStoreFiles(
+                restoreSelection,
+                webStoreSnapshot,
+              );
+            } catch (error, stackTrace) {
+              rollbackError ??= error;
+              rollbackStackTrace ??= stackTrace;
+            }
+          }
+          if (rollbackError != null) {
+            debugPrint(
+              '[BackupService] byte restore rollback failed: $rollbackError\n'
+              '${rollbackStackTrace ?? StackTrace.current}',
+            );
+            throw StateError(
+              'Restore failed: $restoreError; rollback also failed: $rollbackError.',
+            );
+          }
+        } finally {
+          beforeRestoreBinaryPublishForTesting = publishHook;
+        }
+      }
+      Error.throwWithStackTrace(restoreError, restoreStackTrace);
+    }
+    if (await _deleteTaskFlowTemporaryArtifacts(
+      deferredTaskFlowExecutionIds,
+    )) {
+      throw _RestoreTemporaryArtifactCleanupException();
+    }
     onProgress?.call(1.0);
     return metadata.skippedLabels;
   }
@@ -2419,6 +2568,7 @@ class BackupService {
     bool useStartupPreferenceAdapter = false,
     bool skipAnkiMigrationMarkerInvalidation = false,
     bool skipAnkiSyncIndexClear = false,
+    bool skipRollbackSnapshot = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2469,6 +2619,12 @@ class BackupService {
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
         taskFilesToReplace: metadata.taskFilesToReplace,
+      );
+      final deferredTaskFlowExecutionIds =
+          await _taskFlowExecutionIdsToCleanupAfterRestore(
+        restoreSelection,
+        metadata.taskFilesToReplace,
+        skipRollbackSnapshot: skipRollbackSnapshot,
       );
       await _validateAttachmentRestoreTargets(
         restoreSelection,
@@ -2543,17 +2699,20 @@ class BackupService {
         // Keep a streaming snapshot of the selected pre-restore state. If a
         // staged file cannot be published, the restore can roll back files,
         // manifest records, and selected preferences together.
-        rollbackDirectory = await Directory.systemTemp.createTemp(
-          '.stroom-restore-rollback-$pid-',
-        );
-        final rollbackArchivePath =
-            p.join(rollbackDirectory.path, 'pre-restore.zip');
-        await _createBackup(
-          outputPath: rollbackArchivePath,
-          selection: restoreSelection,
-          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-          skipMissingSelectedFiles: true,
-        );
+        String? rollbackArchivePath;
+        if (!skipRollbackSnapshot) {
+          rollbackDirectory = await Directory.systemTemp.createTemp(
+            '.stroom-restore-rollback-$pid-',
+          );
+          rollbackArchivePath =
+              p.join(rollbackDirectory.path, 'pre-restore.zip');
+          await _createBackup(
+            outputPath: rollbackArchivePath,
+            selection: restoreSelection,
+            useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+            skipMissingSelectedFiles: true,
+          );
+        }
 
         try {
           // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
@@ -2643,35 +2802,46 @@ class BackupService {
               !skipAnkiMigrationMarkerInvalidation) {
             await _invalidateAnkiSyncMetadataMigrationMarker();
           }
+          if (await _deleteTaskFlowTemporaryArtifacts(
+            deferredTaskFlowExecutionIds,
+          )) {
+            throw _RestoreTemporaryArtifactCleanupException();
+          }
           onProgress?.call(1.0);
           return metadata.skippedLabels;
         } catch (restoreError, restoreStackTrace) {
-          final publishHook = beforeRestoreBinaryPublishForTesting;
-          beforeRestoreBinaryPublishForTesting = null;
+          if (skipRollbackSnapshot ||
+              restoreError is _RestoreTemporaryArtifactCleanupException) {
+            Error.throwWithStackTrace(restoreError, restoreStackTrace);
+          }
+          Object? rollbackError;
+          StackTrace? rollbackStackTrace;
           try {
             await _restoreFromZipFile(
-              rollbackArchivePath,
+              rollbackArchivePath!,
               selection: restoreSelection,
               skipPostRestoreMigration: true,
               useStartupPreferenceAdapter: useStartupPreferenceAdapter,
               skipAnkiMigrationMarkerInvalidation: true,
               skipAnkiSyncIndexClear: true,
+              skipRollbackSnapshot: true,
             );
-          } catch (rollbackError, rollbackStackTrace) {
+          } catch (error, stackTrace) {
+            rollbackError = error;
+            rollbackStackTrace = stackTrace;
             retainRollbackSnapshot = true;
             debugPrint(
               '[BackupService] restore rollback failed; snapshot retained at '
-              '${rollbackDirectory.path}: $rollbackError\n'
+              '${rollbackDirectory!.path}: $rollbackError\n'
               '$rollbackStackTrace',
             );
-          } finally {
-            beforeRestoreBinaryPublishForTesting = publishHook;
           }
           if (retainRollbackSnapshot) {
             throw StateError(
-              'Restore failed: $restoreError; rollback also failed. '
+              'Restore failed: $restoreError; rollback also failed: '
+              '$rollbackError.\n$rollbackStackTrace '
               'The recovery archive is retained at '
-              '${p.join(rollbackDirectory.path, 'pre-restore.zip')}.',
+              '${p.join(rollbackDirectory!.path, 'pre-restore.zip')}.',
             );
           }
           Error.throwWithStackTrace(restoreError, restoreStackTrace);
@@ -6081,6 +6251,78 @@ class BackupService {
     }
   }
 
+  /// Reads the execution IDs whose persisted inventory is about to be replaced.
+  /// A null result means the current file could not be parsed safely, so its
+  /// artifact namespaces must be retained.
+  static Future<Set<String>?> _taskFlowExecutionIdsToReplace() async {
+    try {
+      final isWebStore = kIsWeb || WebFileStore.isTestMode;
+      final appDir = isWebStore ? null : await AppStorage.directory;
+      final file = isWebStore
+          ? null
+          : File(p.join(appDir!, 'task_flows', 'executions.json'));
+      if (isWebStore) {
+        if (!await WebFileStore.exists('task_flows/executions.json')) {
+          return <String>{};
+        }
+      } else if (!await file!.exists()) {
+        return <String>{};
+      }
+
+      final data = isWebStore
+          ? await WebFileStore.read('task_flows/executions.json')
+          : await file!.readAsBytes();
+      if (data == null) return null;
+      final decoded = jsonDecode(utf8.decode(data));
+      if (decoded is! List) return null;
+
+      final executionIds = <String>{};
+      for (final value in decoded) {
+        if (value is! Map) return null;
+        final id = value['id'];
+        if (id is String && id.isNotEmpty) executionIds.add(id);
+      }
+      return executionIds;
+    } catch (e) {
+      debugPrint('读取待替换的任务流执行记录失败，保留临时输出: $e');
+      return null;
+    }
+  }
+
+  static Future<Set<String>> _taskFlowExecutionIdsToCleanupAfterRestore(
+    BackupSelection selection,
+    Set<String> taskFilesToReplace, {
+    required bool skipRollbackSnapshot,
+  }) async {
+    if (skipRollbackSnapshot ||
+        selection.includeMediaFiles ||
+        !taskFilesToReplace.contains('task_flows/executions.json')) {
+      return const <String>{};
+    }
+    final executionIds = await _taskFlowExecutionIdsToReplace();
+    if (executionIds == null) {
+      throw const DataManagementPreflightException(
+        '无法安全识别待替换任务流的临时输出，已取消恢复以避免数据丢失。',
+      );
+    }
+    return executionIds;
+  }
+
+  static Future<bool> _deleteTaskFlowTemporaryArtifacts(
+    Iterable<String> executionIds,
+  ) async {
+    var deleteFailed = false;
+    for (final executionId in executionIds) {
+      try {
+        await FlowTemporaryArtifactStorage.deleteExecution(executionId);
+      } catch (e) {
+        debugPrint('删除被替换任务流的临时输出失败: $e');
+        deleteFailed = true;
+      }
+    }
+    return deleteFailed;
+  }
+
   static bool get _isBackupFlutterTest {
     try {
       return Platform.environment['FLUTTER_TEST'] == 'true';
@@ -6461,6 +6703,15 @@ class BackupService {
             'task_state/task_list_last_read.json',
             'task_state/app_launches.json',
           };
+      const executionsFile = 'task_flows/executions.json';
+      final cleanupReplacedExecutionArtifacts =
+          selection.includeMediaFiles && taskFiles.contains(executionsFile);
+      final replacedExecutionIds = cleanupReplacedExecutionArtifacts
+          ? await _taskFlowExecutionIdsToReplace()
+          : const <String>{};
+      if (cleanupReplacedExecutionArtifacts && replacedExecutionIds == null) {
+        deleteFailed = true;
+      }
       if (!selection.chatRecordsAndAttachments &&
           selection.includeMediaFiles &&
           (completeFileInventories == null ||
@@ -6506,9 +6757,18 @@ class BackupService {
           !await _deleteFile('task_flows', 'flows.json')) {
         deleteFailed = true;
       }
-      if (taskFiles.contains('task_flows/executions.json') &&
-          !await _deleteFile('task_flows', 'executions.json')) {
-        deleteFailed = true;
+      if (taskFiles.contains(executionsFile) &&
+          (!cleanupReplacedExecutionArtifacts ||
+              replacedExecutionIds != null)) {
+        if (await _deleteFile('task_flows', 'executions.json')) {
+          if (await _deleteTaskFlowTemporaryArtifacts(
+            replacedExecutionIds ?? const <String>{},
+          )) {
+            deleteFailed = true;
+          }
+        } else {
+          deleteFailed = true;
+        }
       }
       if (taskFiles.contains('task_state/task_list_last_read.json') &&
           !await _deleteFile('', 'task_list_last_read.json')) {

@@ -145,6 +145,11 @@ class OcrRequestTooLargeException implements Exception {
 }
 
 class OcrService {
+  static final RegExp _recognizableCredentialValue = RegExp(
+    r'(?:Bearer\s+\S+|sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9_-]{8,}|gsk_[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|AIza[a-z0-9_-]{20,})',
+    caseSensitive: false,
+  );
+
   final OcrConfig config;
   final Dio _dio;
   final bool _usesInjectedDio;
@@ -219,6 +224,93 @@ class OcrService {
       }
     }
     return values.toList(growable: false);
+  }
+
+  static List<String> _recognizableCredentialValues(dynamic value) {
+    final values = <String>{};
+    void collect(dynamic current) {
+      if (current is String) {
+        for (final match in _recognizableCredentialValue.allMatches(current)) {
+          values.add(match.group(0)!);
+        }
+      } else if (current is Map) {
+        for (final entry in current.entries) {
+          collect(entry.key);
+          collect(entry.value);
+        }
+      } else if (current is Iterable) {
+        for (final item in current) {
+          collect(item);
+        }
+      }
+    }
+
+    collect(value);
+    return values.toList(growable: false);
+  }
+
+  static String _redactCredentialValues(
+    String value,
+    Iterable<String> credentialValues,
+  ) {
+    var safeValue = value;
+    for (final credential in credentialValues.toList()
+      ..sort((a, b) => b.length.compareTo(a.length))) {
+      if (credential.isEmpty) continue;
+      final encodedCredential = credential.contains('%')
+          ? RegExp(RegExp.escape(credential), caseSensitive: false)
+          : null;
+      safeValue = encodedCredential == null
+          ? safeValue.replaceAll(credential, '[REDACTED]')
+          : safeValue.replaceAll(encodedCredential, '[REDACTED]');
+    }
+    return safeValue;
+  }
+
+  static dynamic _redactResponseDiagnosticValue(
+    dynamic value,
+    Iterable<String> credentialValues,
+  ) {
+    if (value is String) {
+      return _redactCredentialValues(value, credentialValues).replaceAllMapped(
+        _recognizableCredentialValue,
+        (_) => '[REDACTED]',
+      );
+    }
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          _redactResponseDiagnosticValue(
+            entry.key.toString(),
+            credentialValues,
+          ) as String: _redactResponseDiagnosticValue(
+            entry.value,
+            credentialValues,
+          ),
+      };
+    }
+    if (value is Iterable) {
+      return value
+          .map((item) => _redactResponseDiagnosticValue(item, credentialValues))
+          .toList(growable: false);
+    }
+    return value;
+  }
+
+  static Map<String, List<String>>? _redactResponseDiagnosticHeaders(
+    Map<String, List<String>>? headers,
+    Iterable<String> credentialValues,
+  ) {
+    if (headers == null) return null;
+    return {
+      for (final entry in headers.entries)
+        entry.key: entry.value
+            .map((value) => _redactResponseDiagnosticValue(
+                  value,
+                  credentialValues,
+                ) as String)
+            .toList(growable: false),
+    };
   }
 
   List<String> get _diagnosticRequestCredentialValues => {
@@ -472,7 +564,10 @@ class OcrService {
         requestCredentialValues: requestCredentialValues,
       );
       if (e.type == DioExceptionType.cancel) rethrow;
-      throwWrappedDioException(e);
+      _throwWrappedDioException(
+        e,
+        requestCredentialValues: requestCredentialValues,
+      );
     } finally {
       _finishDiagnosticCapture(stopwatch);
     }
@@ -601,7 +696,10 @@ class OcrService {
         requestCredentialValues: requestCredentialValues,
       );
       if (e.type == DioExceptionType.cancel) rethrow;
-      throwWrappedDioException(e);
+      _throwWrappedDioException(
+        e,
+        requestCredentialValues: requestCredentialValues,
+      );
     } finally {
       _finishDiagnosticCapture(stopwatch);
     }
@@ -730,9 +828,7 @@ class OcrService {
   }) {
     final responseCredentialValues = {
       ...requestCredentialValues,
-      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-        'body': e.requestOptions.data,
-      }),
+      ..._credentialValuesFromRequestOptions(e.requestOptions),
       ..._credentialValuesFromHeaders(e.requestOptions.headers),
       ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
         e.response?.headers.map,
@@ -740,11 +836,21 @@ class OcrService {
       ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
         'body': e.response?.data,
       }),
+      ..._recognizableCredentialValues(e.response?.data),
+      ..._recognizableCredentialValues(e.response?.headers.map),
     }.toList(growable: false);
     if (e.response?.data is Map) {
-      lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+      lastResponseData = _redactResponseDiagnosticValue(
+        e.response!.data,
+        responseCredentialValues,
+      ) as Map<String, dynamic>;
     } else if (e.response?.data is String) {
-      lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
+      lastResponseData = <String, dynamic>{
+        'raw': _redactResponseDiagnosticValue(
+          e.response!.data,
+          responseCredentialValues,
+        ) as String,
+      };
     } else {
       lastResponseData = null;
     }
@@ -753,7 +859,10 @@ class OcrService {
       {'statusCode': e.response?.statusCode},
       excludedValues: [config.apiKey, ...responseCredentialValues],
     )?['statusCode'] as int?;
-    lastResponseHeaders = e.response?.headers.map;
+    lastResponseHeaders = _redactResponseDiagnosticHeaders(
+      e.response?.headers.map,
+      responseCredentialValues,
+    );
     _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
           excludedValues: [config.apiKey, ...responseCredentialValues],
@@ -767,6 +876,106 @@ class OcrService {
       excludedValues: [config.apiKey, ...responseCredentialValues],
     )?['finishReason'] as String?;
     _lastErrorType = e.type.name;
+  }
+
+  Never _throwWrappedDioException(
+    DioException error, {
+    required List<String> requestCredentialValues,
+  }) {
+    final credentials = <String>{
+      config.apiKey,
+      ...requestCredentialValues,
+      ..._credentialValuesFromHeaders(error.requestOptions.headers),
+      ..._credentialValuesFromRequestOptions(error.requestOptions),
+      ..._credentialValuesFromHeaders(_dio.options.headers),
+      ..._credentialValuesFromHeaders(error.response?.headers.map),
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'body': error.response?.data,
+      }),
+      ..._recognizableCredentialValues(error.response?.data),
+      ..._recognizableCredentialValues(error.response?.headers.map),
+    }..removeWhere((credential) => credential.isEmpty);
+
+    throwWrappedDioException(
+      error,
+      messageBuilder: (statusCode, detail) {
+        final safeDetail = _redactCredentialValues(detail, credentials);
+        return statusCode == null
+            ? '请求失败: $safeDetail'
+            : '请求失败 (HTTP $statusCode): $safeDetail';
+      },
+    );
+  }
+
+  List<String> _credentialValuesFromRequestOptions(RequestOptions options) {
+    final uri = options.uri;
+    final url = uri.toString();
+    final urlCredentials =
+        OcrDiagnosticSnapshot.credentialValuesFromUrl(url).toSet();
+    final encodedUrlCredentials = <String>{};
+    // Keep the URI's original escapes too, including noncanonical forms like
+    // `%6f` for an unreserved character.
+    final rawUrl = options.path.startsWith(
+      RegExp(r'https?://', caseSensitive: false),
+    )
+        ? options.path
+        : '${options.baseUrl}${options.path}';
+    final queryStart = rawUrl.indexOf('?');
+    final fragmentStart = rawUrl.indexOf('#', queryStart + 1);
+    final rawQuery = queryStart < 0
+        ? ''
+        : rawUrl.substring(
+            queryStart + 1,
+            fragmentStart < 0 ? rawUrl.length : fragmentStart,
+          );
+    for (final query in {uri.query, rawQuery}) {
+      for (final component in query.split('&')) {
+        final separator = component.indexOf('=');
+        if (separator < 0) continue;
+        final rawValue = component.substring(separator + 1);
+        try {
+          final value = Uri.decodeQueryComponent(rawValue);
+          if (urlCredentials.contains(value)) {
+            encodedUrlCredentials.add(rawValue);
+          }
+        } on FormatException {
+          // Malformed query components are not credential text.
+        }
+      }
+    }
+    final schemeEnd = rawUrl.indexOf('://');
+    if (schemeEnd >= 0) {
+      final authorityStart = schemeEnd + 3;
+      final authorityEnd = rawUrl.indexOf(RegExp(r'[/?#]'), authorityStart);
+      final authority = rawUrl.substring(
+        authorityStart,
+        authorityEnd < 0 ? rawUrl.length : authorityEnd,
+      );
+      final userInfoEnd = authority.lastIndexOf('@');
+      if (userInfoEnd >= 0) {
+        for (final component
+            in authority.substring(0, userInfoEnd).split(':')) {
+          try {
+            final value = Uri.decodeComponent(component);
+            if (urlCredentials.contains(value)) {
+              encodedUrlCredentials.add(component);
+            }
+          } on FormatException {
+            // Malformed user-info components are not credential text.
+          }
+        }
+      }
+    }
+    return <String>{
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'url': url,
+        'body': options.data,
+      }),
+      ...encodedUrlCredentials,
+      for (final credential in urlCredentials)
+        Uri.encodeQueryComponent(credential),
+      for (final credential in urlCredentials) Uri.encodeComponent(credential),
+    }.toList(growable: false);
   }
 
   /// Build the standard OpenAI-compatible request body.

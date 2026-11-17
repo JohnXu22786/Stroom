@@ -54,6 +54,12 @@
   "builtInSystemCompactionDescription": "Condensa conversas longas em um resumo estruturado e ancorado para liberar espaço no contexto.",
   "builtInSystemCompactionPrompt": "Você é um assistente que cria resumos de conversas com contexto ancorado. Condense conversas longas em resumos estruturados.\n\nResuma apenas o histórico de conversa fornecido. As mensagens recentes podem ser preservadas literalmente; portanto, concentre-se no contexto anterior que ainda seja importante.\n\nSe o prompt contiver um bloco <previous-summary>, trate-o como o resumo ancorado atual: mantenha o que ainda for válido, remova o que estiver desatualizado e integre os fatos novos.\n\nSiga exatamente esta estrutura. Mantenha a ordem das seções e inclua todas elas, mesmo que estejam vazias:\n<template>\n## Objetivo\n- [A meta do usuário em uma ou duas frases]\n\n## Detalhes importantes\n- [Restrições/preferências, decisões e motivos, fatos/hipóteses importantes e o contexto preciso necessário para continuar; escreva (nenhum) se estiver vazio]\n\n## Estado do trabalho\n### Concluído\n- [Trabalho concluído, fatos verificados ou alterações feitas; escreva (nenhum) se estiver vazio]\n\n### Em andamento\n- [Trabalho atual, alterações parciais ou investigação; escreva (nenhum) se estiver vazio]\n\n### Bloqueado\n- [Impedimentos, comandos que falharam ou dúvidas; escreva (nenhum) se estiver vazio]\n\n## Próxima ação\n1. [A próxima ação específica ou (nenhuma)]\n2. [Ação de acompanhamento conhecida ou (nenhuma)]\n\n## Arquivos relevantes\n- [Caminho do arquivo ou diretório e por que ele é importante; escreva (nenhum) se estiver vazio]\n</template>\n\nRegras:\n- Inclua todas as seções, mesmo que estejam vazias.\n- Use tópicos concisos, não parágrafos.\n- Preserve os caminhos exatos dos arquivos, símbolos, comandos, mensagens de erro, URLs e identificadores.\n- Não mencione que está resumindo, condensando ou mesclando o contexto.\n- Use o mesmo idioma da conversa.",
   "builtInPromptMarketTitle": "Catálogo de assistentes",
+  "assistantAddTitle": "Adicionar assistente",
+  "assistantBuiltInTab": "Integrados",
+  "assistantImportTab": "Importar",
+  "assistantBuiltInHint": "Explore assistentes prontos para usar e visualize-os antes de adicioná-los.",
+  "assistantImportHint": "Conecte um catálogo remoto ou importe um arquivo de assistente pelo URL.",
+  "assistantImportAction": "Conectar catálogo ou importar arquivo",
   "builtInPromptClose": "Fechar",
   "builtInPromptImportHint": "Os prompts importados se tornam assistentes comuns, que você pode editar livremente.",
   "builtInPromptView": "Ver prompt",
@@ -127,7 +133,7 @@
   "ocrTemplateTableContent": "Transcreva todo o texto visível na página, seguindo a ordem natural de leitura. Nas tabelas, preserve os cabeçalhos, as relações entre linhas e colunas e as células vazias, e formate-as como tabelas Markdown. Mantenha os demais conteúdos como texto comum. Retorne somente a transcrição; não acrescente explicações nem inferências.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "Transcreva todo o texto visível na página, seguindo a ordem natural de leitura. Preserve o texto que não for fórmula e represente as fórmulas matemáticas em LaTeX; use $...$ para fórmulas em linha e $$...$$ para fórmulas em bloco. Retorne somente a transcrição; não acrescente explicações nem inferências.",
-  "ocrDefaultImagesOnly": "Padrão (enviar somente imagens)",
+  "ocrDefaultImagesOnly": "Padrão (sem instrução personalizada; o prompt OCR padrão é usado)",
   "ocrDefaultSystemPrompt": "Extraia todo o texto da imagem, preservando a formatação e o layout originais. Retorne somente o texto extraído; não acrescente explicações.",
   "ocrSavedInstructionSnapshot": "Cópia salva das instruções",
   "ocrPageTitle": "Reconhecimento de texto em imagens",
@@ -148,7 +154,7 @@
   "ocrSelectModel": "Selecionar um modelo",
   "ocrInstructionLabel": "Instrução",
   "ocrManageInstructions": "Gerenciar instruções de reconhecimento",
-  "ocrInstructionManageGuidance": "Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, somente a imagem será enviada.",
+  "ocrInstructionManageGuidance": "Estas instruções se aplicam a todos os modelos de reconhecimento. Se nenhuma for selecionada, nenhuma instrução personalizada será adicionada; o prompt OCR padrão continuará sendo usado.",
   "ocrInstructionManageEmpty": "Ainda não há instruções",
   "ocrInstructionEditTooltip": "Editar instrução",
   "ocrInstructionDeleteTooltip": "Excluir instrução",
@@ -436,6 +442,7 @@
   "unifiedTaskListTabStopped": "Interrompidas",
   "unifiedTaskListConfirmClear": "Confirmar limpeza",
   "unifiedTaskListConfirmClearFailedMessage": "Tem certeza de que deseja limpar todas as tarefas com falha?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Tem certeza de que deseja limpar todas as tarefas concluídas? Esta ação não pode ser desfeita.",
   "unifiedTaskListConfirmClearAllMessage": "Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.",
   "unifiedTaskListCancel": "Cancelar",
   "unifiedTaskListConfirm": "Confirmar",
@@ -775,6 +782,15 @@
   "chatErrorDetailResponseHeaders": "Cabeçalhos da resposta",
   "chatErrorDetailResponseBody": "Corpo da resposta",
   "chatErrorDetailEmpty": "Nenhum dado detalhado disponível",
+  "chatErrorDetailOmittedContentMarker": "[conteúdo do meio omitido, {count} caracteres]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Fechar",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6060,6 +6076,7 @@
   "appLogWillBeCreated": "Os registros são gerados enquanto o app está em execução",
   "appLogExport": "Exportar",
   "appLogDelete": "Excluir",
+  "appLogDeleteUnconfirmed": "Não foi possível confirmar a exclusão.",
   "appLogConfirmDeleteTitle": "Confirmar exclusão",
   "appLogConfirmDeleteMessage": "Excluir o arquivo de registro “{fileName}”?",
   "@appLogConfirmDeleteMessage": {

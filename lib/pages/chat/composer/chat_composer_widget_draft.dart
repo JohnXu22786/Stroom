@@ -1,4 +1,5 @@
 part of 'chat_composer_widget.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -20,7 +21,8 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 产物）也会触发一次保存，把可零等待的载荷落进草稿。
   List<String> _draftAttSignature() => _pendingAttachments
       .map(
-          (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}')
+        (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
+      )
       .toList();
 
   /// 生成待保存的附件草稿快照（深拷贝，与 pending 列表无引用共享）。
@@ -99,6 +101,8 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 预压缩/文件编码就地修改——直接引用会把大体积 base64 写回
   /// 对话状态，撑爆持久化。
   void _restoreDraftAttachments(List<Attachment> attachments) {
+    _pendingAttachmentDraftGeneration++;
+    _pendingAttachmentEditRequests.clear();
     final copies = attachments
         .map((a) => Attachment.fromMap(a.toMap(includeBase64Data: true)))
         .toList();
@@ -151,7 +155,11 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     if (bytes == null || !mounted) return;
     if (att.fileType == 'image') {
       // 重新触发后台预压缩（结果写回 base64Data + 磁盘缓存）
-      await _preCompressPendingImage(att, bytes);
+      await _preCompressPendingImage(
+        att,
+        bytes,
+        conversationId: att.conversationId ?? widget.conversationId,
+      );
       if (!mounted) return;
       setState(() {
         _pendingImageBytes[att.id] = bytes;
@@ -180,6 +188,8 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// attachments when entering edit mode. For image attachments, loads the
   /// bytes from storage so the preview chip can display the thumbnail.
   void _loadEditingAttachments(List<Attachment>? attachments) {
+    _pendingAttachmentDraftGeneration++;
+    _pendingAttachmentEditRequests.clear();
     // 新的编辑会话：无论目标消息有没有附件，都先重置本会话状态——
     // 1) 清空上一会话遗留的 pending 附件：切换编辑目标到无附件消息
     //    时若不清理，陈旧附件芯片仍显示且可移除，其移除会误删仍被
@@ -255,7 +265,12 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       );
       for (final a in removed) {
         if (attachments.any((n) => n.hash == a.hash)) continue;
-        unawaited(_deleteCompressedCacheAfterPreCompress(a));
+        unawaited(
+          _deleteCompressedCacheAfterPreCompress(
+            a,
+            conversationId: _editSessionConversationId,
+          ),
+        );
       }
       _clearPendingAttachments();
       _textController.clear();
@@ -275,11 +290,9 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     final convId = widget.conversationId;
     if (convId != null) {
       _draftTimer?.cancel();
-      ref.read(conversationsProvider.notifier).saveDraft(
-        convId,
-        '',
-        draftAttachments: const [],
-      );
+      ref
+          .read(conversationsProvider.notifier)
+          .saveDraft(convId, '', draftAttachments: const []);
       _lastSavedDraft = '';
       _lastSavedDraftAttSignature = const [];
     }
@@ -293,6 +306,8 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 消息删除时由 _deleteMessage 的 isReferencedElsewhere 检查清理；
   /// 编辑提交后未被引用的孤儿文件由删除整个对话时的附件清理兜底。
   void _clearPendingAttachments() {
+    _pendingAttachmentDraftGeneration++;
+    _pendingAttachmentEditRequests.clear();
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
     // 编辑会话结束（提交或取消）：不再有"待重发时清理"的附件。
@@ -365,8 +380,9 @@ class _FullscreenComposerEditorDialog extends StatefulWidget {
 
 class _FullscreenComposerEditorDialogState
     extends State<_FullscreenComposerEditorDialog> {
-  late final TextEditingController _editingController =
-      TextEditingController(text: widget.initialText);
+  late final TextEditingController _editingController = TextEditingController(
+    text: widget.initialText,
+  );
 
   /// Guards against double-invocation (e.g. X tapped while back key is
   /// pressed during the exit animation, or a rapid double-tap).
@@ -447,7 +463,11 @@ class _FullscreenComposerEditorDialogState
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(
                   icon: const Icon(Icons.send_rounded, size: 18),
-                  label: Text(l10n.actionSend),
+                  label: ConstrainedText(
+                    l10n.actionSend,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   onPressed: _send,
                 ),
               ),

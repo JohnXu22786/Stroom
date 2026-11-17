@@ -193,6 +193,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get builtInPromptMarketTitle => 'アシスタントマーケット';
 
   @override
+  String get assistantAddTitle => 'アシスタントを追加';
+
+  @override
+  String get assistantBuiltInTab => '内蔵';
+
+  @override
+  String get assistantImportTab => 'インポート';
+
+  @override
+  String get assistantBuiltInHint => 'すぐに使えるアシスタントを閲覧し、追加する前にプレビューできます。';
+
+  @override
+  String get assistantImportHint => 'リモートカタログに接続するか、アシスタントファイルの URL から読み込みます。';
+
+  @override
+  String get assistantImportAction => 'カタログに接続またはファイルを読み込む';
+
+  @override
   String get builtInPromptClose => '閉じる';
 
   @override
@@ -452,7 +470,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には \$...\$ を使用し、表示式には \$\$...\$\$ を使用します。転写のみを返します。説明や推論を追加しないでください。';
 
   @override
-  String get ocrDefaultImagesOnly => 'デフォルト（画像のみ送信）';
+  String get ocrDefaultImagesOnly => 'デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -522,7 +540,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。';
+      'これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。';
 
   @override
   String get ocrInstructionManageEmpty => 'まだ指示がありません';
@@ -1494,6 +1512,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '失敗したタスクをすべてクリアしてもよろしいですか?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '完了したタスクをすべてクリアしますか？この操作は取り消せません。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。';
 
@@ -2048,6 +2070,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => '詳細なデータはありません';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中間を$count文字省略]';
+  }
 
   @override
   String get chatAudioPreviewClose => '閉じる';
@@ -3187,12 +3214,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get topicItemPin => 'ピン';
 
   @override
-  @override
   String get topicItemMarkUnread => '未読にする';
 
   @override
   String get topicItemMarkRead => '既読にする';
 
+  @override
   String get topicItemRename => '名前の変更';
 
   @override
@@ -10258,6 +10285,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appLogDelete => '消去';
 
   @override
+  String get appLogDeleteUnconfirmed => '削除を確認できませんでした。';
+
+  @override
   String get appLogConfirmDeleteTitle => '削除の確認';
 
   @override
@@ -11869,6 +11899,24 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get builtInPromptMarketTitle => 'アシスタントマーケット';
 
   @override
+  String get assistantAddTitle => 'アシスタントを追加';
+
+  @override
+  String get assistantBuiltInTab => '内蔵';
+
+  @override
+  String get assistantImportTab => 'インポート';
+
+  @override
+  String get assistantBuiltInHint => 'すぐに使えるアシスタントを閲覧し、追加する前にプレビューできます。';
+
+  @override
+  String get assistantImportHint => 'リモートカタログに接続するか、アシスタントファイルの URL から読み込みます。';
+
+  @override
+  String get assistantImportAction => 'カタログに接続またはファイルを読み込む';
+
+  @override
   String get builtInPromptClose => '閉じる';
 
   @override
@@ -12128,7 +12176,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
       '表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には \$...\$ を使用し、表示式には \$\$...\$\$ を使用します。転写のみを返します。説明や推論を追加しないでください。';
 
   @override
-  String get ocrDefaultImagesOnly => 'デフォルト（画像のみ送信）';
+  String get ocrDefaultImagesOnly => 'デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12198,7 +12246,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。';
+      'これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。';
 
   @override
   String get ocrInstructionManageEmpty => 'まだ指示がありません';
@@ -13170,6 +13218,10 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
       '失敗したタスクをすべてクリアしてもよろしいですか?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '完了したタスクをすべてクリアしますか？この操作は取り消せません。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。';
 
@@ -13724,6 +13776,11 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get chatErrorDetailEmpty => '詳細なデータはありません';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中間を$count文字省略]';
+  }
 
   @override
   String get chatAudioPreviewClose => '閉じる';
@@ -14863,12 +14920,12 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get topicItemPin => 'ピン';
 
   @override
-  @override
   String get topicItemMarkUnread => '未読にする';
 
   @override
   String get topicItemMarkRead => '既読にする';
 
+  @override
   String get topicItemRename => '名前の変更';
 
   @override
@@ -15382,6 +15439,9 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get folderPickerSubfolders => 'サブフォルダー';
+
+  @override
+  String get folderPickerNoFolders => 'フォルダーはありません';
 
   @override
   String get folderPickerExistingFolders => '既存のフォルダー';
@@ -17902,19 +17962,19 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get providerBuiltinBadge => '内蔵';
 
   @override
-  String get providerBuiltinTtsName => 'TTSプロバイダー';
+  String get providerBuiltinTtsName => 'TTS (テキスト読み上げ)';
 
   @override
-  String get providerBuiltinLlmName => 'LLM プロバイダー';
+  String get providerBuiltinLlmName => 'LLM (大規模言語モデル)';
 
   @override
-  String get providerBuiltinOcrName => 'OCRプロバイダー';
+  String get providerBuiltinOcrName => 'OCR (光学文字認識)';
 
   @override
-  String get providerBuiltinAsrName => '音声認識プロバイダー';
+  String get providerBuiltinAsrName => 'STT (音声テキスト変換)';
 
   @override
-  String get providerBuiltinMcpName => 'MCPプロバイダー';
+  String get providerBuiltinMcpName => 'MCP (モデルコンテキストプロトコル)';
 
   @override
   String get providerBuiltinSearchGroupName => '検索';
@@ -21265,6 +21325,11 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCRリクエストのJSONサイズは$encodedBytesバイトで、設定された上限$budgetBytesバイトを超えています。';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR が失敗しました: $details';
   }
@@ -21926,6 +21991,9 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get appLogDelete => '消去';
 
   @override
+  String get appLogDeleteUnconfirmed => '削除を確認できませんでした。';
+
+  @override
   String get appLogConfirmDeleteTitle => '削除の確認';
 
   @override
@@ -22008,6 +22076,99 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get appLogCopyDone => 'すべてのログ内容をコピーしました';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'バックグラウンドタスク';
@@ -23242,4 +23403,16 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get providerMaxUploadSizePositive => '最大アップロードサイズは正の数である必要があります。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '保存された温度が 0～2 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '保存された top-P が 0～1 の範囲外です。保存する前にスライダーを調整するか、この設定をオフにしてください。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      '範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。';
 }

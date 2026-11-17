@@ -6,6 +6,8 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:image/image.dart' as img;
 
+import '../widgets/constrained_text.dart';
+
 /// A quick image editor using [ExtendedImage]'s built-in editor mode.
 ///
 /// Provides crop, rotate, and flip operations. The edited image bytes are
@@ -118,10 +120,12 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
         appBar: AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
-          title: Text(
+          title: ConstrainedText(
             AppLocalizations.of(context)!
                 .imageEditorQuickTitle(widget.fileName),
             style: const TextStyle(fontSize: 16),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -135,9 +139,11 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
             TextButton.icon(
               onPressed: (_isProcessing || _isClosing) ? null : _onSave,
               icon: const Icon(Icons.save, color: Colors.white),
-              label: Text(
+              label: ConstrainedText(
                 AppLocalizations.of(context)!.actionSave,
                 style: TextStyle(color: Colors.white),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

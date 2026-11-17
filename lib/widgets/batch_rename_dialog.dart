@@ -16,6 +16,8 @@ import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/sort_config.dart';
 
+import 'constrained_text.dart';
+
 /// 弹出批量重命名面板（对标「拖把更名器 XTools」）。
 /// 返回用户确认后的 [BatchRenamePlan]；取消或关闭返回 null。
 Future<BatchRenamePlan?> showBatchRenameDialog<T extends FileRecord>({
@@ -351,7 +353,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.batchDlgSavePreset),
+        title: ConstrainedText(
+          strings.batchDlgSavePreset,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -364,14 +370,22 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.batchDlgCancel),
+            child: ConstrainedText(
+              strings.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty)
                 Navigator.pop(ctx, controller.text.trim());
             },
-            child: Text(strings.batchDlgSave),
+            child: ConstrainedText(
+              strings.batchDlgSave,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -383,16 +397,28 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       final replace = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(strings.batchDlgOverwriteTitle),
+          title: ConstrainedText(
+            strings.batchDlgOverwriteTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: Text(strings.batchDlgOverwriteBody(name)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(strings.batchDlgCancel),
+              child: ConstrainedText(
+                strings.batchDlgCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(strings.batchDlgOverwrite),
+              child: ConstrainedText(
+                strings.batchDlgOverwrite,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -421,7 +447,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, update) => AlertDialog(
-          title: Text(strings.batchDlgManagePresets),
+          title: ConstrainedText(
+            strings.batchDlgManagePresets,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: 360,
             child: ListView(
@@ -457,7 +487,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(strings.batchDlgDone),
+              child: ConstrainedText(
+                strings.batchDlgDone,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -470,7 +504,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.batchDlgEditNameTooltip),
+        title: ConstrainedText(
+          strings.batchDlgEditNameTooltip,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           key: const Key('batch_manual_name'),
           controller: controller,
@@ -487,12 +525,20 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.batchDlgCancel),
+            child: ConstrainedText(
+              strings.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             key: const Key('batch_manual_save'),
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: Text(strings.batchDlgConfirm),
+            child: ConstrainedText(
+              strings.batchDlgConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -539,11 +585,22 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                       for (final e in _builtins.entries)
                         PopupMenuItem(
                           value: e.value,
-                          child: Text(_builtinPresetLabel(e.key)),
+                          child: ConstrainedText(
+                            _builtinPresetLabel(e.key),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       if (_presets.isNotEmpty) const PopupMenuDivider(),
                       for (final e in _presets.entries)
-                        PopupMenuItem(value: e.value, child: Text(e.key)),
+                        PopupMenuItem(
+                          value: e.value,
+                          child: ConstrainedText(
+                            e.key,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                     ],
                     child: Padding(
                       padding: EdgeInsets.all(8),
@@ -562,10 +619,12 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                             _plan.configError != null
                         ? null
                         : _savePreset,
-                    child: Text(
+                    child: ConstrainedText(
                       _saving
                           ? strings.batchDlgSaving
                           : strings.batchDlgSavePresetFallback,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
@@ -614,12 +673,16 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
             children: [
               for (final field in SortField.values)
                 ChoiceChip(
-                  label: Text(switch (field) {
-                    SortField.name => strings.batchDlgSortName,
-                    SortField.createdAt => strings.batchDlgSortCreated,
-                    SortField.modifiedAt => strings.batchDlgSortModified,
-                    SortField.size => strings.batchDlgSortSize,
-                  }),
+                  label: ConstrainedText(
+                    switch (field) {
+                      SortField.name => strings.batchDlgSortName,
+                      SortField.createdAt => strings.batchDlgSortCreated,
+                      SortField.modifiedAt => strings.batchDlgSortModified,
+                      SortField.size => strings.batchDlgSortSize,
+                    },
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   selected: _config.sortField == field,
                   onSelected: (_) => _change(
                     () => _config = _config.copyWith(sortField: field),
@@ -632,10 +695,12 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
             children: [
               for (final order in SortOrder.values)
                 ChoiceChip(
-                  label: Text(
+                  label: ConstrainedText(
                     order == SortOrder.ascending
                         ? strings.batchDlgAscending
                         : strings.batchDlgDescending,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   selected: _config.sortOrder == order,
                   onSelected: (_) => _change(
@@ -657,7 +722,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               for (final op in const BatchRenameConfig().operations)
                 PopupMenuItem(
                   value: op,
-                  child: Text(localizedBatchRenameOperationLabel(op, strings)),
+                  child: ConstrainedText(
+                    localizedBatchRenameOperationLabel(op, strings),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             child: Padding(
@@ -775,13 +844,18 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               for (final f in _PreviewFilter.values)
                 DropdownMenuItem(
                   value: f,
-                  child: Text(switch (f) {
-                    _PreviewFilter.all => strings.batchDlgFilterAll,
-                    _PreviewFilter.changed => strings.batchDlgFilterChanged,
-                    _PreviewFilter.errors => strings.batchDlgFilterErrors,
-                    _PreviewFilter.unchanged => strings.batchDlgFilterUnchanged,
-                    _PreviewFilter.excluded => strings.batchDlgFilterExcluded,
-                  }),
+                  child: ConstrainedText(
+                    switch (f) {
+                      _PreviewFilter.all => strings.batchDlgFilterAll,
+                      _PreviewFilter.changed => strings.batchDlgFilterChanged,
+                      _PreviewFilter.errors => strings.batchDlgFilterErrors,
+                      _PreviewFilter.unchanged =>
+                        strings.batchDlgFilterUnchanged,
+                      _PreviewFilter.excluded => strings.batchDlgFilterExcluded,
+                    },
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
           ),
@@ -790,19 +864,35 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'all',
-                child: Text(strings.batchDlgIncludeAll),
+                child: ConstrainedText(
+                  strings.batchDlgIncludeAll,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               PopupMenuItem(
                 value: 'files',
-                child: Text(strings.batchDlgOnlyFiles),
+                child: ConstrainedText(
+                  strings.batchDlgOnlyFiles,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               PopupMenuItem(
                 value: 'folders',
-                child: Text(strings.batchDlgOnlyFolders),
+                child: ConstrainedText(
+                  strings.batchDlgOnlyFolders,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               PopupMenuItem(
                 value: 'none',
-                child: Text(strings.batchDlgExcludeAll),
+                child: ConstrainedText(
+                  strings.batchDlgExcludeAll,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
             onSelected: (v) => _change(() {
@@ -827,7 +917,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           TextButton(
             onPressed:
                 _previewing || _previewError != null ? null : _copyPreview,
-            child: Text(strings.batchDlgCopyList),
+            child: ConstrainedText(
+              strings.batchDlgCopyList,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -839,11 +933,19 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         items: [
           DropdownMenuItem(
             value: BatchRenameConflictStrategy.block,
-            child: Text(strings.batchDlgConflictBlock),
+            child: ConstrainedText(
+              strings.batchDlgConflictBlock,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           DropdownMenuItem(
             value: BatchRenameConflictStrategy.numberSuffix,
-            child: Text(strings.batchDlgConflictSuffix),
+            child: ConstrainedText(
+              strings.batchDlgConflictSuffix,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
         onChanged: (v) =>
@@ -919,7 +1021,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                   ),
                   Tooltip(
                     message: r.oldDisplay,
-                    child: Text(
+                    child: ConstrainedText(
                       r.oldDisplay,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -932,7 +1034,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                       Expanded(
                         child: Tooltip(
                           message: r.newDisplay,
-                          child: Text(
+                          child: ConstrainedText(
                             r.newDisplay,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
@@ -1030,12 +1132,20 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   void _help() => showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(strings.batchDlgHelpTitle),
+          title: ConstrainedText(
+            strings.batchDlgHelpTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SingleChildScrollView(child: Text(strings.batchDlgHelpBody)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(strings.batchDlgHelpDismiss),
+              child: ConstrainedText(
+                strings.batchDlgHelpDismiss,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -1073,10 +1183,12 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                                 key: const Key('batch_rules_tab'),
                                 onPressed: () =>
                                     setState(() => _previewTab = false),
-                                child: Text(
+                                child: ConstrainedText(
                                   _previewTab
                                       ? strings.batchDlgRulesTab
                                       : '● ${strings.batchDlgRulesTab}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ),
@@ -1085,8 +1197,10 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                                 key: const Key('batch_preview_tab'),
                                 onPressed: () =>
                                     setState(() => _previewTab = true),
-                                child: Text(
+                                child: ConstrainedText(
                                   '${_previewTab ? '● ' : ''}${strings.batchDlgPreviewCount(_plan.changeCount.toString())}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ),
@@ -1111,7 +1225,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                     TextButton(
                       key: const Key('batch_rename_cancel_btn'),
                       onPressed: () => Navigator.pop(context),
-                      child: Text(strings.batchDlgCancel),
+                      child: ConstrainedText(
+                        strings.batchDlgCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const Spacer(),
                     FilledButton(
@@ -1122,9 +1240,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                               _invalid.isEmpty
                           ? () => Navigator.pop(context, _plan)
                           : null,
-                      child: Text(
+                      child: ConstrainedText(
                         strings
                             .batchDlgRenameCount(_plan.changeCount.toString()),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

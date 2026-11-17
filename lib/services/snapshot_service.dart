@@ -165,6 +165,9 @@ class SnapshotService {
       }
       final list = decoded['snapshots'];
       if (list is! List) return _rebuildIndexFromDisk();
+      if (list.any((entry) => entry is! Map<String, dynamic>)) {
+        return _rebuildIndexFromDisk();
+      }
       final entries = list
           .whereType<Map<String, dynamic>>()
           .map(SnapshotEntry.fromJson)

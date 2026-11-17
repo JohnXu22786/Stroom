@@ -143,6 +143,12 @@ final fileManagerNavManifestBridge = ManifestBridge(
   getAllDescendantFolderPaths: (parentPath, allPaths) => [],
 );
 
+Widget _disableTestAnimations(BuildContext context, Widget? child) =>
+    MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    );
+
 /// Simple helper from file_manager_view_test.dart — wraps a widget in
 /// MaterialApp + Scaffold.
 Widget _buildTestApp(
@@ -150,6 +156,7 @@ Widget _buildTestApp(
   Locale locale = const Locale('zh', 'CN'),
 }) {
   return MaterialApp(
+    builder: _disableTestAnimations,
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
@@ -205,6 +212,7 @@ Widget _buildFileManagerApp({
 
   return ProviderScope(
     child: MaterialApp(
+      builder: _disableTestAnimations,
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Navigator(
@@ -1154,6 +1162,7 @@ void main() {
       ManifestBridge? bridge,
     }) {
       return MaterialApp(
+        builder: _disableTestAnimations,
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
@@ -1345,6 +1354,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              builder: _disableTestAnimations,
               locale: const Locale('zh', 'CN'),
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
@@ -1500,6 +1510,8 @@ void main() {
       Future<void> Function(List<String>, String)? onMoveFiles,
       Future<void> Function(List<String>, String)? onMoveFolders,
       Future<String?> Function(List<String>, String)? onExportFiles,
+      Future<String?> Function(List<String>, String, List<String>)?
+          onExportFilesWithFolders,
       Future<String?> Function(List<String>, String)? onExportFolders,
       Future<void> Function(String)? onDeleteFolder,
       Future<void> Function(String, String)? onMoveFolder,
@@ -1537,6 +1549,7 @@ void main() {
         onMoveFolders: onMoveFolders ?? (_, __) async {},
         onExportFile: (_) async {},
         onExportFiles: onExportFiles,
+        onExportFilesWithFolders: onExportFilesWithFolders,
         onExportFolders: onExportFolders,
         onRenameFolder: onRenameFolder ?? (_, __) async {},
         onMoveFolder: onMoveFolder ?? (_, __) async {},
@@ -1898,12 +1911,16 @@ void main() {
       (tester) async {
         String? folderCallbackTarget;
         final exportedFolders = <String>[];
+        final reservedFolders = <String>[];
         await tester.pumpWidget(
           _buildTestApp(
             buildBatchFM(
               records: [_TestFileRecord(id: 'f1', name: 'one')],
               folders: {'a'},
-              onExportFiles: (ids, t) async => 'D:\\picked',
+              onExportFilesWithFolders: (ids, t, folders) async {
+                reservedFolders.addAll(folders);
+                return 'D:\\picked';
+              },
               onExportFolders: (names, t) async {
                 folderCallbackTarget = t;
                 exportedFolders.addAll(names);
@@ -1924,6 +1941,7 @@ void main() {
         // 文件夹导出必须复用文件导出选定的目录，不再弹出第二次目录选择
         expect(folderCallbackTarget, 'D:\\picked');
         expect(exportedFolders, ['a']);
+        expect(reservedFolders, ['a']);
         // 导出成功后退出选择模式
         expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
       },
@@ -3042,6 +3060,7 @@ void main() {
       VoidCallback? onTap,
     }) {
       return MaterialApp(
+        builder: _disableTestAnimations,
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,

@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -17,12 +16,15 @@ import '../providers/tts_state_provider.dart';
 import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../utils/audio_playback.dart';
+import '../utils/audio_player_temp_file.dart';
 import '../utils/audio_utils.dart';
 import '../utils/system_pick_utils.dart';
 import '../widgets/app_media_picker_dialog.dart';
 import 'audio_player_shared.dart';
 import 'audio_separation_shared.dart';
 import 'tts_create_page.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 音频播放器页面
 /// 跨平台：Web 用 HTML5 AudioElement，Native 用 just_audio
@@ -167,9 +169,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               const SizedBox(height: 24),
               Text(
                 _l10n.audioPlayerSourceTextSource,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -247,10 +250,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(result.first.value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(_l10n.audioPlayerSelectTextFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l10n.audioPlayerSelectTextFailure(e.toString())),
+          ),
+        );
       }
     }
   }
@@ -268,10 +272,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(
-              SnackBar(content: Text(_l10n.audioPlayerCannotReadTextFile)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_l10n.audioPlayerCannotReadTextFile)),
+          );
         }
         return;
       }
@@ -279,10 +282,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(bytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(_l10n.audioPlayerUploadTextFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l10n.audioPlayerUploadTextFailure(e.toString())),
+          ),
+        );
       }
     }
   }
@@ -291,10 +295,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Future<void> _applySourceTextContent(Uint8List bytes) async {
     if (bytes.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-            SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)),
+        );
       }
       return;
     }
@@ -308,10 +311,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     if (textContent.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-            SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)),
+        );
       }
       return;
     }
@@ -320,10 +322,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _saveSourceText(textContent);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content: Text(_l10n.audioPlayerSaveTextFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_l10n.audioPlayerSaveTextFailure(e.toString())),
+          ),
+        );
       }
       return;
     }
@@ -336,9 +339,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(wasEmpty
-            ? _l10n.audioPlayerSourceTextUploaded
-            : _l10n.audioPlayerSourceTextUpdated),
+        content: Text(
+          wasEmpty
+              ? _l10n.audioPlayerSourceTextUploaded
+              : _l10n.audioPlayerSourceTextUpdated,
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -435,6 +440,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     if (!kIsWeb) {
       // Native: read into memory, validate/convert format, play from temp
       final data = await FileManifest.readFile(widget.filePath);
+      if (!mounted) return;
       if (data == null || data.isEmpty) {
         throw Exception(_l10n.audioPlayerFileNotFound(widget.filePath));
       }
@@ -443,12 +449,24 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         requestedFormat: extension,
         sampleRate: 24000,
       );
-      final tempDir = await getTemporaryDirectory();
-      final tempPath =
-          '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.${fixed.$2}';
-      await File(tempPath).writeAsBytes(fixed.$1);
-      _tempFilePath = tempPath;
-      await _player!.load(tempPath);
+      final tempFile = await writeAudioPlayerTempFile(
+        bytes: fixed.$1,
+        extension: fixed.$2,
+        isDisposed: () => !mounted,
+      );
+      if (tempFile == null) return;
+      if (!mounted) {
+        await deleteAudioPlayerTempFile(tempFile);
+        return;
+      }
+      _tempFilePath = tempFile.path;
+      final player = _player;
+      if (player == null) {
+        await deleteAudioPlayerTempFile(tempFile);
+        _tempFilePath = null;
+        return;
+      }
+      await player.load(tempFile.path);
     } else {
       // Web: 读取文件并创建 Blob URL
       final data = await FileManifest.readFile(widget.filePath);
@@ -546,7 +564,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(_l10n.audioPlayerSelectStreamingModel),
+        title: ConstrainedText(
+          _l10n.audioPlayerSelectStreamingModel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -572,7 +594,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(_l10n.cancel),
+            child: ConstrainedText(
+              _l10n.cancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -602,7 +628,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(fileName, overflow: TextOverflow.ellipsis),
+        title: ConstrainedText(
+          fileName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: _buildBody(),
@@ -616,9 +646,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         diagnosticInfo: _diagnosticInfo,
         onRetry: () {
           if (_tempFilePath != null) {
-            try {
-              File(_tempFilePath!).delete();
-            } catch (_) {}
+            unawaited(deleteAudioPlayerTempFile(File(_tempFilePath!)));
             _tempFilePath = null;
           }
           _disposePlayer();
@@ -693,9 +721,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.upload_file,
                                         size: 14,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -703,9 +731,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ],
@@ -739,9 +767,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.edit,
                                         size: 14,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -749,9 +777,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ],
@@ -927,7 +955,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             const SizedBox(width: 12),
             // 文件名
             Expanded(
-              child: Text(
+              child: ConstrainedText(
                 widget.displayName ?? path.basename(widget.filePath),
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
@@ -984,7 +1012,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   widget.displayName ?? path.basename(widget.filePath),
                   style: const TextStyle(
                     fontSize: 16,
@@ -1084,7 +1112,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(_l10n.audioPlayerPlaybackSpeed),
+          title: ConstrainedText(
+            _l10n.audioPlayerPlaybackSpeed,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: 260,
             height: 80,
@@ -1118,7 +1150,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(_l10n.audioPlayerClose),
+              child: ConstrainedText(
+                _l10n.audioPlayerClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -1129,9 +1165,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   @override
   void dispose() {
     if (_tempFilePath != null) {
-      try {
-        File(_tempFilePath!).delete();
-      } catch (_) {}
+      unawaited(deleteAudioPlayerTempFile(File(_tempFilePath!)));
     }
     _disposePlayer();
     _textController.dispose();

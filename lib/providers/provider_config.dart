@@ -45,6 +45,10 @@ class ProviderEntriesState {
   });
 }
 
+class ProviderEntriesRollbackException implements Exception {
+  const ProviderEntriesRollbackException();
+}
+
 bool isMcpProviderConfigEnabled(
   ProviderConfigItem config,
   List<McpProviderGroup> groups,
@@ -245,7 +249,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       : super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
+  Future<void> _stateMutationQueue = Future<void>.value();
   Future<void> get ready => _loading;
+
+  Future<void> _enqueueStateMutation(Future<void> Function() mutation) {
+    final operation = _stateMutationQueue.then((_) => mutation());
+    // Keep the queue usable after a caller-visible persistence failure.
+    _stateMutationQueue = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
 
   Future<void> load() async {
     var mcpGroups = builtinMcpProviderGroups;
@@ -286,11 +298,16 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         // 对齐 conversations 的防御风格。整表回退会导致含 API key
         // 的配置静默丢失且被后续 _persist 覆盖。
         final entries = <ProviderEntry>[];
+        var skippedCorruptEntry = false;
         for (final raw in rawList) {
-          if (raw is! Map) continue;
+          if (raw is! Map) {
+            skippedCorruptEntry = true;
+            continue;
+          }
           try {
             entries.add(ProviderEntry.fromMap(Map<String, dynamic>.from(raw)));
           } catch (e) {
+            skippedCorruptEntry = true;
             debugPrint('Skipping corrupt provider entry: $e');
           }
         }
@@ -299,6 +316,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           await _backupCorruptProviderEntries(prefs, json);
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
+        }
+        if (skippedCorruptEntry) {
+          // 混合列表仍可加载有效条目，但后续持久化只写入已解析条目；
+          // 先备份原始 JSON，避免跳过的配置（可能含 API key）被永久覆盖。
+          await _backupCorruptProviderEntries(prefs, json);
         }
 
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
@@ -463,117 +485,140 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   }
 
   /// 在列表第一个位置添加新条目
-  Future<void> addFirst(ProviderEntry entry) async {
-    state = ProviderEntriesState(
-      entries: [entry, ...state.entries],
-      mcpGroups: state.mcpGroups,
-    );
-    await _persist();
-  }
+  Future<void> addFirst(ProviderEntry entry) => _enqueueStateMutation(() async {
+        final updatedState = ProviderEntriesState(
+          entries: [entry, ...state.entries],
+          mcpGroups: state.mcpGroups,
+        );
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
+      });
 
-  /// 更新条目
+  /// 更新条目。保留旧参数供已有调用方兼容，但持久化失败始终向调用方传播。
   Future<void> update(
     String id,
     ProviderEntry updated, {
-    bool requirePersistence = false,
-  }) async {
-    state = ProviderEntriesState(
-      entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
-      mcpGroups: state.mcpGroups,
-    );
-    await _persist(rethrowOnFailure: requirePersistence);
-  }
+    bool requirePersistence = true,
+  }) =>
+      _enqueueStateMutation(() async {
+        final updatedState = ProviderEntriesState(
+          entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
+          mcpGroups: state.mcpGroups,
+        );
+        await _persist(
+          rethrowOnFailure: true,
+          persistMcpGroups: false,
+          stateToPersist: updatedState,
+        );
+        state = updatedState;
+      });
 
   /// 删除条目
-  Future<void> remove(String id) async {
-    state = ProviderEntriesState(
-      entries: state.entries.where((e) => e.id != id).toList(),
-      mcpGroups: state.mcpGroups,
-    );
-    await _persist();
-  }
+  Future<void> remove(String id) => _enqueueStateMutation(() async {
+        final updatedState = ProviderEntriesState(
+          entries: state.entries.where((e) => e.id != id).toList(),
+          mcpGroups: state.mcpGroups,
+        );
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
+      });
 
-  Future<void> addMcpGroup(McpProviderGroup group) async {
-    state = ProviderEntriesState(
-      entries: state.entries,
-      mcpGroups: [...state.mcpGroups, group],
-    );
-    await _persist();
-  }
+  Future<void> addMcpGroup(McpProviderGroup group) =>
+      _enqueueStateMutation(() async {
+        final updatedState = ProviderEntriesState(
+          entries: state.entries,
+          mcpGroups: [...state.mcpGroups, group],
+        );
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
+      });
 
-  Future<void> updateMcpGroup(McpProviderGroup updated) async {
-    final current =
-        state.mcpGroups.where((group) => group.id == updated.id).firstOrNull;
-    if (current == null || current.isBuiltin) return;
-    state = ProviderEntriesState(
-      entries: state.entries,
-      mcpGroups: state.mcpGroups
-          .map((group) => group.id == updated.id ? updated : group)
-          .toList(),
-    );
-    await _persist();
-  }
+  Future<void> updateMcpGroup(McpProviderGroup updated) =>
+      _enqueueStateMutation(() async {
+        final current = state.mcpGroups
+            .where((group) => group.id == updated.id)
+            .firstOrNull;
+        if (current == null || current.isBuiltin) return;
+        final updatedState = ProviderEntriesState(
+          entries: state.entries,
+          mcpGroups: state.mcpGroups
+              .map((group) => group.id == updated.id ? updated : group)
+              .toList(),
+        );
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
+      });
 
-  Future<void> setMcpGroupEnabled(String id, bool enabled) async {
-    state = ProviderEntriesState(
-      entries: state.entries,
-      mcpGroups: state.mcpGroups
-          .map((group) =>
-              group.id == id ? group.copyWith(enabled: enabled) : group)
-          .toList(),
-    );
-    await _persist();
-  }
+  Future<void> setMcpGroupEnabled(String id, bool enabled) =>
+      _enqueueStateMutation(() async {
+        final updatedState = ProviderEntriesState(
+          entries: state.entries,
+          mcpGroups: state.mcpGroups
+              .map((group) =>
+                  group.id == id ? group.copyWith(enabled: enabled) : group)
+              .toList(),
+        );
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
+      });
 
-  Future<void> removeMcpGroup(String id) async {
-    final group = state.mcpGroups.where((item) => item.id == id).firstOrNull;
-    if (group == null || group.isBuiltin) return;
-    final fallbackId = id == builtinMcpServicesGroupId
-        ? builtinSearchMcpGroupId
-        : builtinMcpServicesGroupId;
-    final entries = state.entries.map((entry) {
-      if (entry.type != 'mcp' ||
-          !entry.configs.any((config) => config.groupId == id)) {
-        return entry;
-      }
-      return ProviderEntry(
-        id: entry.id,
-        type: entry.type,
-        name: entry.name,
-        enabled: entry.enabled,
-        configs: entry.configs.map((config) {
-          final copy = config.copy();
-          if (copy.groupId == id) copy.groupId = fallbackId;
-          return copy;
-        }).toList(),
-      );
-    }).toList();
-    state = ProviderEntriesState(
-      entries: entries,
-      mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
-    );
-    await _persist();
-  }
+  Future<void> removeMcpGroup(String id) => _enqueueStateMutation(() async {
+        final group =
+            state.mcpGroups.where((item) => item.id == id).firstOrNull;
+        if (group == null || group.isBuiltin) return;
+        final fallbackId = id == builtinMcpServicesGroupId
+            ? builtinSearchMcpGroupId
+            : builtinMcpServicesGroupId;
+        final entries = state.entries.map((entry) {
+          if (entry.type != 'mcp' ||
+              !entry.configs.any((config) => config.groupId == id)) {
+            return entry;
+          }
+          return ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            enabled: entry.enabled,
+            configs: entry.configs.map((config) {
+              final copy = config.copy();
+              if (copy.groupId == id) copy.groupId = fallbackId;
+              return copy;
+            }).toList(),
+          );
+        }).toList();
+        final updatedState = ProviderEntriesState(
+          entries: entries,
+          mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
+        );
+        await _persist(
+          rethrowOnFailure: true,
+          stateToPersist: updatedState,
+        );
+        state = updatedState;
+      });
 
-  Future<void> moveMcpConfigToGroup(String configId, String groupId) async {
-    final entries = state.entries.map((entry) {
-      if (entry.type != 'mcp' ||
-          !entry.configs.any((config) => config.id == configId)) {
-        return entry;
-      }
-      return ProviderEntry(
-        id: entry.id,
-        type: entry.type,
-        name: entry.name,
-        enabled: entry.enabled,
-        configs: entry.configs.map((config) {
-          final copy = config.copy();
-          if (copy.id == configId) copy.groupId = groupId;
-          return copy;
-        }).toList(),
-      );
-    }).toList();
-    state = ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups);
-    await _persist();
-  }
+  Future<void> moveMcpConfigToGroup(String configId, String groupId) =>
+      _enqueueStateMutation(() async {
+        final entries = state.entries.map((entry) {
+          if (entry.type != 'mcp' ||
+              !entry.configs.any((config) => config.id == configId)) {
+            return entry;
+          }
+          return ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            enabled: entry.enabled,
+            configs: entry.configs.map((config) {
+              final copy = config.copy();
+              if (copy.id == configId) copy.groupId = groupId;
+              return copy;
+            }).toList(),
+          );
+        }).toList();
+        final updatedState =
+            ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups);
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
+      });
 }

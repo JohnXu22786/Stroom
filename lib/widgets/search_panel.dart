@@ -4,6 +4,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 
+import 'constrained_text.dart';
+
 class SearchPanel extends StatefulWidget {
   final List<Conversation> conversations;
   final void Function(Conversation) onConversationSelected;
@@ -129,8 +131,10 @@ class _SearchPanelState extends State<SearchPanel> {
                 child: Row(
                   children: [
                     FilterChip(
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.searchPanelByTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       selected: !_searchByContent,
                       onSelected: (_) =>
@@ -140,8 +144,10 @@ class _SearchPanelState extends State<SearchPanel> {
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.searchPanelByContent,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       selected: _searchByContent,
                       onSelected: (_) =>
@@ -263,7 +269,7 @@ class _SearchPanelState extends State<SearchPanel> {
                             ),
                           ),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

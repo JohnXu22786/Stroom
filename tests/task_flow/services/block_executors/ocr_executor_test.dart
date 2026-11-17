@@ -27,6 +27,7 @@ import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/ocr_executor.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/http_timeout.dart';
+import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
@@ -144,6 +145,8 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     WebFileStore.enableTestMode();
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
@@ -162,6 +165,8 @@ void main() {
 
   tearDown(() async {
     await background.pendingPersistence;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     if (executions.mounted) executions.dispose();
     background.dispose();
     WebFileStore.disableTestMode();
@@ -879,6 +884,126 @@ void main() {
     expect(background.state.single.status, TaskStatus.failed);
   });
 
+  test('cancellation during oversized WebFileStore input removes the task',
+      () async {
+    const key = 'attachments/cancelled_oversized_taskflow_image.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+    executions.cancelExecution(execId);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during missing WebFileStore read removes the task',
+      () async {
+    const key = 'attachments/cancelled_missing_taskflow_image.png';
+    await WebFileStore.write(key, _validPng());
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<Uint8List?>();
+    var failedTaskObserved = false;
+    final removeListener = background.addListener((tasks) {
+      failedTaskObserved |=
+          tasks.any((task) => task.status == TaskStatus.failed);
+    }, fireImmediately: false);
+    addTearDown(removeListener);
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      readWebFileBytes: (_, {maxBytes}) {
+        readStarted.complete();
+        return releaseRead.future;
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await readStarted.future;
+    executions.cancelExecution(execId);
+    releaseRead.complete(null);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(failedTaskObserved, isFalse);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('missing WebFileStore read reports the localized input error', () async {
+    const key = 'attachments/missing_taskflow_image.png';
+    await WebFileStore.write(key, _validPng());
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        readWebFileBytes: (_, {maxBytes}) async => null,
+        requestOcr: (_, _) async => 'must not be sent',
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        'The image file could not be found. Select the image again.',
+      )),
+    );
+
+    expect(background.state.single.status, TaskStatus.failed);
+  });
+
   test(
     'cancellation during OCR input read prevents request dispatch',
     () async {
@@ -933,6 +1058,335 @@ void main() {
       );
     },
   );
+
+  test('cancellation during a failing OCR input read removes the task',
+      () async {
+    final source = await File('${directory.path}/cancelled_read_error.png')
+        .writeAsBytes(_validPng());
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      readInputBytes: (_, _) async {
+        readStarted.complete();
+        await releaseRead.future;
+        throw StateError('read failed after cancellation');
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await readStarted.future;
+    executions.cancelExecution(execId);
+    releaseRead.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during missing OCR input check removes the task',
+      () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<bool>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/missing_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) {
+        checkStarted.complete();
+        return releaseCheck.future;
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete(false);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during failing OCR input check removes the task',
+      () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/check_error_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) async {
+        checkStarted.complete();
+        await releaseCheck.future;
+        throw StateError('existence check failed after cancellation');
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation overrides failing OCR input check exception', () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/check_block_error_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) async {
+        checkStarted.complete();
+        await releaseCheck.future;
+        throw BlockExecutionException(
+          'preflight check failed',
+          blockType: BlockType.ocr.name,
+          blockTitle: BlockTypeDefinition.ocr.label,
+        );
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during failing OCR payload preparation removes the task',
+      () async {
+    final source = await File('${directory.path}/cancelled_payload.png')
+        .writeAsBytes(_validPng());
+    final preparationStarted = Completer<void>();
+    final releasePreparation = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      prepareImagePayload: (_) async {
+        preparationStarted.complete();
+        await releasePreparation.future;
+        throw const OcrImagePayloadException(
+          OcrImagePayloadFailure.decodeFailed,
+          'decode failed after cancellation',
+        );
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await preparationStarted.future;
+    executions.cancelExecution(execId);
+    releasePreparation.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during OCR request removes the background task', () async {
+    final source = await File('${directory.path}/cancelled_request.png')
+        .writeAsBytes(_validPng());
+    final requestStarted = Completer<void>();
+    final releaseRequest = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (_, _) async {
+        requestStarted.complete();
+        await releaseRequest.future;
+        throw DioException(
+          requestOptions: RequestOptions(path: '/recognize'),
+          type: DioExceptionType.cancel,
+        );
+      },
+    );
+
+    await requestStarted.future;
+    executions.cancelExecution(execId);
+    releaseRequest.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during OCR text saving removes the background task',
+      () async {
+    final source = await File('${directory.path}/cancelled_save.png')
+        .writeAsBytes(_validPng());
+    final manifestReadStarted = Completer<void>();
+    final releaseManifestRead = Completer<void>();
+    ManifestDatabase.beforeWebDataSaveForTesting = () async {
+      if (!manifestReadStarted.isCompleted) {
+        manifestReadStarted.complete();
+        await releaseManifestRead.future;
+      }
+    };
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (_, _) async => 'recognized text',
+    );
+
+    await manifestReadStarted.future;
+    executions.cancelExecution(execId);
+    releaseManifestRead.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
 
   test('OCR rejects corrupt bytes before invoking its request', () async {
     final source = await File('${directory.path}/corrupt.png').writeAsBytes(

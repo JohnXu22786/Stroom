@@ -112,6 +112,194 @@ void main() {
       expect(entries, isNotEmpty);
     });
 
+    test('malformed non-built-in LLM entry does not discard legacy configs',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'corrupt_llm',
+            'type': 'llm',
+            'name': 'Corrupt LLM',
+            'configs': [
+              {
+                'customParams': [
+                  {
+                    'paramName': 'legacy_param',
+                    'options': [123]
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.5},
+            ],
+          },
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final migrated = entries
+          .whereType<Map<String, dynamic>>()
+          .firstWhere((entry) => entry['id'] == 'migrated_llm');
+      final configs = migrated['configs'] as List;
+      final provider = configs.single as Map<String, dynamic>;
+      expect(provider['providerName'], 'Legacy provider');
+      expect(provider['key'], 'legacy-key');
+      expect(
+        ((provider['models'] as List).single
+            as Map<String, dynamic>)['modelId'],
+        'legacy-model',
+      );
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('merges legacy model settings into a usable LLM entry', () async {
+      final existingConfig = {
+        'id': 'existing_config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {
+            'modelId': 'legacy-model',
+            'typeConfig': {
+              'temperature': 0.2,
+              'customSetting': 0.2,
+            },
+          },
+        ],
+      };
+      Map<String, dynamic> legacyConfig(double temperature) => {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': temperature,
+                'typeConfig': {'customSetting': temperature},
+              },
+            ],
+          };
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Custom LLM',
+            'configs': [existingConfig],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          legacyConfig(0.2),
+          legacyConfig(0.7),
+          legacyConfig(0.7),
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final llmEntry = entries
+          .whereType<Map<String, dynamic>>()
+          .singleWhere((entry) => entry['id'] == 'existing_llm');
+      final configs = llmEntry['configs'] as List;
+      expect(configs, hasLength(3));
+      final temperatures = configs.map((config) {
+        final model = ((config as Map<String, dynamic>)['models'] as List)
+            .single as Map<String, dynamic>;
+        return (model['typeConfig'] as Map<String, dynamic>)['temperature'];
+      });
+      expect(temperatures, orderedEquals([0.2, 0.2, 0.7]));
+      final customSettings = configs.map((config) {
+        final model = ((config as Map<String, dynamic>)['models'] as List)
+            .single as Map<String, dynamic>;
+        return (model['typeConfig'] as Map<String, dynamic>)['customSetting'];
+      });
+      expect(customSettings, orderedEquals([0.2, 0.2, 0.7]));
+      final supportStream = configs.map((config) {
+        final model = ((config as Map<String, dynamic>)['models'] as List)
+            .single as Map<String, dynamic>;
+        return model['supportStream'] ?? false;
+      });
+      expect(supportStream, orderedEquals([false, true, true]));
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('normalizes legacy top-level LLM model settings before merging',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Legacy LLM',
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': 0.2,
+                'typeConfig': {'context': 4000},
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.2},
+            ],
+          },
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.7},
+            ],
+          },
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final llmEntry = entries
+          .whereType<Map<String, dynamic>>()
+          .singleWhere((entry) => entry['id'] == 'existing_llm');
+      final configs = llmEntry['configs'] as List;
+      expect(configs, hasLength(3));
+      final temperatures = configs.map((config) {
+        final model = ((config as Map<String, dynamic>)['models'] as List)
+            .single as Map<String, dynamic>;
+        return (model['typeConfig'] as Map<String, dynamic>)['temperature'];
+      });
+      expect(temperatures, orderedEquals([0.2, 0.2, 0.7]));
+      expect(
+        ((configs.first as Map<String, dynamic>)['models'] as List)
+            .single['typeConfig']['context'],
+        4000,
+      );
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test('migrates per-model context/maxTokens into typeConfig', () async {
       // 回归：旧数据把压缩阈值挂在 model 上，不迁移则自动压缩静默失效。
       SharedPreferences.setMockInitialValues({
@@ -121,7 +309,12 @@ void main() {
             'host': '',
             'key': '',
             'models': [
-              {'modelId': 'm1', 'maxTokens': 4000, 'temperature': 0.5},
+              {
+                'modelId': 'm1',
+                'maxTokens': 4000,
+                'temperature': 0.5,
+                'typeConfig': {'customSetting': 'carry-forward'},
+              },
             ],
           },
         ]),
@@ -137,6 +330,7 @@ void main() {
       final typeConfig =
           (models.first as Map<String, dynamic>)['typeConfig'] as Map;
       expect(typeConfig['context'], 4000);
+      expect(typeConfig['customSetting'], 'carry-forward');
     });
   });
 }
