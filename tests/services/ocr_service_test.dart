@@ -2515,6 +2515,84 @@ void main() {
         expect(diagnostics, isNot(contains(headerCredential)));
       });
 
+      test('recognize redacts response-only credentials from success snapshots',
+          () async {
+        const bodyCredential = 'opaque-success-body-secret-r85';
+        const headerCredential = 'opaque-success-header-secret-r85';
+        final service = OcrService(
+          config: _testOcrConfig,
+          dio: _mockDioWithSuccess(
+            {
+              'api_key': bodyCredential,
+              'choices': [
+                {
+                  'message': {'content': 'recognized text'},
+                },
+              ],
+            },
+            headers: {
+              'x-api-key': [headerCredential],
+              'x-safe-diagnostic': ['safe-value'],
+            },
+          ),
+        );
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+        );
+
+        expect(result.text, 'recognized text');
+        final responseData = jsonEncode(service.lastResponseData);
+        final responseHeaders = jsonEncode(service.lastResponseHeaders);
+        expect(responseData, isNot(contains(bodyCredential)));
+        expect(responseData, isNot(contains(headerCredential)));
+        expect(responseHeaders, isNot(contains(bodyCredential)));
+        expect(responseHeaders, isNot(contains(headerCredential)));
+        expect(responseData, contains('recognized text'));
+        expect(responseHeaders, contains('safe-value'));
+      });
+
+      test(
+        'recognizeBatch redacts response-only credentials from success snapshots',
+        () async {
+          const bodyCredential = 'opaque-batch-success-body-secret-r85';
+          const headerCredential = 'opaque-batch-success-header-secret-r85';
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: _mockDioWithSuccess(
+              {
+                'api_key': bodyCredential,
+                'choices': [
+                  {
+                    'message': {'content': 'recognized batch text'},
+                  },
+                ],
+              },
+              headers: {
+                'x-api-key': [headerCredential],
+                'x-safe-diagnostic': ['safe-batch-value'],
+              },
+            ),
+          );
+
+          final result = await service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg')
+            ],
+          );
+
+          expect(result.text, 'recognized batch text');
+          final responseData = jsonEncode(service.lastResponseData);
+          final responseHeaders = jsonEncode(service.lastResponseHeaders);
+          expect(responseData, isNot(contains(bodyCredential)));
+          expect(responseData, isNot(contains(headerCredential)));
+          expect(responseHeaders, isNot(contains(bodyCredential)));
+          expect(responseHeaders, isNot(contains(headerCredential)));
+          expect(responseData, contains('recognized batch text'));
+          expect(responseHeaders, contains('safe-batch-value'));
+        },
+      );
+
       test('recognize redacts recognizable key echoed only in error text',
           () async {
         const credential = 'sk-proj-r79-response-text-secret-7654321';

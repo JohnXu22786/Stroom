@@ -526,9 +526,20 @@ class OcrService {
         excludedValues: [config.apiKey, ...responseCredentialValues],
       )?['statusCode'] as int?;
       lastResponseData = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '${response.data}'};
-      lastResponseHeaders = response.headers.map;
+          ? _redactResponseDiagnosticValue(
+              response.data,
+              responseCredentialValues,
+            ) as Map<String, dynamic>
+          : <String, dynamic>{
+              'raw': _redactResponseDiagnosticValue(
+                '${response.data}',
+                responseCredentialValues,
+              ) as String,
+            };
+      lastResponseHeaders = _redactResponseDiagnosticHeaders(
+        response.headers.map,
+        responseCredentialValues,
+      );
       _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
@@ -658,9 +669,20 @@ class OcrService {
         excludedValues: [config.apiKey, ...responseCredentialValues],
       )?['statusCode'] as int?;
       lastResponseData = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '${response.data}'};
-      lastResponseHeaders = response.headers.map;
+          ? _redactResponseDiagnosticValue(
+              response.data,
+              responseCredentialValues,
+            ) as Map<String, dynamic>
+          : <String, dynamic>{
+              'raw': _redactResponseDiagnosticValue(
+                '${response.data}',
+                responseCredentialValues,
+              ) as String,
+            };
+      lastResponseHeaders = _redactResponseDiagnosticHeaders(
+        response.headers.map,
+        responseCredentialValues,
+      );
       _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
