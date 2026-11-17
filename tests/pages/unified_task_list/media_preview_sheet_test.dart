@@ -43,32 +43,32 @@ void main() {
       });
 
       Widget previewWidget() => ProviderScope(
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: MediaPreviewSheet(
-              resource: MediaResource(
-                url: 'https://example.com/preview.mp4',
-                name: 'sample',
-                ext: 'mp4',
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: MediaPreviewSheet(
+                  resource: MediaResource(
+                    url: 'https://example.com/preview.mp4',
+                    name: 'sample',
+                    ext: 'mp4',
+                  ),
+                  taskTitle: 'Preview',
+                  downloadToFile: (_, file) async {
+                    downloadStarted.complete();
+                    final output = file.openWrite();
+                    output.add([1, 2, 3, 4]);
+                    await output.flush();
+                    firstChunkWritten.complete();
+                    await finishDownload.future;
+                    output.add([5, 6, 7, 8]);
+                    await output.close();
+                    downloadFinished.complete();
+                  },
+                ),
               ),
-              taskTitle: 'Preview',
-              downloadToFile: (_, file) async {
-                downloadStarted.complete();
-                final output = file.openWrite();
-                output.add([1, 2, 3, 4]);
-                await output.flush();
-                firstChunkWritten.complete();
-                await finishDownload.future;
-                output.add([5, 6, 7, 8]);
-                await output.close();
-                downloadFinished.complete();
-              },
             ),
-          ),
-        ),
-      );
+          );
 
       await tester.pumpWidget(previewWidget());
       await tester.pump();
