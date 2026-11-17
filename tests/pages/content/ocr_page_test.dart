@@ -3792,6 +3792,18 @@ void main() {
   });
 
   group('OcrPage - instruction selector', () {
+    test('unnamed instruction label truncation keeps emoji intact', () {
+      final instruction = OcrInstruction(content: '${'a' * 19}😀more text');
+
+      expect(ocrInstructionLabel(instruction), '${'a' * 19}😀…');
+      expect(
+        ocrInstructionLabel(
+          const OcrInstruction(name: 'A long instruction name', content: ''),
+        ),
+        'A long instruction name',
+      );
+    });
+
     testWidgets(
       'locks instruction selection during image preparation and preflight',
       (tester) async {

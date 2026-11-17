@@ -1,3 +1,4 @@
+import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,7 +17,8 @@ String ocrInstructionLabel(OcrInstruction instruction) {
   final name = instruction.name;
   if (name.isNotEmpty) return name;
   final firstLine = instruction.content.trim().split('\n').first.trim();
-  return firstLine.length > 20 ? '${firstLine.substring(0, 20)}…' : firstLine;
+  final graphemes = firstLine.characters;
+  return graphemes.length > 20 ? '${graphemes.take(20)}…' : firstLine;
 }
 
 /// Dialog for managing the generic OCR instructions (add / edit / delete).
