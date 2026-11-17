@@ -10,6 +10,10 @@ void main() {
   testWidgets('regular phone keeps the compact inline block header', (
     tester,
   ) async {
+    // Keep this case at the regular text size; larger text has its own layout
+    // coverage below and intentionally stacks the header.
+    tester.platformDispatcher.textScaleFactorTestValue = 1;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(_cardAtWidth(358));

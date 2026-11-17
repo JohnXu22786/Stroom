@@ -178,8 +178,7 @@ class FlowBlockCard extends ConsumerWidget {
           ),
           child: Icon(def.icon, size: 18, color: def.color),
         );
-        final useStackedHeader =
-            constraints.maxWidth < 280 ||
+        final useStackedHeader = constraints.maxWidth < 320 ||
             MediaQuery.textScalerOf(context).scale(1) > 1.3;
         if (useStackedHeader) {
           return Column(
