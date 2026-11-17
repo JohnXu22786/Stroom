@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/backup_service_shared.dart';
+import 'package:stroom/services/browser_cookie_service.dart';
 import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -60,6 +61,44 @@ void main() {
     if (await dir.exists()) {
       await dir.delete(recursive: true);
     }
+  });
+
+  test('rollback cookie restoration replaces the selected snapshot exactly',
+      () async {
+    WebFileStore.enableTestMode();
+    BrowserCookieService.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    addTearDown(BrowserCookieService.disableTestMode);
+
+    final existingCookies = [
+      {
+        'domain': 'existing.example',
+        'name': 'session',
+        'value': 'old',
+        'path': '/',
+      },
+    ];
+    final snapshotCookies = [
+      {
+        'domain': 'snapshot.example',
+        'name': 'session',
+        'value': 'before-restore',
+        'path': '/',
+      },
+    ];
+    await BrowserCookieService.persistCookiesRawForTest(existingCookies);
+    final snapshot =
+        Uint8List.fromList(utf8.encode(jsonEncode(snapshotCookies)));
+
+    await BackupService.restoreBrowserCookiesSnapshotForTest(
+      snapshot,
+      replaceExisting: true,
+    );
+
+    final restored = jsonDecode(
+      utf8.decode((await WebFileStore.read('/browser_cookies.json'))!),
+    ) as List;
+    expect(restored, snapshotCookies);
   });
 
   /// 把一个内存 Archive 编码为磁盘上的 zip 文件，返回其路径。

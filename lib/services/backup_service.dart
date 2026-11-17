@@ -451,6 +451,7 @@ class BackupService {
         skipAnkiMigrationMarkerInvalidation: true,
         skipAnkiSyncIndexClear: true,
         skipRollbackSnapshot: true,
+        replaceBrowserCookiesExactly: true,
       );
       final absentSelection =
           _selectionDifference(originalSelection, recoverySelection);
@@ -2621,6 +2622,7 @@ class BackupService {
     bool skipMissingCategories = false,
     bool skipRollbackSnapshot = false,
     bool skipAnkiMigrationMarkerInvalidation = false,
+    bool replaceBrowserCookiesExactly = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2791,6 +2793,7 @@ class BackupService {
       await _restoreBrowserCookiesAfterDataRestore(
         restoreSelection,
         metadata.browserCookiesData,
+        replaceExisting: replaceBrowserCookiesExactly,
       );
     } catch (restoreError, restoreStackTrace) {
       if (rollbackBytes != null) {
@@ -2807,6 +2810,7 @@ class BackupService {
               skipMissingCategories: true,
               skipRollbackSnapshot: true,
               skipAnkiMigrationMarkerInvalidation: true,
+              replaceBrowserCookiesExactly: true,
             );
           } catch (error, stackTrace) {
             rollbackError = error;
@@ -2872,6 +2876,7 @@ class BackupService {
     bool skipAnkiMigrationMarkerInvalidation = false,
     bool skipAnkiSyncIndexClear = false,
     bool skipRollbackSnapshot = false,
+    bool replaceBrowserCookiesExactly = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -3113,6 +3118,7 @@ class BackupService {
           await _restoreBrowserCookiesAfterDataRestore(
             restoreSelection,
             metadata.browserCookiesData,
+            replaceExisting: replaceBrowserCookiesExactly,
           );
           if (restoreSelection.ankiData &&
               restoreSelection.includeMediaFiles &&
@@ -3159,6 +3165,7 @@ class BackupService {
               skipAnkiMigrationMarkerInvalidation: true,
               skipAnkiSyncIndexClear: true,
               skipRollbackSnapshot: true,
+              replaceBrowserCookiesExactly: true,
             );
             if (rollbackMarker != null && await rollbackMarker.exists()) {
               await rollbackMarker.delete();
@@ -5487,8 +5494,9 @@ class BackupService {
   /// profile entries are ignored by [_restoreArchiveEntry].
   static Future<void> _restoreBrowserCookiesAfterDataRestore(
     BackupSelection selection,
-    Uint8List? cookieData,
-  ) async {
+    Uint8List? cookieData, {
+    bool replaceExisting = false,
+  }) async {
     if (!selection.browserCookies || cookieData == null) return;
 
     await BrowserCookieService.runExclusiveRetentionOperation(() async {
@@ -5503,16 +5511,18 @@ class BackupService {
                 .toList();
         final importedCookies = (jsonDecode(utf8.decode(cookieData)) as List)
             .cast<Map<String, dynamic>>();
-        final cookieDataToWrite = Uint8List.fromList(
-          utf8.encode(
-            jsonEncode(
-              BrowserCookieService.mergeCookieSnapshots(
-                existingCookies,
-                importedCookies,
-              ),
-            ),
-          ),
-        );
+        final cookieDataToWrite = replaceExisting
+            ? cookieData
+            : Uint8List.fromList(
+                utf8.encode(
+                  jsonEncode(
+                    BrowserCookieService.mergeCookieSnapshots(
+                      existingCookies,
+                      importedCookies,
+                    ),
+                  ),
+                ),
+              );
         await writeBackupFile('', 'browser_cookies.json', cookieDataToWrite);
         await BrowserCookieService.markBackupRestorePending();
         if (!WebFileStore.isTestMode &&
@@ -5531,6 +5541,27 @@ class BackupService {
       }
     });
   }
+
+  @visibleForTesting
+  static Future<void> restoreBrowserCookiesSnapshotForTest(
+    Uint8List cookieData, {
+    bool replaceExisting = false,
+  }) =>
+      _restoreBrowserCookiesAfterDataRestore(
+        const BackupSelection(
+          chatRecordsAndAttachments: false,
+          settings: false,
+          pictures: false,
+          audio: false,
+          videos: false,
+          texts: false,
+          tasks: false,
+          ankiData: false,
+          browserCookies: true,
+        ),
+        cookieData,
+        replaceExisting: replaceExisting,
+      );
 
   static Future<void> _rollbackCookiesAfterFailedRestore({
     required Uint8List? previousFileData,
