@@ -1369,6 +1369,39 @@ void main() {
     }
   });
 
+  test('client key header aliases exclude echoed IDs but keep safe IDs', () {
+    const credential = 'opaque-client-value-123';
+    const safeRequestId = 'req-safe-after-client-key';
+    for (final headerName in [
+      'clientKey',
+      'client_key',
+      'client-key',
+      'X-Client-Key',
+    ]) {
+      final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders(
+        {headerName: credential},
+      );
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'requestId': credential,
+          'data': {'requestId': safeRequestId},
+        },
+        excludedValues: excludedValues,
+      )!;
+
+      expect(excludedValues, contains(credential), reason: headerName);
+      expect(
+          response,
+          {
+            'statusCode': 401,
+            'requestId': safeRequestId,
+          },
+          reason: headerName);
+      expect(jsonEncode(response), isNot(contains(credential)));
+    }
+  });
+
   test('request IDs exclude echoes matching a short masked auth header', () {
     const apiKey = 'abcd123456789';
     final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({

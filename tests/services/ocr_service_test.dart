@@ -3539,6 +3539,42 @@ void main() {
       );
 
       test(
+        'success diagnostics exclude request IDs echoed from client key headers',
+        () async {
+          const clientKey = 'opaque-client-value-123';
+          final dio = Dio(BaseOptions(
+            headers: {'X-Client-Key': clientKey},
+          ))
+            ..interceptors.add(
+              _SuccessInterceptor(
+                {
+                  'choices': [
+                    {
+                      'message': {'content': 'test text'},
+                    },
+                  ],
+                },
+                headers: {
+                  'x-request-id': [clientKey],
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], isNull);
+          expect(
+            jsonEncode(service.diagnosticResponse()),
+            isNot(contains(clientKey)),
+          );
+        },
+      );
+
+      test(
         'success diagnostics exclude request IDs echoed from camelCase URL secrets',
         () async {
           const secret = 'opaque-api-secret-url-r85';
