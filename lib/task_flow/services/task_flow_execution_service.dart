@@ -429,7 +429,7 @@ class TaskFlowExecutionService {
             batchIndex: entry.key,
             snapshot: snapshot,
             subTasks: _steps(flow),
-            inputText: entry.value.text,
+            inputText: entry.value.ownedStoragePath ?? entry.value.text,
             inputDurationSec: entry.value.durationSec,
             inputMimeType: entry.value.mimeType,
             inputType: flow.inputType,
@@ -741,11 +741,36 @@ class TaskFlowExecutionService {
       prefix++;
     }
     final flow = snapshot.flow;
-    final data = prefix == 0
-        ? FlowPayload.fromValue(current.inputText, flow.inputType,
-            mimeType: current.inputMimeType, fileName: current.inputFileName)
-        : current.subTasks[prefix - 1].result!;
-    await _readable(data, current.flowId);
+    late final FlowPayload data;
+    try {
+      data = prefix == 0
+          ? FlowPayload.fromValue(
+              await resolveTaskFlowInputReference(FlowRunInput(
+                text: current.inputText,
+                mimeType: current.inputMimeType,
+                fileName: current.inputFileName,
+                ownedStoragePath: current.inputStoragePath,
+              )),
+              flow.inputType,
+              mimeType: current.inputMimeType,
+              fileName: current.inputFileName)
+          : current.subTasks[prefix - 1].result!;
+      await _readable(data, current.flowId);
+    } catch (_) {
+      if (_currentControl(id, revision) != null) {
+        _notifier.setExecutionStatus(
+          id,
+          FlowExecutionStatus.failed,
+          error: '已保存的步骤文件不存在、为空或无法读取，请重新运行',
+        );
+        await _notifier.persist();
+      }
+      throw TaskFlowValidationException(
+        '已保存的步骤文件不存在、为空或无法读取，请重新运行',
+        flowId: current.flowId,
+        isInputError: true,
+      );
+    }
     current = _currentControl(id, revision);
     if (current == null) return;
     final remaining = flow.blocks.skip(prefix).toList();
@@ -1090,6 +1115,19 @@ class TaskFlowExecutionService {
           }
           current = step.result!;
           continue;
+        }
+        if (i == 0) {
+          current = FlowPayload.fromValue(
+              await resolveTaskFlowInputReference(FlowRunInput(
+                text: original.inputText,
+                mimeType: original.inputMimeType,
+                fileName: original.inputFileName,
+                ownedStoragePath: original.inputStoragePath,
+              )),
+              flow.inputType,
+              mimeType: original.inputMimeType,
+              fileName: original.inputFileName);
+          await _readable(current, flow.id);
         }
         activeStepId = step.id;
         final block = flow.blocks[i];

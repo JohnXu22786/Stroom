@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as p;
 
 import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
+import '../../services/attachment_storage.dart';
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
 import '../../utils/provider_models.dart';
 import '../../utils/web_file_store.dart';
@@ -41,6 +43,19 @@ class TaskFlowValidationException implements Exception {
   @override
   String toString() =>
       blockIndex == null ? message : '步骤 ${blockIndex! + 1}：$message';
+}
+
+/// Resolve a picked file's durable storage reference for this runtime.
+/// Native execution records may outlive the app-container path that was
+/// current when the picker first selected the file.
+Future<String> resolveTaskFlowInputReference(FlowRunInput input) async {
+  final storagePath = input.ownedStoragePath;
+  if (storagePath == null) return input.text;
+  if (kIsWeb) return storagePath;
+  return p.join(
+    await AttachmentStorage.getStorageDirPath(),
+    p.basename(storagePath),
+  );
 }
 
 /// Validate the entire chain and every input before creating execution records.
@@ -190,7 +205,7 @@ Future<void> validateTaskFlow(
   final firstType = flow.blocks.first.getDefinition()!.inputType;
   final inputType = firstType == IOType.any ? flow.inputType : firstType;
   for (var i = 0; i < inputs.length; i++) {
-    final text = inputs[i].text;
+    final text = await resolveTaskFlowInputReference(inputs[i]);
     String? error;
     var checkLargeImage = false;
     var checkTextEncoding = false;

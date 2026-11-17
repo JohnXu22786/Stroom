@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import '../../services/attachment_storage.dart';
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
@@ -1582,14 +1581,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         final bytes = await _readGenericFile(file);
         final storagePath = await AttachmentStorage.saveFile(file.name, bytes);
         savedPaths.add(storagePath);
-        // The web reference is an IndexedDB key. Native validation and
-        // execution use File(reference), so they need the absolute path.
-        final reference = kIsWeb
-            ? storagePath
-            : p.join(
-                await AttachmentStorage.getStorageDirPath(),
-                p.basename(storagePath),
-              );
+        // Keep the durable attachment reference in the run input. Native
+        // execution resolves it against the current app storage directory.
+        final reference = storagePath;
         selected[reference] = file.name;
         owned[reference] = storagePath;
       }
