@@ -75,6 +75,56 @@ void main() {
   const fragmentNote =
       'Explain #access_token=ordinary-text without changing it';
 
+  test('credential aliases stay out of launch snapshots and hydrate live', () {
+    ProviderEntriesState providers(String apiToken, String accessKey) {
+      final state = modelProviders('provider-secret', '0.5');
+      state.entries.single.configs.single.models.single.customParams.addAll([
+        CustomParam(paramName: 'api_token', defaultValue: apiToken),
+        CustomParam(paramName: 'access_key', defaultValue: accessKey),
+        CustomParam(paramName: 'temperature', defaultValue: '0.5'),
+      ]);
+      return state;
+    }
+
+    final snapshot = FlowLaunchSnapshot.capture(
+      flow,
+      providers('launch-api-token', 'launch-access-key'),
+      [],
+    );
+    final encoded = jsonEncode(snapshot.toMap());
+    expect(encoded, isNot(contains('api_token')));
+    expect(encoded, isNot(contains('launch-api-token')));
+    expect(encoded, isNot(contains('access_key')));
+    expect(encoded, isNot(contains('launch-access-key')));
+
+    final resolved = resolveProviderModel(
+      FlowLaunchSnapshot.fromMap(snapshot.toMap()).resolveProviders(
+        providers('current-api-token', 'current-access-key'),
+      ),
+      'tts',
+      flow.blocks.single.params['modelRef'],
+    )!;
+    final params = resolved.model.customParams;
+    expect(
+      params
+          .singleWhere((param) => param.paramName == 'api_token')
+          .defaultValue,
+      'current-api-token',
+    );
+    expect(
+      params
+          .singleWhere((param) => param.paramName == 'access_key')
+          .defaultValue,
+      'current-access-key',
+    );
+    expect(
+      params
+          .singleWhere((param) => param.paramName == 'temperature')
+          .defaultValue,
+      '0.5',
+    );
+  });
+
   test(
     'fragment URLs redact saved values and hydrate config and model callbacks',
     () {
