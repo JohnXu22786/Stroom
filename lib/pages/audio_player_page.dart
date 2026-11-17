@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
@@ -17,6 +16,7 @@ import '../providers/tts_state_provider.dart';
 import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../utils/audio_playback.dart';
+import '../utils/audio_player_temp_file.dart';
 import '../utils/audio_utils.dart';
 import '../utils/system_pick_utils.dart';
 import '../widgets/app_media_picker_dialog.dart';
@@ -440,6 +440,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     if (!kIsWeb) {
       // Native: read into memory, validate/convert format, play from temp
       final data = await FileManifest.readFile(widget.filePath);
+      if (!mounted) return;
       if (data == null || data.isEmpty) {
         throw Exception(_l10n.audioPlayerFileNotFound(widget.filePath));
       }
@@ -448,12 +449,24 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         requestedFormat: extension,
         sampleRate: 24000,
       );
-      final tempDir = await getTemporaryDirectory();
-      final tempPath =
-          '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.${fixed.$2}';
-      await File(tempPath).writeAsBytes(fixed.$1);
-      _tempFilePath = tempPath;
-      await _player!.load(tempPath);
+      final tempFile = await writeAudioPlayerTempFile(
+        bytes: fixed.$1,
+        extension: fixed.$2,
+        isDisposed: () => !mounted,
+      );
+      if (tempFile == null) return;
+      if (!mounted) {
+        await deleteAudioPlayerTempFile(tempFile);
+        return;
+      }
+      _tempFilePath = tempFile.path;
+      final player = _player;
+      if (player == null) {
+        await deleteAudioPlayerTempFile(tempFile);
+        _tempFilePath = null;
+        return;
+      }
+      await player.load(tempFile.path);
     } else {
       // Web: 读取文件并创建 Blob URL
       final data = await FileManifest.readFile(widget.filePath);
@@ -633,9 +646,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         diagnosticInfo: _diagnosticInfo,
         onRetry: () {
           if (_tempFilePath != null) {
-            try {
-              File(_tempFilePath!).delete();
-            } catch (_) {}
+            unawaited(deleteAudioPlayerTempFile(File(_tempFilePath!)));
             _tempFilePath = null;
           }
           _disposePlayer();
@@ -1154,9 +1165,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   @override
   void dispose() {
     if (_tempFilePath != null) {
-      try {
-        File(_tempFilePath!).delete();
-      } catch (_) {}
+      unawaited(deleteAudioPlayerTempFile(File(_tempFilePath!)));
     }
     _disposePlayer();
     _textController.dispose();
