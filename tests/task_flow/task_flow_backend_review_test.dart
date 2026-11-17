@@ -1714,6 +1714,20 @@ void main() {
         'owned file retry');
     expect(notifier.execution(retryIds.single)!.inputText, storagePath);
 
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 1);
+    await expectLater(
+      service.retryExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+    final failedRetry = notifier.executions.firstWhere(
+      (execution) => execution.id != ids.single && execution.id != retryIds.single,
+    );
+    expect(failedRetry.status, FlowExecutionStatus.failed);
+    expect(failedRetry.inputStoragePath, storagePath);
+    expect(failedRetry.error, contains('文件不存在'));
+    PathProviderPlatform.instance = _Documents(directory.path);
+
     saved = notifier.execution(ids.single)!;
     notifier.state = [
       saved.copyWith(

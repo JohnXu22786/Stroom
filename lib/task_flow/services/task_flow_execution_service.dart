@@ -534,8 +534,43 @@ class TaskFlowExecutionService {
     final path = _execution(id)?.inputStoragePath;
     return _notifier.withInputStoragePathLock(
         path,
-        () => _retryExecution(id,
-            useLatestConfiguration: useLatestConfiguration));
+        () async {
+          try {
+            return await _retryExecution(id,
+                useLatestConfiguration: useLatestConfiguration);
+          } on TaskFlowValidationException catch (error) {
+            final original = _execution(id);
+            if (original?.inputStoragePath != null && error.isInputError) {
+              await _persistRetryInputFailure(original!, error);
+            }
+            rethrow;
+          }
+        });
+  }
+
+  Future<void> _persistRetryInputFailure(
+    TaskFlowExecution original,
+    TaskFlowValidationException error,
+  ) async {
+    final snapshot = original.snapshot;
+    final failure = TaskFlowExecution(
+      flowId: original.flowId,
+      flowName: original.flowName,
+      status: FlowExecutionStatus.failed,
+      completedAt: DateTime.now(),
+      snapshot: snapshot,
+      subTasks: snapshot == null ? original.subTasks : _steps(snapshot.flow),
+      error: error.toString(),
+      inputText: original.inputStoragePath ?? original.inputText,
+      inputDurationSec: original.inputDurationSec,
+      inputMimeType: original.inputMimeType,
+      inputType: original.inputType,
+      inputFileName: original.inputFileName,
+      inputStoragePath: original.inputStoragePath,
+    );
+    if (!await _notifier.addExecutions([failure])) {
+      throw const TaskFlowPersistenceException('无法保存失败的输入重试记录');
+    }
   }
 
   Future<List<String>> _retryExecution(String id,

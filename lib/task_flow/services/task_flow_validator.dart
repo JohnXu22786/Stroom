@@ -205,8 +205,14 @@ Future<void> validateTaskFlow(
   final firstType = flow.blocks.first.getDefinition()!.inputType;
   final inputType = firstType == IOType.any ? flow.inputType : firstType;
   for (var i = 0; i < inputs.length; i++) {
-    final text = await resolveTaskFlowInputReference(inputs[i]);
     String? error;
+    late final String text;
+    try {
+      text = await resolveTaskFlowInputReference(inputs[i]);
+    } catch (_) {
+      error = '文件不存在、为空或无法读取，请重新选择文件';
+      text = inputs[i].text;
+    }
     var checkLargeImage = false;
     var checkTextEncoding = false;
     final inputName = inputs[i].fileName ?? text;
@@ -251,9 +257,9 @@ Future<void> validateTaskFlow(
       }
     }
 
-    if (text.trim().isEmpty) {
+    if (error == null && text.trim().isEmpty) {
       error = '输入为空，请重新输入或选择文件';
-    } else if ([
+    } else if (error == null && [
       IOType.audio,
       IOType.image,
       IOType.video,
@@ -291,7 +297,8 @@ Future<void> validateTaskFlow(
       } catch (_) {
         error = '文件不存在、为空或无法读取，请重新选择文件';
       }
-    } else if (flow.blocks.first.typeKey == BlockType.catcatch) {
+    } else if (error == null &&
+        flow.blocks.first.typeKey == BlockType.catcatch) {
       final uri = Uri.tryParse(text.trim());
       if (uri == null ||
           !['http', 'https'].contains(uri.scheme) ||
