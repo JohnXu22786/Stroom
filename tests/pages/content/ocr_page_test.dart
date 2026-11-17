@@ -3849,7 +3849,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Instruction A').last);
         await tester.pumpAndSettle();
@@ -3909,7 +3909,7 @@ void main() {
 
       // The selector is always visible regardless of configuration.
       expect(find.text('指令'), findsOneWidget);
-      expect(find.text('默认（仅发送图片）'), findsOneWidget);
+      expect(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'), findsOneWidget);
     });
 
     testWidgets(
@@ -3985,7 +3985,7 @@ void main() {
 
         expect(find.text('Selected Model | Stable Provider'), findsOneWidget);
         expect(find.text('指令'), findsOneWidget);
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
         expect(find.text('Test instruction'), findsWidgets);
         await tester.tap(find.text('Test instruction').last);
@@ -4011,10 +4011,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('指令'), findsOneWidget);
-      expect(find.text('默认（仅发送图片）'), findsOneWidget);
+      expect(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'), findsOneWidget);
 
       // Open the dropdown — both instruction names are listed.
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       expect(find.text('发票提取'), findsWidgets);
       expect(find.text('表格提取'), findsWidgets);
@@ -4107,7 +4107,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       for (final template in ocrOutputTemplates) {
         expect(find.text(template.label), findsOneWidget);
@@ -4147,7 +4147,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Markdown 模板').last);
       await tester.pumpAndSettle();
@@ -4196,7 +4196,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Whitespace prompt').last);
         await tester.pumpAndSettle();
@@ -4226,7 +4226,7 @@ void main() {
 
       // Open the dropdown — the unnamed instruction is labeled by its
       // content snippet.
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
 
       expect(find.text('提取图片中的全部文字并翻译'), findsWidgets);
@@ -4248,7 +4248,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open the instruction dropdown and pick the second instruction.
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('表格提取').last);
       await tester.pumpAndSettle();
@@ -4271,7 +4271,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Select the instruction.
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('发票提取').last);
       await tester.pumpAndSettle();
@@ -4361,7 +4361,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('已保存的指令快照'), findsOneWidget);
-        expect(find.text('默认（仅发送图片）'), findsNothing);
+        expect(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'), findsNothing);
       },
     );
 
@@ -4406,7 +4406,7 @@ void main() {
 
         // The list has not arrived yet — the dropdown shows the default
         // instead of crashing on an out-of-range value.
-        expect(find.text('默认（仅发送图片）'), findsOneWidget);
+        expect(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'), findsOneWidget);
 
         // The list arrives — the restored instruction selection applies.
         await tester.pump(const Duration(milliseconds: 200));
@@ -4454,9 +4454,9 @@ void main() {
 
         // Inside the pending window the dropdown has only the default item —
         // explicitly pick it.
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('默认（仅发送图片）').last);
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）').last);
         await tester.pumpAndSettle();
 
         // The load lands — the user's explicit choice sticks and the retry
@@ -4464,7 +4464,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 200));
         await tester.pumpAndSettle();
 
-        expect(find.text('默认（仅发送图片）'), findsOneWidget);
+        expect(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'), findsOneWidget);
         expect(find.text('表格提取'), findsNothing);
       },
     );
@@ -4610,8 +4610,8 @@ void main() {
         expect(find.text('Manage recognition instructions'), findsOneWidget);
         expect(
           find.text(
-            'These instructions apply to all recognition models. If none is '
-            'selected, only the image is sent.',
+            'These instructions apply to all recognition models. If none is selected, '
+            'no custom instruction is added; the default OCR prompt is still used.',
           ),
           findsOneWidget,
         );
@@ -4678,7 +4678,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('管理识别指令'), findsOneWidget);
-        expect(find.text('这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。'), findsOneWidget);
+        expect(find.text('这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。'), findsOneWidget);
         expect(find.text('我的识别名称'), findsOneWidget);
         expect(find.text('保持原始提示文字'), findsOneWidget);
         expect(find.byTooltip('编辑指令'), findsOneWidget);
@@ -4731,7 +4731,7 @@ void main() {
         // Close the dialog and open the dropdown — instruction is selectable.
         await tester.tap(find.text('关闭'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
         expect(find.text('发票提取'), findsWidgets);
       },
@@ -4774,7 +4774,7 @@ void main() {
       // And in the dropdown after closing.
       await tester.tap(find.text('关闭'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       expect(find.text('发票提取v2'), findsWidgets);
     });
@@ -4855,7 +4855,7 @@ void main() {
         await notifier.add('新建', '新指令');
         await notifier.add('新建', '新指令');
         await tester.pumpAndSettle();
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
         // Pick the second equal-valued row so row identity survives its edit.
         await tester.tap(find.text('新建').last);
@@ -4916,7 +4916,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Select the middle instruction, then delete it via the manage dialog.
-      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('表格提取').last);
       await tester.pumpAndSettle();
@@ -4939,7 +4939,7 @@ void main() {
         // Closing the dialog must not leave its former index selected.
         await tester.tap(find.text('关闭'));
         await tester.pumpAndSettle();
-        expect(find.text('默认（仅发送图片）'), findsOneWidget);
+        expect(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'), findsOneWidget);
       } finally {
         if (!finishRemove.isCompleted) finishRemove.complete();
         await tester.pumpAndSettle();
@@ -4963,7 +4963,7 @@ void main() {
 
         // Select the third instruction, then delete the first. Its former
         // index remains valid after deletion but now points at another prompt.
-        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.tap(find.text('默认（不添加自定义指令；仍使用默认 OCR 提示）'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('备注提取').last);
         await tester.pumpAndSettle();
