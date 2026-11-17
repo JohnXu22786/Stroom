@@ -8,7 +8,7 @@ import 'package:stroom/providers/provider_config.dart';
 class _FailingGroupRemovalNotifier extends ProviderEntriesNotifier {
   _FailingGroupRemovalNotifier() {
     state = ProviderEntriesState(
-      entries: [ProviderEntry(id: 'mcp', type: 'mcp', name: 'MCP')],
+      entries: [ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP')],
       mcpGroups: [
         ...builtinMcpProviderGroups,
         const McpProviderGroup(id: 'custom_group', name: 'Custom group'),
@@ -39,7 +39,7 @@ void main() {
           locale: const Locale('en'),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: const ProviderConfigPage(entryId: 'mcp'),
+          home: const ProviderConfigPage(entryId: 'builtin_mcp'),
         ),
       ),
     );
