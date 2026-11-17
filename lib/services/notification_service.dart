@@ -277,8 +277,7 @@ class NotificationService {
                 currentSecond + _legacyNotificationIdSafetyMargin
             ? _notificationIdNamespaceStart
             : currentSecond + _legacyNotificationIdSafetyMargin;
-        final lastId = prefs.getInt(_lastNotificationIdKey) ??
-            firstId - 1;
+        final lastId = prefs.getInt(_lastNotificationIdKey) ?? firstId - 1;
         if (lastId >= 0x7fffffff) {
           throw StateError('Notification ID range is exhausted');
         }
