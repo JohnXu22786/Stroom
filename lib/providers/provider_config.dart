@@ -486,14 +486,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
   /// 在列表第一个位置添加新条目
   Future<void> addFirst(ProviderEntry entry) => _enqueueStateMutation(() async {
-        state = ProviderEntriesState(
+        final updatedState = ProviderEntriesState(
           entries: [entry, ...state.entries],
           mcpGroups: state.mcpGroups,
         );
-        await _persist();
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
       });
 
-  /// 更新条目
+  /// 更新条目。保留旧参数供已有调用方兼容，但持久化失败始终向调用方传播。
   Future<void> update(
     String id,
     ProviderEntry updated, {
@@ -505,7 +506,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           mcpGroups: state.mcpGroups,
         );
         await _persist(
-          rethrowOnFailure: requirePersistence,
+          rethrowOnFailure: true,
           persistMcpGroups: false,
           stateToPersist: updatedState,
         );
@@ -514,20 +515,22 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
   /// 删除条目
   Future<void> remove(String id) => _enqueueStateMutation(() async {
-        state = ProviderEntriesState(
+        final updatedState = ProviderEntriesState(
           entries: state.entries.where((e) => e.id != id).toList(),
           mcpGroups: state.mcpGroups,
         );
-        await _persist();
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
       });
 
   Future<void> addMcpGroup(McpProviderGroup group) =>
       _enqueueStateMutation(() async {
-        state = ProviderEntriesState(
+        final updatedState = ProviderEntriesState(
           entries: state.entries,
           mcpGroups: [...state.mcpGroups, group],
         );
-        await _persist();
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
       });
 
   Future<void> updateMcpGroup(McpProviderGroup updated) =>
@@ -536,25 +539,27 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             .where((group) => group.id == updated.id)
             .firstOrNull;
         if (current == null || current.isBuiltin) return;
-        state = ProviderEntriesState(
+        final updatedState = ProviderEntriesState(
           entries: state.entries,
           mcpGroups: state.mcpGroups
               .map((group) => group.id == updated.id ? updated : group)
               .toList(),
         );
-        await _persist();
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
       });
 
   Future<void> setMcpGroupEnabled(String id, bool enabled) =>
       _enqueueStateMutation(() async {
-        state = ProviderEntriesState(
+        final updatedState = ProviderEntriesState(
           entries: state.entries,
           mcpGroups: state.mcpGroups
               .map((group) =>
                   group.id == id ? group.copyWith(enabled: enabled) : group)
               .toList(),
         );
-        await _persist();
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
       });
 
   Future<void> removeMcpGroup(String id) => _enqueueStateMutation(() async {
@@ -611,8 +616,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             }).toList(),
           );
         }).toList();
-        state =
+        final updatedState =
             ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups);
-        await _persist();
+        await _persist(rethrowOnFailure: true, stateToPersist: updatedState);
+        state = updatedState;
       });
 }

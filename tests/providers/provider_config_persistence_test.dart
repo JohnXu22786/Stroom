@@ -742,6 +742,78 @@ void main() {
     }
   });
 
+  test('provider addition does not publish when persistence fails', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderEntriesStore(
+      const {},
+      failedWriteCount: 1,
+    );
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final originalEntries = notifier.state.entries;
+
+      await expectLater(
+        notifier.addFirst(
+          ProviderEntry(id: 'new_llm', type: 'llm', name: 'New provider'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(notifier.state.entries, same(originalEntries));
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'new_llm'),
+        isFalse,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), isNull);
+      await prefs.reload();
+      expect(prefs.getString('provider_entries'), isNull);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('provider addition is published only after persistence completes',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _GatedProviderEntriesStore(const {});
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final originalEntries = notifier.state.entries;
+      store.isArmed = true;
+
+      final add = notifier.addFirst(
+        ProviderEntry(id: 'new_llm', type: 'llm', name: 'New provider'),
+      );
+      await store.firstProviderEntriesWriteStarted.future;
+
+      expect(notifier.state.entries, same(originalEntries));
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'new_llm'),
+        isFalse,
+      );
+
+      store.releaseFirstProviderEntriesWrite.complete();
+      await add;
+
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'new_llm'),
+        isTrue,
+      );
+    } finally {
+      if (!store.releaseFirstProviderEntriesWrite.isCompleted) {
+        store.releaseFirstProviderEntriesWrite.complete();
+      }
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
   test('provider update ignores an unrelated group write failure', () async {
     const savedEntries = '[{"id":"existing_llm","type":"llm",'
         '"name":"Before","configs":[]}]';
