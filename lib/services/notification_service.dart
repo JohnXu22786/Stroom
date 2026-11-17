@@ -19,6 +19,9 @@ import '../widgets/constrained_text.dart';
 const _notificationsEnabledKey = 'notifications_enabled';
 const _notificationsPermissionRequestedKey =
     'notifications_permission_requested';
+const _lastNotificationIdKey = 'last_notification_id';
+const _notificationIdNamespaceStart = 2000000000;
+const _legacyNotificationIdSafetyMargin = 10000000;
 
 // ============================================================================
 // Notification Service
@@ -43,15 +46,9 @@ class NotificationService {
   /// Keeps service strings in sync with the app's selected locale.
   void updateLocaleOverride(Locale? locale) => _localeOverride = locale;
 
-  /// 单调递增的通知 ID 计数器。
-  ///
-  /// 不直接使用 taskId.hashCode：哈希可能碰撞（导致新通知覆盖
-  /// 旧通知，用户看不到第一个任务的完成通知），也可能是负数
-  /// （部分厂商 ROM 对负 ID 处理异常）。
-  ///
-  /// 初始值用当前时间（秒）播种：进程重启后 ID 不会从头开始，
-  /// 避免新通知意外覆盖上个进程还残留在通知栏的旧通知。
-  int _notificationIdCounter = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  /// Serializes ID reservations so overlapping notifications cannot store
+  /// the same value in shared preferences.
+  Future<void> _notificationIdReservationQueue = Future.value();
 
   /// Callback for in-app notification display.
   /// Set by the app shell to show an in-app banner.
@@ -251,10 +248,11 @@ class NotificationService {
               payload.error ?? strings.notificationUnknownError,
             );
 
-      // 使用单调递增 ID，避免 hashCode 碰撞导致通知互相覆盖。
-      _notificationIdCounter += 1;
+      // Persist each ID before showing it so a quick process restart cannot
+      // reuse an ID that is still present in the system notification tray.
+      final notificationId = await _reserveNotificationId();
       await _plugin!.show(
-        id: _notificationIdCounter,
+        id: notificationId,
         title: title,
         body: body,
         notificationDetails: details,
@@ -265,6 +263,35 @@ class NotificationService {
         '[NotificationService] Failed to show system notification: $e',
       );
     }
+  }
+
+  Future<int> _reserveNotificationId() {
+    final completer = Completer<int>();
+    _notificationIdReservationQueue = _notificationIdReservationQueue.then((
+      _,
+    ) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final currentSecond = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final firstId = _notificationIdNamespaceStart >
+                currentSecond + _legacyNotificationIdSafetyMargin
+            ? _notificationIdNamespaceStart
+            : currentSecond + _legacyNotificationIdSafetyMargin;
+        final lastId = prefs.getInt(_lastNotificationIdKey) ??
+            firstId - 1;
+        if (lastId >= 0x7fffffff) {
+          throw StateError('Notification ID range is exhausted');
+        }
+        final nextId = lastId + 1;
+        if (!await prefs.setInt(_lastNotificationIdKey, nextId)) {
+          throw StateError('Could not persist the next notification ID');
+        }
+        completer.complete(nextId);
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 
   void _onNotificationResponse(NotificationResponse response) {
