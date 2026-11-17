@@ -87,12 +87,15 @@ class MediaPreviewSheet extends ConsumerStatefulWidget {
   final String taskTitle;
   @visibleForTesting
   final AudioPlayer Function()? audioPlayerFactory;
+  @visibleForTesting
+  final Future<void> Function(String url, File file)? downloadToFile;
 
   const MediaPreviewSheet({
     super.key,
     required this.resource,
     required this.taskTitle,
     this.audioPlayerFactory,
+    this.downloadToFile,
   });
 
   @override
@@ -199,7 +202,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
       _downloadInProgress = true;
       try {
-        await _downloadToFile(widget.resource.url, _tempFile!);
+        await (widget.downloadToFile ?? _downloadToFile)(
+          widget.resource.url,
+          _tempFile!,
+        );
       } finally {
         _downloadInProgress = false;
         if (!mounted) await _deleteTempFile();
