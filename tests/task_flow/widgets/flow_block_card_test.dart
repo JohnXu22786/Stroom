@@ -19,6 +19,21 @@ void main() {
     await tester.pumpWidget(_cardAtWidth(358));
     await tester.pumpAndSettle();
 
+    final card = find.byType(FlowBlockCard);
+    final headerLayout = find.descendant(
+      of: card,
+      matching: find.byType(LayoutBuilder),
+    );
+    final context = tester.element(card);
+    debugPrint(
+      'phone header geometry: view=${tester.view.physicalSize} '
+      'dpr=${tester.view.devicePixelRatio} '
+      'media=${MediaQuery.sizeOf(context)} '
+      'scale=${MediaQuery.textScalerOf(context).scale(1)} '
+      'card=${tester.getRect(find.byType(Card))} '
+      'header=${tester.getRect(headerLayout)}',
+    );
+
     final title = tester.getRect(find.text('1. Audio Separation'));
     final temporaryOutput = tester.getRect(find.byType(Checkbox));
 
