@@ -37,37 +37,39 @@ void main() {
       final responseGate = Completer<void>();
       final closeResponseGate = Completer<void>();
       var requestCount = 0;
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      final serverTask = server.listen((request) async {
-        if (++requestCount == 1) {
-          requestReceived.complete();
-          await responseGate.future;
-          request.response
-            ..statusCode = HttpStatus.ok
-            ..contentLength = 8;
-          request.response.add([1, 2, 3, 4]);
-          await request.response.flush();
-          await closeResponseGate.future;
-          request.response.add([5, 6, 7, 8]);
-          await request.response.close();
-        } else {
-          secondRequestReceived.complete();
-          request.response
-            ..statusCode = HttpStatus.ok
-            ..contentLength = 4
-            ..add([1, 2, 3, 4]);
-          await request.response.close();
-        }
+      late HttpServer server;
+      late StreamSubscription<HttpRequest> serverTask;
+      await tester.runAsync(() async {
+        server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        serverTask = server.listen((request) async {
+          if (++requestCount == 1) {
+            requestReceived.complete();
+            await responseGate.future;
+            request.response
+              ..statusCode = HttpStatus.ok
+              ..contentLength = 8;
+            request.response.add([1, 2, 3, 4]);
+            await request.response.flush();
+            await closeResponseGate.future;
+            request.response.add([5, 6, 7, 8]);
+            await request.response.close();
+          } else {
+            secondRequestReceived.complete();
+            request.response
+              ..statusCode = HttpStatus.ok
+              ..contentLength = 4
+              ..add([1, 2, 3, 4]);
+            await request.response.close();
+          }
+        });
       });
-      addTearDown(() async {
+      addTearDown(() {
         if (!responseGate.isCompleted) responseGate.complete();
         if (!closeResponseGate.isCompleted) closeResponseGate.complete();
-        await tester.runAsync(() async {
-          await serverTask.cancel();
-          await server.close(force: true);
-          PathProviderPlatform.instance = previousPathProvider;
-          await tempDirectory.delete(recursive: true);
-        });
+        unawaited(serverTask.cancel());
+        unawaited(server.close(force: true));
+        PathProviderPlatform.instance = previousPathProvider;
+        tempDirectory.deleteSync(recursive: true);
       });
 
       Widget previewWidget() => ProviderScope(
