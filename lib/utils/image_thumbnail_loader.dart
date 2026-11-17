@@ -68,6 +68,9 @@ class ImageThumbnailLoader {
   @visibleForTesting
   static int generationCount = 0;
 
+  @visibleForTesting
+  static Future<void> Function(String hash)? beforeThumbnailPersistForTesting;
+
   /// 加载 [record] 的缩略图字节：
   /// 内存缓存 → 磁盘 `_thumb_v2.png` → 缺失时读原图生成并持久化。
   ///
@@ -82,7 +85,11 @@ class ImageThumbnailLoader {
     final inflight = _inflight[record.hash];
     if (inflight != null) return inflight;
 
-    final future = _loadThumbnailInner(record);
+    late final Future<Uint8List?> future;
+    future = _loadThumbnailInner(
+      record,
+      () => identical(_inflight[record.hash], future),
+    );
     _inflight[record.hash] = future;
     try {
       return await future;
@@ -95,7 +102,10 @@ class ImageThumbnailLoader {
     }
   }
 
-  static Future<Uint8List?> _loadThumbnailInner(ImageRecord record) async {
+  static Future<Uint8List?> _loadThumbnailInner(
+    ImageRecord record,
+    bool Function() isCurrent,
+  ) async {
     // 1) 磁盘上已有缩略图 → 读回并缓存
     Uint8List? existing;
     try {
@@ -123,25 +133,39 @@ class ImageThumbnailLoader {
       return null;
     }
 
-    // 加载期间 invalidate() 被调用（记录已删除）：
-    // 不再持久化/缓存，避免已删除记录写回孤儿缩略图文件
-    if (!_inflight.containsKey(record.hash)) return null;
+    await beforeThumbnailPersistForTesting?.call(record.hash);
 
     var persisted = false;
-    try {
-      await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
-      persisted = true;
-    } catch (e) {
-      // 持久化失败仅影响下次加载的缓存命中，不阻塞本次显示
-      debugPrint('ImageThumbnailLoader persist thumb failed: $e');
-    }
-    // 旧版（变形）命名残留文件已无用途：仅当 v2 成功落盘后才清理，
-    // 避免写入失败时把磁盘上仅剩的缩略图也一并删掉
-    if (persisted) {
-      await ImageManifest.deleteFile('${record.hash}_thumb.png');
-    }
-    _cache.put(record.hash, thumb);
-    return thumb;
+    var stillActive = false;
+    await ImageManifest.withSaveLock(record.hash, () async {
+      // Record deletion uses this same hash lock. Recheck after acquiring it:
+      // invalidation may have happened while this load waited to publish.
+      if (!isCurrent()) return;
+
+      try {
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
+        persisted = true;
+      } catch (e) {
+        // Persist failure only affects the next load's cache hit; it should
+        // not block displaying the generated thumbnail now.
+        debugPrint('ImageThumbnailLoader persist thumb failed: $e');
+      }
+
+      // The legacy name is obsolete. Clean it only after v2 persisted, so a
+      // failed write cannot remove the only on-disk thumbnail.
+      if (persisted) {
+        await ImageManifest.deleteFile('${record.hash}_thumb.png');
+      }
+
+      // invalidate() can run while the storage write is in progress. Deletion
+      // is waiting on this lock and will remove a late write, so do not retain
+      // its bytes in memory or report them as a completed load.
+      if (isCurrent()) {
+        _cache.put(record.hash, thumb);
+        stillActive = true;
+      }
+    });
+    return stillActive ? thumb : null;
   }
 
   /// 生成缩略图（最大边 [maxDimension]px，保持宽高比，小图不放大）。

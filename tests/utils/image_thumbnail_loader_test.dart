@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -58,6 +59,7 @@ void main() {
     ImageManifest.invalidateCache();
     ImageThumbnailLoader.clear();
     ImageThumbnailLoader.generationCount = 0;
+    ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
   });
 
   group('ImageThumbnailLoader', () {
@@ -203,6 +205,72 @@ void main() {
 
       expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
           reason: 'after invalidate the stale memory entry must not be used');
+    });
+
+    testWidgets(
+        'thumbnail publication waits for deletion and cannot recreate an '
+        'orphan after invalidation', (tester) async {
+      final record = _makeRecord(hash: 'delete_during_thumbnail_write');
+      final png = await tester.runAsync(
+          () => _createEnginePng(width: 512, height: 512));
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
+      });
+
+      final hashHeld = Completer<void>();
+      final releaseHash = Completer<void>();
+      final heldLock = ImageManifest.withSaveLock(record.hash, () async {
+        hashHeld.complete();
+        await releaseHash.future;
+      });
+      await hashHeld.future;
+
+      final persistReady = Completer<void>();
+      final resumePersist = Completer<void>();
+      ImageThumbnailLoader.beforeThumbnailPersistForTesting = (hash) async {
+        persistReady.complete();
+        await resumePersist.future;
+      };
+      final completedBeforeDelete = await tester.runAsync(() async {
+        var loadCompletedWhileHashHeld = false;
+        final loading =
+            ImageThumbnailLoader.loadThumbnail(record).then((result) {
+          loadCompletedWhileHashHeld = true;
+          return result;
+        });
+        // Pause after generation has completed, while publication is staging.
+        await persistReady.future;
+
+        ImageThumbnailLoader.invalidate(record.hash);
+        final deletion = ImageManifest.deleteRecord(record.id);
+        resumePersist.complete();
+        await Future<void>.delayed(Duration.zero);
+        final completedBeforeDelete = loadCompletedWhileHashHeld;
+        releaseHash.complete();
+        await Future.wait([heldLock, deletion, loading]);
+        return completedBeforeDelete;
+      });
+
+      expect(
+        completedBeforeDelete,
+        isFalse,
+        reason: 'thumbnail publication must wait for the deletion lock',
+      );
+      await tester.runAsync(() async {
+        expect(await ImageManifest.loadRecords(), isEmpty);
+        expect(await ImageManifest.readFile(record.storagePath), isNull);
+        expect(
+          await ImageManifest.readFile(imageThumbFileName(record.hash)),
+          isNull,
+          reason: 'deletion must leave no late-published thumbnail file',
+        );
+      });
+      expect(
+        await ImageThumbnailLoader.loadThumbnail(record),
+        isNull,
+        reason: 'the deleted record must not leave a stale cached thumbnail',
+      );
     });
 
     testWidgets(
