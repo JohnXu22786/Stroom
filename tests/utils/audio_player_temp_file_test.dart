@@ -5,6 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_player_temp_file.dart';
 
 void main() {
+  test('deletes a partial temp file when writing fails', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+
+    await expectLater(
+      writeAudioPlayerTempFile(
+        getTempDirectory: () async => directory,
+        bytes: [1, 2, 3],
+        extension: 'wav',
+        isDisposed: () => false,
+        writeBytes: (file, _) async {
+          await file.writeAsBytes([1]);
+          throw StateError('simulated write failure');
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(directory.listSync(), isEmpty);
+  });
   test('keeps overlapping same-extension temp writes independent', () async {
     final directory = await Directory.systemTemp.createTemp('audio_player_');
     addTearDown(() => directory.delete(recursive: true));

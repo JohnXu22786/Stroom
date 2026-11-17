@@ -28,7 +28,7 @@ Future<File?> writeAudioPlayerTempFile({
       bytes,
     );
   } catch (_) {
-    if (isDisposed()) await deleteAudioPlayerTempFile(file);
+    await deleteAudioPlayerTempFile(file);
     rethrow;
   }
 
