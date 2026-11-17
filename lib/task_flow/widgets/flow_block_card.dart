@@ -121,18 +121,30 @@ class FlowBlockCard extends ConsumerWidget {
           onTemporaryOutputChanged != null)
         Tooltip(
           message: strings.taskFlowUiTemporaryFileHint,
-          child: Semantics(
-            label: strings.taskFlowUiTemporary,
-            child: Checkbox(
-              value: temporaryOutput,
-              onChanged: (value) {
-                if (value != null) {
-                  onTemporaryOutputChanged!(value);
-                }
-              },
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                label: strings.taskFlowUiTemporary,
+                child: Checkbox(
+                  value: temporaryOutput,
+                  onChanged: (value) {
+                    if (value != null) {
+                      onTemporaryOutputChanged!(value);
+                    }
+                  },
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 2),
+              ExcludeSemantics(
+                child: Text(
+                  strings.taskFlowUiTemporary,
+                  style: const TextStyle(fontSize: 10),
+                ),
+              ),
+            ],
           ),
         ),
       // Settings button (hidden in readOnly)

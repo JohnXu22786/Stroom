@@ -18,6 +18,7 @@ void main() {
     final title = tester.getRect(find.text('1. Audio Separation'));
     final temporaryOutput = tester.getRect(find.byType(Checkbox));
 
+    expect(find.text('Temporary'), findsOneWidget);
     expect((title.center.dy - temporaryOutput.center.dy).abs(), lessThan(20));
   });
 
