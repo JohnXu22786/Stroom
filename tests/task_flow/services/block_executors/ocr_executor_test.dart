@@ -922,6 +922,88 @@ void main() {
     );
   });
 
+  test('cancellation during missing WebFileStore read removes the task',
+      () async {
+    const key = 'attachments/cancelled_missing_taskflow_image.png';
+    await WebFileStore.write(key, _validPng());
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<Uint8List?>();
+    var failedTaskObserved = false;
+    final removeListener = background.addListener((tasks) {
+      failedTaskObserved |=
+          tasks.any((task) => task.status == TaskStatus.failed);
+    }, fireImmediately: false);
+    addTearDown(removeListener);
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      readWebFileBytes: (_, {maxBytes}) {
+        readStarted.complete();
+        return releaseRead.future;
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await readStarted.future;
+    executions.cancelExecution(execId);
+    releaseRead.complete(null);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(failedTaskObserved, isFalse);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('missing WebFileStore read reports the localized input error', () async {
+    const key = 'attachments/missing_taskflow_image.png';
+    await WebFileStore.write(key, _validPng());
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        readWebFileBytes: (_, {maxBytes}) async => null,
+        requestOcr: (_, _) async => 'must not be sent',
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        'The image file could not be found. Select the image again.',
+      )),
+    );
+
+    expect(background.state.single.status, TaskStatus.failed);
+  });
+
   test(
     'cancellation during OCR input read prevents request dispatch',
     () async {
