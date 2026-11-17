@@ -27,13 +27,16 @@ class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
   _FailingProviderEntriesStore(
     Map<String, Object> data, {
     this.failedKey = 'flutter.provider_entries',
+    this.failedWriteCount = 1,
   }) : super.withData(data);
 
   final String failedKey;
+  int failedWriteCount;
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) {
-    if (key == failedKey) {
+    if (key == failedKey && failedWriteCount > 0) {
+      failedWriteCount--;
       return Future<bool>.value(false);
     }
     return super.setValue(valueType, key, value);
@@ -610,6 +613,8 @@ void main() {
             .groupId,
         groupId,
       );
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
       await prefs.reload();
       expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
       expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
@@ -724,6 +729,7 @@ void main() {
         'Before',
       );
       final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), savedEntries);
       await prefs.reload();
       expect(prefs.getString('provider_entries'), savedEntries);
     } finally {

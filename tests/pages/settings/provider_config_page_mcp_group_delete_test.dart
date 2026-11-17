@@ -48,9 +48,15 @@ void main() {
     )!;
 
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Custom group'));
+    await tester.scrollUntilVisible(
+      find.text('Custom group'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip(l10n.providerDeleteTooltip));
+    await tester.tap(find.byTooltip(l10n.providerGroupActions));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.providerDeleteGroupAction));
     await tester.pumpAndSettle();
     await tester.tap(find.text(l10n.providerDeleteGroup).last);
     await tester.pumpAndSettle();
