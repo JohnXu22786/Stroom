@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
@@ -17,6 +18,18 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+class _RestoreTestPathProvider extends PathProviderPlatform {
+  _RestoreTestPathProvider(this.root);
+
+  final String root;
+
+  @override
+  Future<String> getApplicationDocumentsPath() async => root;
+
+  @override
+  Future<String> getTemporaryPath() async => root;
+}
 
 /// 流式恢复（restoreBackup）回归测试。
 ///
@@ -1707,11 +1720,20 @@ void main() {
     'restoreBackup validates malformed task JSON before mutating restored data',
     () async {
       WebFileStore.disableTestMode();
+      final previousPathProvider = PathProviderPlatform.instance;
+      final appDir = '$workDir/restore_app_data';
+      PathProviderPlatform.instance = _RestoreTestPathProvider(appDir);
+      AppStorage.resetCache();
+      addTearDown(() {
+        PathProviderPlatform.instance = previousPathProvider;
+        AppStorage.resetCache();
+      });
       SharedPreferences.setMockInitialValues({
         'data_format_versions': jsonEncode(DataParts.currentVersions),
         'existing_pref': 'keep',
       });
-      final appDir = await AppStorage.directory;
+      await Directory(appDir).create(recursive: true);
+      expect(await AppStorage.directory, appDir);
       final existingTaskBytes = Uint8List.fromList(utf8.encode('[]'));
       final existingTextBytes = Uint8List.fromList(utf8.encode('keep'));
       final existingTaskFile = File('$appDir/synthesis/tasks.json');
