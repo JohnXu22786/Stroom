@@ -12,6 +12,7 @@ import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/app_version.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -264,6 +265,52 @@ void main() {
       expect(await refMedia.exists(), isTrue, reason: '被引用的媒体文件不能删');
       expect(await orphan.exists(), isFalse, reason: '无引用且超 3 天应删除');
       expect(await fresh.exists(), isTrue, reason: '3 天缓冲内的文件应保留');
+    });
+
+    test(
+        'cleanupOrphans preserves legacy audio after migration write failure',
+        () async {
+      const hash = 'legacy_audio_hash';
+      const format = 'wa?v';
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'legacy_audio_1',
+        'name': 'legacy audio',
+        'hash': hash,
+        'format': format,
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'sourceText': '',
+        'duration': 1,
+      });
+      WebFileStore.disableTestMode();
+      FileManifest.invalidateCache();
+
+      final audioDir = Directory(p.join(appDir, 'tts_audio'));
+      await audioDir.create(recursive: true);
+      const legacyName = '$hash.$format';
+      final legacyAudio = File(p.join(audioDir.path, legacyName));
+      await legacyAudio.writeAsString('only surviving audio copy');
+      final storageName = AudioRecord.storageFileNameFor(
+        hash: hash,
+        format: format,
+      );
+      await Directory(p.join(audioDir.path, storageName)).create();
+
+      await FileManifest.loadRecords();
+      expect(await legacyAudio.exists(), isTrue,
+          reason: 'failed destination migration must retain its source');
+      expect(await File(p.join(audioDir.path, storageName)).exists(), isFalse,
+          reason: 'the migration destination is blocked');
+      await legacyAudio.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await legacyAudio.exists(), isTrue,
+          reason: 'the live record must keep its legacy source referenced');
+
     });
 
     test('cleanupOrphans keeps old audio with a Windows-invalid format',

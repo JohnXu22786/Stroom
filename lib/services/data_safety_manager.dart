@@ -454,6 +454,7 @@ class DataSafetyManager {
             referenced.add(audio
                 ? AudioRecord.storageFileNameFor(hash: hash, format: format)
                 : '$hash.$format');
+            if (audio) referenced.add('$hash.$format');
             referenced.add('${hash}_thumb_v2.png');
             if (format != 'jpg') {
               referenced.add('${hash}_thumb.jpg');
