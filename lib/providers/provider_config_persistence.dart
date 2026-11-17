@@ -20,6 +20,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       final decoded = jsonDecode(oldJson);
       if (decoded is! List) {
         debugPrint('chat_configs 不是合法数组，跳过旧配置迁移');
+        // Preserve the original payload before removing an unusable legacy
+        // shape; it may still contain settings that can be recovered later.
+        if (!await _backupCorruptProviderEntries(prefs, oldJson)) return;
         await prefs.remove('chat_configs');
         await prefs.remove('chat_selected_config_id');
         return;
