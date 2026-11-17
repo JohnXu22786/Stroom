@@ -538,7 +538,7 @@ class TaskFlowExecutionService {
             useLatestConfiguration: useLatestConfiguration);
       } on TaskFlowValidationException catch (error) {
         final original = _execution(id);
-        if (original?.inputStoragePath != null && error.isInputError) {
+        if (original?.inputStoragePath != null && error.isStorageError) {
           await _persistRetryInputFailure(original!, error);
         }
         rethrow;

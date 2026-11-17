@@ -1727,7 +1727,8 @@ void main() {
         _FailOnDocumentsLookup(directory.path, failOnCall: 1);
     await expectLater(
       service.retryExecution(ids.single),
-      throwsA(isA<TaskFlowValidationException>()),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((error) => error.isStorageError, 'storage failure', isTrue)),
     );
     final failedRetry = notifier.executions.firstWhere(
       (execution) =>

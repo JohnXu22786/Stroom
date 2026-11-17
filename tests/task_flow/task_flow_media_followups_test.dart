@@ -1005,7 +1005,11 @@ void main() {
     await expectLater(
         service.retryExecution(retryIds.single, useLatestConfiguration: true),
         throwsA(isA<TaskFlowValidationException>()
-            .having((error) => error.isInputError, 'input mismatch', isTrue)));
+            .having((error) => error.isInputError, 'input mismatch', isTrue)
+            .having(
+                (error) => error.isStorageError, 'storage failure', isFalse)));
+    expect(executions.executions, hasLength(2),
+        reason: 'a flow type mismatch must not create a retry owner');
     await executions.removeExecution(retryIds.single);
     expect(await File(inputs.first.text).exists(), isFalse);
     final remaining = executions.executions.single;

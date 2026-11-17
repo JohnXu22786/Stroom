@@ -30,6 +30,7 @@ class TaskFlowValidationException implements Exception {
   final int? blockIndex;
   final int? inputIndex;
   final bool isInputError;
+  final bool isStorageError;
 
   const TaskFlowValidationException(
     this.message, {
@@ -38,6 +39,7 @@ class TaskFlowValidationException implements Exception {
     this.blockIndex,
     this.inputIndex,
     this.isInputError = false,
+    this.isStorageError = false,
   });
 
   @override
@@ -206,10 +208,12 @@ Future<void> validateTaskFlow(
   final inputType = firstType == IOType.any ? flow.inputType : firstType;
   for (var i = 0; i < inputs.length; i++) {
     String? error;
+    var storageError = false;
     late final String text;
     try {
       text = await resolveTaskFlowInputReference(inputs[i]);
     } catch (_) {
+      storageError = true;
       error = '文件不存在、为空或无法读取，请重新选择文件';
       text = inputs[i].text;
     }
@@ -296,6 +300,7 @@ Future<void> validateTaskFlow(
           }
         }
       } catch (_) {
+        storageError = true;
         error = '文件不存在、为空或无法读取，请重新选择文件';
       }
     } else if (error == null &&
@@ -315,6 +320,7 @@ Future<void> validateTaskFlow(
         blockIndex: 0,
         inputIndex: i,
         isInputError: true,
+        isStorageError: storageError,
       );
     }
   }
