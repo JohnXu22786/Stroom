@@ -837,6 +837,37 @@ void main() {
     });
   });
 
+  test('request body camel case credentials exclude echoed IDs only', () {
+    const apiToken = 'opaque-body-api-token-207';
+    const safeRequestId = 'req-safe-body-camel-case-207';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {
+        'apiToken': apiToken,
+        'accessTokenExpiresIn': 3600,
+        'accessToken': {'expiresIn': '1800'},
+        'language': 'en',
+      },
+    });
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': apiToken},
+      excludedValues: credentialValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, contains(apiToken));
+    expect(credentialValues, isNot(contains('3600')));
+    expect(credentialValues, isNot(contains('1800')));
+    expect(credentialValues, isNot(contains('en')));
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
   test(
       'request customParams secretAccessKey excludes echoed IDs and keeps safe IDs',
       () {
