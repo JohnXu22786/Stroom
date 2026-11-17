@@ -14,6 +14,36 @@ import 'package:stroom/utils/app_version.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
+final class _RealIO extends IOOverrides {}
+
+final class _FailingMigrationStagedFile extends Fake implements File {
+  _FailingMigrationStagedFile(this.file, this.destinationPath);
+
+  final File file;
+  final String destinationPath;
+
+  @override
+  String get path => file.path;
+
+  @override
+  Future<bool> exists() => file.exists();
+
+  @override
+  Future<File> rename(String newPath) async {
+    if (p.normalize(newPath) == p.normalize(destinationPath)) {
+      throw FileSystemException('Injected migration destination failure', path);
+    }
+    return file.rename(newPath);
+  }
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) =>
+      file.delete(recursive: recursive);
+
+  @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -268,50 +298,66 @@ void main() {
     });
 
     test(
-        'cleanupOrphans preserves legacy audio after migration write failure',
-        () async {
-      const hash = 'legacy_audio_hash';
-      const format = 'wa?v';
-      await ManifestDatabase.insertAudioRecord({
-        'id': 'legacy_audio_1',
-        'name': 'legacy audio',
-        'hash': hash,
-        'format': format,
-        'createdAt': DateTime.now().toIso8601String(),
-        'size': 100,
-        'folder': '',
-        'sourceText': '',
-        'duration': 1,
-      });
-      WebFileStore.disableTestMode();
-      FileManifest.invalidateCache();
+      'cleanupOrphans preserves legacy audio after migration write failure',
+      () async {
+        const hash = 'legacy_audio_hash';
+        const format = 'wa%v';
+        await ManifestDatabase.insertAudioRecord({
+          'id': 'legacy_audio_1',
+          'name': 'legacy audio',
+          'hash': hash,
+          'format': format,
+          'createdAt': DateTime.now().toIso8601String(),
+          'size': 100,
+          'folder': '',
+          'sourceText': '',
+          'duration': 1,
+        });
+        WebFileStore.disableTestMode();
+        addTearDown(WebFileStore.enableTestMode);
+        FileManifest.invalidateCache();
 
-      final audioDir = Directory(p.join(appDir, 'tts_audio'));
-      await audioDir.create(recursive: true);
-      const legacyName = '$hash.$format';
-      final legacyAudio = File(p.join(audioDir.path, legacyName));
-      await legacyAudio.writeAsString('only surviving audio copy');
-      final storageName = AudioRecord.storageFileNameFor(
-        hash: hash,
-        format: format,
-      );
-      await Directory(p.join(audioDir.path, storageName)).create();
+        final audioDir = Directory(p.join(appDir, 'tts_audio'));
+        await audioDir.create(recursive: true);
+        const legacyName = '$hash.$format';
+        final legacyAudio = File(p.join(audioDir.path, legacyName));
+        await legacyAudio.writeAsString('only surviving audio copy');
+        final storageName = AudioRecord.storageFileNameFor(
+          hash: hash,
+          format: format,
+        );
+        final destinationPath = p.join(audioDir.path, storageName);
+        final realIO = IOOverrides.current ?? _RealIO();
+        await IOOverrides.runZoned(
+          () => FileManifest.loadRecords(),
+          createFile: (path) {
+            final file = realIO.createFile(path);
+            return p.basename(path).startsWith('.audio-migration-')
+                ? _FailingMigrationStagedFile(file, destinationPath)
+                : file;
+          },
+        );
+        expect(await legacyAudio.exists(), isTrue,
+            reason: 'failed destination migration must retain its source');
+        expect(await File(destinationPath).exists(), isFalse,
+            reason: 'the injected migration write failure blocks the destination');
+        await legacyAudio.setLastModified(
+          DateTime.now().subtract(const Duration(days: 10)),
+        );
 
-      await FileManifest.loadRecords();
-      expect(await legacyAudio.exists(), isTrue,
-          reason: 'failed destination migration must retain its source');
-      expect(await File(p.join(audioDir.path, storageName)).exists(), isFalse,
-          reason: 'the migration destination is blocked');
-      await legacyAudio.setLastModified(
-        DateTime.now().subtract(const Duration(days: 10)),
-      );
+        await DataSafetyManager.cleanupOrphans();
 
-      await DataSafetyManager.cleanupOrphans();
+        expect(await legacyAudio.exists(), isTrue,
+            reason: 'the live record must keep its legacy source referenced');
 
-      expect(await legacyAudio.exists(), isTrue,
-          reason: 'the live record must keep its legacy source referenced');
-
-    });
+        FileManifest.invalidateCache();
+        await FileManifest.loadRecords();
+        expect(await legacyAudio.exists(), isFalse,
+            reason: 'a later successful migration retry removes the legacy file');
+        expect(await File(destinationPath).exists(), isTrue,
+            reason: 'a later successful migration retry writes the escaped file');
+      },
+    );
 
     test('cleanupOrphans keeps old audio with a Windows-invalid format',
         () async {
