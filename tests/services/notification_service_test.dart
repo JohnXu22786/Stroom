@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,7 +47,8 @@ void main() {
         AndroidFlutterLocalNotificationsPlugin();
   });
 
-  testWidgets('iOS notification permission request returns the system result', (tester) async {
+  testWidgets('iOS notification permission request returns the system result',
+      (tester) async {
     const channel = MethodChannel('flutter.baseflow.com/permissions/methods');
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
