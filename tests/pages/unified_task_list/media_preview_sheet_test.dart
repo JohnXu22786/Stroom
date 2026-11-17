@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -25,21 +24,23 @@ void main() {
   testWidgets(
     'removes downloaded preview file when sheet is disposed mid-download',
     (tester) async {
-      final tempDirectory = await Directory.systemTemp.createTemp(
-        'media_preview_',
-      );
+      Directory? tempDirectory;
+      await tester.runAsync(() async {
+        tempDirectory = await Directory.systemTemp.createTemp(
+          'media_preview_',
+        );
+      });
+      final temporaryDirectory = tempDirectory!;
       final previousPathProvider = PathProviderPlatform.instance;
       PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
-        tempDirectory.path,
+        temporaryDirectory.path,
       );
-      final downloadStarted = Completer<void>();
-      final firstChunkWritten = Completer<void>();
+      final downloadStarted = Completer<File>();
       final finishDownload = Completer<void>();
-      final downloadFinished = Completer<void>();
       addTearDown(() {
         if (!finishDownload.isCompleted) finishDownload.complete();
         PathProviderPlatform.instance = previousPathProvider;
-        tempDirectory.deleteSync(recursive: true);
+        temporaryDirectory.deleteSync(recursive: true);
       });
 
       Widget previewWidget() => ProviderScope(
@@ -54,16 +55,9 @@ void main() {
                     ext: 'mp4',
                   ),
                   taskTitle: 'Preview',
-                  downloadToFile: (_, file) async {
-                    downloadStarted.complete();
-                    final output = file.openWrite();
-                    output.add([1, 2, 3, 4]);
-                    await output.flush();
-                    firstChunkWritten.complete();
-                    await finishDownload.future;
-                    output.add([5, 6, 7, 8]);
-                    await output.close();
-                    downloadFinished.complete();
+                  downloadToFile: (_, file) {
+                    downloadStarted.complete(file);
+                    return finishDownload.future;
                   },
                 ),
               ),
@@ -72,29 +66,24 @@ void main() {
 
       await tester.pumpWidget(previewWidget());
       await tester.pump();
-      await tester.runAsync(() => downloadStarted.future);
-      await tester.runAsync(() => firstChunkWritten.future);
+      expect(downloadStarted.isCompleted, isTrue);
+      final previewFile = await downloadStarted.future;
 
       await tester.pumpWidget(const SizedBox.shrink());
-      List<File> previewFiles() => tempDirectory
-          .listSync()
-          .whereType<File>()
-          .where(
-            (file) =>
-                p.basename(file.path).startsWith('preview_sample_') &&
-                file.path.endsWith('.mp4'),
-          )
-          .toList();
-      expect(previewFiles(), hasLength(1));
+      expect(previewFile.existsSync(), isFalse);
+      previewFile.writeAsBytesSync([1, 2, 3, 4]);
+      expect(previewFile.existsSync(), isTrue);
 
       finishDownload.complete();
-      await tester.runAsync(() => downloadFinished.future);
-      await tester.runAsync(() async {
-        for (var i = 0; i < 100 && previewFiles().isNotEmpty; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      expect(previewFiles(), isEmpty);
+      await tester.pump();
+      for (var i = 0; i < 100 && previewFile.existsSync(); i++) {
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      await tester.pump();
+      expect(previewFile.existsSync(), isFalse);
     },
   );
 }
