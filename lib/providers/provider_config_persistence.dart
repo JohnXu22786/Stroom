@@ -141,8 +141,21 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       } else {
         final existingEntry = existingEntries[usableLlmEntryIndex];
         final parsedEntry = ProviderEntry.fromMap(existingEntry);
-        final representedConfigs =
-            parsedEntry.configs.map(_legacyConfigIdentity).toSet();
+        final rawConfigs = existingEntry['configs'];
+        final representedConfigs = <String>{};
+        for (var i = 0; i < parsedEntry.configs.length; i++) {
+          final rawConfig = rawConfigs is List &&
+                  i < rawConfigs.length &&
+                  rawConfigs[i] is Map<String, dynamic>
+              ? rawConfigs[i] as Map<String, dynamic>
+              : null;
+          representedConfigs.add(
+            _legacyConfigIdentity(
+              parsedEntry.configs[i],
+              storedConfig: rawConfig,
+            ),
+          );
+        }
         final unrepresentedConfigs = <ProviderConfigItem>[];
         for (final config in migratedConfigs) {
           if (representedConfigs.add(_legacyConfigIdentity(config))) {
@@ -151,7 +164,6 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         }
 
         if (unrepresentedConfigs.isNotEmpty) {
-          final rawConfigs = existingEntry['configs'];
           final configs = rawConfigs is List
               ? rawConfigs
               : parsedEntry.configs.map((config) => config.toMap()).toList();
@@ -186,8 +198,48 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     }
   }
 
-  String _legacyConfigIdentity(ProviderConfigItem config) =>
-      jsonEncode([config.providerName, config.host, config.key]);
+  String _legacyConfigIdentity(
+    ProviderConfigItem config, {
+    Map<String, dynamic>? storedConfig,
+  }) {
+    final storedModels = storedConfig?['models'];
+    return jsonEncode([
+      config.providerName,
+      config.host,
+      config.key,
+      config.models.asMap().entries.map((entry) {
+        final storedModel = storedModels is List &&
+                entry.key < storedModels.length
+            ? storedModels[entry.key]
+            : null;
+        final supportStream = storedModel is Map<String, dynamic> &&
+                storedModel['supportStream'] is bool
+            ? storedModel['supportStream'] as bool
+            : storedConfig == null
+                ? entry.value.supportStream
+                : true;
+        return [
+          entry.value.modelId,
+          supportStream,
+          _canonicalLegacyIdentityValue(entry.value.typeConfig),
+        ];
+      }).toList(),
+    ]);
+  }
+
+  Object? _canonicalLegacyIdentityValue(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.whereType<String>().toList()..sort();
+      return {
+        for (final key in keys)
+          key: _canonicalLegacyIdentityValue(value[key]),
+      };
+    }
+    if (value is List) {
+      return value.map(_canonicalLegacyIdentityValue).toList();
+    }
+    return value;
+  }
 
   Future<void> _migrateOldCustomParams(SharedPreferences prefs) async {
     try {

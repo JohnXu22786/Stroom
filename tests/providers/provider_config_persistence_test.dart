@@ -326,6 +326,63 @@ void main() {
       }
     });
 
+    test('legacy configs with distinct model settings are preserved once',
+        () async {
+      final representedConfig = {
+        'id': 'existing_config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {
+            'modelId': 'legacy-model',
+            'typeConfig': {'temperature': 0.2},
+          },
+        ],
+      };
+      Map<String, dynamic> legacyConfig(double temperature) => {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': temperature,
+              },
+            ],
+          };
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Custom LLM',
+            'configs': [representedConfig],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          legacyConfig(0.2),
+          legacyConfig(0.7),
+          legacyConfig(0.7),
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(2));
+      expect(
+        llmEntry.configs.map((config) =>
+            config.models.single.typeConfig['temperature']),
+        containsAll([0.2, 0.7]),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test('represented legacy configs are not duplicated during migration',
         () async {
       final config = {
