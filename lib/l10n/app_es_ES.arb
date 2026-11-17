@@ -105,7 +105,7 @@
   "taskFlowTemplateReadImageRequirements": "Configure los modelos de síntesis de voz y OCR y luego elija una voz.",
   "taskFlowActions": "Acciones de flujo",
   "taskFlowBlockCount": "{count, plural, one{{count} bloque} other{{count} bloques}}",
-  "taskFlowBlockOcr": "LOC",
+  "taskFlowBlockOcr": "OCR",
   "taskFlowBlockAsr": "Reconocimiento de voz",
   "taskFlowBlockAudioSeparation": "Separación de audio",
   "taskFlowBlockCatCatch": "Descarga de recursos web",
