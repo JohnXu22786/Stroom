@@ -42,9 +42,7 @@ class _BuiltInPromptSelectorDialogState
     setState(() => _addingIndices.add(index));
 
     // Immediately create the assistant (synchronous operation)
-    ref
-        .read(assistantProvider.notifier)
-        .createAssistant(
+    ref.read(assistantProvider.notifier).createAssistant(
           name: prompt.name,
           prompt: prompt.prompt,
           emoji: prompt.emoji,
@@ -102,8 +100,8 @@ class _BuiltInPromptSelectorDialogState
                   child: Row(
                     children: [
                       IconButton(
-                        tooltip: MaterialLocalizations.of(context)
-                            .backButtonTooltip,
+                        tooltip:
+                            MaterialLocalizations.of(context).backButtonTooltip,
                         onPressed: () {
                           final tabs = DefaultTabController.of(context);
                           if (tabs.index == 1) {
@@ -119,7 +117,9 @@ class _BuiltInPromptSelectorDialogState
                           strings.assistantAddTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.headlineSmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -222,20 +222,20 @@ class _AssistantSourceTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Icon(icon, size: 20),
-      const SizedBox(width: 8),
-      Flexible(
-        child: ConstrainedText(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 8),
+          Flexible(
+            child: ConstrainedText(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
 }
 
 class _BuiltInPromptList extends StatelessWidget {
@@ -266,7 +266,9 @@ class _BuiltInPromptList extends StatelessWidget {
             strings.assistantBuiltInHint,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
                 ?.copyWith(color: colorScheme.onSurfaceVariant),
           ),
         ),
@@ -340,9 +342,9 @@ class _BuiltInPromptRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                        ),
                   ),
                   if (prompt.description.isNotEmpty) ...[
                     const SizedBox(height: 3),
@@ -350,7 +352,9 @@ class _BuiltInPromptRow extends StatelessWidget {
                       prompt.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
                           ?.copyWith(color: colorScheme.onSurfaceVariant),
                     ),
                   ],
@@ -422,7 +426,9 @@ class _AssistantImportTab extends StatelessWidget {
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge
+            style: Theme.of(context)
+                .textTheme
+                .bodyLarge
                 ?.copyWith(color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 28),

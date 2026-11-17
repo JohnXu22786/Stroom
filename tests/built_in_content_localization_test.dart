@@ -24,17 +24,15 @@ void main() {
     });
 
     test('ARB resources have matching keys and valid JSON', () {
-      final files =
-          Directory('lib/l10n')
-              .listSync()
-              .whereType<File>()
-              .map((file) => file.path)
-              .where(
-                (path) =>
-                    path.startsWith('lib/l10n/app_') && path.endsWith('.arb'),
-              )
-              .toList()
-            ..sort();
+      final files = Directory('lib/l10n')
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.path)
+          .where(
+            (path) => path.startsWith('lib/l10n/app_') && path.endsWith('.arb'),
+          )
+          .toList()
+        ..sort();
       final resources = files
           .map((path) => jsonDecode(File(path).readAsStringSync()) as Map)
           .toList();
@@ -274,10 +272,10 @@ class _PromptMarketLauncher extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-    body: TextButton(
-      key: const Key('open-market'),
-      onPressed: () => showBuiltInPromptSelector(context, ref),
-      child: const Text('Open'),
-    ),
-  );
+        body: TextButton(
+          key: const Key('open-market'),
+          onPressed: () => showBuiltInPromptSelector(context, ref),
+          child: const Text('Open'),
+        ),
+      );
 }
