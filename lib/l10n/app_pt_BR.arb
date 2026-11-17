@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "Interrompidas",
   "unifiedTaskListConfirmClear": "Confirmar limpeza",
   "unifiedTaskListConfirmClearFailedMessage": "Tem certeza de que deseja limpar todas as tarefas com falha?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Tem certeza de que deseja limpar todas as tarefas concluídas? Esta ação não pode ser desfeita.",
   "unifiedTaskListConfirmClearAllMessage": "Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.",
   "unifiedTaskListCancel": "Cancelar",
   "unifiedTaskListConfirm": "Confirmar",

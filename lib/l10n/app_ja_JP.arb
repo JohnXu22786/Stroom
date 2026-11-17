@@ -424,6 +424,7 @@
   "unifiedTaskListTabStopped": "停止しました",
   "unifiedTaskListConfirmClear": "クリアを確認する",
   "unifiedTaskListConfirmClearFailedMessage": "失敗したタスクをすべてクリアしてもよろしいですか?",
+  "unifiedTaskListConfirmClearCompletedMessage": "完了したタスクをすべてクリアしますか？この操作は取り消せません。",
   "unifiedTaskListConfirmClearAllMessage": "すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。",
   "unifiedTaskListCancel": "キャンセル",
   "unifiedTaskListConfirm": "確認する",

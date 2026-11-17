@@ -1574,6 +1574,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Voulez-vous vraiment effacer toutes les tâches échouées ?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Voulez-vous vraiment effacer toutes les tâches terminées ? Cette action est irréversible.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.';
 

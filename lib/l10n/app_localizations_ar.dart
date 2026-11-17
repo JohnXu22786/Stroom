@@ -1580,6 +1580,10 @@ class AppLocalizationsAr extends AppLocalizations {
       'هل تريد بالتأكيد مسح جميع المهام الفاشلة؟';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.';
 
@@ -13685,6 +13689,10 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   @override
   String get unifiedTaskListConfirmClearFailedMessage =>
       'هل تريد بالتأكيد مسح جميع المهام الفاشلة؟';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage =>

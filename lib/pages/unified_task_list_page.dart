@@ -339,7 +339,41 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'clear_completed') {
-                _clearTerminalTasks(TaskStatus.completed);
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: ConstrainedText(
+                      strings.unifiedTaskListConfirmClear,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    content: Text(
+                      strings.unifiedTaskListConfirmClearCompletedMessage,
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: ConstrainedText(
+                          strings.unifiedTaskListCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _clearTerminalTasks(TaskStatus.completed);
+                        },
+                        child: ConstrainedText(
+                          strings.unifiedTaskListConfirm,
+                          style: TextStyle(color: Colors.red),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
               } else if (value == 'clear_failed') {
                 showDialog(
                   context: context,
@@ -518,7 +552,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
               PopupMenuItem(
                 value: 'clear_completed',
                 child: ListTile(
-                  leading: Icon(Icons.cleaning_services, size: 20),
+                  leading: Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Colors.red,
+                  ),
                   title: Text(strings.unifiedTaskListClearCompleted),
                   dense: true,
                   contentPadding: EdgeInsets.zero,

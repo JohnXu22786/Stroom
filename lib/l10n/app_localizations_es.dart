@@ -1577,6 +1577,10 @@ class AppLocalizationsEs extends AppLocalizations {
       '¿Está seguro de que desea borrar todas las tareas fallidas?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '¿Seguro que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.';
 

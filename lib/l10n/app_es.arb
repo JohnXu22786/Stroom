@@ -424,6 +424,7 @@
   "unifiedTaskListTabStopped": "Interrumpido",
   "unifiedTaskListConfirmClear": "Confirmar claro",
   "unifiedTaskListConfirmClearFailedMessage": "¿Está seguro de que desea borrar todas las tareas fallidas?",
+  "unifiedTaskListConfirmClearCompletedMessage": "¿Seguro que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.",
   "unifiedTaskListConfirmClearAllMessage": "¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.",
   "unifiedTaskListCancel": "Cancelar",
   "unifiedTaskListConfirm": "Confirmar",

@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "Arrêtées",
   "unifiedTaskListConfirmClear": "Confirmer l’effacement",
   "unifiedTaskListConfirmClearFailedMessage": "Voulez-vous vraiment effacer toutes les tâches échouées ?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Voulez-vous vraiment effacer toutes les tâches terminées ? Cette action est irréversible.",
   "unifiedTaskListConfirmClearAllMessage": "Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.",
   "unifiedTaskListCancel": "Annuler",
   "unifiedTaskListConfirm": "Confirmer",

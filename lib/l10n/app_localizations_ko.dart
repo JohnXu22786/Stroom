@@ -1507,6 +1507,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unifiedTaskListConfirmClearFailedMessage => '실패한 작업을 모두 지울까요?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '완료된 작업을 모두 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
 

@@ -1567,6 +1567,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Tem certeza de que deseja limpar todas as tarefas com falha?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Tem certeza de que deseja limpar todas as tarefas concluídas? Esta ação não pode ser desfeita.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.';
 

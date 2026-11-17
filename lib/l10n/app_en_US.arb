@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "Stopped",
   "unifiedTaskListConfirmClear": "Confirm clear",
   "unifiedTaskListConfirmClearFailedMessage": "Are you sure you want to clear all failed tasks?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Are you sure you want to clear all completed tasks? This action cannot be undone.",
   "unifiedTaskListConfirmClearAllMessage": "Are you sure you want to clear all tasks? This action cannot be undone.",
   "unifiedTaskListCancel": "Cancel",
   "unifiedTaskListConfirm": "Confirm",

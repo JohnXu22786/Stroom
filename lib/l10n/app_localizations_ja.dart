@@ -1494,6 +1494,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '失敗したタスクをすべてクリアしてもよろしいですか?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '完了したタスクをすべてクリアしますか？この操作は取り消せません。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。';
 

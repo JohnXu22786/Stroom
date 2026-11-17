@@ -434,6 +434,7 @@
   "unifiedTaskListTabStopped": "Angehalten",
   "unifiedTaskListConfirmClear": "Leeren bestätigen",
   "unifiedTaskListConfirmClearFailedMessage": "Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListConfirmClearAllMessage": "Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListCancel": "Abbrechen",
   "unifiedTaskListConfirm": "Bestätigen",
