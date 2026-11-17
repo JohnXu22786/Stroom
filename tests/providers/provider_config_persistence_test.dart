@@ -712,6 +712,8 @@ void main() {
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeUpdate = prefs.getString('provider_entries')!;
       store.failedWriteCount = 1;
 
       await expectLater(
@@ -732,10 +734,9 @@ void main() {
             .name,
         'Before',
       );
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('provider_entries'), savedEntries);
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeUpdate);
       await prefs.reload();
-      expect(prefs.getString('provider_entries'), savedEntries);
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeUpdate);
     } finally {
       SharedPreferencesStorePlatform.instance = previousStore;
     }
