@@ -31,8 +31,8 @@ void main() {
     final revokedUrls = <String>[];
 
     urlConstructor['revokeObjectURL'] = ((JSString url) => revokedUrls.add(
-      url.toDart,
-    )).toJS;
+          url.toDart,
+        )).toJS;
     addTearDown(() {
       urlConstructor['revokeObjectURL'] = originalRevoke;
       for (final url in revokedUrls) {
