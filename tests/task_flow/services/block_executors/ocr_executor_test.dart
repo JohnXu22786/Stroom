@@ -1152,6 +1152,101 @@ void main() {
     );
   });
 
+  test('cancellation during failing OCR input check removes the task',
+      () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/check_error_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) async {
+        checkStarted.complete();
+        await releaseCheck.future;
+        throw StateError('existence check failed after cancellation');
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation overrides failing OCR input check exception', () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/check_block_error_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) async {
+        checkStarted.complete();
+        await releaseCheck.future;
+        throw BlockExecutionException(
+          'preflight check failed',
+          blockType: BlockType.ocr.name,
+          blockTitle: BlockTypeDefinition.ocr.label,
+        );
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
   test('cancellation during failing OCR payload preparation removes the task',
       () async {
     final source = await File('${directory.path}/cancelled_payload.png')
