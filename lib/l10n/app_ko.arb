@@ -439,6 +439,7 @@
   "unifiedTaskListTabStopped": "중지됨",
   "unifiedTaskListConfirmClear": "지우기 확인",
   "unifiedTaskListConfirmClearFailedMessage": "실패한 작업을 모두 지울까요?",
+  "unifiedTaskListConfirmClearCompletedMessage": "완료된 작업을 모두 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.",
   "unifiedTaskListConfirmClearAllMessage": "작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.",
   "unifiedTaskListCancel": "취소",
   "unifiedTaskListConfirm": "확인",

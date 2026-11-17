@@ -1570,6 +1570,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
 
@@ -13728,6 +13732,10 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   @override
   String get unifiedTaskListConfirmClearFailedMessage =>
       'Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage =>

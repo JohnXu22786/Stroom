@@ -1456,6 +1456,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '确定要清除所有已完成任务吗？此操作不可撤销。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
 
   @override

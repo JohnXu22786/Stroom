@@ -2662,6 +2662,8 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to clear all failed tasks?'**
   String get unifiedTaskListConfirmClearFailedMessage;
 
+  String get unifiedTaskListConfirmClearCompletedMessage;
+
   /// No description provided for @unifiedTaskListConfirmClearAllMessage.
   ///
   /// In en, this message translates to:

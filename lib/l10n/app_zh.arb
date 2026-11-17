@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "已停止",
   "unifiedTaskListConfirmClear": "确认清除",
   "unifiedTaskListConfirmClearFailedMessage": "确定要清除所有失败任务吗？",
+  "unifiedTaskListConfirmClearCompletedMessage": "确定要清除所有已完成任务吗？此操作不可撤销。",
   "unifiedTaskListConfirmClearAllMessage": "确定要清除所有任务吗？此操作不可撤销。",
   "unifiedTaskListCancel": "取消",
   "unifiedTaskListConfirm": "确定",

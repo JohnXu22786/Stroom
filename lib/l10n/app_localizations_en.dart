@@ -1550,6 +1550,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Are you sure you want to clear all failed tasks?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Are you sure you want to clear all completed tasks? This action cannot be undone.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Are you sure you want to clear all tasks? This action cannot be undone.';
 

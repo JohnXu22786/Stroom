@@ -436,6 +436,7 @@
   "unifiedTaskListTabStopped": "متوقفة",
   "unifiedTaskListConfirmClear": "تأكيد المسح",
   "unifiedTaskListConfirmClearFailedMessage": "هل تريد بالتأكيد مسح جميع المهام الفاشلة؟",
+  "unifiedTaskListConfirmClearCompletedMessage": "هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.",
   "unifiedTaskListConfirmClearAllMessage": "هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.",
   "unifiedTaskListCancel": "إلغاء",
   "unifiedTaskListConfirm": "تأكيد",
