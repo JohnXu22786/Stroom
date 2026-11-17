@@ -91,6 +91,46 @@ Future<String> uniqueExecutorPath(String path) async {
   return path;
 }
 
+/// Keeps an MP4 destination reserved until conversion is published.
+class ConvertedOutputReservation {
+  ConvertedOutputReservation(this.outputPath, this._reservationFile);
+
+  final String outputPath;
+  final File _reservationFile;
+
+  Future<void> release() async {
+    if (await _reservationFile.exists()) await _reservationFile.delete();
+  }
+}
+
+/// Reserves an exclusive MP4 destination so concurrent conversions with the
+/// same input basename cannot write to the same file.
+Future<ConvertedOutputReservation> reserveConvertedOutputPath(
+  String outputDir,
+  String inputPath,
+) async {
+  await Directory(outputDir).create(recursive: true);
+  final name = p.basenameWithoutExtension(inputPath);
+  var index = 1;
+  while (true) {
+    final suffix = index == 1 ? '' : ' ($index)';
+    final path = p.join(outputDir, '$name$suffix.mp4');
+    final reservationFile = File('$path.reserve');
+    try {
+      await reservationFile.create(exclusive: true);
+      if (await File(path).exists()) {
+        await reservationFile.delete();
+        index++;
+        continue;
+      }
+      return ConvertedOutputReservation(path, reservationFile);
+    } on FileSystemException {
+      if (!await reservationFile.exists()) rethrow;
+      index++;
+    }
+  }
+}
+
 String longestCommonPrefix(String a, String b) {
   final minLen = a.length < b.length ? a.length : b.length;
   int i = 0;
