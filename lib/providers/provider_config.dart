@@ -577,11 +577,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             }).toList(),
           );
         }).toList();
-        state = ProviderEntriesState(
+        final updatedState = ProviderEntriesState(
           entries: entries,
           mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
         );
-        await _persist();
+        await _persist(
+          rethrowOnFailure: true,
+          stateToPersist: updatedState,
+        );
+        state = updatedState;
       });
 
   Future<void> moveMcpConfigToGroup(String configId, String groupId) =>

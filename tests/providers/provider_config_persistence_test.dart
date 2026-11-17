@@ -534,6 +534,68 @@ void main() {
     });
   });
 
+  test('removing an MCP group rolls back when persistence fails', () async {
+    const groupId = 'custom_group';
+    final originalEntries = [
+      ProviderEntry(
+        id: 'mcp',
+        type: 'mcp',
+        name: 'MCP',
+        configs: [ProviderConfigItem(id: 'server', groupId: groupId)],
+      ),
+      ProviderEntry(id: 'ocr', type: 'ocr', name: 'OCR'),
+      ProviderEntry(id: 'asr', type: 'asr', name: 'ASR'),
+    ];
+    final originalGroups = [
+      ...builtinMcpProviderGroups,
+      const McpProviderGroup(id: groupId, name: 'Custom'),
+    ];
+    final savedEntries =
+        jsonEncode(originalEntries.map((entry) => entry.toMap()).toList());
+    final savedGroups =
+        jsonEncode(originalGroups.map((group) => group.toMap()).toList());
+    SharedPreferences.setMockInitialValues({
+      'provider_entries': savedEntries,
+      'mcp_provider_groups': savedGroups,
+    });
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore(
+      {
+        'flutter.provider_entries': savedEntries,
+        'flutter.mcp_provider_groups': savedGroups,
+      },
+      failedKey: 'flutter.mcp_provider_groups',
+    );
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      await expectLater(
+        notifier.removeMcpGroup(groupId),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        notifier.state.mcpGroups.map((group) => group.id),
+        contains(groupId),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'mcp')
+            .configs
+            .single
+            .groupId,
+        groupId,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      expect(prefs.getString('provider_entries'), savedEntries);
+      expect(prefs.getString('mcp_provider_groups'), savedGroups);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
   test('provider update surfaces a failed persistence write', () async {
     const savedEntries = '[{"id":"existing_llm","type":"llm",'
         '"name":"Before","configs":[]}]';
