@@ -472,7 +472,10 @@ class OcrService {
         requestCredentialValues: requestCredentialValues,
       );
       if (e.type == DioExceptionType.cancel) rethrow;
-      throwWrappedDioException(e);
+      _throwWrappedDioException(
+        e,
+        requestCredentialValues: requestCredentialValues,
+      );
     } finally {
       _finishDiagnosticCapture(stopwatch);
     }
@@ -601,7 +604,10 @@ class OcrService {
         requestCredentialValues: requestCredentialValues,
       );
       if (e.type == DioExceptionType.cancel) rethrow;
-      throwWrappedDioException(e);
+      _throwWrappedDioException(
+        e,
+        requestCredentialValues: requestCredentialValues,
+      );
     } finally {
       _finishDiagnosticCapture(stopwatch);
     }
@@ -767,6 +773,32 @@ class OcrService {
       excludedValues: [config.apiKey, ...responseCredentialValues],
     )?['finishReason'] as String?;
     _lastErrorType = e.type.name;
+  }
+
+  Never _throwWrappedDioException(
+    DioException error, {
+    required List<String> requestCredentialValues,
+  }) {
+    final credentials = <String>{
+      config.apiKey,
+      ...requestCredentialValues,
+      ..._credentialValuesFromHeaders(error.requestOptions.headers),
+      ..._credentialValuesFromHeaders(_dio.options.headers),
+    }..removeWhere((credential) => credential.isEmpty);
+
+    throwWrappedDioException(
+      error,
+      messageBuilder: (statusCode, detail) {
+        var safeDetail = detail;
+        for (final credential in credentials.toList()
+          ..sort((a, b) => b.length.compareTo(a.length))) {
+          safeDetail = safeDetail.replaceAll(credential, '[REDACTED]');
+        }
+        return statusCode == null
+            ? '请求失败: $safeDetail'
+            : '请求失败 (HTTP $statusCode): $safeDetail';
+      },
+    );
   }
 
   /// Build the standard OpenAI-compatible request body.
