@@ -141,6 +141,10 @@ class ImageThumbnailLoader {
       // Record deletion uses this same hash lock. Recheck after acquiring it:
       // invalidation may have happened while this load waited to publish.
       if (!isCurrent()) return;
+      // A new load may start after invalidation but before deletion gets this
+      // lock, so also require a surviving record for the content hash.
+      final records = await ImageManifest.loadRecords();
+      if (!records.any((candidate) => candidate.hash == record.hash)) return;
 
       try {
         await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);

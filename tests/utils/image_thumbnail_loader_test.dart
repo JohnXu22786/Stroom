@@ -211,8 +211,8 @@ void main() {
         'thumbnail publication waits for deletion and cannot recreate an '
         'orphan after invalidation', (tester) async {
       final record = _makeRecord(hash: 'delete_during_thumbnail_write');
-      final png = await tester.runAsync(
-          () => _createEnginePng(width: 512, height: 512));
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 512, height: 512));
       await tester.runAsync(() async {
         await ImageManifest.writeFile(record.storagePath, png!);
         await ImageManifest.addRecord(record);
@@ -271,6 +271,47 @@ void main() {
         isNull,
         reason: 'the deleted record must not leave a stale cached thumbnail',
       );
+    });
+
+    testWidgets(
+        'a fresh thumbnail request cannot publish after its image is deleted',
+        (tester) async {
+      final record = _makeRecord(hash: 'fresh_load_after_invalidation');
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 512, height: 512));
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
+      });
+
+      final persistReady = Completer<void>();
+      final resumePersist = Completer<void>();
+      ImageThumbnailLoader.beforeThumbnailPersistForTesting = (hash) async {
+        persistReady.complete();
+        await resumePersist.future;
+      };
+      final result = await tester.runAsync(() async {
+        // Deletion invalidates the earlier request. A new request can still
+        // read and generate from the source before deletion gets its hash lock.
+        ImageThumbnailLoader.invalidate(record.hash);
+        final loading = ImageThumbnailLoader.loadThumbnail(record);
+        await persistReady.future;
+        await ImageManifest.deleteRecord(record.id);
+        resumePersist.complete();
+        return loading;
+      });
+
+      expect(result, isNull,
+          reason: 'a deleted record must not publish from a fresh load');
+      await tester.runAsync(() async {
+        expect(await ImageManifest.loadRecords(), isEmpty);
+        expect(await ImageManifest.readFile(record.storagePath), isNull);
+        expect(
+          await ImageManifest.readFile(imageThumbFileName(record.hash)),
+          isNull,
+          reason: 'no thumbnail may be written after record deletion',
+        );
+      });
     });
 
     testWidgets(
