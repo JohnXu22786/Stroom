@@ -3539,6 +3539,43 @@ void main() {
       );
 
       test(
+        'success diagnostics exclude request IDs echoed from camelCase URL secrets',
+        () async {
+          const secret = 'opaque-api-secret-url-r85';
+          const safeRequestId = 'req-safe-after-camel-case-url-secret';
+          final dio = _mockDioWithSuccess({
+            'request_id': secret,
+            'requestId': safeRequestId,
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          });
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'test-key',
+              host: 'https://api.test.com/v1?apiSecret=$secret',
+            ),
+            dio: dio,
+          );
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(secret)));
+        },
+      );
+
+      test(
         'customParams secretAccessKey echoes are excluded from diagnostics',
         () async {
           const credential = 'opaque-custom-secret-access-key-198';
