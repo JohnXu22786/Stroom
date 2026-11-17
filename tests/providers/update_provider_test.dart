@@ -1067,8 +1067,7 @@ void main() {
           );
         },
       ));
-      final downloadDirectory = Directory('$tempDir/downloads')
-        ..createSync();
+      final downloadDirectory = Directory('$tempDir/downloads')..createSync();
       final victim = File('$tempDir/victim');
       await victim.writeAsString('keep me');
       final notifier = UpdateNotifier(dio: dio);
@@ -1099,8 +1098,7 @@ void main() {
           );
         },
       ));
-      final downloadDirectory = Directory('$tempDir/downloads')
-        ..createSync();
+      final downloadDirectory = Directory('$tempDir/downloads')..createSync();
       final victim = File('$tempDir/victim');
       await victim.writeAsString('keep me');
       await Link('${downloadDirectory.path}/update.zip').create(victim.path);
