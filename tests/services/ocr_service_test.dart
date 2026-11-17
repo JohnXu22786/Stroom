@@ -2612,6 +2612,226 @@ void main() {
         expect(diagnostics, isNot(contains(headerCredential)));
       });
 
+      test(
+        'recognize redacts credentials from final intercepted request options',
+        () async {
+          const bodyCredential = 'interceptor-body-secret-opaque-2026';
+          const urlCredential = 'interceptor/url-secret-opaque-2026';
+          const percentEncodedCredential = 'paque-url-percent-secret-2026';
+          const userInfoCredential = 'paque-userinfo-secret-2026';
+          String? interceptedUrl;
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    (options.data as Map)['api_key'] = bodyCredential;
+                    options.queryParameters['api_key'] = urlCredential;
+                    options.path = options.path.replaceFirst(
+                      'https://',
+                      'HTTPS://%6f$userInfoCredential@',
+                    );
+                    options.path =
+                        '${options.path}?access_token=%6f$percentEncodedCredential';
+                    interceptedUrl = options.path;
+                    final echoedUrl =
+                        options.path.replaceAll('%2F', '%2f');
+                    handler.reject(
+                      DioException(
+                        requestOptions: options,
+                        type: DioExceptionType.badResponse,
+                        response: Response(
+                          requestOptions: options,
+                          statusCode: 403,
+                          data: {
+                            'error': {
+                              'message':
+                                  'denied: $bodyCredential $echoedUrl',
+                            },
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(
+                  contains('HTTP 403'),
+                  isNot(contains(bodyCredential)),
+                  isNot(contains(urlCredential)),
+                  isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                      .replaceAll('%2F', '%2f'))),
+                  allOf(
+                    isNot(contains('o$percentEncodedCredential')),
+                    isNot(contains('%6f$percentEncodedCredential')),
+                    isNot(contains('o$userInfoCredential')),
+                    isNot(contains('%6f$userInfoCredential@')),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          expect(
+            interceptedUrl,
+            contains('access_token=%6f$percentEncodedCredential'),
+          );
+          expect(interceptedUrl, contains('HTTPS://%6f$userInfoCredential@'));
+          final responseData = jsonEncode(service.lastResponseData);
+          expect(responseData, isNot(contains(bodyCredential)));
+          expect(responseData, isNot(contains(urlCredential)));
+          expect(responseData, isNot(contains('o$percentEncodedCredential')));
+          expect(responseData, isNot(contains('%6f$percentEncodedCredential')));
+          expect(responseData, isNot(contains('o$userInfoCredential')));
+          expect(responseData, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            responseData,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(diagnostics, isNot(contains(bodyCredential)));
+          expect(diagnostics, isNot(contains(urlCredential)));
+          expect(diagnostics, isNot(contains('o$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('%6f$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('o$userInfoCredential')));
+          expect(diagnostics, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            diagnostics,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+        },
+      );
+
+      test(
+        'recognizeBatch redacts credentials from final intercepted request options',
+        () async {
+          const bodyCredential = 'batch-interceptor-body-secret-opaque-2026';
+          const urlCredential = 'batch/interceptor-url-secret-opaque-2026';
+          const percentEncodedCredential = 'batch-paque-url-percent-secret-2026';
+          const userInfoCredential = 'batch-paque-userinfo-secret-2026';
+          String? interceptedUrl;
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    (options.data as Map)['api_key'] = bodyCredential;
+                    options.queryParameters['api_key'] = urlCredential;
+                    options.path = options.path.replaceFirst(
+                      'https://',
+                      'HTTPS://%6f$userInfoCredential@',
+                    );
+                    options.path =
+                        '${options.path}?access_token=%6f$percentEncodedCredential';
+                    interceptedUrl = options.path;
+                    final echoedUrl =
+                        options.path.replaceAll('%2F', '%2f');
+                    handler.reject(
+                      DioException(
+                        requestOptions: options,
+                        type: DioExceptionType.badResponse,
+                        response: Response(
+                          requestOptions: options,
+                          statusCode: 403,
+                          data: {
+                            'error': {
+                              'message':
+                                  'denied: $bodyCredential $echoedUrl',
+                            },
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg')
+              ],
+            ),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(
+                  contains('HTTP 403'),
+                  isNot(contains(bodyCredential)),
+                  isNot(contains(urlCredential)),
+                  isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                      .replaceAll('%2F', '%2f'))),
+                  allOf(
+                    isNot(contains('o$percentEncodedCredential')),
+                    isNot(contains('%6f$percentEncodedCredential')),
+                    isNot(contains('o$userInfoCredential')),
+                    isNot(contains('%6f$userInfoCredential@')),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          expect(
+            interceptedUrl,
+            contains('access_token=%6f$percentEncodedCredential'),
+          );
+          expect(interceptedUrl, contains('HTTPS://%6f$userInfoCredential@'));
+          final responseData = jsonEncode(service.lastResponseData);
+          expect(responseData, isNot(contains(bodyCredential)));
+          expect(responseData, isNot(contains(urlCredential)));
+          expect(responseData, isNot(contains('o$percentEncodedCredential')));
+          expect(responseData, isNot(contains('%6f$percentEncodedCredential')));
+          expect(responseData, isNot(contains('o$userInfoCredential')));
+          expect(responseData, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            responseData,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(diagnostics, isNot(contains(bodyCredential)));
+          expect(diagnostics, isNot(contains(urlCredential)));
+          expect(diagnostics, isNot(contains('o$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('%6f$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('o$userInfoCredential')));
+          expect(diagnostics, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            diagnostics,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+        },
+      );
+
       test('recognizeBatch redacts interceptor Authorization credentials',
           () async {
         const credential = 'interceptor-ocr-secret-credential-102';
