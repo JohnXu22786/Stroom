@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
 /// Helper: taps the "查看代码" card button to reveal the raw source view.
@@ -21,6 +22,21 @@ Finder _codeBlockSizeBox() => find
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('buildHtmlDocument preserves complete documents and their head', () {
+    const html = '''<!-- generated document -->
+<!DOCTYPE html>
+<!-- generated root element -->
+<html>
+<head>
+  <base href="https://cdn.example/assets/">
+  <script src="bundle.js"></script>
+</head>
+<body><main>Loaded page</main></body>
+</html>''';
+
+    expect(HtmlCodeBlockWidget.buildHtmlDocument(html), html);
+  });
 
   group('HtmlCodeBlockWidget - card preview (default)', () {
     testWidgets(
@@ -409,7 +425,7 @@ void main() {
       expect(find.text('查看代码'), findsOneWidget);
     });
 
-    testWidgets('long titles are ellipsized instead of wrapping',
+    testWidgets('long titles use constrained scrolling instead of wrapping',
         (tester) async {
       final longTitle = List.filled(30, 'title').join(' ');
       await tester.pumpWidget(
@@ -427,7 +443,8 @@ void main() {
 
       final titleText = tester.widget<Text>(find.text(longTitle));
       expect(titleText.maxLines, 1);
-      expect(titleText.overflow, TextOverflow.ellipsis);
+      expect(titleText.overflow, TextOverflow.clip);
+      expect(find.byType(ConstrainedText), findsWidgets);
     });
   });
 

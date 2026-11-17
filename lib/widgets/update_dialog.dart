@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../l10n/app_localizations.dart';
 import '../providers/update_provider.dart';
+
+import 'constrained_text.dart';
 
 /// A shared update dialog used by both the settings page and the
 /// application startup flow.
@@ -26,12 +29,20 @@ class UpdateDialog extends ConsumerStatefulWidget {
 }
 
 class _UpdateDialogState extends ConsumerState<UpdateDialog> {
+  final ScrollController _releaseNotesController = ScrollController();
+
   /// Whether the download URL points to a GitHub release page (not a direct asset).
   /// When true, the "立即更新" button is replaced with "前往浏览器下载".
   bool get _isHtmlUrlFallback {
     final url = ref.read(updateProvider).downloadUrl;
     if (url == null) return false;
     return url.contains('/releases/tag/');
+  }
+
+  @override
+  void dispose() {
+    _releaseNotesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -80,10 +91,24 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               if (state.releaseNotes != null &&
                   state.releaseNotes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(strings.updateReleaseNotesLabel,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  strings.updateReleaseNotesLabel,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
-                Text(state.releaseNotes!),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+                  ),
+                  child: Scrollbar(
+                    controller: _releaseNotesController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _releaseNotesController,
+                      child: Text(state.releaseNotes!),
+                    ),
+                  ),
+                ),
               ],
               // Installing state — shown briefly while the app auto-installs
               if (state.isInstalling) ...[
@@ -94,10 +119,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   decoration: BoxDecoration(
                     color: cs.tertiaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: cs.tertiaryContainer,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: cs.tertiaryContainer, width: 0.5),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -108,7 +130,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                              cs.onTertiaryContainer),
+                            cs.onTertiaryContainer,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -194,7 +217,11 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         return [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(strings.updateClose),
+            child: ConstrainedText(
+              strings.updateClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -202,7 +229,11 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               // with visual feedback (isInstalling state).
               notifier.retryInstall();
             },
-            child: Text(strings.updateManualInstall),
+            child: ConstrainedText(
+              strings.updateManualInstall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ];
       }
@@ -212,14 +243,22 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.updateClose),
+          child: ConstrainedText(
+            strings.updateClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () {
             // Re-open the installer (same as manual install fallback)
             notifier.retryInstall();
           },
-          child: Text(strings.updateOpenInstaller),
+          child: ConstrainedText(
+            strings.updateOpenInstaller,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ];
     }
@@ -230,57 +269,116 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.updateClose),
+          child: ConstrainedText(
+            strings.updateClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         if (!isNonRecoverable)
           FilledButton(
             onPressed: () => notifier.downloadUpdate(),
-            child: Text(strings.updateRetryDownload),
+            child: ConstrainedText(
+              strings.updateRetryDownload,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ];
     }
 
     // Initial state: check if the download URL is a release page (html fallback)
     if (_isHtmlUrlFallback) {
-      return [
-        TextButton(
-          onPressed: () {
-            if (state.latestVersion != null) {
-              notifier.skipVersion(state.latestVersion!);
-            }
-            Navigator.of(context).pop();
-          },
-          child: Text(strings.updateSkipVersion),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.updateRemindLater),
-        ),
-        FilledButton(
+      return _buildInitialActions(
+        state,
+        primaryAction: FilledButton(
           onPressed: () => _openInBrowser(state.downloadUrl!),
-          child: Text(strings.updateOpenBrowser),
+          child: ConstrainedText(
+            strings.updateOpenBrowser,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    // Initial state with direct download URL: show all action buttons
+    return _buildInitialActions(
+      state,
+      primaryAction: FilledButton(
+        onPressed: () => notifier.downloadUpdate(),
+        child: ConstrainedText(
+          strings.updateNow,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildInitialActions(
+    UpdateState state, {
+    required Widget primaryAction,
+  }) {
+    final strings = AppLocalizations.of(context)!;
+    final notifier = ref.read(updateProvider.notifier);
+    final skipAction = TextButton(
+      onPressed: () {
+        if (state.latestVersion != null) {
+          notifier.skipVersion(state.latestVersion!);
+        }
+        Navigator.of(context).pop();
+      },
+      child: ConstrainedText(
+        strings.updateSkipVersion,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+    final remindAction = TextButton(
+      onPressed: () => Navigator.of(context).pop(),
+      child: ConstrainedText(
+        strings.updateRemindLater,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    if (viewportWidth >= 600 && textScale <= 1.2) {
+      return [skipAction, remindAction, primaryAction];
+    }
+
+    if (viewportWidth < 360 || textScale > 1.2) {
+      return [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(width: double.infinity, child: skipAction),
+            SizedBox(width: double.infinity, child: remindAction),
+            const SizedBox(height: 4),
+            SizedBox(width: double.infinity, child: primaryAction),
+          ],
         ),
       ];
     }
 
-    // Initial state with direct download URL: show all action buttons
     return [
-      TextButton(
-        onPressed: () {
-          if (state.latestVersion != null) {
-            notifier.skipVersion(state.latestVersion!);
-          }
-          Navigator.of(context).pop();
-        },
-        child: Text(strings.updateSkipVersion),
-      ),
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: Text(strings.updateRemindLater),
-      ),
-      FilledButton(
-        onPressed: () => notifier.downloadUpdate(),
-        child: Text(strings.updateNow),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(child: skipAction),
+              Expanded(child: remindAction),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SizedBox(width: double.infinity, child: primaryAction),
+        ],
       ),
     ];
   }
@@ -313,85 +411,91 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
 
       final isSelected = realIdx == selectedIndex;
       final isLast = displayIdx == visibleCount;
-      items.add(InkWell(
-        onTap: () => notifier.selectVersion(realIdx),
-        borderRadius: displayIdx == 1
-            ? const BorderRadius.vertical(top: Radius.circular(8))
-            : isLast
-                ? const BorderRadius.vertical(bottom: Radius.circular(8))
-                : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color:
-                isSelected ? cs.primaryContainer.withValues(alpha: 0.4) : null,
-            border: !isLast
-                ? Border(
-                    bottom: BorderSide(color: cs.outlineVariant, width: 0.5))
-                : null,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                size: 18,
-                color: isSelected ? cs.primary : cs.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'v${v.version}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: isSelected ? cs.primary : cs.onSurface,
-                          ),
-                        ),
-                        if (v.isPreRelease) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
+      items.add(
+        InkWell(
+          onTap: () => notifier.selectVersion(realIdx),
+          borderRadius: displayIdx == 1
+              ? const BorderRadius.vertical(top: Radius.circular(8))
+              : isLast
+                  ? const BorderRadius.vertical(bottom: Radius.circular(8))
+                  : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? cs.primaryContainer.withValues(alpha: 0.4)
+                  : null,
+              border: !isLast
+                  ? Border(
+                      bottom: BorderSide(color: cs.outlineVariant, width: 0.5),
+                    )
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isSelected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  size: 18,
+                  color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'v${v.version}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: isSelected ? cs.primary : cs.onSurface,
                             ),
-                            child: Text(
-                              strings.updatePreviewBadge,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.orange.shade700,
+                          ),
+                          if (v.isPreRelease) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                strings.updatePreviewBadge,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.orange.shade700,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                        if (realIdx == 0) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            strings.updateLatestBadge,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: cs.primary,
-                              fontWeight: FontWeight.w600,
+                          ],
+                          if (realIdx == 0) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              strings.updateLatestBadge,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: cs.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ));
+      );
     }
 
     return Container(
@@ -431,10 +535,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       decoration: BoxDecoration(
         color: cs.primaryContainer.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: cs.primaryContainer,
-          width: 0.5,
-        ),
+        border: Border.all(color: cs.primaryContainer, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,11 +545,13 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             children: [
               Icon(Icons.download, size: 18, color: cs.primary),
               const SizedBox(width: 6),
-              Text(strings.updateDownloading,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
-                  )),
+              Text(
+                strings.updateDownloading,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -494,9 +597,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       );
     }
     if (error.startsWith('下载失败: ')) {
-      return strings.updateDownloadFailed(
-        error.substring('下载失败: '.length),
-      );
+      return strings.updateDownloadFailed(error.substring('下载失败: '.length));
     }
     if (error.startsWith('无法打开文件，请手动安装: ')) {
       return strings.updateManualInstallFileError(

@@ -184,6 +184,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get builtInPromptMarketTitle => '助手市场';
 
   @override
+  String get assistantAddTitle => '添加助手';
+
+  @override
+  String get assistantBuiltInTab => '内置助手';
+
+  @override
+  String get assistantImportTab => '导入助手';
+
+  @override
+  String get assistantBuiltInHint => '浏览可直接使用的内置助手，点击条目可预览后再添加。';
+
+  @override
+  String get assistantImportHint => '连接远程助手目录，或通过助手文件 URL 导入。';
+
+  @override
+  String get assistantImportAction => '连接目录或导入文件';
+
+  @override
   String get builtInPromptClose => '关闭';
 
   @override
@@ -435,7 +453,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 \$...\$，独立公式使用 \$\$...\$\$。只返回转录结果，不添加说明或推断。';
 
   @override
-  String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+  String get ocrDefaultImagesOnly => '默认（不添加自定义指令；仍使用默认 OCR 提示）';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -502,7 +520,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+      '这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。';
 
   @override
   String get ocrInstructionManageEmpty => '暂无指令';
@@ -1456,6 +1474,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '确定要清除所有已完成任务吗？此操作不可撤销。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
 
   @override
@@ -1987,6 +2009,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => '暂无详细信息';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中间内容已省略，共 $count 字]';
+  }
 
   @override
   String get chatAudioPreviewClose => '关闭';
@@ -3106,12 +3133,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get topicItemPin => '置顶';
 
   @override
-  @override
   String get topicItemMarkUnread => '标记为未读';
 
   @override
   String get topicItemMarkRead => '标记为已读';
 
+  @override
   String get topicItemRename => '重命名';
 
   @override
@@ -9981,6 +10008,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appLogDelete => '删除';
 
   @override
+  String get appLogDeleteUnconfirmed => '无法确认删除结果。';
+
+  @override
   String get appLogConfirmDeleteTitle => '确认删除';
 
   @override
@@ -11536,6 +11566,24 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get builtInPromptMarketTitle => '助手市场';
 
   @override
+  String get assistantAddTitle => '添加助手';
+
+  @override
+  String get assistantBuiltInTab => '内置助手';
+
+  @override
+  String get assistantImportTab => '导入助手';
+
+  @override
+  String get assistantBuiltInHint => '浏览可直接使用的内置助手，点击条目可预览后再添加。';
+
+  @override
+  String get assistantImportHint => '连接远程助手目录，或通过助手文件 URL 导入。';
+
+  @override
+  String get assistantImportAction => '连接目录或导入文件';
+
+  @override
   String get builtInPromptClose => '关闭';
 
   @override
@@ -11787,7 +11835,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
       '请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 \$...\$，独立公式使用 \$\$...\$\$。只返回转录结果，不添加说明或推断。';
 
   @override
-  String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+  String get ocrDefaultImagesOnly => '默认（不添加自定义指令；仍使用默认 OCR 提示）';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -11854,7 +11902,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+      '这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。';
 
   @override
   String get ocrInstructionManageEmpty => '暂无指令';
@@ -12808,6 +12856,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '确定要清除所有已完成任务吗？此操作不可撤销。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
 
   @override
@@ -13339,6 +13391,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatErrorDetailEmpty => '暂无详细信息';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中间内容已省略，共 $count 字]';
+  }
 
   @override
   String get chatAudioPreviewClose => '关闭';
@@ -14458,12 +14515,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get topicItemPin => '置顶';
 
   @override
-  @override
   String get topicItemMarkUnread => '标记为未读';
 
   @override
   String get topicItemMarkRead => '标记为已读';
 
+  @override
   String get topicItemRename => '重命名';
 
   @override
@@ -14965,6 +15022,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get folderPickerSubfolders => '子文件夹';
+
+  @override
+  String get folderPickerNoFolders => '没有文件夹';
 
   @override
   String get folderPickerExistingFolders => '现有文件夹';
@@ -20682,6 +20742,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR 请求 JSON 大小为 $encodedBytes 字节，超过配置的 $budgetBytes 字节上限。';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR识别失败：$details';
   }
@@ -21325,6 +21390,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get appLogDelete => '删除';
 
   @override
+  String get appLogDeleteUnconfirmed => '无法确认删除结果。';
+
+  @override
   String get appLogConfirmDeleteTitle => '确认删除';
 
   @override
@@ -21401,6 +21469,92 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get appLogCopyDone => '已复制全部日志内容';
+
+  @override
+  String get appLogSettings => '日志设置';
+
+  @override
+  String get appLogSettingsTitle => '应用日志设置';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count 个文件 · 已用 $size';
+  }
+
+  @override
+  String get appLogRetentionDays => '保留期限';
+
+  @override
+  String appLogDays(int count) {
+    return '$count 天';
+  }
+
+  @override
+  String get appLogMinimumLevel => '记录详细度';
+
+  @override
+  String get appLogStorageLimit => '日志空间上限';
+
+  @override
+  String get appLogUnlimited => '不限制';
+
+  @override
+  String get appLogSettingsHelp => '超出保留期限或空间上限的旧日志会自动清理；当前小时的日志文件会保留。';
+
+  @override
+  String get appLogSettingsSaved => '日志设置已保存';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return '保存日志设置失败：$error';
+  }
+
+  @override
+  String get appLogSave => '保存';
+
+  @override
+  String get appLogLevelDebug => '调试 · 最详细';
+
+  @override
+  String get appLogLevelInfo => '信息';
+
+  @override
+  String get appLogLevelWarning => '警告';
+
+  @override
+  String get appLogLevelError => '错误';
+
+  @override
+  String get appLogFilter => '筛选日志';
+
+  @override
+  String get appLogSearch => '关键词';
+
+  @override
+  String get appLogSource => '来源';
+
+  @override
+  String get appLogLevel => '级别';
+
+  @override
+  String get appLogAnyLevel => '全部级别';
+
+  @override
+  String get appLogFromTime => '开始时间';
+
+  @override
+  String get appLogUntilTime => '结束时间';
+
+  @override
+  String get appLogClearFilters => '清除筛选';
+
+  @override
+  String get appLogNoMatches => '没有符合筛选条件的日志';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '显示 $visible / $total 行';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Stroom 后台任务';
@@ -22602,4 +22756,15 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
 }

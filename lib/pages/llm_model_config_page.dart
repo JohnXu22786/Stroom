@@ -10,6 +10,8 @@ import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 part 'llm_model_config_page_custom_params.dart';
 part 'llm_model_config_page_reasoning.dart';
 part 'llm_model_config_page_reasoning_builders.dart';
@@ -703,17 +705,29 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -724,11 +738,19 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

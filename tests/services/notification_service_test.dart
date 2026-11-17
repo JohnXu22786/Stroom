@@ -82,6 +82,45 @@ void main() {
         reason: '通知 ID 不能为负数（部分 ROM 对负 ID 处理异常）');
   });
 
+  test('notification IDs continue past persisted IDs after a process restart',
+      () async {
+    final service = NotificationService();
+    await service.initialize();
+
+    // The previous allocator used epoch seconds, with the first ID at the
+    // process start second plus one. New IDs must use a separate range.
+    final legacyRangeStart = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await service.showTaskCompletionNotification(
+      taskId: 'before-restart',
+      title: '测试OCR',
+      typeLabel: '文字识别',
+      success: true,
+    );
+    expect(shownIds.single, greaterThan(legacyRangeStart),
+        reason: 'upgraded IDs must continue above the legacy timestamp range');
+
+    // Retain the stored sequence while resetting the in-memory preferences,
+    // as if the process had restarted within the same second.
+    final prefs = await SharedPreferences.getInstance();
+    final persistedId = prefs.getInt('last_notification_id')!;
+    SharedPreferences.setMockInitialValues({
+      'notifications_enabled': true,
+      'last_notification_id': persistedId,
+    });
+    shownIds.clear();
+
+    await service.showTaskCompletionNotification(
+      taskId: 'after-restart',
+      title: '测试OCR',
+      typeLabel: '文字识别',
+      success: true,
+    );
+
+    expect(shownIds, hasLength(1));
+    expect(shownIds.single, greaterThan(persistedId),
+        reason: 'a restarted process must not reuse a previously issued ID');
+  });
+
   test('notifications are not sent when the user has disabled them', () async {
     SharedPreferences.setMockInitialValues({
       'notifications_enabled': false,

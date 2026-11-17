@@ -429,7 +429,7 @@ class TaskFlowExecutionService {
             batchIndex: entry.key,
             snapshot: snapshot,
             subTasks: _steps(flow),
-            inputText: entry.value.text,
+            inputText: entry.value.ownedStoragePath ?? entry.value.text,
             inputDurationSec: entry.value.durationSec,
             inputMimeType: entry.value.mimeType,
             inputType: flow.inputType,
@@ -532,10 +532,43 @@ class TaskFlowExecutionService {
   Future<List<String>> retryExecution(String id,
       {bool useLatestConfiguration = false}) async {
     final path = _execution(id)?.inputStoragePath;
-    return _notifier.withInputStoragePathLock(
-        path,
-        () => _retryExecution(id,
-            useLatestConfiguration: useLatestConfiguration));
+    return _notifier.withInputStoragePathLock(path, () async {
+      try {
+        return await _retryExecution(id,
+            useLatestConfiguration: useLatestConfiguration);
+      } on TaskFlowValidationException catch (error) {
+        final original = _execution(id);
+        if (original?.inputStoragePath != null && error.isStorageError) {
+          await _persistRetryInputFailure(original!, error);
+        }
+        rethrow;
+      }
+    });
+  }
+
+  Future<void> _persistRetryInputFailure(
+    TaskFlowExecution original,
+    TaskFlowValidationException error,
+  ) async {
+    final snapshot = original.snapshot;
+    final failure = TaskFlowExecution(
+      flowId: original.flowId,
+      flowName: original.flowName,
+      status: FlowExecutionStatus.failed,
+      completedAt: DateTime.now(),
+      snapshot: snapshot,
+      subTasks: snapshot == null ? original.subTasks : _steps(snapshot.flow),
+      error: error.toString(),
+      inputText: original.inputStoragePath ?? original.inputText,
+      inputDurationSec: original.inputDurationSec,
+      inputMimeType: original.inputMimeType,
+      inputType: original.inputType,
+      inputFileName: original.inputFileName,
+      inputStoragePath: original.inputStoragePath,
+    );
+    if (!await _notifier.addExecutions([failure])) {
+      throw const TaskFlowPersistenceException('无法保存失败的输入重试记录');
+    }
   }
 
   Future<List<String>> _retryExecution(String id,
@@ -612,18 +645,25 @@ class TaskFlowExecutionService {
       return;
     }
     try {
-      if (kIsWeb || WebFileStore.isTestMode) {
+      if (kIsWeb) {
         if ((await WebFileStore.read(path))?.isNotEmpty != true) {
           throw const FileSystemException();
         }
       } else {
-        final file = await File(path).open();
-        try {
-          if ((await file.read(1)).isEmpty) {
+        final nativeFile = File(path);
+        if (WebFileStore.isTestMode && !await nativeFile.exists()) {
+          if ((await WebFileStore.read(path))?.isNotEmpty != true) {
             throw const FileSystemException();
           }
-        } finally {
-          await file.close();
+        } else {
+          final file = await nativeFile.open();
+          try {
+            if ((await file.read(1)).isEmpty) {
+              throw const FileSystemException();
+            }
+          } finally {
+            await file.close();
+          }
         }
       }
     } catch (_) {
@@ -741,11 +781,36 @@ class TaskFlowExecutionService {
       prefix++;
     }
     final flow = snapshot.flow;
-    final data = prefix == 0
-        ? FlowPayload.fromValue(current.inputText, flow.inputType,
-            mimeType: current.inputMimeType, fileName: current.inputFileName)
-        : current.subTasks[prefix - 1].result!;
-    await _readable(data, current.flowId);
+    late final FlowPayload data;
+    try {
+      data = prefix == 0
+          ? FlowPayload.fromValue(
+              await resolveTaskFlowInputReference(FlowRunInput(
+                text: current.inputText,
+                mimeType: current.inputMimeType,
+                fileName: current.inputFileName,
+                ownedStoragePath: current.inputStoragePath,
+              )),
+              flow.inputType,
+              mimeType: current.inputMimeType,
+              fileName: current.inputFileName)
+          : current.subTasks[prefix - 1].result!;
+      await _readable(data, current.flowId);
+    } catch (_) {
+      if (_currentControl(id, revision) != null) {
+        _notifier.setExecutionStatus(
+          id,
+          FlowExecutionStatus.failed,
+          error: '已保存的步骤文件不存在、为空或无法读取，请重新运行',
+        );
+        await _notifier.persist();
+      }
+      throw TaskFlowValidationException(
+        '已保存的步骤文件不存在、为空或无法读取，请重新运行',
+        flowId: current.flowId,
+        isInputError: true,
+      );
+    }
     current = _currentControl(id, revision);
     if (current == null) return;
     final remaining = flow.blocks.skip(prefix).toList();
@@ -1090,6 +1155,19 @@ class TaskFlowExecutionService {
           }
           current = step.result!;
           continue;
+        }
+        if (i == 0) {
+          current = FlowPayload.fromValue(
+              await resolveTaskFlowInputReference(FlowRunInput(
+                text: original.inputText,
+                mimeType: original.inputMimeType,
+                fileName: original.inputFileName,
+                ownedStoragePath: original.inputStoragePath,
+              )),
+              flow.inputType,
+              mimeType: original.inputMimeType,
+              fileName: original.inputFileName);
+          await _readable(current, flow.id);
         }
         activeStepId = step.id;
         final block = flow.blocks[i];

@@ -259,6 +259,77 @@ void main() {
       expect(await TextManifest.loadRecordsUncached(), isEmpty);
     });
 
+    test('removes unique text content when manifest registration fails',
+        () async {
+      const content = 'unregistered unique text';
+      final record = _textRecordWithContent('unique-save-failure', content);
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecordIfUnique(record, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readText(record.storageFileName), isNull);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
+    test('preserves insertion failure when cleanup cannot check references',
+        () async {
+      const content = 'unregistered unique text with cleanup failure';
+      final record =
+          _textRecordWithContent('unique-save-cleanup-failure', content);
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          throw StateError('simulated manifest read failure');
+        };
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecordIfUnique(record, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readText(record.storageFileName), content);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
+    test(
+        'preserves content referenced by another record on unique save failure',
+        () async {
+      const content = 'shared unique-save text';
+      final existing = _textRecordWithContent('existing-reference', content);
+      final candidate =
+          _textRecordWithContent('unique-save-candidate', content);
+      await TextManifest.saveTextRecord(existing, content);
+
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecordIfUnique(candidate, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readText(existing.storageFileName), content);
+      expect(
+        (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+        [existing.id],
+      );
+    });
+
     test(
       'cleans up converted content when a format rename update fails',
       () async {

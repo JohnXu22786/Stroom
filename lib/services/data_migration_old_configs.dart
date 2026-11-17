@@ -320,7 +320,9 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
         ? rawModels.whereType<Map<String, dynamic>>().toList()
         : <Map<String, dynamic>>[];
     final models = oldModels.map((model) {
-      final typeConfig = <String, dynamic>{};
+      final typeConfig = model['typeConfig'] is Map
+          ? Map<String, dynamic>.from(model['typeConfig'] as Map)
+          : <String, dynamic>{};
       final temperature = model['temperature'];
       if (temperature != null) typeConfig['temperature'] = temperature;
       final context = model['maxTokens'] ?? model['context'];
@@ -355,7 +357,16 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
   String migratedConfigsJson,
   String? existingJson,
 ) {
-  final migratedConfigs = jsonDecode(migratedConfigsJson) as List;
+  final decodedMigratedConfigs = jsonDecode(migratedConfigsJson) as List;
+  final migratedConfigs = <Map<String, dynamic>>[];
+  final migratedIdentities = <String>{};
+  for (final config
+      in decodedMigratedConfigs.whereType<Map<String, dynamic>>()) {
+    if (migratedIdentities.add(_legacyChatConfigIdentity(config))) {
+      migratedConfigs.add(config);
+    }
+  }
+
   List<Map<String, dynamic>> existingEntries = [];
   var corruptExisting = false;
   if (existingJson != null && existingJson.isNotEmpty) {
@@ -371,10 +382,55 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     }
   }
 
-  final hasLlmEntry = existingEntries
-      .any((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm');
-  if (hasLlmEntry) {
-    return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
+  final usableLlmEntryIndex = existingEntries.indexWhere((entry) {
+    if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') return false;
+    try {
+      final parsed = ProviderEntry.fromMap(entry);
+      if (parsed.configs.isEmpty) return false;
+      jsonEncode(parsed.toMap());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  });
+  if (usableLlmEntryIndex >= 0) {
+    final existingEntry = existingEntries[usableLlmEntryIndex];
+    final rawConfigs = existingEntry['configs'];
+    final parsedEntry = ProviderEntry.fromMap(existingEntry);
+    final configs = rawConfigs is List
+        ? rawConfigs.whereType<Map<String, dynamic>>().toList()
+        : (jsonDecode(
+            _prepareLegacyChatConfigsSync(
+                jsonEncode([existingEntry]))['payload']! as String,
+          ) as List)
+            .whereType<Map<String, dynamic>>()
+            .toList();
+    final representedConfigs = rawConfigs is List ? configs : [existingEntry];
+    final representedIdentities = representedConfigs
+        .map(
+          (config) => _legacyChatConfigIdentity(
+            config,
+            legacyFormat: rawConfigs is! List,
+          ),
+        )
+        .toSet();
+    final unrepresentedConfigs = migratedConfigs
+        .where(
+          (config) => representedIdentities.add(
+            _legacyChatConfigIdentity(config),
+          ),
+        )
+        .toList();
+    if (unrepresentedConfigs.isEmpty) {
+      return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
+    }
+    configs.addAll(unrepresentedConfigs);
+    existingEntry['configs'] = configs;
+    return {
+      'status': 'write',
+      'corruptExisting': corruptExisting,
+      'payload': jsonEncode(existingEntries),
+    };
   }
 
   existingEntries.add({
@@ -388,6 +444,48 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     'corruptExisting': corruptExisting,
     'payload': jsonEncode(existingEntries),
   };
+}
+
+String _legacyChatConfigIdentity(
+  Map<String, dynamic> config, {
+  bool legacyFormat = false,
+}) =>
+    jsonEncode([
+      config['providerName'] is String ? config['providerName'] : '',
+      config['host'] is String ? config['host'] : '',
+      config['key'] is String ? config['key'] : '',
+      (config['models'] is List ? config['models'] as List : const [])
+          .whereType<Map<String, dynamic>>()
+          .map((model) {
+        final typeConfig = model['typeConfig'] is Map
+            ? Map<String, dynamic>.from(model['typeConfig'] as Map)
+            : <String, dynamic>{};
+        final temperature = model['temperature'];
+        if (temperature != null) typeConfig['temperature'] = temperature;
+        final context = model['maxTokens'] ?? model['context'];
+        if (context != null) typeConfig['context'] = context;
+        return [
+          model['modelId'] is String ? model['modelId'] : '',
+          model['supportStream'] is bool
+              ? model['supportStream']
+              : legacyFormat,
+          _canonicalLegacyChatIdentityValue(typeConfig),
+        ];
+      }).toList(),
+    ]);
+
+Object? _canonicalLegacyChatIdentityValue(Object? value) {
+  if (value is Map) {
+    final keys = value.keys.whereType<String>().toList()..sort();
+    return {
+      for (final key in keys)
+        key: _canonicalLegacyChatIdentityValue(value[key]),
+    };
+  }
+  if (value is List) {
+    return value.map(_canonicalLegacyChatIdentityValue).toList();
+  }
+  return value;
 }
 
 Map<String, Object?> _fixProviderEntriesSync(String raw) {

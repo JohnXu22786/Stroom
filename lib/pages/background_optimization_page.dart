@@ -12,6 +12,8 @@ import '../services/desktop_app_service.dart';
 import '../services/ios_continued_task_service.dart';
 import 'platform_tutorial_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// A page that detects current system environment, checks background optimization
 /// status, and provides tutorials organized by OS categories.
 class BackgroundOptimizationPage extends ConsumerStatefulWidget {
@@ -388,7 +390,11 @@ class _BackgroundOptimizationPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_strings.backgroundOptimizationTitle),
+        title: ConstrainedText(
+          _strings.backgroundOptimizationTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -555,8 +561,10 @@ class _BackgroundOptimizationPageState
                                 ),
                               )
                             : const Icon(Icons.restart_alt, size: 18),
-                        label: Text(
+                        label: ConstrainedText(
                           _strings.backgroundOptimizationRestartService,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -584,7 +592,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _isOperating ? null : _checkBackgroundService,
                   icon: const Icon(Icons.refresh, size: 18),
-                  label: Text(_strings.backgroundOptimizationRedetect),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationRedetect,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -674,7 +686,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _requestBatteryExemption,
                   icon: const Icon(Icons.battery_charging_full, size: 18),
-                  label: Text(_strings.backgroundOptimizationIgnoreBattery),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationIgnoreBattery,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -686,7 +702,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _requestExactAlarm,
                   icon: const Icon(Icons.alarm_add, size: 18),
-                  label: Text(_strings.backgroundOptimizationExactAlarm),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationExactAlarm,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -944,7 +964,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _quitDesktopApp,
                   icon: const Icon(Icons.power_settings_new, size: 18),
-                  label: Text(_strings.backgroundOptimizationQuitApp),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationQuitApp,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ),
@@ -1028,14 +1052,22 @@ class _BackgroundOptimizationPageState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SingleChildScrollView(
           child: Text(detail, style: theme.textTheme.bodyMedium),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(_strings.backgroundOptimizationGotIt),
+            child: ConstrainedText(
+              _strings.backgroundOptimizationGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

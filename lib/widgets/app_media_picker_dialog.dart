@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/natural_sort.dart';
 
+import 'constrained_text.dart';
+
 // ============================================================================
 // MediaPickerConfig — configuration for the unified media picker
 // ============================================================================
@@ -338,7 +340,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: Text(widget.config.title),
+          title: ConstrainedText(
+            widget.config.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -354,10 +360,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
               TextButton(
                 key: const Key('media_picker_clear_btn'),
                 onPressed: _clearSelection,
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!
                       .appMediaClearSelection(_selectedItems.length),
                   style: TextStyle(color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
@@ -380,8 +388,9 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                     ),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         _currentFolder,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 12,
                           color: cs.onSurfaceVariant,
@@ -443,7 +452,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                                     .pop(_selectedItems.values.toList());
                               },
                     icon: const Icon(Icons.check, size: 18),
-                    label: Text(
+                    label: ConstrainedText(
                       hasSelection
                           ? AppLocalizations.of(context)!
                               .appMediaConfirmSelectionCount(
@@ -451,6 +460,8 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                             )
                           : AppLocalizations.of(context)!
                               .appMediaConfirmSelection,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -483,7 +494,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
               TextButton.icon(
                 onPressed: _loadData,
                 icon: const Icon(Icons.refresh),
-                label: Text(l10n.actionRetry),
+                label: ConstrainedText(
+                  l10n.actionRetry,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -592,7 +607,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 ),
               ),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   baseName,
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
@@ -664,7 +679,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ConstrainedText(
                       widget.config.displayName(record),
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
@@ -775,7 +790,7 @@ class _PreviewChip extends StatelessWidget {
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(4),
-                child: Text(
+                child: ConstrainedText(
                   label,
                   style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
                   maxLines: 3,

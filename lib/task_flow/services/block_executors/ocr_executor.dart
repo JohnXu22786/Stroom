@@ -153,6 +153,15 @@ Future<String> executeOcrBlock({
   /// Allows bounded reads to be observed in preflight limit tests.
   Future<Uint8List> Function(File, int)? readInputBytes,
 
+  /// Allows WebFileStore reads to be held and released in cancellation tests.
+  Future<Uint8List?> Function(String, {int? maxBytes})? readWebFileBytes,
+
+  /// Allows the input-existence check to be held in cancellation tests.
+  Future<bool> Function(String)? checkInputExists,
+
+  /// Allows payload preparation to be held and released in cancellation tests.
+  Future<OcrImagePayload> Function(Uint8List)? prepareImagePayload,
+
   /// Shared Dio client for this request. The executor does not own or close it.
   Dio? ocrDio,
 }) async {
@@ -178,12 +187,21 @@ Future<String> executeOcrBlock({
   try {
     if (kIsWeb) {
       usesWebFileStore = true;
-      inputExists = await WebFileStore.exists(input);
+      inputExists = await (checkInputExists ?? WebFileStore.exists)(input);
     } else {
       final existsInWebFileStore =
           WebFileStore.isTestMode && await WebFileStore.exists(input);
       usesWebFileStore = existsInWebFileStore;
-      inputExists = existsInWebFileStore || await file.exists();
+      inputExists = existsInWebFileStore ||
+          await (checkInputExists ?? ((_) => file.exists()))(input);
+    }
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
     if (!inputExists) {
       failSubTask(
@@ -202,6 +220,14 @@ Future<String> executeOcrBlock({
       );
     }
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     failSubTask(
       bgNotifier,
@@ -323,9 +349,16 @@ Future<String> executeOcrBlock({
 
   try {
     if (usesWebFileStore) {
-      final storedBytes =
-          await WebFileStore.read(input, maxBytes: maxInputBytes);
+      final readWebFile = readWebFileBytes ?? WebFileStore.read;
+      final storedBytes = await readWebFile(input, maxBytes: maxInputBytes);
       if (storedBytes == null) {
+        if (!isFlowExecutionActive(execNotifier, execId)) {
+          throw BlockExecutionException(
+            '任务流已结束或删除',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
         failSubTask(
           bgNotifier,
           taskId,
@@ -354,8 +387,24 @@ Future<String> executeOcrBlock({
       throw oversizedInputException();
     }
   } on WebFileStoreReadLimitExceededException {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     throw oversizedInputException();
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     failSubTask(
       bgNotifier,
@@ -375,11 +424,20 @@ Future<String> executeOcrBlock({
 
   late final OcrImagePayload payload;
   try {
-    payload = await prepareOcrImagePayload(
-      imageBytes,
-      maxReencodedPngBytes: maxReencodedPngBytes,
-    );
+    payload = await (prepareImagePayload ??
+        (bytes) => prepareOcrImagePayload(
+              bytes,
+              maxReencodedPngBytes: maxReencodedPngBytes,
+            ))(imageBytes);
   } on OcrImagePayloadException catch (error) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     final localizedError = switch (error.failure) {
       OcrImagePayloadFailure.empty => strings.ocrImageEmpty,
       OcrImagePayloadFailure.unsupportedFormat =>
@@ -520,6 +578,15 @@ Future<String> executeOcrBlock({
     );
     return result;
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      if (e is BlockExecutionException) rethrow;
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     final safeError = _localizedSafeOcrTaskError(
       e,

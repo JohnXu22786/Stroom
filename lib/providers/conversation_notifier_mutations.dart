@@ -176,10 +176,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
-  Future<void> deleteConversation(String id) async {
+  Future<bool> deleteConversation(String id) async {
     final original = List<Conversation>.from(state);
     final deleted = state.where((c) => c.id == id).toList();
-    if (deleted.isEmpty) return;
+    if (deleted.isEmpty) return false;
     state = state.where((c) => c.id != id).toList();
     try {
       await _appendJournalBarrier({
@@ -191,15 +191,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record conversation deletion: $error');
-      return;
+      return false;
     }
-    if (!mounted) return;
+    if (!mounted) return true;
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
     await _persist();
     await _persistActiveId();
+    return true;
   }
 
   /// Replaces a flow-owned conversation from a prior attempt. Unlike the
@@ -452,11 +453,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Deletes multiple conversations by [ids]. Also clears active if included.
-  Future<void> batchDelete(List<String> ids) async {
+  Future<bool> batchDelete(List<String> ids) async {
     final original = List<Conversation>.from(state);
     final idSet = ids.toSet();
     final deleted = state.where((c) => idSet.contains(c.id)).toList();
-    if (deleted.isEmpty) return;
+    if (deleted.isEmpty) return false;
     state = state.where((c) => !idSet.contains(c.id)).toList();
     try {
       await _appendJournalBarrier({
@@ -469,15 +470,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record batch conversation deletion: $error');
-      return;
+      return false;
     }
-    if (!mounted) return;
+    if (!mounted) return true;
     if (idSet.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
     await _persist();
     await _persistActiveId();
+    return true;
   }
 
   /// Auto-generates a title for a conversation using the first messages.
@@ -515,11 +517,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Replaces the message list of a conversation (e.g. after sending or
   /// loading a different conversation).
   ///
-  Future<void> updateMessages(
+  Future<bool> updateMessages(
     String conversationId,
     List<ChatMessage> messages,
   ) async {
-    if (!mounted) return;
+    if (!mounted) return false;
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
       List<String> removedMessageIds() {
@@ -627,8 +629,29 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     } else {
       _replaceMessages(conversationId, messages);
     }
-    if (!mounted) return;
-    await _persistNow();
+    if (!mounted) return false;
+    return _persistNowChecked();
+  }
+
+  /// Restores history after a failed destructive operation and records a
+  /// tombstone cancellation for any checkpointed messages in [restoredIds].
+  Future<bool> restoreMessagesChecked(
+    String conversationId,
+    List<ChatMessage> messages, {
+    required Iterable<String> restoredIds,
+  }) async {
+    if (!mounted ||
+        !state.any((conversation) => conversation.id == conversationId)) {
+      return false;
+    }
+    if (!await updateMessages(conversationId, messages)) return false;
+    try {
+      await _appendMessageRestorations(conversationId, restoredIds);
+    } catch (error) {
+      debugPrint('Failed to record restored message history: $error');
+      return false;
+    }
+    return _persistNowChecked();
   }
 
   /// Queues a supersedable periodic stream checkpoint journal entry.

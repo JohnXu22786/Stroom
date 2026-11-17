@@ -432,7 +432,20 @@ class TextManifest {
                 }
 
                 await writeText(record.storagePath, text);
-                await _ops.addRecord(record);
+                try {
+                  await _ops.addRecord(record);
+                } catch (_) {
+                  try {
+                    await deleteFileIfUnreferenced(
+                      record.hash,
+                      record.storagePath,
+                    );
+                  } catch (_) {
+                    // Keep the original insertion failure if reference checks
+                    // or cleanup also fail.
+                  }
+                  rethrow;
+                }
                 return true;
               }));
 

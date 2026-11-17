@@ -1325,6 +1325,9 @@ Future<void> _clearCompleted(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
   await tester.tap(find.text('清除已完成'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.tap(find.widgetWithText(TextButton, '确定'));
   await tester.pump(const Duration(milliseconds: 300));
 }
 

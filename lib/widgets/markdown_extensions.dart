@@ -12,6 +12,8 @@ import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
 import 'mermaid_render_widget.dart';
 
+import 'constrained_text.dart';
+
 /// Tag used by the LaTeX custom generator.
 const _latexTag = 'latex';
 
@@ -136,8 +138,9 @@ class DisplayMathBlockSyntax extends m.BlockSyntax {
 
   @override
   m.Node parse(m.BlockParser parser) {
-    final currentIndex =
-        parser.lines.indexWhere((line) => identical(line, parser.current));
+    final currentIndex = parser.lines.indexWhere(
+      (line) => identical(line, parser.current),
+    );
     final search = _findClosingDelimiter(parser, currentIndex);
     assert(search.closingIndex != null || !search.foundFence);
     final closingIndex = search.closingIndex;
@@ -386,14 +389,22 @@ class LatexNode extends SpanNode {
             onTap: () => showDialog<void>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: Text(AppLocalizations.of(dialogContext)!.mathParseError),
+                title: ConstrainedText(
+                  AppLocalizations.of(dialogContext)!.mathParseError,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 content: SingleChildScrollView(
                   child: SelectableText(error.messageWithType),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: Text(AppLocalizations.of(dialogContext)!.mathClose),
+                    child: ConstrainedText(
+                      AppLocalizations.of(dialogContext)!.mathClose,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -787,7 +798,12 @@ class _NormalizedContainerTailSource {
     _pendingPrefix.writeTo(line);
     _pendingLine.writeTo(line);
     return _stripFenceContainerPrefix(
-        line.toString(), quoteDepth, listIndent, innerQuoteDepth, fenceIndent);
+      line.toString(),
+      quoteDepth,
+      listIndent,
+      innerQuoteDepth,
+      fenceIndent,
+    );
   }
 }
 
@@ -1451,10 +1467,7 @@ class StreamingFenceInfoCache {
     return _info!;
   }
 
-  _MermaidFenceInfo _copyWithPendingLine(
-    _MermaidFenceInfo info,
-    String text,
-  ) =>
+  _MermaidFenceInfo _copyWithPendingLine(_MermaidFenceInfo info, String text) =>
       (
         tail: info.tail,
         tailSource: info.tailSource == null ? null : text,

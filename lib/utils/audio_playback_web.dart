@@ -6,6 +6,19 @@ import 'dart:typed_data';
 /// 全局 Audio 元素（用于 playAudioBytes / playAudioUrl / stopAudio）
 html.AudioElement? _globalAudio;
 
+class _PendingAudioLoad {
+  final Completer<void> completer = Completer<void>();
+  final List<StreamSubscription<html.Event>> subscriptions = [];
+
+  void cancel() {
+    for (final subscription in subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    subscriptions.clear();
+    if (!completer.isCompleted) completer.complete();
+  }
+}
+
 // ===========================================================================
 // AudioPlayerAdapter — 用于 AudioPlayerPage 的跨平台播放器
 // ===========================================================================
@@ -13,6 +26,9 @@ html.AudioElement? _globalAudio;
 /// Web 实现：使用 HTML5 AudioElement
 class AudioPlayerAdapter {
   html.AudioElement? _audio;
+  _PendingAudioLoad? _pendingLoad;
+  int _loadGeneration = 0;
+  bool _disposed = false;
   Timer? _positionTimer;
   bool _playing = false;
 
@@ -45,29 +61,35 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频
   Future<void> load(String url) async {
-    _audio?.pause();
-    _audio = html.AudioElement();
-    _audio!.src = url;
-    _audio!.preload = 'auto';
+    if (_disposed) return;
 
-    final completer = Completer<void>();
-    StreamSubscription? errSub;
-    StreamSubscription? canPlaySub;
-    StreamSubscription? metaSub;
+    final generation = ++_loadGeneration;
+    _pendingLoad?.cancel();
+    _pendingLoad = null;
+    _audio?.pause();
+    final audio = html.AudioElement();
+    _audio = audio;
+    audio.src = url;
+    audio.preload = 'auto';
+
+    final attempt = _PendingAudioLoad();
+    _pendingLoad = attempt;
+
+    bool isCurrent() =>
+        !_disposed && generation == _loadGeneration && identical(_audio, audio);
 
     void onLoad() {
-      errSub?.cancel();
-      canPlaySub?.cancel();
-      metaSub?.cancel();
-      if (!completer.isCompleted) completer.complete();
+      attempt.cancel();
+      if (identical(_pendingLoad, attempt)) _pendingLoad = null;
     }
 
     void onError(html.Event event) {
-      errSub?.cancel();
-      canPlaySub?.cancel();
-      metaSub?.cancel();
-      if (!completer.isCompleted) {
-        final mediaError = _audio?.error;
+      if (!isCurrent()) {
+        onLoad();
+        return;
+      }
+      if (!attempt.completer.isCompleted) {
+        final mediaError = audio.error;
         final errorCode = mediaError?.code ?? -1;
         final errorMsg = mediaError?.message ?? '';
         String detail;
@@ -88,21 +110,28 @@ class AudioPlayerAdapter {
             detail = '未知错误';
         }
         final fullMsg = errorMsg.isNotEmpty ? '$detail（$errorMsg）' : detail;
-        completer.completeError(
-          Exception('加载音频失败：$fullMsg'),
-        );
+        attempt.completer.completeError(Exception('加载音频失败：$fullMsg'));
       }
+      for (final subscription in attempt.subscriptions) {
+        unawaited(subscription.cancel());
+      }
+      attempt.subscriptions.clear();
+      if (identical(_pendingLoad, attempt)) _pendingLoad = null;
     }
 
-    errSub = _audio!.onError.listen(onError);
-    canPlaySub = _audio!.onCanPlay.listen((_) => onLoad());
-    metaSub = _audio!.onLoadedMetadata.listen((_) => onLoad());
+    attempt.subscriptions.add(audio.onError.listen(onError));
+    attempt.subscriptions.add(audio.onCanPlay.listen((_) => onLoad()));
+    attempt.subscriptions.add(audio.onLoadedMetadata.listen((_) => onLoad()));
 
-    await completer.future
-        .timeout(const Duration(seconds: 30), onTimeout: onLoad);
+    await attempt.completer.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: onLoad,
+    );
+
+    if (!isCurrent()) return;
 
     // 通知时长
-    final seconds = _audio!.duration;
+    final seconds = audio.duration;
     final duration = seconds.isFinite
         ? Duration(milliseconds: (seconds * 1000).toInt())
         : null;
@@ -167,6 +196,10 @@ class AudioPlayerAdapter {
 
   /// 释放资源
   void dispose() {
+    _disposed = true;
+    _loadGeneration++;
+    _pendingLoad?.cancel();
+    _pendingLoad = null;
     _audio?.pause();
     _positionTimer?.cancel();
     _audio = null;
@@ -197,7 +230,7 @@ void downloadAudioFile(Uint8List data, String fileName, String mimeType) {
   html.document.body!.children.add(anchor);
   anchor.click();
   html.document.body!.children.remove(anchor);
-  html.Url.revokeObjectUrl(url);
+  Timer(const Duration(seconds: 1), () => html.Url.revokeObjectUrl(url));
 }
 
 /// 从 URL 播放音频

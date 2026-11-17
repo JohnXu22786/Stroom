@@ -52,6 +52,12 @@
   "builtInSystemCompactionDescription": "Verdichtet einen langen Gesprächsverlauf zu einer strukturierten Zusammenfassung mit Ankern, um Kontext freizugeben.",
   "builtInSystemCompactionPrompt": "Du bist ein Assistent zur Zusammenfassung mit Ankern. Verdichte lange Gespräche zu strukturierten Zusammenfassungen.\n\nFasse nur den bereitgestellten Gesprächsverlauf zusammen. Neuere Nachrichten bleiben möglicherweise wortgetreu erhalten. Konzentriere dich deshalb auf ältere, weiterhin wichtige Informationen.\n\nWenn die Eingabe einen <previous-summary>-Block enthält, behandle ihn als aktuelle, verankerte Zusammenfassung: Behalte weiterhin gültige Informationen bei, entferne Überholtes und integriere neue Fakten.\n\nHalte die folgende Struktur genau ein. Behalte die Reihenfolge der Abschnitte bei und nimm alle Abschnitte auf, auch wenn sie leer sind:\n<template>\n## Ziel\n- [Ziel des Nutzers in ein oder zwei Sätzen]\n\n## Wichtige Details\n- [Vorgaben und Präferenzen, Entscheidungen samt Begründungen, wichtige Fakten oder Annahmen und genaue Angaben für die Fortsetzung; schreibe (keine), wenn leer]\n\n## Arbeitsstand\n### Abgeschlossen\n- [Abgeschlossene Arbeiten, bestätigte Fakten oder vorgenommene Änderungen; schreibe (keine), wenn leer]\n\n### Aktiv\n- [Aktuelle Arbeit, Teilergebnisse oder laufende Untersuchungen; schreibe (keine), wenn leer]\n\n### Blockiert\n- [Hindernisse, fehlgeschlagene Befehle oder Unbekanntes; schreibe (keine), wenn leer]\n\n## Nächste Schritte\n1. [Nächste konkrete Handlung oder (keine)]\n2. [Bekannte Folgehandlung oder (keine)]\n\n## Relevante Dateien\n- [Dateipfad oder Verzeichnis und seine Bedeutung; schreibe (keine), wenn leer]\n</template>\n\nRegeln:\n- Nimm alle Abschnitte auf, auch wenn sie leer sind.\n- Verwende kurze Aufzählungspunkte statt Absätzen.\n- Bewahre genaue Dateipfade, Symbole, Befehle, Fehlermeldungen, URLs und Bezeichner.\n- Erwähne nicht, dass du den Kontext zusammenfasst, verdichtest oder zusammenführst.\n- Verwende dieselbe Sprache wie das Gespräch.",
   "builtInPromptMarketTitle": "Assistenten-Marktplatz",
+  "assistantAddTitle": "Assistent hinzufügen",
+  "assistantBuiltInTab": "Integriert",
+  "assistantImportTab": "Importieren",
+  "assistantBuiltInHint": "Durchsuche fertige Assistenten und sieh sie dir vor dem Hinzufügen an.",
+  "assistantImportHint": "Verbinde einen Assistentenkatalog oder importiere eine Datei über ihre URL.",
+  "assistantImportAction": "Katalog verbinden oder Datei importieren",
   "builtInPromptClose": "Schließen",
   "builtInPromptImportHint": "Importierte Prompts werden zu regulären Assistenten, die du frei bearbeiten kannst.",
   "builtInPromptView": "Prompt anzeigen",
@@ -125,7 +131,7 @@
   "ocrTemplateTableContent": "Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre bei Tabellen Überschriften sowie Zeilen- und Spaltenzuordnungen und leere Zellen und gib sie als Markdown-Tabellen aus. Gib andere Inhalte als gewöhnlichen Text wieder. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "Transkribiere den gesamten sichtbaren Text in der natürlichen Lesereihenfolge der Seite. Bewahre Text außerhalb von Formeln und stelle mathematische Formeln in LaTeX dar; verwende $...$ für Inline-Formeln und $$...$$ für abgesetzte Formeln. Gib ausschließlich die Transkription zurück; füge keine Erklärungen oder Schlussfolgerungen hinzu.",
-  "ocrDefaultImagesOnly": "Standard (nur Bilder senden)",
+  "ocrDefaultImagesOnly": "Standard (keine benutzerdefinierte Anweisung; Standard-OCR-Prompt wird verwendet)",
   "ocrDefaultSystemPrompt": "Extrahiere den gesamten Text aus dem Bild und bewahre dabei die ursprüngliche Formatierung und das Layout. Gib ausschließlich den extrahierten Text zurück, ohne Erklärungen.",
   "ocrSavedInstructionSnapshot": "Gespeicherte Anweisungskopie",
   "ocrPageTitle": "Texterkennung im Bild",
@@ -146,7 +152,7 @@
   "ocrSelectModel": "Modell auswählen",
   "ocrInstructionLabel": "Anweisung",
   "ocrManageInstructions": "Erkennungsanweisungen verwalten",
-  "ocrInstructionManageGuidance": "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird nur das Bild gesendet.",
+  "ocrInstructionManageGuidance": "Diese Anweisungen gelten für alle Erkennungsmodelle. Wenn keine ausgewählt ist, wird keine benutzerdefinierte Anweisung hinzugefügt; der Standard-OCR-Prompt wird weiterhin verwendet.",
   "ocrInstructionManageEmpty": "Noch keine Anweisungen",
   "ocrInstructionEditTooltip": "Anweisung bearbeiten",
   "ocrInstructionDeleteTooltip": "Anweisung löschen",
@@ -434,6 +440,7 @@
   "unifiedTaskListTabStopped": "Angehalten",
   "unifiedTaskListConfirmClear": "Leeren bestätigen",
   "unifiedTaskListConfirmClearFailedMessage": "Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?",
+  "unifiedTaskListConfirmClearCompletedMessage": "Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListConfirmClearAllMessage": "Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListCancel": "Abbrechen",
   "unifiedTaskListConfirm": "Bestätigen",
@@ -773,6 +780,15 @@
   "chatErrorDetailResponseHeaders": "Antwort-Header",
   "chatErrorDetailResponseBody": "Antwortinhalt",
   "chatErrorDetailEmpty": "Keine Detaildaten verfügbar",
+  "chatErrorDetailOmittedContentMarker": "[{count} Zeichen in der Mitte ausgelassen]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "Schließen",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6058,6 +6074,7 @@
   "appLogWillBeCreated": "Protokolle werden erstellt, während die App läuft",
   "appLogExport": "Exportieren",
   "appLogDelete": "Löschen",
+  "appLogDeleteUnconfirmed": "Löschen konnte nicht bestätigt werden.",
   "appLogConfirmDeleteTitle": "Löschen bestätigen",
   "appLogConfirmDeleteMessage": "Protokolldatei „{fileName}“ löschen?",
   "@appLogConfirmDeleteMessage": {

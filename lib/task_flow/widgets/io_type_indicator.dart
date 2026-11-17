@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../widgets/constrained_text.dart';
 import '../models/io_type.dart';
 
 /// Displays an [IOType] with an icon and label in a chip-like container.
@@ -53,14 +54,20 @@ class IOTypeIndicator extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(
-            isInput
-                ? strings.taskFlowUiInputLabel(localizedType)
-                : strings.taskFlowUiOutputLabel(labelOverride ?? localizedType),
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: ConstrainedText(
+              isInput
+                  ? strings.taskFlowUiInputLabel(localizedType)
+                  : strings.taskFlowUiOutputLabel(
+                      labelOverride ?? localizedType,
+                    ),
+              style: TextStyle(
+                fontSize: 10,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

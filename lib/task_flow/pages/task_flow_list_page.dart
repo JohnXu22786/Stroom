@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -27,7 +28,11 @@ class TaskFlowListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.taskFlowPageTitle),
+        title: ConstrainedText(
+          strings.taskFlowPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -70,8 +75,10 @@ class TaskFlowListPage extends ConsumerWidget {
           FilledButton.icon(
             onPressed: () => _showTemplates(context),
             icon: const Icon(Icons.auto_awesome_outlined),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.taskFlowStartFromTemplate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -165,7 +172,7 @@ class TaskFlowListPage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        ConstrainedText(
                           flow.name,
                           style: TextStyle(
                             fontSize: 15,
@@ -176,7 +183,7 @@ class TaskFlowListPage extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (flow.description.isNotEmpty)
-                          Text(
+                          ConstrainedText(
                             flow.description,
                             style: TextStyle(
                               fontSize: 12,
@@ -238,7 +245,7 @@ class TaskFlowListPage extends ConsumerWidget {
                     ),
                     if (defs.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
+                      ConstrainedText(
                         defs,
                         style: TextStyle(
                           fontSize: 11,
@@ -328,8 +335,10 @@ class TaskFlowListPage extends ConsumerWidget {
                 showDialog(
                   context: context,
                   builder: (dCtx) => AlertDialog(
-                    title: Text(
+                    title: ConstrainedText(
                       AppLocalizations.of(context)!.taskFlowConfirmDelete,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     content: Text(
                       AppLocalizations.of(context)!
@@ -338,8 +347,10 @@ class TaskFlowListPage extends ConsumerWidget {
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dCtx),
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.systemAssistantCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       TextButton(
@@ -349,11 +360,13 @@ class TaskFlowListPage extends ConsumerWidget {
                               .read(taskFlowListProvider.notifier)
                               .removeFlow(flow.id);
                         },
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.taskFlowDelete,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.error,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -498,7 +511,7 @@ class TaskFlowListPage extends ConsumerWidget {
                       shrinkWrap: true,
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       itemCount: templates.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (_, index) {
                         final template = templates[index];
                         return _buildTemplateCard(
@@ -647,8 +660,10 @@ class TaskFlowListPage extends ConsumerWidget {
                       alignment: Alignment.centerRight,
                       child: FilledButton.tonal(
                         onPressed: onPressed,
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.taskFlowUseTemplate,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -716,7 +731,11 @@ class TaskFlowListPage extends ConsumerWidget {
               ),
               trailing: FilledButton.tonal(
                 onPressed: onPressed,
-                child: Text(AppLocalizations.of(context)!.taskFlowUseTemplate),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUseTemplate,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
     );

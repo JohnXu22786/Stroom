@@ -16,6 +16,8 @@ import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
+import 'package:stroom/task_flow/models/task_flow_execution.dart';
+import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 
 // =============================================================================
 // CatCatch task helpers (from unified_task_list_page_test.dart)
@@ -71,6 +73,27 @@ catcatch.CatCatchTask _createPausedTask({required String id}) {
   );
 }
 
+TaskFlowExecution _createCompletedFlowExecution({required String id}) {
+  return TaskFlowExecution(
+    id: id,
+    flowId: 'test-flow',
+    flowName: '已完成OCR任务',
+    status: FlowExecutionStatus.completed,
+    createdAt: DateTime(2025, 6, 1),
+    completedAt: DateTime(2025, 6, 1, 0, 3),
+  );
+}
+
+class _InMemoryTaskFlowExecutionNotifier extends TaskFlowExecutionNotifier {
+  @override
+  Future<bool> removeExecutionsPersisted(Iterable<String> ids) async {
+    final removedIds = ids.toSet();
+    state =
+        state.where((execution) => !removedIds.contains(execution.id)).toList();
+    return true;
+  }
+}
+
 // =============================================================================
 // Page pump helpers
 // =============================================================================
@@ -115,8 +138,9 @@ Future<void> expandCompletedCard(WidgetTester tester) async {
 /// Pumps the UnifiedTaskListPage with given background tasks and empty others.
 Future<void> pumpPageWithBackground(
   WidgetTester tester,
-  List<BackgroundTask> backgroundTasks,
-) async {
+  List<BackgroundTask> backgroundTasks, {
+  TaskFlowExecutionNotifier? flowNotifier,
+}) async {
   final bgNotifier = BackgroundTaskNotifier();
   bgNotifier.state = backgroundTasks;
 
@@ -134,6 +158,9 @@ Future<void> pumpPageWithBackground(
           return notifier;
         }),
         backgroundTasksProvider.overrideWith((ref) => bgNotifier),
+        taskFlowExecutionsProvider.overrideWith((ref) {
+          return flowNotifier ?? TaskFlowExecutionNotifier();
+        }),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
       child: MaterialApp(
@@ -602,6 +629,81 @@ void main() {
       await pumpPageWithBackground(tester, []);
 
       expect(find.text('暂无任务'), findsOneWidget, reason: '空任务列表应显示"暂无任务"占位符');
+    });
+
+    testWidgets('clearing completed tasks requires confirmation',
+        (tester) async {
+      final flowNotifier = _InMemoryTaskFlowExecutionNotifier()
+        ..state = [_createCompletedFlowExecution(id: 'completed-flow')];
+      await pumpPageWithBackground(tester, [], flowNotifier: flowNotifier);
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      final clearCompletedItem = find.ancestor(
+        of: find.text('清除已完成'),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        find.descendant(
+          of: clearCompletedItem,
+          matching: find.byIcon(Icons.delete_outline),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('清除已完成'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认清除'), findsOneWidget);
+      expect(find.text('确定要清除所有已完成任务吗？此操作不可撤销。'), findsOneWidget);
+      expect(find.text('已完成OCR任务'), findsOneWidget,
+          reason: 'completed tasks must remain until the user confirms');
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(flowNotifier.state, hasLength(1));
+      expect(find.text('已完成OCR任务'), findsOneWidget,
+          reason: 'canceling the confirmation must preserve completed tasks');
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('清除已完成'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      expect(flowNotifier.state, isEmpty);
+      expect(find.text('已完成OCR任务'), findsNothing,
+          reason: 'confirmed clearing must remove completed tasks');
+    });
+
+    testWidgets(
+        'clearing failed tasks uses a trash icon and requires confirmation',
+        (tester) async {
+      await pumpPage(tester, [_createFailedTask(id: 'failed-1')]);
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+
+      final clearFailedItem = find.ancestor(
+        of: find.text('清除失败任务'),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        find.descendant(
+          of: clearFailedItem,
+          matching: find.byIcon(Icons.delete_outline),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('清除失败任务'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认清除'), findsOneWidget);
+      expect(find.text('确定要清除所有失败任务吗？'), findsOneWidget);
+      expect(find.text('失败 failed-1'), findsOneWidget,
+          reason: 'failed tasks must remain until the user confirms');
     });
 
     testWidgets('failed background task can be deleted via delete button',

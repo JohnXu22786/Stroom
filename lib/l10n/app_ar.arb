@@ -54,6 +54,12 @@
   "builtInSystemCompactionDescription": "يلخّص محادثة طويلة في موجز منظم ومترابط لتوفير مساحة في السياق.",
   "builtInSystemCompactionPrompt": "أنت مساعد لتلخيص السياق مع الحفاظ على ترابطه. لخّص المحادثات الطويلة في موجز منظم.\n\nلخّص سجل المحادثة المقدّم فقط. قد تُحفظ الرسائل الحديثة حرفيًا، لذا ركّز على المعلومات الأقدم التي ما زالت مهمة.\n\nإذا احتوى الطلب على كتلة <previous-summary>، فاعتبرها الموجز الحالي المحفوظ: أبقِ ما يزال صحيحًا، واحذف ما تقادم، وادمج الحقائق الجديدة.\n\nاتبع هذا الهيكل بدقة. حافظ على ترتيب الأقسام وأدرجها كلها، حتى إن كان بعضها فارغًا:\n<template>\n## الهدف\n- [هدف المستخدم في جملة أو جملتين]\n\n## تفاصيل مهمة\n- [القيود والتفضيلات والقرارات وأسبابها والحقائق والافتراضات والسياق الدقيق اللازم للمتابعة؛ اكتب (لا شيء) إذا كان القسم فارغًا]\n\n## حالة العمل\n### مكتمل\n- [العمل المكتمل والحقائق التي تم التحقق منها والتغييرات المنجزة؛ اكتب (لا شيء) إذا كان القسم فارغًا]\n\n### جارٍ\n- [العمل الجاري أو التغييرات الجزئية أو الاستقصاء؛ اكتب (لا شيء) إذا كان القسم فارغًا]\n\n### متعذر\n- [العوائق أو الأوامر الفاشلة أو الأمور غير المعروفة؛ اكتب (لا شيء) إذا كان القسم فارغًا]\n\n## الخطوة التالية\n1. [الإجراء المحدد التالي أو (لا شيء)]\n2. [متابعة معروفة أو (لا شيء)]\n\n## الملفات ذات الصلة\n- [مسار الملف أو المجلد وسبب أهميته؛ اكتب (لا شيء) إذا كان القسم فارغًا]\n</template>\n\nالقواعد:\n- أدرج جميع الأقسام، حتى إن كانت فارغة.\n- استخدم نقاطًا موجزة لا فقرات.\n- حافظ على مسارات الملفات والرموز والأوامر ورسائل الخطأ وعناوين URL والمعرّفات كما هي.\n- لا تذكر أنك تلخّص أو تضغط السياق أو تدمج موجزات.\n- استخدم لغة المحادثة نفسها.",
   "builtInPromptMarketTitle": "متجر المساعدين",
+  "assistantAddTitle": "إضافة مساعد",
+  "assistantBuiltInTab": "المساعدون المدمجون",
+  "assistantImportTab": "استيراد",
+  "assistantBuiltInHint": "تصفح المساعدين الجاهزين للاستخدام وعاينهم قبل إضافتهم.",
+  "assistantImportHint": "اتصل بكتالوج مساعدين عن بُعد أو استورد ملف مساعد عبر رابطه.",
+  "assistantImportAction": "الاتصال بالكتالوج أو استيراد ملف",
   "builtInPromptClose": "إغلاق",
   "builtInPromptImportHint": "تصبح المطالبات المستوردة مساعدين عاديين يمكنك تعديلهم بحرية.",
   "builtInPromptView": "عرض المطالبة",
@@ -127,7 +133,7 @@
   "ocrTemplateTableContent": "انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. في الجداول، حافظ على العناوين والعلاقات بين الصفوف والأعمدة والخلايا الفارغة، وأخرجها في صورة جداول Markdown. أخرج المحتوى الآخر كنص عادي. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.",
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم $...$ للصيغ المضمنة و$$...$$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.",
-  "ocrDefaultImagesOnly": "الافتراضي (إرسال الصور فقط)",
+  "ocrDefaultImagesOnly": "الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)",
   "ocrDefaultSystemPrompt": "استخرج كل النص من الصورة مع الحفاظ على تنسيقه وتخطيطه الأصليين. أخرج النص المستخرج فقط، دون أي شرح.",
   "ocrSavedInstructionSnapshot": "نسخة محفوظة من التعليمات",
   "ocrPageTitle": "التعرّف على نص الصور",
@@ -148,7 +154,7 @@
   "ocrSelectModel": "اختيار نموذج",
   "ocrInstructionLabel": "التعليمات",
   "ocrManageInstructions": "إدارة تعليمات التعرّف",
-  "ocrInstructionManageGuidance": "تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.",
+  "ocrInstructionManageGuidance": "تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.",
   "ocrInstructionManageEmpty": "لا توجد تعليمات بعد",
   "ocrInstructionEditTooltip": "تعديل التعليمات",
   "ocrInstructionDeleteTooltip": "حذف التعليمات",
@@ -436,6 +442,7 @@
   "unifiedTaskListTabStopped": "متوقفة",
   "unifiedTaskListConfirmClear": "تأكيد المسح",
   "unifiedTaskListConfirmClearFailedMessage": "هل تريد بالتأكيد مسح جميع المهام الفاشلة؟",
+  "unifiedTaskListConfirmClearCompletedMessage": "هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.",
   "unifiedTaskListConfirmClearAllMessage": "هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.",
   "unifiedTaskListCancel": "إلغاء",
   "unifiedTaskListConfirm": "تأكيد",
@@ -775,6 +782,15 @@
   "chatErrorDetailResponseHeaders": "ترويسات الاستجابة",
   "chatErrorDetailResponseBody": "نص الاستجابة",
   "chatErrorDetailEmpty": "لا تتوفر بيانات تفصيلية",
+  "chatErrorDetailOmittedContentMarker": "[تم إخفاء {count} حرفًا من الوسط]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "إغلاق",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -6060,6 +6076,7 @@
   "appLogWillBeCreated": "تُنشأ السجلات أثناء تشغيل التطبيق",
   "appLogExport": "تصدير",
   "appLogDelete": "حذف",
+  "appLogDeleteUnconfirmed": "تعذر تأكيد الحذف.",
   "appLogConfirmDeleteTitle": "تأكيد الحذف",
   "appLogConfirmDeleteMessage": "هل تريد حذف ملف السجل \"{fileName}\"؟",
   "@appLogConfirmDeleteMessage": {

@@ -18,6 +18,7 @@ import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
+import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_launch_snapshot.dart';
@@ -39,6 +40,20 @@ class _Documents extends PathProviderPlatform {
   final String path;
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+class _FailOnDocumentsLookup extends PathProviderPlatform {
+  _FailOnDocumentsLookup(this.path, {this.failOnCall = 2});
+  final String path;
+  final int failOnCall;
+  var calls = 0;
+  @override
+  Future<String?> getApplicationDocumentsPath() async {
+    if (++calls == failOnCall) {
+      throw const FileSystemException('documents lookup failed');
+    }
+    return path;
+  }
 }
 
 const _dispatchWait = Duration(seconds: 10);
@@ -1642,6 +1657,280 @@ void main() {
           'flowName': 'Legacy',
         }).inputMimeType,
         isNull);
+  });
+
+  test(
+      'owned file input resolves from durable attachment storage on retry and resume',
+      () async {
+    final mediaBytes = Uint8List.fromList([
+      0,
+      0,
+      0,
+      24,
+      ...ascii.encode('ftypisom'),
+      0,
+      0,
+      0,
+      1,
+      ...ascii.encode('isommp41'),
+    ]);
+    final storagePath =
+        await AttachmentStorage.saveFile('recording.mp4', mediaBytes);
+    final basename = storagePath.split('/').last;
+    final expectedPath = '${directory.path}/attachments/$basename';
+    final stalePath = '/previous/app/documents/attachments/$basename';
+    final providers = _providers('asr', 'voice');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries',
+        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.audio, blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.asr, params: {'modelRef': _reference('voice')})
+    ]);
+    final received = <FlowPayload>[];
+    final container = make(runner: (block, input, id, step) async {
+      received.add(input);
+      return const FlowPayload.text('done');
+    });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service.launchFlowMany('flow', [
+      FlowRunInput(
+        text: stalePath,
+        mimeType: 'audio/mp4',
+        fileName: 'recording.mp4',
+        ownedStoragePath: storagePath,
+      ),
+    ]);
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.completed,
+        'owned file initial launch');
+
+    var saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.failed,
+      ),
+    ];
+    final retryIds = await service.retryExecution(ids.single);
+    await _waitFor(
+        () =>
+            notifier.execution(retryIds.single)?.status ==
+            FlowExecutionStatus.completed,
+        'owned file retry');
+    expect(notifier.execution(retryIds.single)!.inputText, storagePath);
+
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 1);
+    await expectLater(
+      service.retryExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((error) => error.isStorageError, 'storage failure', isTrue)),
+    );
+    final failedRetry = notifier.executions.firstWhere(
+      (execution) =>
+          execution.id != ids.single && execution.id != retryIds.single,
+    );
+    expect(failedRetry.status, FlowExecutionStatus.failed);
+    expect(failedRetry.inputStoragePath, storagePath);
+    expect(failedRetry.error, contains('文件不存在'));
+    PathProviderPlatform.instance = _Documents(directory.path);
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    await service.resumeExecution(ids.single);
+    await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.completed,
+        'owned file prefix-zero resume');
+
+    expect(received, hasLength(3));
+    expect(received.map((input) => input.value), everyElement(expectedPath));
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 1);
+    await expectLater(
+      service.resumeExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+    expect(notifier.execution(ids.single)?.status, FlowExecutionStatus.failed);
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 2);
+    await service.resumeExecution(ids.single);
+    await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.failed,
+        'owned file resolution failure handling');
+    expect(received, hasLength(3));
+    PathProviderPlatform.instance = _Documents(directory.path);
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    await AttachmentStorage.deleteFile(storagePath);
+    await expectLater(
+      service.resumeExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+    expect(notifier.execution(ids.single)?.status, FlowExecutionStatus.failed);
+
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'cold-owned-input',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.waiting,
+        snapshot: saved.snapshot,
+        inputText: stalePath,
+        inputMimeType: 'audio/mp4',
+        inputType: IOType.audio,
+        inputFileName: 'recording.mp4',
+        inputStoragePath: storagePath,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ]);
+    await service.restorePendingExecutions();
+    await _waitFor(
+        () =>
+            notifier.execution('cold-owned-input')?.status ==
+            FlowExecutionStatus.failed,
+        'cold restored missing owned file');
+    expect(received, hasLength(3));
+
+    final checkpointFile =
+        await File('${directory.path}/checkpoint.mp4').writeAsBytes(mediaBytes);
+    final checkpointFlow = TaskFlowDefinition(
+      id: 'checkpoint-flow',
+      inputType: IOType.audio,
+      blocks: [
+        TaskFlowBlock(
+            id: 'first',
+            typeKey: BlockType.asr,
+            params: {'modelRef': _reference('voice')}),
+        TaskFlowBlock(
+            id: 'second',
+            typeKey: BlockType.asr,
+            params: {'modelRef': _reference('voice')}),
+      ],
+    );
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'checkpoint-owned-input',
+        flowId: checkpointFlow.id,
+        flowName: checkpointFlow.name,
+        status: FlowExecutionStatus.waiting,
+        snapshot: FlowLaunchSnapshot.capture(checkpointFlow, providers, []),
+        inputText: stalePath,
+        inputMimeType: 'audio/mp4',
+        inputType: IOType.audio,
+        inputFileName: 'recording.mp4',
+        inputStoragePath: storagePath,
+        subTasks: [
+          FlowSubTask(
+            id: 'saved-first-step',
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'completed-asr',
+            subTaskType: 'background',
+            status: TaskStatus.completed,
+            result: FlowPayload.file(
+              fileReference: checkpointFile.path,
+              type: IOType.audio,
+              mimeType: 'audio/mp4',
+            ),
+          ),
+          FlowSubTask(
+            id: 'pending-second-step',
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ]);
+    await service.restorePendingExecutions();
+    await _waitFor(
+        () =>
+            notifier.execution('checkpoint-owned-input')?.status ==
+            FlowExecutionStatus.completed,
+        'cold restored owned-file checkpoint');
+    expect(received, hasLength(4));
+    expect(received.last.value, checkpointFile.path);
   });
 
   test('cold restored audio MP4 dispatch uses persisted input MIME', () async {

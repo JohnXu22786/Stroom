@@ -197,6 +197,26 @@ class AppLocalizationsAr extends AppLocalizations {
   String get builtInPromptMarketTitle => 'متجر المساعدين';
 
   @override
+  String get assistantAddTitle => 'إضافة مساعد';
+
+  @override
+  String get assistantBuiltInTab => 'المساعدون المدمجون';
+
+  @override
+  String get assistantImportTab => 'استيراد';
+
+  @override
+  String get assistantBuiltInHint =>
+      'تصفح المساعدين الجاهزين للاستخدام وعاينهم قبل إضافتهم.';
+
+  @override
+  String get assistantImportHint =>
+      'اتصل بكتالوج مساعدين عن بُعد أو استورد ملف مساعد عبر رابطه.';
+
+  @override
+  String get assistantImportAction => 'الاتصال بالكتالوج أو استيراد ملف';
+
+  @override
   String get builtInPromptClose => 'إغلاق';
 
   @override
@@ -476,7 +496,8 @@ class AppLocalizationsAr extends AppLocalizations {
       'انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم \$...\$ للصيغ المضمنة و\$\$...\$\$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.';
 
   @override
-  String get ocrDefaultImagesOnly => 'الافتراضي (إرسال الصور فقط)';
+  String get ocrDefaultImagesOnly =>
+      'الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -547,7 +568,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.';
+      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.';
 
   @override
   String get ocrInstructionManageEmpty => 'لا توجد تعليمات بعد';
@@ -1580,6 +1601,10 @@ class AppLocalizationsAr extends AppLocalizations {
       'هل تريد بالتأكيد مسح جميع المهام الفاشلة؟';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.';
 
@@ -2161,6 +2186,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'لا تتوفر بيانات تفصيلية';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[تم إخفاء $count حرفًا من الوسط]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'إغلاق';
@@ -3317,12 +3347,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get topicItemPin => 'تثبيت';
 
   @override
-  @override
   String get topicItemMarkUnread => 'وضع علامة كغير مقروءة';
 
   @override
   String get topicItemMarkRead => 'وضع علامة كمقروءة';
 
+  @override
   String get topicItemRename => 'إعادة تسمية';
 
   @override
@@ -10635,6 +10665,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appLogDelete => 'حذف';
 
   @override
+  String get appLogDeleteUnconfirmed => 'تعذر تأكيد الحذف.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'تأكيد الحذف';
 
   @override
@@ -12296,6 +12329,26 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get builtInPromptMarketTitle => 'متجر المساعدين';
 
   @override
+  String get assistantAddTitle => 'إضافة مساعد';
+
+  @override
+  String get assistantBuiltInTab => 'المساعدون المدمجون';
+
+  @override
+  String get assistantImportTab => 'استيراد';
+
+  @override
+  String get assistantBuiltInHint =>
+      'تصفح المساعدين الجاهزين للاستخدام وعاينهم قبل إضافتهم.';
+
+  @override
+  String get assistantImportHint =>
+      'اتصل بكتالوج مساعدين عن بُعد أو استورد ملف مساعد عبر رابطه.';
+
+  @override
+  String get assistantImportAction => 'الاتصال بالكتالوج أو استيراد ملف';
+
+  @override
   String get builtInPromptClose => 'إغلاق';
 
   @override
@@ -12575,7 +12628,8 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       'انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم \$...\$ للصيغ المضمنة و\$\$...\$\$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.';
 
   @override
-  String get ocrDefaultImagesOnly => 'الافتراضي (إرسال الصور فقط)';
+  String get ocrDefaultImagesOnly =>
+      'الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12646,7 +12700,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.';
+      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.';
 
   @override
   String get ocrInstructionManageEmpty => 'لا توجد تعليمات بعد';
@@ -13679,6 +13733,10 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       'هل تريد بالتأكيد مسح جميع المهام الفاشلة؟';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.';
 
@@ -14260,6 +14318,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get chatErrorDetailEmpty => 'لا تتوفر بيانات تفصيلية';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[تم إخفاء $count حرفًا من الوسط]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'إغلاق';
@@ -15416,12 +15479,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get topicItemPin => 'تثبيت';
 
   @override
-  @override
   String get topicItemMarkUnread => 'وضع علامة كغير مقروءة';
 
   @override
   String get topicItemMarkRead => 'وضع علامة كمقروءة';
 
+  @override
   String get topicItemRename => 'إعادة تسمية';
 
   @override
@@ -15944,6 +16007,9 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get folderPickerSubfolders => 'المجلدات الفرعية';
+
+  @override
+  String get folderPickerNoFolders => 'لا توجد مجلدات';
 
   @override
   String get folderPickerExistingFolders => 'المجلدات الموجودة';
@@ -22052,6 +22118,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'حجم JSON لطلب OCR هو $encodedBytes بايت، ويتجاوز الحد المُعدّ البالغ $budgetBytes بايت.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'فشل OCR: $details';
   }
@@ -22726,6 +22797,9 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get appLogDelete => 'حذف';
 
   @override
+  String get appLogDeleteUnconfirmed => 'تعذر تأكيد الحذف.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'تأكيد الحذف';
 
   @override
@@ -22812,6 +22886,99 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get appLogCopyDone => 'تم نسخ محتوى السجل كاملًا';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'مهمة في الخلفية';
@@ -24088,4 +24255,16 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   @override
   String get providerMaxUploadSizePositive =>
       'يجب أن يكون الحد الأقصى لحجم الرفع رقمًا موجبًا.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'قيمة درجة الحرارة المحفوظة خارج النطاق 0–2. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'قيمة top-P المحفوظة خارج النطاق 0–1. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.';
 }

@@ -445,6 +445,42 @@ abstract class AppLocalizations {
   /// **'Assistant Market'**
   String get builtInPromptMarketTitle;
 
+  /// No description provided for @assistantAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add assistant'**
+  String get assistantAddTitle;
+
+  /// No description provided for @assistantBuiltInTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in'**
+  String get assistantBuiltInTab;
+
+  /// No description provided for @assistantImportTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get assistantImportTab;
+
+  /// No description provided for @assistantBuiltInHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse ready-to-use assistants. Tap one to preview it before adding.'**
+  String get assistantBuiltInHint;
+
+  /// No description provided for @assistantImportHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a remote assistant catalog or import an assistant file from its URL.'**
+  String get assistantImportHint;
+
+  /// No description provided for @assistantImportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect catalog or import file'**
+  String get assistantImportAction;
+
   /// No description provided for @builtInPromptClose.
   ///
   /// In en, this message translates to:
@@ -886,7 +922,7 @@ abstract class AppLocalizations {
   /// No description provided for @ocrDefaultImagesOnly.
   ///
   /// In en, this message translates to:
-  /// **'Default (send images only)'**
+  /// **'Default (no custom instruction; default OCR prompt used)'**
   String get ocrDefaultImagesOnly;
 
   /// No description provided for @ocrDefaultSystemPrompt.
@@ -1012,7 +1048,7 @@ abstract class AppLocalizations {
   /// No description provided for @ocrInstructionManageGuidance.
   ///
   /// In en, this message translates to:
-  /// **'These instructions apply to all recognition models. If none is selected, only the image is sent.'**
+  /// **'These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.'**
   String get ocrInstructionManageGuidance;
 
   /// No description provided for @ocrInstructionManageEmpty.
@@ -2539,7 +2575,10 @@ abstract class AppLocalizations {
   /// **'Temporary conversation'**
   String get conversationTemporary;
 
-  /// Text used to enable temporary mode from a conversation menu.
+  /// No description provided for @conversationSetTemporary.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as temporary conversation'**
   String get conversationSetTemporary;
 
   /// No description provided for @conversationCloseTemporary.
@@ -2661,6 +2700,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to clear all failed tasks?'**
   String get unifiedTaskListConfirmClearFailedMessage;
+
+  /// No description provided for @unifiedTaskListConfirmClearCompletedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to clear all completed tasks? This action cannot be undone.'**
+  String get unifiedTaskListConfirmClearCompletedMessage;
 
   /// No description provided for @unifiedTaskListConfirmClearAllMessage.
   ///
@@ -3604,6 +3649,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No detail data available'**
   String get chatErrorDetailEmpty;
+
+  /// Clickable marker for omitted text in a Request Body preview
+  ///
+  /// In en, this message translates to:
+  /// **'[middle content omitted, {count} characters]'**
+  String chatErrorDetailOmittedContentMarker(int count);
 
   /// No description provided for @chatAudioPreviewClose.
   ///
@@ -5541,16 +5592,22 @@ abstract class AppLocalizations {
   /// **'Pin'**
   String get topicItemPin;
 
+  /// No description provided for @topicItemMarkUnread.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as unread'**
+  String get topicItemMarkUnread;
+
+  /// No description provided for @topicItemMarkRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get topicItemMarkRead;
+
   /// No description provided for @topicItemRename.
   ///
   /// In en, this message translates to:
   /// **'Rename'**
-  /// Mark a conversation as unread.
-  String get topicItemMarkUnread;
-
-  /// Mark a conversation as read.
-  String get topicItemMarkRead;
-
   String get topicItemRename;
 
   /// No description provided for @topicItemAutoName.
@@ -10830,31 +10887,31 @@ abstract class AppLocalizations {
   /// No description provided for @providerBuiltinTtsName.
   ///
   /// In en, this message translates to:
-  /// **'TTS Provider'**
+  /// **'TTS (Text to Speech)'**
   String get providerBuiltinTtsName;
 
   /// No description provided for @providerBuiltinLlmName.
   ///
   /// In en, this message translates to:
-  /// **'LLM Provider'**
+  /// **'LLM (Large Language Model)'**
   String get providerBuiltinLlmName;
 
   /// No description provided for @providerBuiltinOcrName.
   ///
   /// In en, this message translates to:
-  /// **'OCR Provider'**
+  /// **'OCR (Optical Character Recognition)'**
   String get providerBuiltinOcrName;
 
   /// No description provided for @providerBuiltinAsrName.
   ///
   /// In en, this message translates to:
-  /// **'Speech Recognition Provider'**
+  /// **'STT (Speech to Text)'**
   String get providerBuiltinAsrName;
 
   /// No description provided for @providerBuiltinMcpName.
   ///
   /// In en, this message translates to:
-  /// **'MCP Provider'**
+  /// **'MCP (Model Context Protocol)'**
   String get providerBuiltinMcpName;
 
   /// No description provided for @providerBuiltinSearchGroupName.
@@ -16491,14 +16548,17 @@ abstract class AppLocalizations {
   /// **'Saving speech transcription failed: {details}'**
   String bgTaskAsrSaveError(String details);
 
+  /// No description provided for @bgTaskOcrRequestSizeExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR request JSON size is {encodedBytes} bytes, exceeding the configured limit of {budgetBytes} bytes.'**
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes);
+
   /// No description provided for @bgTaskOcrError.
   ///
   /// In en, this message translates to:
   /// **'OCR failed: {details}'**
   String bgTaskOcrError(String details);
-
-  /// OCR request JSON size exceeded the configured request budget.
-  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes);
 
   /// No description provided for @bgTaskOcrSaveError.
   ///
@@ -17461,6 +17521,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete'**
   String get appLogDelete;
+
+  /// No description provided for @appLogDeleteUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion could not be confirmed.'**
+  String get appLogDeleteUnconfirmed;
 
   /// No description provided for @appLogConfirmDeleteTitle.
   ///

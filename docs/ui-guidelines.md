@@ -40,6 +40,14 @@ Use the active theme's text roles for comparable UI: `bodyMedium` is 14 px for o
 
 The app does not define a complete custom global `textTheme`; read the nearest theme and current comparable widgets before adding local styles. Let text scaling and localization expand layout naturally.
 
+### Constrained display labels
+
+Apply this rule to every first-party display string placed in a finite width, line-count, or height slot across `lib/` and `packages/streaming_markdown/`, including navigation tabs, dropdown options and selected values, buttons, chips, card and list labels, form/help text, bounded metadata, and dialog titles. Treat a fixed limit as a candidate even when the current English or Chinese value happens to fit: measure the actual localized string with the current width, text scale, direction, and style. Use [`ConstrainedText`](../lib/widgets/constrained_text.dart) for labels that can be clipped. If the complete current string fits, keep it stationary and visually identical, including its original alignment; only a measured clip starts motion. Single-line labels use the bidirectional horizontal marquee; multi-line labels keep their wrapping and reveal clipped lines vertically. Preserve control sizing, focus, selection, keyboard, and touch behavior, and expose the complete value as one semantic label. Never shrink text or add language-specific shortening to avoid overflow.
+
+The [constrained-text inventory](ui-constrained-text-inventory.csv) lists every source file found by the latest hard-limit, text-widget, and finite-layout scans across the current `main` snapshot and the Stage 2 rollout. It records scan signals and the disposition of verified additions; generic layout hits remain candidates until actual text clipping is confirmed.
+
+Overflowing labels remain still for 1 second when first laid out, then move bidirectionally at 24 logical px/s by default with a 2 second pause at each endpoint. The initial delay is separate from endpoint pauses. Honor reduced-motion settings and pause motion while the containing view is hidden. Do not shrink text for individual translations. A description, helper, or subtitle in a finite single-line slot is also a constrained label, even when it reads as prose. Keep prose and content bodies that are not explicitly line-bounded naturally wrapping or scrollable. For truncated multi-line labels, retain their line wrapping and reveal the clipped lines through vertical scrolling. Editable inputs retain native caret-follow behavior; never animate typed content or code/document bodies as labels.
+
 ## 2. App shell, navigation, and page layout
 
 - Follow the responsive app shell in [`lib/pages/home_page_navigation.dart`](../lib/pages/home_page_navigation.dart) and the page's existing navigation structure. The app uses different navigation affordances across available widths/orientations; don't assume a phone-width bottom bar is the only layout.

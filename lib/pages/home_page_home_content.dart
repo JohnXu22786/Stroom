@@ -30,7 +30,7 @@ class HomeStatusLabel extends StatelessWidget {
             ),
             const SizedBox(width: 5),
             Flexible(
-              child: Text(
+              child: ConstrainedText(
                 label,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -136,8 +136,9 @@ extension _HomePageHomeContentExt on _HomePageState {
                     Icon(Icons.auto_awesome, size: 24, color: cs.primary),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.homeWelcome,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -231,6 +232,7 @@ extension _HomePageHomeContentExt on _HomePageState {
         icon: Icons.language,
         label: AppLocalizations.of(context)!.homeWebDownloadTitle,
         subtitle: AppLocalizations.of(context)!.homeWebDownloadSubtitle,
+        subtitleSpeed: 24,
         color: Colors.purple,
         onTap: () {
           Navigator.push(
@@ -308,6 +310,7 @@ extension _HomePageHomeContentExt on _HomePageState {
     required IconData icon,
     required String label,
     required String subtitle,
+    double subtitleSpeed = 24,
     required Color color,
     required VoidCallback onTap,
   }) {
@@ -337,23 +340,21 @@ extension _HomePageHomeContentExt on _HomePageState {
                 child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(height: 4),
-              Text(
-                label,
+              ConstrainedText.home(
+                text: label,
+                marqueeTextAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 1),
-              Text(
-                subtitle,
+              ConstrainedText.home(
+                text: subtitle,
                 style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                speed: subtitleSpeed,
               ),
             ],
           ),
@@ -401,8 +402,10 @@ extension _HomePageHomeContentExt on _HomePageState {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      AppLocalizations.of(context)!.homeTaskFlowTitle,
+                    ConstrainedText.home(
+                      text: AppLocalizations.of(context)!.homeTaskFlowTitle,
+                      maxLines: null,
+                      overflow: TextOverflow.clip,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -410,8 +413,10 @@ extension _HomePageHomeContentExt on _HomePageState {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      taskFlows.isEmpty
+                    ConstrainedText.home(
+                      maxLines: null,
+                      overflow: TextOverflow.clip,
+                      text: taskFlows.isEmpty
                           ? AppLocalizations.of(context)!.homeTaskFlowEmpty
                           : AppLocalizations.of(context)!
                               .homeTaskFlowManage(taskFlows.length),

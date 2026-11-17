@@ -8,6 +8,11 @@ import 'package:video_player_platform_interface/video_player_platform_interface.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('maps 3GPP file extensions to browser MIME types', () {
+    expect(videoMimeTypeForPath('videos/sample.3gp'), 'video/3gpp');
+    expect(videoMimeTypeForPath('videos/sample.3gpp'), 'video/3gpp');
+  });
+
   for (final testCase in [
     (locale: const Locale('en'), error: 'Could not load video'),
     (locale: const Locale('zh', 'CN'), error: '无法加载视频'),
@@ -41,11 +46,16 @@ void main() {
 }
 
 class _FailingVideoPlayerPlatform extends VideoPlayerPlatform {
+  DataSource? dataSource;
+
   @override
   Future<void> init() async {}
 
   @override
-  Future<int?> createWithOptions(VideoCreationOptions options) async => 1;
+  Future<int?> createWithOptions(VideoCreationOptions options) async {
+    dataSource = options.dataSource;
+    return 1;
+  }
 
   @override
   Stream<VideoEvent> videoEventsFor(int playerId) => Stream<VideoEvent>.error(
