@@ -238,7 +238,8 @@ Future<void> writeUserVisibleExportFile(
   final file = File(path);
   await file.create(exclusive: true);
   try {
-    await (writeBytes ?? (file, bytes) => file.writeAsBytes(bytes))(file, bytes);
+    await (writeBytes ?? (file, bytes) => file.writeAsBytes(bytes))(
+        file, bytes);
   } catch (_) {
     try {
       await file.delete();
