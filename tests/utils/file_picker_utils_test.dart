@@ -90,6 +90,28 @@ void main() {
     expect(await File(paths[1]).readAsBytes(), [1, 2, 3]);
   });
 
+  test('failed export writes remove the exclusively created destination',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('failed_export_');
+    addTearDown(() => directory.delete(recursive: true));
+    final destination = '${directory.path}/partial.bin';
+
+    await expectLater(
+      writeUserVisibleExportFile(
+        destination,
+        Uint8List.fromList([1, 2, 3]),
+        writeBytes: (file, bytes) async {
+          await file.writeAsBytes(bytes.take(1).toList());
+          throw FileSystemException('simulated write failure', file.path);
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(await FileSystemEntity.type(destination),
+        FileSystemEntityType.notFound);
+  });
+
   test('file exports reserve names using Unicode case folding', () async {
     final directory = await Directory.systemTemp.createTemp('unicode_export_');
     addTearDown(() => directory.delete(recursive: true));
