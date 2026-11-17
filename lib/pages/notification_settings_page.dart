@@ -147,12 +147,12 @@ class _NotificationSettingsPageState
       usageReason: _strings.notificationSettingsUsageReason,
     );
     await _checkPermission();
-    if (granted && mounted) {
-      ref.read(notificationSettingsProvider.notifier).setEnabled(true);
-      setState(() {
-        _notificationsEnabled = true;
-      });
-    }
+    if (!mounted) return;
+
+    await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
+    setState(() {
+      _notificationsEnabled = granted;
+    });
   }
 
   Future<void> _openSystemSettings() async {

@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -152,8 +153,12 @@ class NotificationService {
       }
 
       // On iOS, permission is handled by the plugin
-      if (Platform.isIOS) {
-        return true; // Plugin handles this
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final status = await Permission.notification.status;
+        if (status.isGranted) return true;
+
+        final result = await Permission.notification.request();
+        return result.isGranted;
       }
 
       return false;
