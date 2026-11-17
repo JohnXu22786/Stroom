@@ -403,24 +403,272 @@ class BackupService {
           'Interrupted restore recovery archive is missing: $archivePath',
         );
       }
-      final preferenceMode = await marker.readAsString();
-      final useStartupPreferenceAdapter = switch (preferenceMode) {
-        _startupPreferenceRestoreMarker => true,
-        _sharedPreferenceRestoreMarker => false,
-        _ => throw StateError(
-            'Interrupted restore recovery marker is invalid: ${marker.path}',
-          ),
-      };
+      final markerContents = await marker.readAsString();
+      final bool useStartupPreferenceAdapter;
+      final BackupSelection originalSelection;
+      final BackupSelection recoverySelection;
+      final bool skipMissingCategories;
+      if (markerContents == _startupPreferenceRestoreMarker ||
+          markerContents == _sharedPreferenceRestoreMarker) {
+        final legacyState = await _readSnapshotSelection(archivePath);
+        useStartupPreferenceAdapter =
+            markerContents == _startupPreferenceRestoreMarker;
+        originalSelection = legacyState.selection;
+        recoverySelection = legacyState.selection;
+        skipMissingCategories = legacyState.skipMissingCategories;
+      } else {
+        final recoveryState = _parseRestoreRecoveryMarker(markerContents);
+        final archiveState = await _readSnapshotSelection(archivePath);
+        final recordedSnapshotSelection = recoveryState.snapshotSelection;
+        if (recordedSnapshotSelection != null &&
+            !_sameRestoreSelection(
+              recordedSnapshotSelection,
+              archiveState.selection,
+            )) {
+          throw const FormatException(
+            'Interrupted restore marker does not match its archive.',
+          );
+        }
+        if (!_restoreSelectionIsSubset(
+          archiveState.selection,
+          recoveryState.selection,
+        )) {
+          throw const FormatException(
+            'Interrupted restore archive exceeds its selected categories.',
+          );
+        }
+        useStartupPreferenceAdapter = recoveryState.useStartupPreferenceAdapter;
+        originalSelection = recoveryState.selection;
+        recoverySelection = archiveState.selection;
+        skipMissingCategories = archiveState.skipMissingCategories;
+      }
       await _restoreFromZipFile(
         archivePath,
+        selection: recoverySelection,
+        skipMissingCategories: skipMissingCategories,
         skipPostRestoreMigration: true,
         useStartupPreferenceAdapter: useStartupPreferenceAdapter,
         skipAnkiMigrationMarkerInvalidation: true,
         skipAnkiSyncIndexClear: true,
         skipRollbackSnapshot: true,
       );
+      final absentSelection =
+          _selectionDifference(originalSelection, recoverySelection);
+      if (absentSelection.selectedPartIds.isNotEmpty) {
+        await clearSelectedData(absentSelection);
+      }
       await entity.delete(recursive: true);
     }
+  }
+
+  static Future<({BackupSelection selection, bool skipMissingCategories})>
+      _readSnapshotSelection(String archivePath) async {
+    final reader = _ZipStreamReader(archivePath);
+    try {
+      final manifestBytes = reader.readMetaFile('manifest.json');
+      if (manifestBytes == null) {
+        throw const BackupValidationException(
+          'Interrupted restore archive has no manifest.',
+        );
+      }
+      final decoded = jsonDecode(utf8.decode(manifestBytes));
+      if (decoded is! Map<String, dynamic>) {
+        throw const BackupValidationException(
+          'Interrupted restore manifest is invalid.',
+        );
+      }
+      final declaredSelection = _selectionFromDeclaredParts(
+        decoded['dataParts'],
+      );
+      final includeMediaFiles = decoded['includeMediaFiles'];
+      if (includeMediaFiles != null && includeMediaFiles is! bool) {
+        throw const BackupValidationException(
+          'Interrupted restore media selection is invalid.',
+        );
+      }
+      if (declaredSelection == null) {
+        return (
+          selection: BackupSelection.all,
+          skipMissingCategories: true,
+        );
+      }
+      return (
+        selection: _selectionWithMediaFiles(
+          declaredSelection,
+          includeMediaFiles ?? true,
+        ),
+        skipMissingCategories: false,
+      );
+    } finally {
+      reader.close();
+    }
+  }
+
+  static BackupSelection _selectionWithMediaFiles(
+    BackupSelection selection,
+    bool includeMediaFiles,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: selection.chatRecordsAndAttachments,
+        settings: selection.settings,
+        pictures: selection.pictures,
+        audio: selection.audio,
+        videos: selection.videos,
+        texts: selection.texts,
+        tasks: selection.tasks,
+        ankiData: selection.ankiData,
+        browserCookies: selection.browserCookies,
+        includeMediaFiles: includeMediaFiles,
+      );
+
+  static bool _sameRestoreSelection(
+    BackupSelection first,
+    BackupSelection second,
+  ) =>
+      first.chatRecordsAndAttachments == second.chatRecordsAndAttachments &&
+      first.settings == second.settings &&
+      first.pictures == second.pictures &&
+      first.audio == second.audio &&
+      first.videos == second.videos &&
+      first.texts == second.texts &&
+      first.tasks == second.tasks &&
+      first.ankiData == second.ankiData &&
+      first.browserCookies == second.browserCookies &&
+      first.includeMediaFiles == second.includeMediaFiles;
+
+  static bool _restoreSelectionIsSubset(
+    BackupSelection subset,
+    BackupSelection superset,
+  ) =>
+      (!subset.chatRecordsAndAttachments ||
+          superset.chatRecordsAndAttachments) &&
+      (!subset.settings || superset.settings) &&
+      (!subset.pictures || superset.pictures) &&
+      (!subset.audio || superset.audio) &&
+      (!subset.videos || superset.videos) &&
+      (!subset.texts || superset.texts) &&
+      (!subset.tasks || superset.tasks) &&
+      (!subset.ankiData || superset.ankiData) &&
+      (!subset.browserCookies || superset.browserCookies) &&
+      subset.includeMediaFiles == superset.includeMediaFiles;
+
+  static BackupSelection _selectionDifference(
+    BackupSelection original,
+    BackupSelection snapshot,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: original.chatRecordsAndAttachments &&
+            !snapshot.chatRecordsAndAttachments,
+        settings: original.settings && !snapshot.settings,
+        pictures: original.pictures && !snapshot.pictures,
+        audio: original.audio && !snapshot.audio,
+        videos: original.videos && !snapshot.videos,
+        texts: original.texts && !snapshot.texts,
+        tasks: original.tasks && !snapshot.tasks,
+        ankiData: original.ankiData && !snapshot.ankiData,
+        browserCookies: original.browserCookies && !snapshot.browserCookies,
+        includeMediaFiles: original.includeMediaFiles,
+      );
+
+  static ({
+    BackupSelection selection,
+    BackupSelection? snapshotSelection,
+    bool useStartupPreferenceAdapter,
+  }) _parseRestoreRecoveryMarker(String contents) {
+    final decoded = jsonDecode(contents);
+    if (decoded is! Map) {
+      throw const FormatException('Invalid interrupted restore marker.');
+    }
+    const versionOneKeys = {
+      'version',
+      'useStartupPreferenceAdapter',
+      'selection',
+    };
+    final actualMarkerKeys = decoded.keys.toSet();
+    final version = decoded['version'];
+    const versionTwoKeys = {...versionOneKeys, 'snapshotSelection'};
+    final expectedMarkerKeys = switch (version) {
+      1 => versionOneKeys,
+      2 => versionTwoKeys,
+      _ => throw const FormatException(
+          'Invalid interrupted restore marker version.',
+        ),
+    };
+    if (actualMarkerKeys.length != expectedMarkerKeys.length ||
+        !actualMarkerKeys.containsAll(expectedMarkerKeys)) {
+      throw const FormatException('Invalid interrupted restore marker fields.');
+    }
+    final useStartupPreferenceAdapter = decoded['useStartupPreferenceAdapter'];
+    if (useStartupPreferenceAdapter is! bool) {
+      throw const FormatException('Incomplete interrupted restore marker.');
+    }
+
+    return (
+      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      selection: _parseRestoreSelection(decoded['selection']),
+      snapshotSelection: version == 2
+          ? _parseRestoreSelection(decoded['snapshotSelection'])
+          : null,
+    );
+  }
+
+  static Map<String, bool> _restoreSelectionMarkerFields(
+    BackupSelection selection,
+  ) =>
+      {
+        'chatRecordsAndAttachments': selection.chatRecordsAndAttachments,
+        'settings': selection.settings,
+        'pictures': selection.pictures,
+        'audio': selection.audio,
+        'videos': selection.videos,
+        'texts': selection.texts,
+        'tasks': selection.tasks,
+        'ankiData': selection.ankiData,
+        'browserCookies': selection.browserCookies,
+        'includeMediaFiles': selection.includeMediaFiles,
+      };
+
+  static BackupSelection _parseRestoreSelection(Object? rawSelection) {
+    const selectionKeys = {
+      'chatRecordsAndAttachments',
+      'settings',
+      'pictures',
+      'audio',
+      'videos',
+      'texts',
+      'tasks',
+      'ankiData',
+      'browserCookies',
+      'includeMediaFiles',
+    };
+    if (rawSelection is! Map) {
+      throw const FormatException('Incomplete interrupted restore marker.');
+    }
+    final actualSelectionKeys = rawSelection.keys.toSet();
+    if (actualSelectionKeys.length != selectionKeys.length ||
+        !actualSelectionKeys.containsAll(selectionKeys)) {
+      throw const FormatException('Incomplete interrupted restore selection.');
+    }
+    bool selectionFlag(String key) {
+      final value = rawSelection[key];
+      if (value is! bool) {
+        throw FormatException('Invalid interrupted restore selection: $key.');
+      }
+      return value;
+    }
+
+    return BackupSelection(
+      chatRecordsAndAttachments: selectionFlag('chatRecordsAndAttachments'),
+      settings: selectionFlag('settings'),
+      pictures: selectionFlag('pictures'),
+      audio: selectionFlag('audio'),
+      videos: selectionFlag('videos'),
+      texts: selectionFlag('texts'),
+      tasks: selectionFlag('tasks'),
+      ankiData: selectionFlag('ankiData'),
+      browserCookies: selectionFlag('browserCookies'),
+      includeMediaFiles: selectionFlag('includeMediaFiles'),
+    );
   }
 
   static bool _isSelectedWebStoreKey(
@@ -2771,15 +3019,24 @@ class BackupService {
             skipMissingSelectedFiles: true,
           );
           if (appDir != null) {
+            final snapshotState =
+                await _readSnapshotSelection(rollbackArchivePath);
             rollbackMarker = File(
               p.join(rollbackDirectory.path, _restoreInProgressMarker),
             );
-            await rollbackMarker.writeAsString(
-              useStartupPreferenceAdapter
-                  ? _startupPreferenceRestoreMarker
-                  : _sharedPreferenceRestoreMarker,
+            final markerContents = jsonEncode({
+              'version': 2,
+              'useStartupPreferenceAdapter': useStartupPreferenceAdapter,
+              'selection': _restoreSelectionMarkerFields(restoreSelection),
+              'snapshotSelection':
+                  _restoreSelectionMarkerFields(snapshotState.selection),
+            });
+            final temporaryMarker = File('${rollbackMarker.path}.tmp');
+            await temporaryMarker.writeAsString(
+              markerContents,
               flush: true,
             );
+            await temporaryMarker.rename(rollbackMarker.path);
           }
         }
 

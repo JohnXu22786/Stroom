@@ -779,7 +779,7 @@ void main() {
       videos: false,
       texts: false,
       tasks: false,
-      ankiData: false,
+      ankiData: true,
       browserCookies: false,
     );
     final snapshotPath = '$workDir/pre-restore.zip';
@@ -793,10 +793,78 @@ void main() {
     );
     await recoveryDirectory.create();
     await File(snapshotPath).copy('${recoveryDirectory.path}/pre-restore.zip');
-    await File('${recoveryDirectory.path}/restore-in-progress')
-        .writeAsString('startup-preferences', flush: true);
+    final marker = File('${recoveryDirectory.path}/restore-in-progress');
+    final validMarker = {
+      'version': 2,
+      'useStartupPreferenceAdapter': true,
+      'selection': {
+        'chatRecordsAndAttachments': false,
+        'settings': true,
+        'pictures': true,
+        'audio': false,
+        'videos': false,
+        'texts': false,
+        'tasks': false,
+        'ankiData': true,
+        'browserCookies': false,
+        'includeMediaFiles': true,
+      },
+      'snapshotSelection': {
+        'chatRecordsAndAttachments': false,
+        'settings': true,
+        'pictures': true,
+        'audio': false,
+        'videos': false,
+        'texts': false,
+        'tasks': false,
+        'ankiData': false,
+        'browserCookies': false,
+        'includeMediaFiles': true,
+      },
+    };
+    await marker.writeAsString(
+      jsonEncode({...validMarker, 'unexpected': true}),
+      flush: true,
+    );
     await File('$appDir/pictures/old.jpg').writeAsBytes([9]);
     await File('$appDir/pictures/new.jpg').writeAsBytes([8]);
+    await File('$appDir/collection.anki2').writeAsBytes([12]);
+    await prefs.setBool('darkMode', false);
+
+    await expectLater(
+      BackupService.recoverInterruptedRestores(),
+      throwsA(isA<FormatException>()),
+    );
+    await marker.writeAsString('{"version":1}', flush: true);
+    await expectLater(
+      BackupService.recoverInterruptedRestores(),
+      throwsA(isA<FormatException>()),
+    );
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [9]);
+    expect(await File('$appDir/pictures/new.jpg').readAsBytes(), [8]);
+    expect(await File('$appDir/collection.anki2').exists(), isTrue);
+    expect(await recoveryDirectory.exists(), isTrue);
+
+    await marker.writeAsString(jsonEncode(validMarker), flush: true);
+    await BackupService.recoverInterruptedRestores();
+
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
+    expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
+    expect(await File('$appDir/collection.anki2').exists(), isFalse);
+    expect(prefs.getBool('darkMode'), isTrue);
+    expect(await recoveryDirectory.exists(), isFalse);
+
+    final legacyRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-legacy',
+    );
+    await legacyRecoveryDirectory.create();
+    await File(snapshotPath).copy(
+      '${legacyRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File('${legacyRecoveryDirectory.path}/restore-in-progress')
+        .writeAsString('startup-preferences', flush: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([10]);
+    await File('$appDir/pictures/new.jpg').writeAsBytes([11]);
     await prefs.setBool('darkMode', false);
 
     await BackupService.recoverInterruptedRestores();
@@ -804,7 +872,7 @@ void main() {
     expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
     expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
     expect(prefs.getBool('darkMode'), isTrue);
-    expect(await recoveryDirectory.exists(), isFalse);
+    expect(await legacyRecoveryDirectory.exists(), isFalse);
   });
 
   test(
