@@ -12,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/backup_service_shared.dart';
-import 'package:stroom/services/browser_cookie_service.dart';
 import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -66,18 +65,7 @@ void main() {
   test('rollback cookie restoration replaces the selected snapshot exactly',
       () async {
     WebFileStore.enableTestMode();
-    BrowserCookieService.enableTestMode();
     addTearDown(WebFileStore.disableTestMode);
-    addTearDown(BrowserCookieService.disableTestMode);
-
-    final existingCookies = [
-      {
-        'domain': 'existing.example',
-        'name': 'session',
-        'value': 'old',
-        'path': '/',
-      },
-    ];
     final snapshotCookies = [
       {
         'domain': 'snapshot.example',
@@ -86,7 +74,10 @@ void main() {
         'path': '/',
       },
     ];
-    await BrowserCookieService.persistCookiesRawForTest(existingCookies);
+    await WebFileStore.write(
+      '/browser_cookies.json',
+      Uint8List.fromList(utf8.encode('{malformed cookie data')),
+    );
     final snapshot =
         Uint8List.fromList(utf8.encode(jsonEncode(snapshotCookies)));
 
@@ -912,6 +903,125 @@ void main() {
     expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
     expect(prefs.getBool('darkMode'), isTrue);
     expect(await legacyRecoveryDirectory.exists(), isFalse);
+
+    final missingPreferenceSnapshot = await writeArchive(
+      buildV2Archive(dataParts: [DataParts.settings]),
+      'missing-startup-preferences.zip',
+    );
+    final missingPreferenceRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-missing-preferences',
+    );
+    await missingPreferenceRecoveryDirectory.create();
+    await File(missingPreferenceSnapshot).copy(
+      '${missingPreferenceRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File(
+      '${missingPreferenceRecoveryDirectory.path}/restore-in-progress',
+    ).writeAsString(
+      jsonEncode({
+        'version': 2,
+        'useStartupPreferenceAdapter': true,
+        'selection': {
+          'chatRecordsAndAttachments': false,
+          'settings': true,
+          'pictures': false,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': true,
+        },
+        'snapshotSelection': {
+          'chatRecordsAndAttachments': false,
+          'settings': true,
+          'pictures': false,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': true,
+        },
+      }),
+      flush: true,
+    );
+    await prefs.setBool('darkMode', false);
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(prefs.getBool('darkMode'), isNull);
+    expect(await missingPreferenceRecoveryDirectory.exists(), isFalse);
+
+    final structuredOnlySnapshot = await writeArchive(
+      buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'structured-only-image',
+            'name': 'structured-only-image',
+            'hash': 'structured-only-image',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        dataParts: [DataParts.pictures],
+        manifestOverrides: const {'includeMediaFiles': false},
+      ),
+      'structured-only-media.zip',
+    );
+    final structuredOnlyRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-structured-only',
+    );
+    await structuredOnlyRecoveryDirectory.create();
+    await File(structuredOnlySnapshot).copy(
+      '${structuredOnlyRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File(
+      '${structuredOnlyRecoveryDirectory.path}/restore-in-progress',
+    ).writeAsString(
+      jsonEncode({
+        'version': 2,
+        'useStartupPreferenceAdapter': false,
+        'selection': {
+          'chatRecordsAndAttachments': false,
+          'settings': false,
+          'pictures': true,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': false,
+        },
+        'snapshotSelection': {
+          'chatRecordsAndAttachments': false,
+          'settings': false,
+          'pictures': true,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': false,
+        },
+      }),
+      flush: true,
+    );
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(
+      (await ManifestDatabase.getAllImageRecords())
+          .map((record) => record['id']),
+      contains('structured-only-image'),
+    );
+    expect(await structuredOnlyRecoveryDirectory.exists(), isFalse);
   });
 
   test(

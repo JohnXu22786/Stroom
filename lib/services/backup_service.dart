@@ -414,7 +414,7 @@ class BackupService {
         useStartupPreferenceAdapter =
             markerContents == _startupPreferenceRestoreMarker;
         originalSelection = legacyState.selection;
-        recoverySelection = legacyState.selection;
+        recoverySelection = legacyState.availableSelection;
         skipMissingCategories = legacyState.skipMissingCategories;
       } else {
         final recoveryState = _parseRestoreRecoveryMarker(markerContents);
@@ -439,7 +439,7 @@ class BackupService {
         }
         useStartupPreferenceAdapter = recoveryState.useStartupPreferenceAdapter;
         originalSelection = recoveryState.selection;
-        recoverySelection = archiveState.selection;
+        recoverySelection = archiveState.availableSelection;
         skipMissingCategories = archiveState.skipMissingCategories;
       }
       await _restoreFromZipFile(
@@ -456,14 +456,21 @@ class BackupService {
       final absentSelection =
           _selectionDifference(originalSelection, recoverySelection);
       if (absentSelection.selectedPartIds.isNotEmpty) {
-        await clearSelectedData(absentSelection);
+        await clearSelectedData(
+          absentSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        );
       }
       await entity.delete(recursive: true);
     }
   }
 
-  static Future<({BackupSelection selection, bool skipMissingCategories})>
-      _readSnapshotSelection(String archivePath) async {
+  static Future<
+      ({
+        BackupSelection selection,
+        BackupSelection availableSelection,
+        bool skipMissingCategories,
+      })> _readSnapshotSelection(String archivePath) async {
     final reader = _ZipStreamReader(archivePath);
     try {
       final manifestBytes = reader.readMetaFile('manifest.json');
@@ -487,18 +494,32 @@ class BackupService {
           'Interrupted restore media selection is invalid.',
         );
       }
+      final selection = _selectionWithMediaFiles(
+        declaredSelection ?? BackupSelection.all,
+        includeMediaFiles ?? true,
+      );
+      Uint8List? readMetaFile(String name) => reader.readMetaFile(name);
+      final metadata = _validateAndParseMetadata(
+        readMetaFile,
+        selection,
+        archiveEntries: reader.entries.map((entry) => entry.name).toSet(),
+        archiveEntrySizes: {
+          for (final entry in reader.entries)
+            entry.name: entry.uncompressedSize,
+        },
+        skipMissingCategories: true,
+      );
       if (declaredSelection == null) {
         return (
-          selection: BackupSelection.all,
+          selection: selection,
+          availableSelection: metadata.restoreSelection,
           skipMissingCategories: true,
         );
       }
       return (
-        selection: _selectionWithMediaFiles(
-          declaredSelection,
-          includeMediaFiles ?? true,
-        ),
-        skipMissingCategories: false,
+        selection: selection,
+        availableSelection: metadata.restoreSelection,
+        skipMissingCategories: true,
       );
     } finally {
       reader.close();
@@ -2668,10 +2689,12 @@ class BackupService {
     );
     final restoreSelection = metadata.restoreSelection;
     _validateArchiveEntryChecksums(archive, fileMap, restoreSelection);
-    await _preflightBrowserCookieMerge(
-      restoreSelection,
-      metadata.browserCookiesData,
-    );
+    if (!replaceBrowserCookiesExactly) {
+      await _preflightBrowserCookieMerge(
+        restoreSelection,
+        metadata.browserCookiesData,
+      );
+    }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
@@ -2920,10 +2943,12 @@ class BackupService {
       );
       final restoreSelection = metadata.restoreSelection;
       _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
-      await _preflightBrowserCookieMerge(
-        restoreSelection,
-        metadata.browserCookiesData,
-      );
+      if (!replaceBrowserCookiesExactly) {
+        await _preflightBrowserCookieMerge(
+          restoreSelection,
+          metadata.browserCookiesData,
+        );
+      }
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
         taskFilesToReplace: metadata.taskFilesToReplace,
@@ -5504,8 +5529,9 @@ class BackupService {
       final previousRestorePending =
           await BrowserCookieService.hasBackupRestorePending();
       try {
-        final existingCookies =
-            (await BrowserCookieService.getCookiesFromFileChecked())
+        final existingCookies = replaceExisting
+            ? const <Map<String, dynamic>>[]
+            : (await BrowserCookieService.getCookiesFromFileChecked())
                 .values
                 .expand((cookies) => cookies)
                 .toList();
@@ -6464,6 +6490,7 @@ class BackupService {
   static Future<bool> clearSelectedData(
     BackupSelection selection, {
     void Function(double progress)? onProgress,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -6486,6 +6513,7 @@ class BackupService {
         selection,
         taskFlowAttachmentKeys,
         onProgress,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
     } finally {
       if (guardsBrowserAction) BrowserProfileService.endAction();
@@ -6495,8 +6523,9 @@ class BackupService {
   static Future<bool> _clearSelectedDataAfterPreflight(
     BackupSelection selection,
     Set<String> taskFlowAttachmentKeys,
-    void Function(double progress)? onProgress,
-  ) async {
+    void Function(double progress)? onProgress, {
+    required bool useStartupPreferenceAdapter,
+  }) async {
     var browserWebsiteDataCleared = true;
     // Clear live and persisted Cookies together so browser-close persistence
     // cannot recreate the snapshot after the selected data is deleted.
@@ -6513,13 +6542,26 @@ class BackupService {
 
     // 1. SharedPreferences — 只删除选中类别的键
     if (selection.chatRecordsAndAttachments || selection.settings) {
-      final prefs = await SharedPreferences.getInstance();
-      final keysToRemove = prefs
-          .getKeys()
-          .where((k) => _isKeyInSelection(k, selection))
-          .toList();
+      final SharedPreferences? prefs;
+      final StartupMigrationPreferences? startupPrefs;
+      final Set<String> keys;
+      if (useStartupPreferenceAdapter) {
+        prefs = null;
+        startupPrefs = await StartupMigrationPreferences.load();
+        keys = await startupPrefs.getKeys();
+      } else {
+        prefs = await SharedPreferences.getInstance();
+        startupPrefs = null;
+        keys = prefs.getKeys();
+      }
+      final keysToRemove =
+          keys.where((key) => _isKeyInSelection(key, selection)).toList();
       for (final key in keysToRemove) {
-        await prefs.remove(key);
+        if (prefs != null) {
+          await prefs.remove(key);
+        } else {
+          await startupPrefs!.remove(key);
+        }
       }
       await AppLogService.info(
         'BackupService',
