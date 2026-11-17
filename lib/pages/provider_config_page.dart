@@ -516,7 +516,17 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(providerEntriesProvider.notifier).removeMcpGroup(group.id);
+    try {
+      await ref.read(providerEntriesProvider.notifier).removeMcpGroup(group.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.taskFlowUiSaveFailed),
+        ),
+      );
+      return;
+    }
     if (mounted) setState(() {});
   }
 

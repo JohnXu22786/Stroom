@@ -726,26 +726,78 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     bool persistMcpGroups = true,
     ProviderEntriesState? stateToPersist,
   }) async {
+    SharedPreferences? prefs;
+    String? previousEntries;
+    String? previousGroups;
+    var attemptedEntriesWrite = false;
+    var attemptedGroupsWrite = false;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      prefs = await SharedPreferences.getInstance();
+      if (rethrowOnFailure) {
+        previousEntries = prefs.getString('provider_entries');
+        if (persistMcpGroups) {
+          previousGroups = prefs.getString('mcp_provider_groups');
+        }
+      }
       final persistedState = stateToPersist ?? state;
       final json =
           jsonEncode(persistedState.entries.map((e) => e.toMap()).toList());
+      attemptedEntriesWrite = true;
       final entriesSaved = await prefs.setString('provider_entries', json);
-      final groupsSaved = persistMcpGroups
-          ? await prefs.setString(
-              'mcp_provider_groups',
-              jsonEncode(
-                persistedState.mcpGroups.map((group) => group.toMap()).toList(),
-              ),
-            )
-          : true;
-      if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
+      if (rethrowOnFailure && !entriesSaved) {
         throw StateError('Failed to persist provider configuration.');
+      }
+      if (persistMcpGroups) {
+        attemptedGroupsWrite = true;
+        final groupsSaved = await prefs.setString(
+          'mcp_provider_groups',
+          jsonEncode(
+            persistedState.mcpGroups.map((group) => group.toMap()).toList(),
+          ),
+        );
+        if (rethrowOnFailure && !groupsSaved) {
+          throw StateError('Failed to persist provider configuration.');
+        }
       }
     } catch (e) {
       debugPrint('Failed to persist provider entries: $e');
-      if (rethrowOnFailure) rethrow;
+      if (rethrowOnFailure) {
+        var rollbackFailed = false;
+        if (prefs != null) {
+          if (attemptedEntriesWrite) {
+            try {
+              final restored = previousEntries == null
+                  ? await prefs.remove('provider_entries')
+                  : await prefs.setString('provider_entries', previousEntries);
+              if (!restored) {
+                rollbackFailed = true;
+                debugPrint('Failed to roll back provider entries.');
+              }
+            } catch (rollbackError) {
+              rollbackFailed = true;
+              debugPrint(
+                  'Failed to roll back provider entries: $rollbackError');
+            }
+          }
+          if (attemptedGroupsWrite) {
+            try {
+              final restored = previousGroups == null
+                  ? await prefs.remove('mcp_provider_groups')
+                  : await prefs.setString(
+                      'mcp_provider_groups', previousGroups);
+              if (!restored) {
+                rollbackFailed = true;
+                debugPrint('Failed to roll back MCP groups.');
+              }
+            } catch (rollbackError) {
+              rollbackFailed = true;
+              debugPrint('Failed to roll back MCP groups: $rollbackError');
+            }
+          }
+        }
+        if (rollbackFailed) throw const ProviderEntriesRollbackException();
+        rethrow;
+      }
     }
   }
 }

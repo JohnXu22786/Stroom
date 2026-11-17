@@ -27,13 +27,36 @@ class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
   _FailingProviderEntriesStore(
     Map<String, Object> data, {
     this.failedKey = 'flutter.provider_entries',
+    this.failedWriteCount = 0,
   }) : super.withData(data);
 
   final String failedKey;
+  int failedWriteCount;
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) {
-    if (key == failedKey) {
+    if (key == failedKey && failedWriteCount > 0) {
+      failedWriteCount--;
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _FailingProviderRollbackStore extends InMemorySharedPreferencesStore {
+  _FailingProviderRollbackStore(Map<String, Object> data)
+      : super.withData(data);
+
+  bool isArmed = false;
+  int providerEntriesWrites = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (isArmed && key == 'flutter.provider_entries') {
+      providerEntriesWrites++;
+      if (providerEntriesWrites == 2) return Future<bool>.value(false);
+    }
+    if (isArmed && key == 'flutter.mcp_provider_groups') {
       return Future<bool>.value(false);
     }
     return super.setValue(valueType, key, value);
@@ -534,17 +557,164 @@ void main() {
     });
   });
 
+  test('removing an MCP group rolls back when persistence fails', () async {
+    const groupId = 'custom_group';
+    final originalEntries = [
+      ProviderEntry(
+        id: 'mcp',
+        type: 'mcp',
+        name: 'MCP',
+        configs: [ProviderConfigItem(id: 'server', groupId: groupId)],
+      ),
+      ProviderEntry(id: 'ocr', type: 'ocr', name: 'OCR'),
+      ProviderEntry(id: 'asr', type: 'asr', name: 'ASR'),
+    ];
+    final originalGroups = [
+      ...builtinMcpProviderGroups,
+      const McpProviderGroup(id: groupId, name: 'Custom'),
+    ];
+    final initialEntries =
+        jsonEncode(originalEntries.map((entry) => entry.toMap()).toList());
+    final initialGroups =
+        jsonEncode(originalGroups.map((group) => group.toMap()).toList());
+    SharedPreferences.setMockInitialValues({
+      'provider_entries': initialEntries,
+      'mcp_provider_groups': initialGroups,
+    });
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderEntriesStore(
+      {
+        'flutter.provider_entries': initialEntries,
+        'flutter.mcp_provider_groups': initialGroups,
+      },
+      failedKey: 'flutter.mcp_provider_groups',
+    );
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.failedWriteCount = 1;
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeRemoval = prefs.getString('provider_entries');
+      final savedGroupsBeforeRemoval = prefs.getString('mcp_provider_groups');
+
+      await expectLater(
+        notifier.removeMcpGroup(groupId),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        notifier.state.mcpGroups.map((group) => group.id),
+        contains(groupId),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'mcp')
+            .configs
+            .firstWhere((config) => config.id == 'server')
+            .groupId,
+        groupId,
+      );
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
+      await prefs.reload();
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('removing an MCP group reports when rollback also fails', () async {
+    const groupId = 'custom_group';
+    final originalEntries = [
+      ProviderEntry(
+        id: 'mcp',
+        type: 'mcp',
+        name: 'MCP',
+        configs: [ProviderConfigItem(id: 'server', groupId: groupId)],
+      ),
+      ProviderEntry(id: 'ocr', type: 'ocr', name: 'OCR'),
+      ProviderEntry(id: 'asr', type: 'asr', name: 'ASR'),
+    ];
+    final originalGroups = [
+      ...builtinMcpProviderGroups,
+      const McpProviderGroup(id: groupId, name: 'Custom'),
+    ];
+    final initialEntries =
+        jsonEncode(originalEntries.map((entry) => entry.toMap()).toList());
+    final initialGroups =
+        jsonEncode(originalGroups.map((group) => group.toMap()).toList());
+    SharedPreferences.setMockInitialValues({
+      'provider_entries': initialEntries,
+      'mcp_provider_groups': initialGroups,
+    });
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderRollbackStore({
+      'flutter.provider_entries': initialEntries,
+      'flutter.mcp_provider_groups': initialGroups,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeRemoval = prefs.getString('provider_entries');
+      final savedGroupsBeforeRemoval = prefs.getString('mcp_provider_groups');
+      store.isArmed = true;
+
+      await expectLater(
+        notifier.removeMcpGroup(groupId),
+        throwsA(isA<ProviderEntriesRollbackException>()),
+      );
+
+      expect(
+        notifier.state.mcpGroups.map((group) => group.id),
+        contains(groupId),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'mcp')
+            .configs
+            .firstWhere((config) => config.id == 'server')
+            .groupId,
+        groupId,
+      );
+      await prefs.reload();
+      final persistedEntries =
+          jsonDecode(prefs.getString('provider_entries')!) as List;
+      final persistedMcpEntry = persistedEntries
+          .whereType<Map>()
+          .singleWhere((entry) => entry['id'] == 'mcp');
+      final persistedServer = (persistedMcpEntry['configs'] as List)
+          .whereType<Map>()
+          .singleWhere((config) => config['id'] == 'server');
+      expect(persistedServer['groupId'], builtinMcpServicesGroupId);
+      expect(
+        prefs.getString('provider_entries'),
+        isNot(savedEntriesBeforeRemoval),
+      );
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
   test('provider update surfaces a failed persistence write', () async {
     const savedEntries = '[{"id":"existing_llm","type":"llm",'
         '"name":"Before","configs":[]}]';
     SharedPreferences.setMockInitialValues({});
     final previousStore = SharedPreferencesStorePlatform.instance;
-    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore({
+    final store = _FailingProviderEntriesStore({
       'flutter.provider_entries': savedEntries,
     });
+    SharedPreferencesStorePlatform.instance = store;
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeUpdate = prefs.getString('provider_entries')!;
+      store.failedWriteCount = 1;
 
       await expectLater(
         notifier.update(
@@ -564,9 +734,9 @@ void main() {
             .name,
         'Before',
       );
-      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeUpdate);
       await prefs.reload();
-      expect(prefs.getString('provider_entries'), savedEntries);
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeUpdate);
     } finally {
       SharedPreferencesStorePlatform.instance = previousStore;
     }
@@ -577,13 +747,15 @@ void main() {
         '"name":"Before","configs":[]}]';
     SharedPreferences.setMockInitialValues({});
     final previousStore = SharedPreferencesStorePlatform.instance;
-    SharedPreferencesStorePlatform.instance = _FailingProviderEntriesStore(
+    final store = _FailingProviderEntriesStore(
       {'flutter.provider_entries': savedEntries},
       failedKey: 'flutter.mcp_provider_groups',
     );
+    SharedPreferencesStorePlatform.instance = store;
     try {
       final notifier = ProviderEntriesNotifier();
       await notifier.load();
+      store.failedWriteCount = 1;
 
       await notifier.update(
         'existing_llm',
