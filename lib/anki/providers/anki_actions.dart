@@ -109,11 +109,10 @@ class AnkiActions {
 
   Future<void> removeNote(int nid) async {
     final noteDao = await _noteDao;
-    final cardDao = await _cardDao;
-    final cards = await cardDao.listByNote(nid);
-    for (final c in cards) {
-      await cardDao.delete(c.id);
-    }
+    // NoteDao deletes the note, its cards, review history, and sync graves in
+    // one transaction. Deleting cards here first would commit each card
+    // separately and could leave a partially deleted note if a later delete
+    // fails.
     await noteDao.delete(nid);
     _refresh();
   }

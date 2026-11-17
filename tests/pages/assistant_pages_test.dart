@@ -1238,7 +1238,7 @@ void main() {
       await tester.ensureVisible(find.text('工具结果截断'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('启用截断'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // 关闭后：副标题变为"不截断"，长度输入框隐藏
       expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
@@ -1366,7 +1366,7 @@ void main() {
       await tester.ensureVisible(todowriteSwitch);
       await tester.pumpAndSettle();
       await tester.tap(todowriteSwitch);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Save
       await tester.tap(find.text('保存'));
@@ -1535,7 +1535,7 @@ void main() {
 
       // 选中后保存正常写入
       await tester.tap(find.text('gpt-4o | OpenAI'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
@@ -1648,16 +1648,16 @@ void main() {
       // Select a default model and disable one tool (从未配置 → 默认全部开启，
       // 关闭 todowrite 得到显式集合）
       await tester.tap(find.text('gpt-4o | OpenAI'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       final todowriteSwitch = find.widgetWithText(SwitchListTile, 'todowrite');
       await tester.ensureVisible(todowriteSwitch);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(todowriteSwitch);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Save
       await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // The assistant now carries the defaults
       final container = ProviderScope.containerOf(

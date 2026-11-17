@@ -103,7 +103,7 @@ void main() {
     expect(find.text('关闭'), findsOneWidget);
   });
 
-  testWidgets('video preview dialog shows localized load errors',
+  testWidgets('video preview dialog stops loading and shows localized errors',
       (tester) async {
     await tester.pumpWidget(localizedApp(const VideoPreviewDialog(
       filePath: '/missing/video.mp4',
@@ -113,6 +113,7 @@ void main() {
 
     expect(find.text('video.mp4'), findsOneWidget);
     expect(find.text('视频加载失败'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('HTML preview dialog shows localized title and close tooltip',

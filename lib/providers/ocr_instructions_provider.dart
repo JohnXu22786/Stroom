@@ -147,7 +147,12 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     );
     if (legacy.isNotEmpty) {
       final preserveUserMutations = _userMutationVersion != loadMutationVersion;
-      state = preserveUserMutations ? [...legacy, ...state] : legacy;
+      state = preserveUserMutations
+          ? [
+              ...legacy,
+              ...state.where((instruction) => !legacy.contains(instruction)),
+            ]
+          : legacy;
       await _persist();
     }
   }

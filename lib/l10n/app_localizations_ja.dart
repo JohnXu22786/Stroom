@@ -452,7 +452,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には \$...\$ を使用し、表示式には \$\$...\$\$ を使用します。転写のみを返します。説明や推論を追加しないでください。';
 
   @override
-  String get ocrDefaultImagesOnly => 'デフォルト（画像のみ送信）';
+  String get ocrDefaultImagesOnly => "デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -522,7 +522,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。';
+      "これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。";
 
   @override
   String get ocrInstructionManageEmpty => 'まだ指示がありません';
@@ -1494,6 +1494,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '失敗したタスクをすべてクリアしてもよろしいですか?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '完了したタスクをすべてクリアしますか？この操作は取り消せません。';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。';
 
@@ -2048,6 +2052,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => '詳細なデータはありません';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中間を$count文字省略]';
+  }
 
   @override
   String get chatAudioPreviewClose => '閉じる';
@@ -3477,7 +3486,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fileManagerMultiSelect => '複数選択';
 
   @override
-  String get fileManagerOpen => '開ける';
+  String get fileManagerOpen => '開く';
 
   @override
   String get fileManagerPreview => 'プレビュー';
@@ -10258,6 +10267,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appLogDelete => '消去';
 
   @override
+  String get appLogDeleteUnconfirmed => '削除を確認できませんでした。';
+
+  @override
   String get appLogConfirmDeleteTitle => '削除の確認';
 
   @override
@@ -12128,7 +12140,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
       '表示されているすべてのテキストをページの自然な読み順で書き写します。数式以外のテキストを保持し、LaTeX で数式を表現します。インライン式には \$...\$ を使用し、表示式には \$\$...\$\$ を使用します。転写のみを返します。説明や推論を追加しないでください。';
 
   @override
-  String get ocrDefaultImagesOnly => 'デフォルト（画像のみ送信）';
+  String get ocrDefaultImagesOnly => "デフォルト（カスタム指示なし・既定のOCRプロンプトを使用）";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12198,7 +12210,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'これらの手順はすべての認識モデルに適用されます。何も選択されていない場合は、画像のみが送信されます。';
+      "これらの指示はすべての認識モデルに適用されます。何も選択されていない場合、カスタム指示は追加されず、既定のOCRプロンプトが引き続き使用されます。";
 
   @override
   String get ocrInstructionManageEmpty => 'まだ指示がありません';
@@ -15153,7 +15165,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get fileManagerMultiSelect => '複数選択';
 
   @override
-  String get fileManagerOpen => '開ける';
+  String get fileManagerOpen => '開く';
 
   @override
   String get fileManagerPreview => 'プレビュー';
@@ -21924,6 +21936,9 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get appLogDelete => '消去';
+
+  @override
+  String get appLogDeleteUnconfirmed => '削除を確認できませんでした。';
 
   @override
   String get appLogConfirmDeleteTitle => '削除の確認';

@@ -8,6 +8,7 @@ import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 import '../chat_types.dart';
 
@@ -190,12 +191,16 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '$prefix$label',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: accentColor,
+            Flexible(
+              child: ConstrainedText(
+                '$prefix$label',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: accentColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             // Only show animated chevrons (› ›› ›››) when the reasoning

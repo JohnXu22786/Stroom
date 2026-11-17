@@ -6,6 +6,8 @@ import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
 
 import 'code_block_source_widget.dart';
 
+import 'constrained_text.dart';
+
 /// Widget shown for ```html fenced code blocks inside a chat message.
 ///
 /// The default preview is a compact CARD (not the raw code): it shows an
@@ -45,10 +47,21 @@ class HtmlCodeBlockWidget extends StatefulWidget {
 
   /// Builds a complete HTML document wrapping the given [rawHtml] content.
   ///
-  /// The raw HTML is placed inside the `<body>` tag of a standalone HTML5
-  /// document. It is **not** escaped — the user's HTML code should be
-  /// rendered as-is by the WebView browser engine.
+  /// HTML fragments are placed inside the `<body>` of a standalone HTML5
+  /// document. Complete documents are passed through unchanged so their
+  /// `<head>` metadata and resource declarations remain effective. The HTML
+  /// is **not** escaped — it is rendered as-is by the WebView browser engine.
   static String buildHtmlDocument(String rawHtml) {
+    if (RegExp(
+      r'^\s*(?:<!--.*?-->\s*)*(?:<!doctype\s+html\b[^>]*>\s*)?'
+      r'(?:<!--.*?-->\s*)*<html\b',
+      caseSensitive: false,
+      dotAll: true,
+    ).hasMatch(rawHtml)) {
+      // Preserve a complete document's head: a base URL or external
+      // stylesheet/script declared there is ignored when nested in our body.
+      return rawHtml;
+    }
     return _htmlTemplate.replaceFirst('HTML_CONTENT_PLACEHOLDER', rawHtml);
   }
 
@@ -153,7 +166,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
+                child: ConstrainedText(
                   widget.language,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -172,7 +185,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
             // no (non-empty) title.
             if (title.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(
+              ConstrainedText(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -255,7 +268,12 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
+      label: ConstrainedText(
+        label,
+        style: const TextStyle(fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         minimumSize: Size.zero,

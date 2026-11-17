@@ -52,6 +52,9 @@ final class _FailingReplacementFile extends Fake implements File {
   }
 
   @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+
+  @override
   Future<File> rename(String newPath) => file.rename(newPath);
 }
 
@@ -131,11 +134,131 @@ void main() {
     },
   );
 
+  test('a transient manifest load failure is retried on the next load',
+      () async {
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'transient_load_failure',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: ManifestTables.audioRecords,
+      toMap: (record) => record.toMap(),
+    );
+    final record = AudioRecord(
+      id: 'transient_load_failure',
+      name: 'recover after read failure',
+      hash: 'transient_load_hash',
+      format: 'wav',
+      createdAt: DateTime(2024),
+      size: 1,
+      folder: 'kept_folder',
+    );
+    await operations.addRecord(record);
+    operations.invalidateCache();
+
+    operations.beforeFolderLoadForTesting = () async {
+      operations.beforeFolderLoadForTesting = null;
+      throw StateError('injected transient folder read failure');
+    };
+
+    expect(await operations.loadRecords(), isEmpty);
+    expect(
+      (await operations.loadRecords()).map((item) => item.id),
+      [record.id],
+    );
+    expect(await operations.getAllFolders(), contains(record.folder));
+  });
+
   test('audio writes reject Windows-invalid filename characters', () async {
     await expectLater(
       FileManifest.writeFile('hash?.wav', Uint8List.fromList([1])),
       throwsArgumentError,
     );
+  });
+
+  test(
+    'non-audio file APIs reject traversal names',
+    () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'non_audio_path_validation',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+
+      await expectLater(
+        operations.writeFile('../outside.png', Uint8List.fromList([1])),
+        throwsArgumentError,
+      );
+      await expectLater(
+        operations.fileExists(r'..\outside.png'),
+        throwsArgumentError,
+      );
+      expect(await operations.readFilePath('/outside.png'), isNull);
+      expect(await operations.deleteFile('../outside.png'), isFalse);
+    },
+  );
+
+  test('native non-audio paths reject symbolic links outside storage',
+      () async {
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'manifest-path-containment-test-',
+    );
+    final storage = Directory('${directory.path}/pictures')
+      ..createSync(recursive: true);
+    final outside = Directory('${directory.path}/outside')
+      ..createSync(recursive: true);
+    final outsideFile = File('${outside.path}/payload.png')
+      ..writeAsBytesSync([9]);
+    await Link('${storage.path}/escape').create(outside.path);
+    await Link('${storage.path}/file-link.png').create(outsideFile.path);
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final operations = ManifestOperations<ImageRecord>(
+      manifestKey: 'native_non_audio_path_validation',
+      storageDirName: 'pictures',
+      fromMap: ImageRecord.fromMap,
+      tableName: ManifestTables.imageRecords,
+      toMap: (record) => record.toMap(),
+    );
+
+    await expectLater(
+      operations.writeFile('escape/payload.png', Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+    await expectLater(
+      operations.writeFile('file-link.png', Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+    expect(await outsideFile.readAsBytes(), [9]);
+  });
+
+  test('non-audio records reject path traversal storage names', () async {
+    final operations = ManifestOperations<ImageRecord>(
+      manifestKey: 'non_audio_record_path_validation',
+      storageDirName: 'pictures',
+      fromMap: ImageRecord.fromMap,
+      tableName: ManifestTables.imageRecords,
+      toMap: (record) => record.toMap(),
+    );
+    final record = ImageRecord(
+      id: 'unsafe_storage_path',
+      name: 'unsafe',
+      hash: '../outside',
+      format: 'png',
+      createdAt: DateTime(2024),
+      size: 1,
+    );
+
+    await expectLater(operations.addRecord(record), throwsArgumentError);
+    expect(await operations.loadRecords(), isEmpty);
   });
 
   test('audio records write using their safe storage filename', () async {

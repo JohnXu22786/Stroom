@@ -215,14 +215,46 @@ class Conversation {
   /// [isTemporary] 为 true 时非空；关闭临时模式后置空。
   DateTime? temporaryExpiresAt;
 
+  /// Remaining countdown time captured while an assistant response is active.
+  /// A non-null value pauses expiry and is reconciled on process restart.
+  int? temporaryPausedRemainingMilliseconds;
+
   /// Stored expiry-duration version; older records omit this field.
   int temporaryExpiryVersion = kTemporaryConversationDurationVersion;
+
+  /// In-memory signal for the header's one-shot success/activation feedback.
+  int temporaryExpiryRevision = 0;
 
   /// Restarts the one-hour window from [startedAt] for a temporary conversation.
   void resetTemporaryExpiry(DateTime startedAt) {
     if (!isTemporary) return;
     temporaryExpiresAt = startedAt.add(kTemporaryConversationDuration);
     temporaryExpiryVersion = kTemporaryConversationDurationVersion;
+    temporaryPausedRemainingMilliseconds = null;
+    temporaryExpiryRevision++;
+  }
+
+  void pauseTemporaryExpiry(DateTime pausedAt) {
+    if (!isTemporary ||
+        temporaryExpiresAt == null ||
+        temporaryPausedRemainingMilliseconds != null) {
+      return;
+    }
+    temporaryPausedRemainingMilliseconds = temporaryExpiresAt!
+        .difference(pausedAt)
+        .inMilliseconds
+        .clamp(0, kTemporaryConversationDuration.inMilliseconds);
+  }
+
+  void resumeTemporaryExpiry(DateTime resumedAt, {required bool successful}) {
+    final remaining = temporaryPausedRemainingMilliseconds;
+    if (!isTemporary || remaining == null) return;
+    if (successful) {
+      resetTemporaryExpiry(resumedAt);
+    } else {
+      temporaryExpiresAt = resumedAt.add(Duration(milliseconds: remaining));
+      temporaryPausedRemainingMilliseconds = null;
+    }
   }
 
   Conversation({
@@ -251,6 +283,7 @@ class Conversation {
     this.totalCost = 0,
     this.isTemporary = false,
     this.temporaryExpiresAt,
+    this.temporaryPausedRemainingMilliseconds,
     this.temporaryExpiryVersion = kTemporaryConversationDurationVersion,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
@@ -301,6 +334,9 @@ class Conversation {
         if (isTemporary) 'isTemporary': true,
         if (temporaryExpiresAt != null)
           'temporaryExpiresAt': temporaryExpiresAt!.toIso8601String(),
+        if (isTemporary && temporaryPausedRemainingMilliseconds != null)
+          'temporaryPausedRemainingMilliseconds':
+              temporaryPausedRemainingMilliseconds,
         if (isTemporary) 'temporaryExpiryVersion': temporaryExpiryVersion,
       };
 
@@ -446,6 +482,11 @@ class Conversation {
     final temporaryExpiryVersionRaw = map['temporaryExpiryVersion'];
     final temporaryExpiryVersion =
         temporaryExpiryVersionRaw is int ? temporaryExpiryVersionRaw : 0;
+    final pausedRemainingRaw = map['temporaryPausedRemainingMilliseconds'];
+    final temporaryPausedRemainingMilliseconds =
+        pausedRemainingRaw is int && pausedRemainingRaw >= 0
+            ? pausedRemainingRaw
+            : null;
 
     return Conversation(
       id: idRaw is String ? idRaw : null,
@@ -475,6 +516,8 @@ class Conversation {
           (map['totalCost'] is num) ? (map['totalCost'] as num).toDouble() : 0,
       isTemporary: isTemporary,
       temporaryExpiresAt: temporaryExpiresAt,
+      temporaryPausedRemainingMilliseconds:
+          isTemporary ? temporaryPausedRemainingMilliseconds : null,
       temporaryExpiryVersion: temporaryExpiryVersion,
     );
   }
@@ -618,6 +661,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         .where(
           (c) =>
               c.isTemporary &&
+              c.temporaryPausedRemainingMilliseconds == null &&
               c.temporaryExpiresAt != null &&
               !c.temporaryExpiresAt!.isAfter(now),
         )

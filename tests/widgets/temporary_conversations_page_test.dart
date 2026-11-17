@@ -50,7 +50,7 @@ void main() {
 
     // 倒计时胶囊（MM:SS）出现在临时对话条目前。
     expect(find.text('60:00'), findsOneWidget);
-    expect(find.text('临时'), findsOneWidget);
+    expect(find.text('临时'), findsNothing);
     // 临时对话左侧图标变为"气泡 + 打勾"（非 drag handle）。
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
     // 普通对话仍保留拖拽把手。
@@ -62,6 +62,23 @@ void main() {
     await tester.tap(find.byIcon(Icons.more_vert).first);
     await tester.pumpAndSettle();
     expect(find.text('保留对话'), findsOneWidget);
+  });
+
+  testWidgets('conversation list freezes the capsule while a reply is active',
+      (tester) async {
+    final paused = Conversation(
+      id: 'paused-1',
+      title: 'Paused conversation',
+      isTemporary: true,
+      temporaryExpiresAt: DateTime.now().add(const Duration(minutes: 50)),
+      temporaryPausedRemainingMilliseconds: 30 * 1000,
+    );
+    await tester.pumpWidget(_testApp([paused]));
+    await tester.pump();
+
+    expect(find.text('00:30'), findsOneWidget);
+    expect(find.text('50:00'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('three-dot menu can enable temporary mode on a conversation', (

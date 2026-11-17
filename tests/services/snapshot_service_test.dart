@@ -146,6 +146,31 @@ void main() {
       expect(index.first.sha256, isNotEmpty);
     });
 
+    test('mixed valid and malformed index entries rebuild from disk', () async {
+      final snapshot = await SnapshotService.createSnapshot(force: true);
+      expect(snapshot, isNotNull);
+
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString(jsonEncode({
+        'snapshots': [
+          SnapshotEntry(
+            file: 'backup_2026-10-01T18-29-18.268046.zip',
+            sha256: 'stale',
+            createdAt: '2026-10-01T18:29:18.268046',
+            partVersions: const {},
+          ).toJson(),
+          null,
+        ],
+      }));
+
+      final index = await SnapshotService.readIndex();
+
+      expect(index, hasLength(1));
+      expect(index.single.file, p.basename(snapshot!.path));
+      expect(index.single.sha256, isNot('stale'));
+    });
+
     test('index entries cannot name files outside the snapshots directory',
         () async {
       await snapDir.create(recursive: true);

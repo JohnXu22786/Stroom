@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 
+import '../widgets/constrained_text.dart';
+
 class DuplicateResolveDialog extends StatefulWidget {
   final List<VoiceEntry> working;
   final Map<String, int> idToFirstIdx;
@@ -96,7 +98,11 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(l10n.voiceDuplicateResolution),
+      title: ConstrainedText(
+        l10n.voiceDuplicateResolution,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
@@ -131,12 +137,20 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                         ),
                         TextButton(
                           onPressed: () => _handleUpdate(i),
-                          child: Text(l10n.update),
+                          child: ConstrainedText(
+                            l10n.update,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         TextButton(
                           onPressed: () => _handleSkip(i),
-                          child: Text(l10n.skip),
+                          child: ConstrainedText(
+                            l10n.skip,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -154,7 +168,11 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => widget.onComplete(null),
-                child: Text(l10n.continueEditing),
+                child: ConstrainedText(
+                  l10n.continueEditing,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ],

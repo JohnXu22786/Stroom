@@ -27,11 +27,20 @@ import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'gallery_viewer_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 class GalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
+  @visibleForTesting
+  final Future<XFile?> Function()? testCameraPicker;
 
-  const GalleryPage({super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const GalleryPage({
+    super.key,
+    this.tabIndex = 0,
+    this.isActiveTab = true,
+    this.testCameraPicker,
+  });
 
   @override
   ConsumerState<GalleryPage> createState() => _GalleryPageState();
@@ -163,39 +172,53 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     var success = false;
     try {
       final picker = ImagePicker();
-      final file = await picker.pickImage(source: ImageSource.camera);
+      final file = await (widget.testCameraPicker?.call() ??
+          picker.pickImage(source: ImageSource.camera));
       if (file == null) return;
       if (!mounted) return;
 
       final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        throw const FormatException('Camera returned an empty image');
+      }
       final hash = computeImageHash(bytes);
       const format = 'jpg';
       final fileName = '$hash.$format';
       final destinationFolder = _currentFolder;
       await ImageManifest.withFilePublicationLock(hash, destinationFolder,
           () async {
-        await ImageManifest.writeFile(fileName, bytes);
-        final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
-          bytes,
-        );
-        if (thumbnailBytes != null) {
-          await ImageManifest.writeFile(
-            imageThumbFileName(hash),
-            thumbnailBytes,
-          );
-        }
-        final now = DateTime.now();
-        final timestamp =
-            '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
-        await ImageManifest.addRecord(
-          ImageRecord(
-            name: '照片_$timestamp',
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: destinationFolder,
-          ),
+        await publishStorageFiles<void, ImageRecord>(
+          publish: (writeFile) async {
+            await writeFile(fileName, bytes);
+            final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
+              bytes,
+            );
+            if (thumbnailBytes != null) {
+              await writeFile(imageThumbFileName(hash), thumbnailBytes);
+            }
+            final now = DateTime.now();
+            final timestamp =
+                '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
+            await ImageManifest.addRecord(
+              ImageRecord(
+                name: '照片_$timestamp',
+                hash: hash,
+                format: format,
+                createdAt: DateTime.now(),
+                size: bytes.length,
+                folder: destinationFolder,
+              ),
+            );
+          },
+          loadRecords: ImageManifest.loadRecordsStrict,
+          isReferenced: (record, name) =>
+              record.hash == hash &&
+              (name == record.storageFileName ||
+                  name == imageThumbFileName(record.hash)),
+          writeFile: ImageManifest.writeFile,
+          readFile: ImageManifest.readFile,
+          fileExists: ImageManifest.fileExists,
+          deleteFile: ImageManifest.deleteFile,
         );
       });
       success = true;
@@ -464,13 +487,24 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final selectedFiles = ids
           .map((id) => records.firstWhere((record) => record.id == id))
           .toList();
-      validateUserVisibleExportPaths(
-        files: selectedFiles.map(
-          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
-        ),
-      );
+      final selectedPaths = selectedFiles
+          .map(
+            (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+          )
+          .toList();
+      validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         final data = await ImageManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -483,10 +517,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         if (useArchive) {
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
+          await writeUserVisibleExportFile(outputPath, data);
         }
         exportedCount++;
       }
@@ -544,18 +578,30 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(strings.galleryFolderExportTitle),
+              title: ConstrainedText(
+                strings.galleryFolderExportTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(strings.galleryWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(strings.actionCancel),
+                  child: ConstrainedText(
+                    strings.actionCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(strings.galleryDownloadZip),
+                  child: ConstrainedText(
+                    strings.galleryDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -634,7 +680,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       var exportedCount = 0;
-      final exportPaths = <String>{};
 
       final selectedFolders = <String>{
         ...names,
@@ -652,6 +697,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             ),
           )
           .toList();
+      final outputPaths = await resolveNonClobberingExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        directory: outputDir,
+        folders: selectedFolders,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
       validateUserVisibleExportPaths(
         files: folderFiles.map(
           (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
@@ -662,19 +717,14 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await Directory(p.join(outputDir, folderName)).create(recursive: true);
       }
 
-      for (final file in folderFiles) {
+      for (var i = 0; i < folderFiles.length; i++) {
+        final file = folderFiles[i];
         final data = await ImageManifest.readFile(file.storagePath);
         if (data == null) continue;
-
-        final exportName = '${file.name}.${file.format}';
-        final relativePath = p.posix.join(file.folder, exportName);
-        if (!exportPaths.add(relativePath)) {
-          throw StateError('导出路径重复: $relativePath');
-        }
-        final fileDir = p.join(outputDir, file.folder);
+        final outputPath = outputPaths[i];
+        final fileDir = p.dirname(outputPath);
         await Directory(fileDir).create(recursive: true);
-        final outputPath = p.join(fileDir, exportName);
-        await File(outputPath).writeAsBytes(data);
+        await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }
 
@@ -739,9 +789,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryTakePhoto,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -758,9 +810,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

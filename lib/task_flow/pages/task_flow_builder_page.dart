@@ -28,6 +28,7 @@ import '../models/task_flow_exception.dart';
 import '../providers/task_flow_provider.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
+import '../services/task_flow_input_cleanup.dart';
 import '../services/task_flow_validator.dart';
 import '../utils/block_param_display.dart';
 import '../utils/task_flow_localization.dart';
@@ -36,6 +37,8 @@ import '../widgets/block_editor_dialog.dart';
 import '../widgets/flow_block_card.dart';
 import 'task_flow_run_page.dart';
 import '../../l10n/app_localizations.dart';
+
+import '../../widgets/constrained_text.dart';
 
 @visibleForTesting
 String taskFlowLaunchErrorMessage(Object error, AppLocalizations strings) =>
@@ -141,6 +144,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(TaskFlowInputCleanup.retryPending());
     _nameController = TextEditingController();
     _descController = TextEditingController();
     _inputController = TextEditingController();
@@ -218,19 +222,37 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     super.dispose();
   }
 
-  Future<void> _discardUnsubmittedInput(String reference) async {
-    try {
-      await AttachmentStorage.deleteFile(reference);
-    } catch (error) {
-      debugPrint('Failed to discard unsubmitted flow input: $error');
-    }
-  }
-
   void _discardAllUnsubmittedInputs() {
     final references = List<String>.of(_unsubmittedFileInputs);
-    _unsubmittedFileInputs.clear();
-    for (final reference in references) {
-      unawaited(_discardUnsubmittedInput(reference));
+    unawaited(_queueAndDiscardUnsubmittedInputs(references));
+  }
+
+  Future<void> _queueAndDiscardUnsubmittedInputs(
+    List<String> references,
+  ) async {
+    final ownedPaths = references
+        .map((reference) => _ownedStoragePaths[reference])
+        .whereType<String>()
+        .toSet();
+    if (ownedPaths.isEmpty) {
+      _unsubmittedFileInputs.removeAll(references);
+      for (final reference in references) {
+        _ownedStoragePaths.remove(reference);
+      }
+      return;
+    }
+    try {
+      await TaskFlowInputCleanup.enqueueAndRetry(
+        ownedPaths,
+        onQueued: () {
+          _unsubmittedFileInputs.removeAll(references);
+          for (final reference in references) {
+            _ownedStoragePaths.remove(reference);
+          }
+        },
+      );
+    } catch (error) {
+      debugPrint('Failed to queue unsubmitted flow input cleanup: $error');
     }
   }
 
@@ -239,7 +261,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// previously picked copy in this builder without handing it to the run.
   Future<void> _releaseInputsAfterLaunch(
     TaskFlowExecutionNotifier execNotifier,
+    bool hasExecutions,
   ) async {
+    // A launch implementation that returns no records has not taken ownership.
+    // Keep picker copies available to the caller until the builder is disposed.
+    if (!hasExecutions) return;
     if (!execNotifier.mounted) {
       // The saved owner cannot be inspected after app disposal. Retain copies.
       _unsubmittedFileInputs.clear();
@@ -247,13 +273,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
     for (final reference in List<String>.of(_unsubmittedFileInputs)) {
       final storagePath = _ownedStoragePaths[reference];
-      if (storagePath != null &&
-          execNotifier.referencesInputStoragePath(storagePath)) {
+      if (storagePath == null) {
+        _unsubmittedFileInputs.remove(reference);
+        continue;
+      }
+      if (execNotifier.referencesInputStoragePath(storagePath)) {
         _unsubmittedFileInputs.remove(reference);
         continue;
       }
       try {
-        await AttachmentStorage.deleteFile(storagePath ?? reference);
+        await AttachmentStorage.deleteFile(storagePath);
         _unsubmittedFileInputs.remove(reference);
         _mediaInputs.remove(reference);
         _inputDisplayNames.remove(reference);
@@ -290,18 +319,28 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.taskFlowUiDiscardTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.taskFlowUiDiscardTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.taskFlowUiDiscardBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.taskFlowUiContinueEditing,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.taskFlowUiDiscard,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -384,10 +423,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
+          title: ConstrainedText(
             _isEditing
                 ? AppLocalizations.of(context)!.taskFlowUiEditTitle
                 : AppLocalizations.of(context)!.taskFlowUiCreateTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           centerTitle: true,
           actions: [
@@ -399,7 +440,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             TextButton.icon(
               onPressed: _isSaving ? null : _saveFlow,
               icon: const Icon(Icons.save, size: 18),
-              label: Text(AppLocalizations.of(context)!.taskFlowUiSave),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.taskFlowUiSave,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -499,9 +544,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             ),
             maxLines: 2,
             minLines: 1,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -671,7 +717,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (flowName.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(AppLocalizations.of(context)!.taskFlowUiTitle),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.taskFlowUiTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           centerTitle: true,
         ),
         body: Center(
@@ -685,7 +735,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiBack),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiBack,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -695,7 +749,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(flowName),
+        title: ConstrainedText(
+          flowName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           Padding(
@@ -762,9 +820,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             const SizedBox(height: 4),
             Text(
               _descController.text.trim(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ],
@@ -855,7 +914,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   onPressed:
                       !_isStarting && _canStartFlow() ? _startFlow : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
-                  label: Text(AppLocalizations.of(context)!.taskFlowUiStart),
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiStart,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ),
@@ -898,7 +961,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             onPressed: () =>
                 setState(() => _catcatchInputs.add(_CatCatchInputEntry())),
             icon: const Icon(Icons.add_link, size: 18),
-            label: Text(AppLocalizations.of(context)!.taskFlowUiAddResource),
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.taskFlowUiAddResource,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
             ),
@@ -1047,9 +1114,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   const SizedBox(width: 4),
                   Text(
                     AppLocalizations.of(context)!.taskFlowUiPreview,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   Text(
                     preview,
@@ -1139,7 +1207,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                           : Icons.videocam_outlined,
               size: 16,
             ),
-            label: Text(
+            label: ConstrainedText(
               isImage
                   ? AppLocalizations.of(context)!.taskFlowUiSelectImages
                   : isAudio
@@ -1147,6 +1215,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       : isFile
                           ? AppLocalizations.of(context)!.taskFlowUiSelectFiles
                           : AppLocalizations.of(context)!.taskFlowUiSelectVideo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -1173,7 +1243,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
+                    child: ConstrainedText(
                       _inputDisplayNames[_mediaInputs[i]] ??
                           _fileName(_mediaInputs[i]),
                       style: Theme.of(context).textTheme.bodyMedium,
@@ -1198,9 +1268,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               _inputDisplayNames.remove(reference);
                               _mediaInputs.removeAt(i);
                             });
-                            if (_unsubmittedFileInputs.remove(reference)) {
+                            if (_unsubmittedFileInputs.contains(reference)) {
+                              final storagePath = _ownedStoragePaths[reference];
+                              if (storagePath == null) {
+                                _unsubmittedFileInputs.remove(reference);
+                                return;
+                              }
                               try {
-                                await AttachmentStorage.deleteFile(reference);
+                                await AttachmentStorage.deleteFile(storagePath);
+                                _unsubmittedFileInputs.remove(reference);
+                                _ownedStoragePaths.remove(reference);
                               } catch (error) {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1341,10 +1418,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
+        title: ConstrainedText(
           def == null
               ? localizedBlockTypeName(block.typeKey, strings)
               : localizedBlockTypeLabel(def, strings),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -1390,10 +1469,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       children: [
                         Text(
                           '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: cs.primary,
-                                  ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: cs.primary),
                         ),
                         Expanded(
                           // Friendly display — raw ids (assistant uuids,
@@ -1409,9 +1488,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
-                                ?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
+                                ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                         ),
                       ],
@@ -1425,7 +1502,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.taskFlowUiClose),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.taskFlowUiClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1505,8 +1586,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         final bytes = await _readGenericFile(file);
         final storagePath = await AttachmentStorage.saveFile(file.name, bytes);
         savedPaths.add(storagePath);
-        // The web reference is an IndexedDB key. Native validation and
-        // execution use File(reference), so they need the absolute path.
+        // Keep the local path expected by FlowRunInput callers. The separate
+        // ownedStoragePath remains the durable key used when persisting runs.
         final reference = kIsWeb
             ? storagePath
             : p.join(
@@ -1917,7 +1998,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       executionIds = await ref
           .read(taskFlowExecutionServiceProvider)
           .launchFlowMany(_editingFlowId!, inputs);
-      await _releaseInputsAfterLaunch(execNotifier);
+      await _releaseInputsAfterLaunch(execNotifier, executionIds.isNotEmpty);
     } on TaskFlowValidationException catch (error) {
       if (mounted) {
         await _showValidationError(error);
@@ -1931,9 +2012,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return path != null && execNotifier.referencesInputStoragePath(path);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(taskFlowLaunchErrorMessage(
-                error, AppLocalizations.of(context)!))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              taskFlowLaunchErrorMessage(error, AppLocalizations.of(context)!),
+            ),
+          ),
+        );
       }
       return;
     } finally {

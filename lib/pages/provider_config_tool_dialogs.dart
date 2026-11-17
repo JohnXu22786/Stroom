@@ -7,6 +7,8 @@ import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import '../services/http_tool_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 class HttpToolConfigDialog extends StatefulWidget {
   final ProviderConfigItem config;
   final ToolDefinition? definition;
@@ -115,7 +117,11 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
   Widget build(BuildContext context) {
     final definition = widget.definition;
     return AlertDialog(
-      title: Text(widget.config.providerName),
+      title: ConstrainedText(
+        widget.config.providerName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: SingleChildScrollView(
@@ -185,11 +191,19 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.batchDlgCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: _save,
-          child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.mermaidSaveButton,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -316,7 +330,11 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
     final locale = Localizations.localeOf(context);
     final strings = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(definition.name),
+      title: ConstrainedText(
+        definition.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: SingleChildScrollView(
@@ -353,7 +371,11 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(strings.mathClose),
+          child: ConstrainedText(
+            strings.mathClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

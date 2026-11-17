@@ -10,6 +10,8 @@ import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/temporary_conversation_dialog.dart';
 import 'conversations_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
 
@@ -91,12 +93,42 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     });
   }
 
+  Future<void> _cleanupConversationFiles(Conversation conversation) async {
+    for (final msg in conversation.messages) {
+      for (final att in msg.attachments) {
+        try {
+          await AttachmentStorage.deleteFile(att.storagePath);
+        } catch (_) {
+          // Journaled deletion is complete; keep cleaning the remaining files.
+        }
+      }
+    }
+    for (final att in conversation.draftAttachments) {
+      try {
+        await AttachmentStorage.deleteFile(att.storagePath);
+      } catch (_) {
+        // 非关键清理
+      }
+    }
+    try {
+      await AttachmentStorage.deleteConversationCompressedImages(
+        conversation.id,
+      );
+    } catch (_) {
+      // 非关键清理
+    }
+  }
+
   Future<void> _batchDelete() async {
     if (_selectedIds.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!
               .conversationDeleteMany(_selectedIds.length),
@@ -104,14 +136,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.actionDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -119,39 +159,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     if (confirmed != true) return;
 
     final convs = ref.read(conversationsProvider);
-    for (final id in _selectedIds) {
-      final conv = convs.where((c) => c.id == id).firstOrNull;
-      if (conv != null) {
-        for (final msg in conv.messages) {
-          for (final att in msg.attachments) {
-            await AttachmentStorage.deleteFile(att.storagePath);
-          }
-        }
-        // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
-        for (final att in conv.draftAttachments) {
-          try {
-            await AttachmentStorage.deleteFile(att.storagePath);
-          } catch (_) {
-            // 非关键清理
-          }
-        }
-      }
-      // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
-      // （派生缓存，best-effort：失败不影响对话删除）
-      try {
-        await AttachmentStorage.deleteConversationCompressedImages(id);
-      } catch (_) {
-        // 非关键清理
+    final selectedIds = Set<String>.from(_selectedIds);
+    final deleted = await ref
+        .read(conversationsProvider.notifier)
+        .batchDelete(selectedIds.toList());
+    if (deleted) {
+      for (final conv in convs) {
+        if (!selectedIds.contains(conv.id)) continue;
+        await _cleanupConversationFiles(conv);
       }
     }
-
-    await ref
-        .read(conversationsProvider.notifier)
-        .batchDelete(_selectedIds.toList());
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+    }
   }
 
   void _deleteConversation(String id) async {
@@ -161,49 +184,42 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(AppLocalizations.of(context)!.conversationDeleteOne),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.actionDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
 
-    if (conv != null) {
-      for (final msg in conv.messages) {
-        for (final att in msg.attachments) {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        }
-      }
-      // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
-      for (final att in conv.draftAttachments) {
-        try {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        } catch (_) {
-          // 非关键清理
-        }
-      }
+    final deleted =
+        await ref.read(conversationsProvider.notifier).deleteConversation(id);
+    if (deleted && conv != null) {
+      await _cleanupConversationFiles(conv);
     }
-    // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
-    // （派生缓存，best-effort：失败不影响对话删除）
-    try {
-      await AttachmentStorage.deleteConversationCompressedImages(id);
-    } catch (_) {
-      // 非关键清理
-    }
-
-    await ref.read(conversationsProvider.notifier).deleteConversation(id);
   }
 
   void _renameConversation(String id, String currentTitle) {
@@ -211,7 +227,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationRename),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -235,7 +255,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -248,7 +272,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -308,11 +336,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ),
             )
           : AppBar(
-              title: Text(
+              title: ConstrainedText(
                 _selectionMode
                     ? AppLocalizations.of(context)!
                         .conversationSelected(_selectedIds.length)
                     : AppLocalizations.of(context)!.conversationsTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               actions: [
                 if (!_selectionMode)
@@ -451,9 +481,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             ),
           // 临时对话倒计时胶囊（标题前）
           if (conv.isTemporary && conv.temporaryExpiresAt != null)
-            TemporaryCountdownCapsule(expiresAt: conv.temporaryExpiresAt!),
+            TemporaryCountdownCapsule(
+              expiresAt: conv.temporaryExpiresAt!,
+              pausedRemainingMilliseconds:
+                  conv.temporaryPausedRemainingMilliseconds,
+            ),
           Expanded(
-            child: Text(
+            child: ConstrainedText(
               conv.title.isEmpty
                   ? AppLocalizations.of(context)!.conversationNew
                   : conv.title,
@@ -534,39 +568,51 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   itemBuilder: (ctx) => [
                     PopupMenuItem(
                       value: 'rename',
-                      child: Text(AppLocalizations.of(context)!.actionRename),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.actionRename,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'auto_rename',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.conversationAutoRename,
                         style: TextStyle(color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     PopupMenuItem(
                       value: 'toggle_temporary',
-                      child: Text(
+                      child: ConstrainedText(
                         conv.isTemporary
                             ? AppLocalizations.of(context)!.conversationKeep
                             : AppLocalizations.of(context)!
                                 .conversationSetTemporary,
                         style: TextStyle(color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     PopupMenuItem(
                       value: 'pin',
-                      child: Text(
+                      child: ConstrainedText(
                         conv.isPinned
                             ? AppLocalizations.of(context)!.conversationUnpin
                             : AppLocalizations.of(context)!.conversationPin,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'delete',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.actionDelete,
                         style: TextStyle(color: cs.error),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

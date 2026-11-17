@@ -471,7 +471,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get ocrDefaultImagesOnly =>
-      'Par défaut (envoyer uniquement les images)';
+      "Par défaut (sans instruction personnalisée ; le prompt OCR par défaut est utilisé)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -545,7 +545,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Ces instructions s’appliquent à tous les modèles de reconnaissance. Si aucune instruction n’est sélectionnée, seule l’image est envoyée.';
+      "Ces instructions s’appliquent à tous les modèles de reconnaissance. Si aucune instruction n’est sélectionnée, aucune instruction personnalisée n’est ajoutée ; le prompt OCR par défaut est toujours utilisé.";
 
   @override
   String get ocrInstructionManageEmpty => 'Aucune instruction pour le moment';
@@ -1574,6 +1574,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Voulez-vous vraiment effacer toutes les tâches échouées ?';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Voulez-vous vraiment effacer toutes les tâches terminées ? Cette action est irréversible.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.';
 
@@ -2151,6 +2155,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'Aucune donnée détaillée disponible';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[contenu central omis, $count caractères]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Fermer';
@@ -6491,19 +6500,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get providerBuiltinBadge => 'Intégré';
 
   @override
-  String get providerBuiltinTtsName => 'Fournisseur TTS';
+  String get providerBuiltinTtsName => 'TTS (Synthèse texte-parole)';
 
   @override
-  String get providerBuiltinLlmName => 'Fournisseur LLM';
+  String get providerBuiltinLlmName => 'LLM (Grand modèle de langage)';
 
   @override
-  String get providerBuiltinOcrName => 'Fournisseur OCR';
+  String get providerBuiltinOcrName =>
+      'OCR (Reconnaissance optique de caractères)';
 
   @override
-  String get providerBuiltinAsrName => 'Fournisseur de reconnaissance vocale';
+  String get providerBuiltinAsrName => 'STT (Transcription de la parole)';
 
   @override
-  String get providerBuiltinMcpName => 'Fournisseur MCP';
+  String get providerBuiltinMcpName => 'MCP (Protocole de contexte de modèle)';
 
   @override
   String get providerBuiltinSearchGroupName => 'Recherche';
@@ -10729,6 +10739,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get appLogDelete => 'Supprimer';
 
   @override
+  String get appLogDeleteUnconfirmed =>
+      'La suppression n’a pas pu être confirmée.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirmer la suppression';
 
   @override
@@ -12683,7 +12697,7 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get ocrDefaultImagesOnly =>
-      'Par défaut (envoyer uniquement les images)';
+      "Par défaut (sans instruction personnalisée ; le prompt OCR par défaut est utilisé)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12757,7 +12771,7 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'Ces instructions s’appliquent à tous les modèles de reconnaissance. Si aucune instruction n’est sélectionnée, seule l’image est envoyée.';
+      "Ces instructions s’appliquent à tous les modèles de reconnaissance. Si aucune instruction n’est sélectionnée, aucune instruction personnalisée n’est ajoutée ; le prompt OCR par défaut est toujours utilisé.";
 
   @override
   String get ocrInstructionManageEmpty => 'Aucune instruction pour le moment';
@@ -18700,19 +18714,20 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   String get providerBuiltinBadge => 'Intégré';
 
   @override
-  String get providerBuiltinTtsName => 'Fournisseur TTS';
+  String get providerBuiltinTtsName => 'TTS (Synthèse texte-parole)';
 
   @override
-  String get providerBuiltinLlmName => 'Fournisseur LLM';
+  String get providerBuiltinLlmName => 'LLM (Grand modèle de langage)';
 
   @override
-  String get providerBuiltinOcrName => 'Fournisseur OCR';
+  String get providerBuiltinOcrName =>
+      'OCR (Reconnaissance optique de caractères)';
 
   @override
-  String get providerBuiltinAsrName => 'Fournisseur de reconnaissance vocale';
+  String get providerBuiltinAsrName => 'STT (Transcription de la parole)';
 
   @override
-  String get providerBuiltinMcpName => 'Fournisseur MCP';
+  String get providerBuiltinMcpName => 'MCP (Protocole de contexte de modèle)';
 
   @override
   String get providerBuiltinSearchGroupName => 'Recherche';
@@ -22931,6 +22946,10 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get appLogDelete => 'Supprimer';
+
+  @override
+  String get appLogDeleteUnconfirmed =>
+      'La suppression n’a pas pu être confirmée.';
 
   @override
   String get appLogConfirmDeleteTitle => 'Confirmer la suppression';

@@ -204,7 +204,11 @@ void main() {
           computeTextHash(Uint8List.fromList(utf8.encode('late result')));
       expect(await TextManifest.loadRecords(), isEmpty);
       expect(await WebFileStore.exists('texts/$hash.txt'), isFalse);
-      expect(background.state.single.status, isNot(TaskStatus.completed));
+      if (isAsr) {
+        expect(background.state.single.status, isNot(TaskStatus.completed));
+      } else {
+        expect(background.state, isEmpty);
+      }
       expect(
           executions.execution(execId)?.status, FlowExecutionStatus.cancelled);
     });

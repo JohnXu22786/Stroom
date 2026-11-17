@@ -15,6 +15,7 @@ import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
 /// 流式恢复（restoreBackup）回归测试。
@@ -63,6 +64,7 @@ void main() {
     List<Map<String, dynamic>> textRecords = const [],
     Map<String, Uint8List> files = const {},
     List<String>? dataParts,
+    Map<String, dynamic> manifestOverrides = const {},
     int version = 2,
   }) {
     final archive = Archive();
@@ -72,6 +74,7 @@ void main() {
       'appVersion': 'test',
     };
     if (dataParts != null) manifestData['dataParts'] = dataParts;
+    manifestData.addAll(manifestOverrides);
     final manifest = utf8.encode(jsonEncode(manifestData));
     archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final dbData = {
@@ -98,6 +101,438 @@ void main() {
     }
     return archive;
   }
+
+  test(
+    'restore removes artifacts for replaced executions before restoring archived outputs',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      const executionId = 'replaced-execution';
+      final staleArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'old-block',
+        fileName: 'stale.wav',
+        bytes: Uint8List.fromList([1]),
+      );
+      final restoredArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'restored-block',
+        fileName: 'restored.wav',
+        bytes: Uint8List.fromList([2]),
+      );
+      await FlowTemporaryArtifactStorage.deleteExecution(executionId);
+      await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'old-block',
+        fileName: 'stale.wav',
+        bytes: Uint8List.fromList([1]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'restored-flow',
+                'flowName': 'Restored flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+        restoredArtifact: Uint8List.fromList([2]),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': true,
+          'fileInventories': {
+            DataParts.tasks: [
+              for (final entry in files.entries)
+                if (entry.key.startsWith('task_flow_temporary/'))
+                  {'path': entry.key, 'size': entry.value.length},
+            ],
+          },
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_inventory.zip',
+      );
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      expect(await WebFileStore.read(staleArtifact), isNull);
+      expect(await WebFileStore.read(restoredArtifact), [2]);
+    },
+  );
+
+  test(
+    'restore preserves temporary artifacts when the execution inventory is untouched',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      const executionId = 'untouched-execution';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'existing-flow',
+                'flowName': 'Existing flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final archive = buildV2Archive(
+        files: {
+          'task_flows/flows.json': Uint8List.fromList(
+            utf8.encode(
+              jsonEncode([
+                {
+                  'id': 'restored-flow',
+                  'name': 'Restored flow',
+                  'description': '',
+                  'inputType': 'text',
+                  'blocks': <Object>[],
+                  'createdAt': DateTime(2026).toIso8601String(),
+                  'updatedAt': DateTime(2026).toIso8601String(),
+                },
+              ]),
+            ),
+          ),
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_definitions.zip',
+      );
+
+      await BackupService.restoreBackup(
+        zipPath,
+        selection: selection,
+        skipMissingCategories: true,
+      );
+
+      expect(await WebFileStore.read(artifact), [9]);
+      expect(await WebFileStore.read('task_flows/executions.json'), isNotNull);
+    },
+  );
+
+  test(
+    'restore cleans replaced execution artifacts when media files are excluded',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const executionId = 'replaced-without-media';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_inventory_without_media.zip',
+      );
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      expect(await WebFileStore.read(artifact), isNull);
+    },
+  );
+
+  test(
+    'failed restore without media preserves artifacts from the old execution inventory',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const executionId = 'rolled-back-execution';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([7]),
+      );
+      final oldExecution = {
+        'id': executionId,
+        'flowId': 'old-flow',
+        'flowName': 'Old flow',
+        'status': 'completed',
+        'createdAt': DateTime(2026).toIso8601String(),
+      };
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(jsonEncode([oldExecution])),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(jsonEncode([oldExecution])),
+        ),
+        'task_state/task_list_last_read.json':
+            Uint8List.fromList(utf8.encode('{}')),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {
+            DataParts.tasks: [
+              {
+                'path': 'task_state/task_list_last_read.json',
+                'size': files['task_state/task_list_last_read.json']!.length,
+              },
+            ],
+          },
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'failed_task_flow_inventory_without_media.zip',
+      );
+      BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+        if (index == files.length - 1) {
+          BackupService.beforeRestoreBinaryPublishForTesting = null;
+          throw StateError('injected restore publish failure');
+        }
+      };
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await WebFileStore.read(artifact), [7]);
+      final restoredExecutions = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      expect(restoredExecutions.single['id'], executionId);
+    },
+  );
+
+  test(
+    'no-media restore reports a failure to clean replaced temporary artifacts',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      addTearDown(() {
+        FlowTemporaryArtifactStorage.beforeDeleteExecutionForTesting = null;
+      });
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const oldExecutionId = 'cleanup-failure-old-execution';
+      final oldArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: oldExecutionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': oldExecutionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': 'replacement-execution',
+                'flowId': 'new-flow',
+                'flowName': 'New flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'task_flow_cleanup_failure_without_media.zip',
+      );
+      FlowTemporaryArtifactStorage.beforeDeleteExecutionForTesting =
+          (_) async => throw StateError('injected artifact cleanup failure');
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await WebFileStore.read(oldArtifact), [9]);
+      final restoredExecutions = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      expect(restoredExecutions.single['id'], 'replacement-execution');
+    },
+  );
 
   // ==================================================================
   // store 模式大文件：流式恢复逐字节一致（主回归）
@@ -217,6 +652,199 @@ void main() {
       );
 
       expect(await readBackupFile('pictures', 'existing.jpg'), originalFile);
+      expect(await readBackupFile('pictures', 'first.jpg'), isNull);
+      expect(await readBackupFile('pictures', 'later.jpg'), isNull);
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records, hasLength(1));
+      expect(records.single['id'], 'existing');
+      expect(prefs.getBool('darkMode'), isTrue);
+    },
+  );
+
+  test(
+    'restoreBackup bounds a failed rollback and retains its recovery archive',
+    () async {
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await writeBackupFile(
+        'pictures',
+        'existing.jpg',
+        Uint8List.fromList(utf8.encode('existing image')),
+      );
+
+      final archive = buildV2Archive(
+        files: {
+          'pictures/incoming.jpg': Uint8List.fromList([1])
+        },
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+      final zipPath = await writeArchive(archive, 'rollback_failure.zip');
+
+      String? retainedArchivePath;
+      addTearDown(() async {
+        final path = retainedArchivePath;
+        if (path != null) {
+          final separator = path.lastIndexOf(Platform.pathSeparator);
+          if (separator >= 0) {
+            final rollbackDirectory = Directory(path.substring(0, separator));
+            if (await rollbackDirectory.exists()) {
+              await rollbackDirectory.delete(recursive: true);
+            }
+          }
+        }
+      });
+
+      var publishAttempts = 0;
+      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
+        publishAttempts++;
+        throw StateError(
+          publishAttempts == 1
+              ? 'injected primary restore failure'
+              : 'injected recovery restore failure',
+        );
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      late StateError failure;
+      try {
+        await BackupService.restoreBackup(zipPath, selection: selection);
+        fail('restoreBackup should report the failed restore and rollback');
+      } on StateError catch (error) {
+        failure = error;
+      }
+
+      expect(
+        publishAttempts,
+        2,
+        reason: 'only one rollback restore is allowed',
+      );
+      expect(failure.message, contains('injected primary restore failure'));
+      expect(failure.message, contains('injected recovery restore failure'));
+      final archivePath = RegExp(
+        r'The recovery archive is retained at (.+)\.',
+      ).firstMatch(failure.message)?.group(1);
+      expect(archivePath, isNotNull);
+      retainedArchivePath = archivePath!;
+      expect(await File(retainedArchivePath).exists(), isTrue);
+    },
+  );
+
+  test(
+    'restoreFromBytes keeps selected data unchanged when a later binary write fails',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final originalFile = Uint8List.fromList(utf8.encode('existing image'));
+      final originalTaskMedia =
+          Uint8List.fromList(utf8.encode('existing task media'));
+      await writeBackupFile('pictures', 'existing.jpg', originalFile);
+      await writeBackupFile(
+        'catcatch/completed',
+        'existing.wav',
+        originalTaskMedia,
+      );
+      final originalTaskState =
+          Uint8List.fromList(utf8.encode('original state'));
+      await writeBackupFile('', 'task_list_last_read.json', originalTaskState);
+      await ManifestDatabase.insertImageRecord({
+        'id': 'existing',
+        'name': 'existing',
+        'hash': 'existing',
+        'format': 'jpg',
+        'created_at': DateTime(2026).millisecondsSinceEpoch,
+        'size': originalFile.length,
+        'folder': '',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('darkMode', true);
+
+      final archive = buildV2Archive(
+        dataParts: ['pictures', 'settings', 'tasks'],
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': true,
+          'fileInventories': {
+            'pictures': [
+              {'path': 'pictures/first.jpg', 'size': 1},
+              {'path': 'pictures/later.jpg', 'size': 1},
+            ],
+            'tasks': [
+              {'path': 'catcatch/completed/incoming.wav', 'size': 1},
+              {
+                'path': 'task_state/task_list_last_read.json',
+                'size': utf8.encode('imported state').length,
+              },
+            ],
+          },
+        },
+        files: {
+          'pictures/first.jpg': Uint8List.fromList([1]),
+          'task_state/task_list_last_read.json':
+              Uint8List.fromList(utf8.encode('imported state')),
+          'pictures/later.jpg': Uint8List.fromList([2]),
+          'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+          'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+          'catcatch/completed/incoming.wav': Uint8List.fromList([3]),
+        },
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+
+      var injected = false;
+      BackupService.beforeRestoreBinaryPublishForTesting = (entryIndex) {
+        if (entryIndex == 2 && !injected) {
+          injected = true;
+          throw StateError('injected restore publish failure');
+        }
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      await expectLater(
+        BackupService.restoreFromBytesForTest(
+          Uint8List.fromList(ZipEncoder().encode(archive)),
+          selection: selection,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(injected, isTrue);
+      expect(await readBackupFile('pictures', 'existing.jpg'), originalFile);
+      expect(
+        await readBackupFile('catcatch/completed', 'existing.wav'),
+        originalTaskMedia,
+      );
+      expect(
+        await readBackupFile('', 'task_list_last_read.json'),
+        originalTaskState,
+      );
       expect(await readBackupFile('pictures', 'first.jpg'), isNull);
       expect(await readBackupFile('pictures', 'later.jpg'), isNull);
       final records = await ManifestDatabase.getAllImageRecords();

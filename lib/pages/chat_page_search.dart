@@ -232,8 +232,10 @@ extension _ChatPageSearchExt on _ChatPageState {
             width: selected ? 1.0 : 0.5,
           ),
         ),
-        child: Text(
+        child: ConstrainedText(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 11,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
@@ -477,30 +479,34 @@ extension _ChatPageSearchExt on _ChatPageState {
             const SizedBox(height: 4),
             Row(
               children: [
-                _buildModeChip(
-                  label:
-                      AppLocalizations.of(context)!.searchCurrentConversation,
-                  selected: _searchMode == SearchMode.current,
-                  onTap: () {
-                    if (_searchMode != SearchMode.current) {
-                      setState(() {
-                        _searchMode = SearchMode.current;
-                        _searchTextController.clear();
-                        _performSearch('');
-                      });
-                    }
-                  },
+                Flexible(
+                  child: _buildModeChip(
+                    label:
+                        AppLocalizations.of(context)!.searchCurrentConversation,
+                    selected: _searchMode == SearchMode.current,
+                    onTap: () {
+                      if (_searchMode != SearchMode.current) {
+                        setState(() {
+                          _searchMode = SearchMode.current;
+                          _searchTextController.clear();
+                          _performSearch('');
+                        });
+                      }
+                    },
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _buildModeChip(
-                  label: AppLocalizations.of(context)!.searchAllConversations,
-                  selected: _searchMode == SearchMode.global,
-                  onTap: () {
-                    if (_searchMode != SearchMode.global) {
-                      setState(() => _searchMode = SearchMode.global);
-                      _openGlobalSearch();
-                    }
-                  },
+                Flexible(
+                  child: _buildModeChip(
+                    label: AppLocalizations.of(context)!.searchAllConversations,
+                    selected: _searchMode == SearchMode.global,
+                    onTap: () {
+                      if (_searchMode != SearchMode.global) {
+                        setState(() => _searchMode = SearchMode.global);
+                        _openGlobalSearch();
+                      }
+                    },
+                  ),
                 ),
               ],
             ),

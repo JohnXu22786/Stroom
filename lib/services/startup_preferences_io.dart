@@ -7,6 +7,10 @@ import 'package:path_provider/path_provider.dart';
 
 const _preferencesFileName = 'shared_preferences.json';
 
+// Serialize mutations before starting their worker isolates. Otherwise each
+// isolate can read the same old file and overwrite another isolate's update.
+Future<void> _lastMutation = Future<void>.value();
+
 /// Reads selected values from the same JSON file used by the Linux and
 /// Windows shared_preferences implementations.
 Future<Map<String, Object?>> readValues(Set<String> keys) async {
@@ -27,14 +31,26 @@ Future<Set<String>> readKeys() async {
 Future<void> writeValue(String key, Object value) async {
   final directory = await getApplicationSupportDirectory();
   final filePath = p.join(directory.path, _preferencesFileName);
-  await Isolate.run(() => _writeValueToFile(filePath, key, value));
+  await _serializeMutation(
+    () => Isolate.run(() => _writeValueToFile(filePath, key, value)),
+  );
 }
 
 /// Removes one key while preserving every other legacy preference.
 Future<void> removeValue(String key) async {
   final directory = await getApplicationSupportDirectory();
   final filePath = p.join(directory.path, _preferencesFileName);
-  await Isolate.run(() => _removeValueFromFile(filePath, key));
+  await _serializeMutation(
+    () => Isolate.run(() => _removeValueFromFile(filePath, key)),
+  );
+}
+
+Future<void> _serializeMutation(Future<void> Function() mutation) {
+  final result = _lastMutation.then((_) => mutation());
+  // Keep later mutations usable after one failed write while still returning
+  // that failure to its caller.
+  _lastMutation = result.catchError((Object _) {});
+  return result;
 }
 
 Future<Map<String, Object?>> _readValuesFromFile(
@@ -76,8 +92,7 @@ Future<void> _writeValueToFile(
   final file = File(filePath);
   final preferences = await _readAllValuesFromFile(filePath);
   preferences[key] = value;
-  await file.parent.create(recursive: true);
-  await file.writeAsString(jsonEncode(preferences));
+  await _writePreferencesAtomically(file, preferences);
 }
 
 Future<void> _removeValueFromFile(String filePath, String key) async {
@@ -87,5 +102,23 @@ Future<void> _removeValueFromFile(String filePath, String key) async {
   if (!preferences.containsKey(key)) return;
 
   preferences.remove(key);
-  await file.writeAsString(jsonEncode(preferences));
+  await _writePreferencesAtomically(file, preferences);
+}
+
+Future<void> _writePreferencesAtomically(
+  File file,
+  Map<String, Object?> preferences,
+) async {
+  await file.parent.create(recursive: true);
+  final temporaryFile = File(
+    '${file.path}.$pid.${DateTime.now().microsecondsSinceEpoch}.tmp',
+  );
+  try {
+    await temporaryFile.writeAsString(jsonEncode(preferences), flush: true);
+    await temporaryFile.rename(file.path);
+  } finally {
+    if (await temporaryFile.exists()) {
+      await temporaryFile.delete();
+    }
+  }
 }

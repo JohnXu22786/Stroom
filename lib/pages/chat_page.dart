@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
@@ -21,12 +20,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/markdown_extensions.dart';
+import '../widgets/constrained_text.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/temporary_conversation_dialog.dart';
 import '../widgets/chat_conversation_state.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
+import '../utils/attachment_preview_path.dart';
+import '../utils/attachment_preview_lifecycle.dart';
 import '../utils/model_order.dart';
 import '../utils/file_picker_utils.dart';
 import '../utils/system_pick_utils.dart';
@@ -349,6 +351,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void>? _pendingSearchScroll;
 
   bool _developerMode = false;
+  final Map<String, bool> _lastTemporaryModeByConversation = {};
   final Map<String, bool> _expandedErrors = {};
 
   // ── Edit mode state ──
@@ -597,7 +600,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
               // ── Chat widget ──
               Expanded(
                 child: controller == null
-                    ? const SizedBox.shrink()
+                    ? TickerMode(
+                        enabled: TickerMode.of(context) &&
+                            ChatTabVisibility.of(context),
+                        child: const ChatConversationStateView(
+                          state: ChatConversationState.loading,
+                        ),
+                      )
                     : Stack(
                         children: [
                           Visibility(

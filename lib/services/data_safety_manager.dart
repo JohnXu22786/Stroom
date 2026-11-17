@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
+import '../utils/file_manifest.dart';
 import 'app_log_service.dart';
 import 'backup_service.dart';
 import 'backup_service_shared.dart' show collectAttachmentPathsForSafety;
@@ -440,24 +441,35 @@ class DataSafetyManager {
         return;
       }
       try {
-        final records = <Map<String, dynamic>>[
-          ...await ManifestDatabase.getAllImageRecords(),
-          ...await ManifestDatabase.getAllAudioRecords(),
-          ...await ManifestDatabase.getAllVideoRecords(),
-          ...await ManifestDatabase.getAllTextRecords(),
-        ];
-        for (final record in records) {
-          final hash = record['hash'] as String?;
-          if (hash == null) continue;
-          final format = record['format'] as String? ?? 'jpg';
-          // 媒体文件本体 + 缩略图 + TTS 转写旁车文本
-          referenced.add('$hash.$format');
-          referenced.add('${hash}_thumb_v2.png');
-          if (format != 'jpg') {
-            referenced.add('${hash}_thumb.jpg');
+        void addMediaReferences(
+          List<Map<String, dynamic>> records, {
+          bool audio = false,
+        }) {
+          for (final record in records) {
+            final hash = record['hash'] as String?;
+            if (hash == null) continue;
+            final format = record['format'] as String? ?? 'jpg';
+            // Audio filenames must use the same Windows-safe encoding as the
+            // manifest so cleanup does not treat a live file as an orphan.
+            referenced.add(audio
+                ? AudioRecord.storageFileNameFor(hash: hash, format: format)
+                : '$hash.$format');
+            if (audio) referenced.add('$hash.$format');
+            referenced.add('${hash}_thumb_v2.png');
+            if (format != 'jpg') {
+              referenced.add('${hash}_thumb.jpg');
+            }
+            referenced.add('$hash.txt');
           }
-          referenced.add('$hash.txt');
         }
+
+        addMediaReferences(await ManifestDatabase.getAllImageRecords());
+        addMediaReferences(
+          await ManifestDatabase.getAllAudioRecords(),
+          audio: true,
+        );
+        addMediaReferences(await ManifestDatabase.getAllVideoRecords());
+        addMediaReferences(await ManifestDatabase.getAllTextRecords());
       } catch (e) {
         debugPrint('[DataSafetyManager] 收集媒体引用失败，中止孤儿清理: $e');
         return;

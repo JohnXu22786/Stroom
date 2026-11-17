@@ -1,7 +1,10 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/data_sanitizer.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 /// Shows a dialog with JSON request/response data inspection.
 void showJsonInspectionDialog({
@@ -27,8 +30,10 @@ void showJsonInspectionDialog({
                   children: [
                     Text(
                       AppLocalizations.of(context)!.chatJsonInspection,
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const Spacer(),
                     IconButton(
@@ -40,8 +45,20 @@ void showJsonInspectionDialog({
               ),
               const TabBar(
                 tabs: [
-                  Tab(text: 'Request'),
-                  Tab(text: 'Response'),
+                  Tab(
+                    child: ConstrainedText(
+                      'Request',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Tab(
+                    child: ConstrainedText(
+                      'Response',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
               Flexible(

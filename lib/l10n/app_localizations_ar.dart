@@ -476,7 +476,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم \$...\$ للصيغ المضمنة و\$\$...\$\$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.';
 
   @override
-  String get ocrDefaultImagesOnly => 'الافتراضي (إرسال الصور فقط)';
+  String get ocrDefaultImagesOnly => "الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -547,7 +547,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.';
+      "تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.";
 
   @override
   String get ocrInstructionManageEmpty => 'لا توجد تعليمات بعد';
@@ -1580,6 +1580,10 @@ class AppLocalizationsAr extends AppLocalizations {
       'هل تريد بالتأكيد مسح جميع المهام الفاشلة؟';
 
   @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.';
+
+  @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.';
 
@@ -2161,6 +2165,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatErrorDetailEmpty => 'لا تتوفر بيانات تفصيلية';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[تم إخفاء $count حرفًا من الوسط]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'إغلاق';
@@ -6427,19 +6436,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get providerBuiltinBadge => 'مدمج';
 
   @override
-  String get providerBuiltinTtsName => 'موفّر تحويل النص إلى كلام';
+  String get providerBuiltinTtsName => 'TTS (تحويل النص إلى كلام)';
 
   @override
-  String get providerBuiltinLlmName => 'موفّر LLM';
+  String get providerBuiltinLlmName => 'LLM (نموذج لغوي كبير)';
 
   @override
-  String get providerBuiltinOcrName => 'موفّر OCR';
+  String get providerBuiltinOcrName => 'OCR (التعرّف الضوئي على الحروف)';
 
   @override
-  String get providerBuiltinAsrName => 'موفّر التعرّف على الكلام';
+  String get providerBuiltinAsrName => 'STT (تحويل الكلام إلى نص)';
 
   @override
-  String get providerBuiltinMcpName => 'موفّر MCP';
+  String get providerBuiltinMcpName => 'MCP (بروتوكول سياق النموذج)';
 
   @override
   String get providerBuiltinSearchGroupName => 'بحث';
@@ -10635,6 +10644,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appLogDelete => 'حذف';
 
   @override
+  String get appLogDeleteUnconfirmed => 'تعذر تأكيد الحذف.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'تأكيد الحذف';
 
   @override
@@ -12575,7 +12587,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       'انسخ كل النص الظاهر في الصفحة حسب ترتيب القراءة الطبيعي. حافظ على النص غير الرياضي ومثّل الصيغ الرياضية باستخدام LaTeX؛ استخدم \$...\$ للصيغ المضمنة و\$\$...\$\$ للصيغ المنفصلة. أخرج النص المنسوخ فقط؛ ولا تضف شروحًا أو استنتاجات.';
 
   @override
-  String get ocrDefaultImagesOnly => 'الافتراضي (إرسال الصور فقط)';
+  String get ocrDefaultImagesOnly => "الافتراضي (دون تعليمات مخصصة؛ يُستخدم موجّه OCR الافتراضي)";
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -12646,7 +12658,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تختر أي تعليمات، فستُرسل الصورة فقط.';
+      "تُطبّق هذه التعليمات على جميع نماذج التعرّف. إذا لم تُحدَّد أي تعليمات، فلن تُضاف تعليمات مخصصة؛ وسيظل موجّه OCR الافتراضي مستخدمًا.";
 
   @override
   String get ocrInstructionManageEmpty => 'لا توجد تعليمات بعد';
@@ -13677,6 +13689,10 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   @override
   String get unifiedTaskListConfirmClearFailedMessage =>
       'هل تريد بالتأكيد مسح جميع المهام الفاشلة؟';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
@@ -18523,19 +18539,19 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   String get providerBuiltinBadge => 'مدمج';
 
   @override
-  String get providerBuiltinTtsName => 'موفّر تحويل النص إلى كلام';
+  String get providerBuiltinTtsName => 'TTS (تحويل النص إلى كلام)';
 
   @override
-  String get providerBuiltinLlmName => 'موفّر LLM';
+  String get providerBuiltinLlmName => 'LLM (نموذج لغوي كبير)';
 
   @override
-  String get providerBuiltinOcrName => 'موفّر OCR';
+  String get providerBuiltinOcrName => 'OCR (التعرّف الضوئي على الحروف)';
 
   @override
-  String get providerBuiltinAsrName => 'موفّر التعرّف على الكلام';
+  String get providerBuiltinAsrName => 'STT (تحويل الكلام إلى نص)';
 
   @override
-  String get providerBuiltinMcpName => 'موفّر MCP';
+  String get providerBuiltinMcpName => 'MCP (بروتوكول سياق النموذج)';
 
   @override
   String get providerBuiltinSearchGroupName => 'بحث';
@@ -22724,6 +22740,9 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get appLogDelete => 'حذف';
+
+  @override
+  String get appLogDeleteUnconfirmed => 'تعذر تأكيد الحذف.';
 
   @override
   String get appLogConfirmDeleteTitle => 'تأكيد الحذف';

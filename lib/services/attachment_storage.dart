@@ -9,10 +9,56 @@ import '../utils/image_send_compressor.dart' show CompressedImage;
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 
+class AttachmentDeleteRollbackException implements Exception {
+  const AttachmentDeleteRollbackException(
+      this.deleteError, this.rollbackErrors);
+
+  final Object deleteError;
+  final List<Object> rollbackErrors;
+
+  @override
+  String toString() =>
+      'Attachment deletion failed and ${rollbackErrors.length} file restore(s) failed: '
+      '$deleteError';
+}
+
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
   static const _uuid = Uuid();
   static DateTime Function() _now = DateTime.now;
+
+  @visibleForTesting
+  static Future<String> Function(String, Uint8List)? saveFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<String> Function(String, Uint8List)?
+      saveEditedFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<bool> Function(String)? deleteFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required String? conversationId,
+    required String hash,
+  })? deleteCompressedImageOverrideForTesting;
+
+  @visibleForTesting
+  static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<void> Function(String, Uint8List)?
+      restoreFileOverrideForTesting;
+
+  @visibleForTesting
+  static void resetOverridesForTesting() {
+    saveFileOverrideForTesting = null;
+    saveEditedFileOverrideForTesting = null;
+    deleteFileOverrideForTesting = null;
+    deleteCompressedImageOverrideForTesting = null;
+    readFileOverrideForTesting = null;
+    restoreFileOverrideForTesting = null;
+  }
 
   @visibleForTesting
   static set nowForTesting(DateTime Function() now) => _now = now;
@@ -55,6 +101,9 @@ class AttachmentStorage {
   }
 
   static Future<String> saveFile(String fileName, Uint8List bytes) async {
+    final override = saveFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     await AppLogService.info(
         'AttachmentStorage', '保存文件: $fileName, 大小: ${bytes.length} 字节');
     try {
@@ -90,6 +139,9 @@ class AttachmentStorage {
   /// readFile/deleteFile 通过 basename 即可正确解析（Web 端则因键名
   /// 本身就是 storagePath 而天然一致），标记仍保留用于移除/删除语义。
   static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
+    final override = saveEditedFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
     final storageName = _createStorageName(hash, ext);
@@ -105,6 +157,9 @@ class AttachmentStorage {
   }
 
   static Future<Uint8List?> readFile(String storagePath) async {
+    final override = readFileOverrideForTesting;
+    if (override != null) return override(storagePath);
+
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {
@@ -129,6 +184,9 @@ class AttachmentStorage {
   }
 
   static Future<bool> deleteFile(String storagePath) async {
+    final override = deleteFileOverrideForTesting;
+    if (override != null) return override(storagePath);
+
     await AppLogService.info('AttachmentStorage', '删除文件: $storagePath');
     try {
       if (kIsWeb) {
@@ -151,6 +209,65 @@ class AttachmentStorage {
       await AppLogService.error('AttachmentStorage', '删除文件失败: $storagePath', e);
       rethrow;
     }
+  }
+
+  /// Deletes a set of attachment files as one logical operation. If a delete
+  /// throws, bytes from files already deleted are restored at their original
+  /// storage paths before the error is rethrown.
+  static Future<void> deleteFilesWithRollback(
+      Iterable<String> storagePaths) async {
+    final paths = storagePaths.toList();
+    final originals = <String, Uint8List>{};
+    for (final path in paths) {
+      final bytes = await readFile(path);
+      if (bytes != null) originals[path] = bytes;
+    }
+
+    final deletedPaths = <String>[];
+    try {
+      for (final path in paths) {
+        // A storage delete can partially remove a file before throwing (for
+        // example, temp_edited files have two web keys). Include the current
+        // path in rollback before attempting deletion for that case.
+        deletedPaths.add(path);
+        await deleteFile(path);
+      }
+    } catch (deleteError) {
+      final rollbackErrors = <Object>[];
+      for (final path in deletedPaths.reversed) {
+        final bytes = originals[path];
+        if (bytes == null) continue;
+        try {
+          await _restoreFile(path, bytes);
+        } catch (restoreError) {
+          rollbackErrors.add(restoreError);
+          await AppLogService.error(
+            'AttachmentStorage',
+            '回滚附件删除失败: $path',
+            restoreError,
+          );
+        }
+      }
+      if (rollbackErrors.isNotEmpty) {
+        throw AttachmentDeleteRollbackException(deleteError, rollbackErrors);
+      }
+      rethrow;
+    }
+  }
+
+  static Future<void> _restoreFile(String storagePath, Uint8List bytes) async {
+    final override = restoreFileOverrideForTesting;
+    if (override != null) {
+      await override(storagePath, bytes);
+      return;
+    }
+
+    if (kIsWeb) {
+      await WebFileStore.write(_webKey(storagePath), bytes);
+      return;
+    }
+    final dir = await _storageDir;
+    await File(p.join(dir, p.basename(storagePath))).writeAsBytes(bytes);
   }
 
   static Future<String> getStorageDirPath() async {
@@ -283,6 +400,10 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
+    final override = deleteCompressedImageOverrideForTesting;
+    if (override != null) {
+      return override(conversationId: conversationId, hash: hash);
+    }
     if (!_isSafeConversationId(conversationId) ||
         !_isSafeCompressedCacheHash(hash)) {
       return false;

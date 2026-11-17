@@ -316,7 +316,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     ),
                     const SizedBox(width: 6),
                     Flexible(
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.chatEditWarning,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
