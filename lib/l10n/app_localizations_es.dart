@@ -467,7 +467,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Para las tablas, conserve los encabezados, las relaciones de filas y columnas, y las celdas vacías, y generelos como tablas Markdown. Mantenga el resto del contenido como texto normal. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateLatexLabel => 'Látex';
+  String get ocrTemplateLatexLabel => 'LaTeX';
 
   @override
   String get ocrTemplateLatexContent =>
@@ -12662,7 +12662,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       'Transcribe todo el texto visible en el orden de lectura natural de la página. Para las tablas, conserve los encabezados, las relaciones de filas y columnas, y las celdas vacías, y generelos como tablas Markdown. Mantenga el resto del contenido como texto normal. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateLatexLabel => 'Látex';
+  String get ocrTemplateLatexLabel => 'LaTeX';
 
   @override
   String get ocrTemplateLatexContent =>
