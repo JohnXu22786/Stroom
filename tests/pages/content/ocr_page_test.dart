@@ -4678,7 +4678,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('管理识别指令'), findsOneWidget);
-        expect(find.text('这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。'), findsOneWidget);
+        expect(find.text('这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。'),
+            findsOneWidget);
         expect(find.text('我的识别名称'), findsOneWidget);
         expect(find.text('保持原始提示文字'), findsOneWidget);
         expect(find.byTooltip('编辑指令'), findsOneWidget);
