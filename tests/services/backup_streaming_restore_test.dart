@@ -395,7 +395,11 @@ void main() {
         'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
         'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
         'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
-        'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(jsonEncode([oldExecution])),
+        ),
+        'task_state/task_list_last_read.json':
+            Uint8List.fromList(utf8.encode('{}')),
       };
       final archive = buildV2Archive(
         dataParts: [DataParts.tasks],
@@ -403,16 +407,25 @@ void main() {
         manifestOverrides: {
           'fileInventoryVersion': 1,
           'includeMediaFiles': false,
-          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+          'fileInventories': {
+            DataParts.tasks: [
+              {
+                'path': 'task_state/task_list_last_read.json',
+                'size': files['task_state/task_list_last_read.json']!.length,
+              },
+            ],
+          },
         },
       );
       final zipPath = await writeArchive(
         archive,
         'failed_task_flow_inventory_without_media.zip',
       );
-      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
-        BackupService.beforeRestoreBinaryPublishForTesting = null;
-        throw StateError('injected restore publish failure');
+      BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+        if (index == files.length - 1) {
+          BackupService.beforeRestoreBinaryPublishForTesting = null;
+          throw StateError('injected restore publish failure');
+        }
       };
 
       await expectLater(

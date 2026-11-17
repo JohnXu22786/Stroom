@@ -6690,7 +6690,7 @@ class BackupService {
           };
       const executionsFile = 'task_flows/executions.json';
       final cleanupReplacedExecutionArtifacts =
-          taskFiles.contains(executionsFile);
+          selection.includeMediaFiles && taskFiles.contains(executionsFile);
       final replacedExecutionIds = cleanupReplacedExecutionArtifacts
           ? await _taskFlowExecutionIdsToReplace()
           : const <String>{};
