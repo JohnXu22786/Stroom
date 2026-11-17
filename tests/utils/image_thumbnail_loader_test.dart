@@ -262,8 +262,11 @@ void main() {
           if (!releaseHash.isCompleted) releaseHash.complete();
           ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
           try {
-            await Future.wait([?heldLock, ?deletion, ?loading])
-                .timeout(const Duration(seconds: 5));
+            await Future.wait([
+              if (heldLock != null) heldLock,
+              if (deletion != null) deletion,
+              if (loading != null) loading,
+            ]).timeout(const Duration(seconds: 5));
           } catch (_) {}
         }
       });
@@ -340,8 +343,10 @@ void main() {
           ManifestDatabase.beforeWebDataSaveForTesting = null;
           ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
           try {
-            await Future.wait([?deletion, ?loading])
-                .timeout(const Duration(seconds: 5));
+            await Future.wait([
+              if (deletion != null) deletion,
+              if (loading != null) loading,
+            ]).timeout(const Duration(seconds: 5));
           } catch (_) {}
         }
       });
