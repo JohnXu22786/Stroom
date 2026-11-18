@@ -436,7 +436,9 @@ class TaskFlowExecutionService {
             inputFileName: entry.value.fileName,
             inputStoragePath: FlowPayload.isFileType(flow.inputType)
                 ? entry.value.ownedStoragePath
-                : null))
+                : null,
+            inputManifestStoragePath: entry.value.manifestStoragePath,
+            inputManifestType: entry.value.manifestType))
         .toList();
     if (!await _notifier.addExecutions(records)) {
       for (final record in records) {
@@ -538,7 +540,9 @@ class TaskFlowExecutionService {
             useLatestConfiguration: useLatestConfiguration);
       } on TaskFlowValidationException catch (error) {
         final original = _execution(id);
-        if (original?.inputStoragePath != null && error.isStorageError) {
+        if ((original?.inputStoragePath != null ||
+                original?.inputManifestStoragePath != null) &&
+            error.isStorageError) {
           await _persistRetryInputFailure(original!, error);
         }
         rethrow;
@@ -565,6 +569,8 @@ class TaskFlowExecutionService {
       inputType: original.inputType,
       inputFileName: original.inputFileName,
       inputStoragePath: original.inputStoragePath,
+      inputManifestStoragePath: original.inputManifestStoragePath,
+      inputManifestType: original.inputManifestType,
     );
     if (!await _notifier.addExecutions([failure])) {
       throw const TaskFlowPersistenceException('无法保存失败的输入重试记录');
@@ -586,7 +592,9 @@ class TaskFlowExecutionService {
           durationSec: e.inputDurationSec,
           mimeType: e.inputMimeType,
           fileName: e.inputFileName,
-          ownedStoragePath: e.inputStoragePath)
+          ownedStoragePath: e.inputStoragePath,
+          manifestStoragePath: e.inputManifestStoragePath,
+          manifestType: e.inputManifestType)
     ];
     if (useLatestConfiguration) {
       final latest = _ref
@@ -790,6 +798,8 @@ class TaskFlowExecutionService {
                 mimeType: current.inputMimeType,
                 fileName: current.inputFileName,
                 ownedStoragePath: current.inputStoragePath,
+                manifestStoragePath: current.inputManifestStoragePath,
+                manifestType: current.inputManifestType,
               )),
               flow.inputType,
               mimeType: current.inputMimeType,
@@ -1163,6 +1173,8 @@ class TaskFlowExecutionService {
                 mimeType: original.inputMimeType,
                 fileName: original.inputFileName,
                 ownedStoragePath: original.inputStoragePath,
+                manifestStoragePath: original.inputManifestStoragePath,
+                manifestType: original.inputManifestType,
               )),
               flow.inputType,
               mimeType: original.inputMimeType,

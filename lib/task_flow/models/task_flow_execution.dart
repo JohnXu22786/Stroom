@@ -13,13 +13,21 @@ class FlowRunInput {
 
   /// Picker copy retained while an execution can retry this input.
   final String? ownedStoragePath;
+  /// Stable key in an app media manifest, independent of its current resolved
+  /// path inside the application container.
+  final String? manifestStoragePath;
+  final FlowInputManifestType? manifestType;
   const FlowRunInput(
       {required this.text,
       this.durationSec = 0,
       this.mimeType,
       this.fileName,
-      this.ownedStoragePath});
+      this.ownedStoragePath,
+      this.manifestStoragePath,
+      this.manifestType});
 }
+
+enum FlowInputManifestType { image, audio, video }
 
 enum FlowExecutionStatus {
   waiting,
@@ -165,6 +173,8 @@ class TaskFlowExecution {
   final IOType? inputType;
   final String? inputFileName;
   final String? inputStoragePath;
+  final String? inputManifestStoragePath;
+  final FlowInputManifestType? inputManifestType;
   final bool queued;
   final String? batchId;
   final int batchIndex;
@@ -197,6 +207,8 @@ class TaskFlowExecution {
       this.inputType,
       this.inputFileName,
       this.inputStoragePath,
+      this.inputManifestStoragePath,
+      this.inputManifestType,
       this.queued = false,
       this.batchId,
       this.batchIndex = 0,
@@ -234,6 +246,9 @@ class TaskFlowExecution {
           inputType: inputType ?? this.inputType,
           inputFileName: inputFileName ?? this.inputFileName,
           inputStoragePath: inputStoragePath ?? this.inputStoragePath,
+          inputManifestStoragePath:
+              inputManifestStoragePath ?? this.inputManifestStoragePath,
+          inputManifestType: inputManifestType ?? this.inputManifestType,
           queued: queued ?? this.queued,
           batchId: batchId,
           batchIndex: batchIndex,
@@ -263,6 +278,10 @@ class TaskFlowExecution {
         if (inputType != null) 'inputType': inputType!.name,
         if (inputFileName != null) 'inputFileName': inputFileName,
         if (inputStoragePath != null) 'inputStoragePath': inputStoragePath,
+        if (inputManifestStoragePath != null)
+          'inputManifestStoragePath': inputManifestStoragePath,
+        if (inputManifestType != null)
+          'inputManifestType': inputManifestType!.name,
         if (batchId != null) 'batchId': batchId,
         'batchIndex': batchIndex,
         if (snapshot != null) 'snapshot': snapshot!.toMap()
@@ -291,6 +310,10 @@ class TaskFlowExecution {
               .firstOrNull,
           inputFileName: map['inputFileName'] as String?,
           inputStoragePath: map['inputStoragePath'] as String?,
+          inputManifestStoragePath: map['inputManifestStoragePath'] as String?,
+          inputManifestType: FlowInputManifestType.values
+              .where((type) => type.name == map['inputManifestType'])
+              .firstOrNull,
           batchId: map['batchId'] as String?,
           batchIndex: map['batchIndex'] as int? ?? 0,
           snapshot: map['snapshot'] is Map

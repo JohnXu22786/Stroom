@@ -7,7 +7,10 @@ import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
 import '../../services/attachment_storage.dart';
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
+import '../../utils/file_manifest.dart';
+import '../../utils/image_manifest.dart';
 import '../../utils/provider_models.dart';
+import '../../utils/video_manifest.dart';
 import '../../utils/web_file_store.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_payload.dart';
@@ -51,6 +54,22 @@ class TaskFlowValidationException implements Exception {
 /// Native execution records may outlive the app-container path that was
 /// current when the picker first selected the file.
 Future<String> resolveTaskFlowInputReference(FlowRunInput input) async {
+  final manifestPath = input.manifestStoragePath;
+  final manifestType = input.manifestType;
+  if (manifestPath != null && manifestType != null) {
+    final path = switch (manifestType) {
+      FlowInputManifestType.image =>
+        await ImageManifest.readFilePath(manifestPath),
+      FlowInputManifestType.audio =>
+        await FileManifest.readFilePath(manifestPath),
+      FlowInputManifestType.video =>
+        await VideoManifest.readFilePath(manifestPath),
+    };
+    if (path == null || path.isEmpty) {
+      throw FileSystemException('Manifest input is missing', manifestPath);
+    }
+    return path;
+  }
   final storagePath = input.ownedStoragePath;
   if (storagePath == null) return input.text;
   if (kIsWeb) return storagePath;

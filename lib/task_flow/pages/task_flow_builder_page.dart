@@ -122,6 +122,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   final Map<String, String> _inputDisplayNames = {};
   final Map<String, String> _inputMimeTypes = {};
   final Map<String, String> _ownedStoragePaths = {};
+  final Map<String, String> _manifestStoragePaths = {};
+  final Map<String, FlowInputManifestType> _manifestTypes = {};
   final Set<String> _unsubmittedFileInputs = {};
 
   final _chain = TaskFlowChainEditor();
@@ -184,6 +186,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         if (initialInput.ownedStoragePath != null)
           _ownedStoragePaths[initialInput.text] =
               initialInput.ownedStoragePath!;
+        if (initialInput.manifestStoragePath != null &&
+            initialInput.manifestType != null) {
+          _manifestStoragePaths[initialInput.text] =
+              initialInput.manifestStoragePath!;
+          _manifestTypes[initialInput.text] = initialInput.manifestType!;
+        }
       } else if (_firstBlockDef?.typeKey == BlockType.catcatch) {
         final entry = _CatCatchInputEntry();
         entry.urlController.text = initialInput.text;
@@ -1266,6 +1274,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                             final reference = _mediaInputs[i];
                             setState(() {
                               _inputDisplayNames.remove(reference);
+                              _inputMimeTypes.remove(reference);
+                              _manifestStoragePaths.remove(reference);
+                              _manifestTypes.remove(reference);
                               _mediaInputs.removeAt(i);
                             });
                             if (_unsubmittedFileInputs.contains(reference)) {
@@ -1541,6 +1552,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             fileIconColor: Colors.blue,
             loadRecords: ImageManifest.loadRecords,
             loadFolders: ImageManifest.getAllFolders,
+            manifestType: FlowInputManifestType.image,
             resolvePath: (r) => ImageManifest.readFilePath(r.storagePath),
           );
         case IOType.audio:
@@ -1552,6 +1564,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             fileIconColor: Colors.green,
             loadRecords: FileManifest.loadRecords,
             loadFolders: FileManifest.getAllFolders,
+            manifestType: FlowInputManifestType.audio,
             resolvePath: (r) => FileManifest.readFilePath(r.storagePath),
           );
         case IOType.video:
@@ -1563,6 +1576,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             fileIconColor: Colors.orange,
             loadRecords: VideoManifest.loadRecords,
             loadFolders: VideoManifest.getAllFolders,
+            manifestType: FlowInputManifestType.video,
             resolvePath: (r) => VideoManifest.readFilePath(r.storagePath),
           );
         case IOType.file:
@@ -1702,10 +1716,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     required Color fileIconColor,
     required Future<List<T>> Function() loadRecords,
     required Future<Set<String>> Function() loadFolders,
+    required FlowInputManifestType manifestType,
     required Future<String?> Function(T record) resolvePath,
   }) async {
     final paths = <String>[];
     final names = <String, String>{};
+    final manifestPaths = <String, String>{};
     var unresolvedRecords = 0;
     // Multi-select path-only mode: no readFile — the dialog resolves each
     // record's path via onRecordsPicked without buffering the files.
@@ -1741,6 +1757,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             if (path != null && path.isNotEmpty) {
               paths.add(path);
               final dynamic named = record;
+              final storagePath = named.storagePath as String?;
+              if (storagePath != null && storagePath.isNotEmpty) {
+                manifestPaths[path] = storagePath;
+              }
               final name = named.name as String?;
               final format = named.format as String?;
               if (name != null && name.isNotEmpty) {
@@ -1781,6 +1801,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       for (final path in fresh) {
         final name = names[path];
         if (name != null) _inputDisplayNames[path] = name;
+        final manifestPath = manifestPaths[path];
+        if (manifestPath != null) {
+          _manifestStoragePaths[path] = manifestPath;
+          _manifestTypes[path] = manifestType;
+        }
       }
     });
   }
@@ -1812,6 +1837,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             mimeType: _inputMimeTypes[path],
             fileName: _inputDisplayNames[path],
             ownedStoragePath: _ownedStoragePaths[path],
+            manifestStoragePath: _manifestStoragePaths[path],
+            manifestType: _manifestTypes[path],
           ),
       ];
     }
