@@ -210,7 +210,8 @@ void main() {
           'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
         },
       );
-      final zipPath = await writeArchive(archive, 'task_flow_without_media.zip');
+      final zipPath =
+          await writeArchive(archive, 'task_flow_without_media.zip');
 
       await BackupService.restoreBackup(zipPath, selection: selection);
 
@@ -220,8 +221,8 @@ void main() {
       final restoredExecution = restored.single as Map;
       expect(restoredExecution['inputStoragePath'], isNull);
       expect(restoredExecution['inputText'], isNull);
-      final result = (restoredExecution['subTasks'] as List).single['result']
-          as Map;
+      final result =
+          (restoredExecution['subTasks'] as List).single['result'] as Map;
       expect(result['fileReference'], isNull);
       expect(result['temporaryArtifact'], isNull);
     },
