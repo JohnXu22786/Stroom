@@ -13,6 +13,7 @@ class FlowRunInput {
 
   /// Picker copy retained while an execution can retry this input.
   final String? ownedStoragePath;
+
   /// Stable key in an app media manifest, independent of its current resolved
   /// path inside the application container.
   final String? manifestStoragePath;
@@ -291,15 +292,19 @@ class TaskFlowExecution {
           id: map['id'] as String?,
           flowId: map['flowId'] as String? ?? '',
           flowName: map['flowName'] as String? ?? '',
-          status: FlowExecutionStatus.values
+          status: FlowExecutionStatus
+                  .values
                   .where((s) => s.name == map['status'])
                   .firstOrNull ??
               FlowExecutionStatus.running,
           createdAt: DateTime.tryParse(map['createdAt'] as String? ?? ''),
           completedAt: DateTime.tryParse(map['completedAt'] as String? ?? ''),
-          subTasks: (map['subTasks'] as List? ?? [])
-              .map((s) =>
-                  FlowSubTask.fromMap(Map<String, dynamic>.from(s as Map)))
+          subTasks: (map['subTasks']
+                      as List? ??
+                  [])
+              .map(
+                  (s) =>
+                      FlowSubTask.fromMap(Map<String, dynamic>.from(s as Map)))
               .toList(),
           error: map['error'] as String?,
           inputText: map['inputText'] as String? ?? '',

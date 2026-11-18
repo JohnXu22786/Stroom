@@ -113,7 +113,8 @@ void main() {
           record.storagePath,
           Uint8List.fromList([1, 2, 3, 4]),
         );
-        final manifestPath = await ImageManifest.readFilePath(record.storagePath);
+        final manifestPath =
+            await ImageManifest.readFilePath(record.storagePath);
         expect(manifestPath, isNotNull);
 
         final resolved = await resolveTaskFlowInputReference(
