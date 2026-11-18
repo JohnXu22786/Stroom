@@ -2000,8 +2000,14 @@ class BackupService {
     Object? value, {
     required String appDir,
     required bool restoring,
+    bool removePortablePaths = false,
   }) {
     if (value is String) {
+      if (restoring &&
+          removePortablePaths &&
+          value.startsWith(_portableAppDataPathPrefix)) {
+        return null;
+      }
       if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         if (!_isSafeRelativeArchivePath(relative)) return value;
@@ -2038,17 +2044,37 @@ class BackupService {
               child,
               appDir: appDir,
               restoring: restoring,
+              removePortablePaths: removePortablePaths,
             ),
           )
           .toList();
     }
     if (value is Map) {
-      return value.map(
+      final mapped = value.map(
         (key, child) => MapEntry(
           key,
-          _mapPortableTaskPaths(child, appDir: appDir, restoring: restoring),
+          _mapPortableTaskPaths(
+            child,
+            appDir: appDir,
+            restoring: restoring,
+            removePortablePaths: removePortablePaths,
+          ),
         ),
       );
+      if (restoring && removePortablePaths) {
+        mapped.removeWhere((key, _) {
+          final originalValue = value[key];
+          return originalValue is String &&
+              originalValue.startsWith(_portableAppDataPathPrefix);
+        });
+        // A temporary artifact is only meaningful while its file reference
+        // exists. Drop the ownership marker together with the omitted file.
+        mapped.removeWhere((key, child) =>
+            key == 'temporaryArtifact' &&
+            child is Map &&
+            !child.containsKey('reference'));
+      }
+      return mapped;
     }
     return value;
   }
@@ -2083,6 +2109,7 @@ class BackupService {
           decoded,
           appDir: appDir,
           restoring: true,
+          removePortablePaths: !selection.includeMediaFiles,
         );
         final restoredJson = jsonEncode(restored);
         if (isWebStore) {

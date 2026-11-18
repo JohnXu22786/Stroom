@@ -147,6 +147,88 @@ void main() {
   }
 
   test(
+    'no-media restore removes unavailable task-flow file references',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      final execution = {
+        'id': 'missing-media-execution',
+        'flowId': 'flow',
+        'flowName': 'Flow',
+        'status': 'paused',
+        'createdAt': DateTime(2026).toIso8601String(),
+        'inputText': 'stroom-app-data:/attachments/input.wav',
+        'inputStoragePath': 'stroom-app-data:/attachments/input.wav',
+        'subTasks': [
+          {
+            'blockTypeKey': 'audio',
+            'blockLabel': 'Audio',
+            'subTaskId': 'audio-step',
+            'subTaskType': 'audio',
+            'result': {
+              'type': 'audio',
+              'text': '',
+              'fileReference':
+                  'stroom-app-data:/task_flow_temporary/execution/block/output.wav',
+              'temporaryArtifact': {
+                'executionId': 'missing-media-execution',
+                'blockId': 'block',
+                'reference':
+                    'stroom-app-data:/task_flow_temporary/execution/block/output.wav',
+              },
+            },
+          },
+        ],
+      };
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json':
+            Uint8List.fromList(utf8.encode(jsonEncode([execution]))),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath =
+          await writeArchive(archive, 'task_flow_without_media.zip');
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      final restored = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      final restoredExecution = restored.single as Map;
+      expect(restoredExecution['inputStoragePath'], isNull);
+      expect(restoredExecution['inputText'], isNull);
+      final result =
+          (restoredExecution['subTasks'] as List).single['result'] as Map;
+      expect(result['fileReference'], isNull);
+      expect(result['temporaryArtifact'], isNull);
+    },
+  );
+
+  test(
     'restore removes artifacts for replaced executions before restoring archived outputs',
     () async {
       WebFileStore.enableTestMode();
