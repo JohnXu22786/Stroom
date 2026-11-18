@@ -27,12 +27,96 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
 }
 
 Future<void> _waitForFileDeletion(WidgetTester tester, File file) async {
+  await tester.pump();
   await tester.runAsync(() async {
     for (var i = 0; i < 100 && file.existsSync(); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
   });
   await tester.pump();
+}
+
+Future<bool> _waitForSignal(
+  WidgetTester tester,
+  Completer<void> signal,
+) async {
+  await tester.pump();
+  final completed = await tester.runAsync(() async {
+    try {
+      await signal.future.timeout(const Duration(seconds: 2));
+      return true;
+    } on TimeoutException {
+      return false;
+    }
+  });
+  await tester.pump();
+  return completed ?? false;
+}
+
+Future<void> _tearDownVideoTest({
+  required WidgetTester tester,
+  required _BlockingDisposalVideoPlayerPlatform videoPlatform,
+  required PathProviderPlatform previousPathProvider,
+  required VideoPlayerPlatform previousVideoPlatform,
+  required Directory tempDir,
+  File? previewFile,
+}) async {
+  try {
+    await tester.pumpWidget(const SizedBox.shrink());
+    if (!videoPlatform.finishDispose.isCompleted) {
+      videoPlatform.finishDispose.complete();
+    }
+    if (videoPlatform.createStarted.isCompleted &&
+        !videoPlatform.finishCreate.isCompleted) {
+      videoPlatform.finishCreate.complete();
+    }
+    await tester.pump();
+
+    final disposed = await tester.runAsync(() async {
+      try {
+        if (videoPlatform.createStarted.isCompleted) {
+          await videoPlatform.createFinished.future.timeout(
+            const Duration(seconds: 2),
+          );
+        }
+        if (videoPlatform.playerCreated.isCompleted) {
+          await videoPlatform.disposeStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          await videoPlatform.disposeFinished.future.timeout(
+            const Duration(seconds: 2),
+          );
+        }
+        if (previewFile != null) {
+          for (var i = 0; i < 100 && previewFile.existsSync(); i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        }
+        return previewFile == null || !previewFile.existsSync();
+      } on TimeoutException {
+        return false;
+      }
+    });
+    await tester.pump();
+    expect(disposed, isTrue, reason: 'video preview cleanup did not finish');
+  } finally {
+    if (!videoPlatform.finishDispose.isCompleted) {
+      videoPlatform.finishDispose.complete();
+    }
+    if (videoPlatform.createStarted.isCompleted &&
+        !videoPlatform.finishCreate.isCompleted) {
+      videoPlatform.finishCreate.complete();
+    }
+    try {
+      await videoPlatform.close().timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      // Keep shared plugin state isolated even if a broken subscription hangs.
+    } finally {
+      PathProviderPlatform.instance = previousPathProvider;
+      VideoPlayerPlatform.instance = previousVideoPlatform;
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    }
+  }
 }
 
 void main() {
@@ -109,17 +193,17 @@ void main() {
         tempDir.path,
       );
       VideoPlayerPlatform.instance = videoPlatform;
-      addTearDown(() async {
-        if (!videoPlatform.finishDispose.isCompleted) {
-          videoPlatform.finishDispose.complete();
-        }
-        PathProviderPlatform.instance = previousPathProvider;
-        VideoPlayerPlatform.instance = previousVideoPlatform;
-        tempDir.deleteSync(recursive: true);
-        await videoPlatform.close();
-      });
-
       File? previewFile;
+      addTearDown(
+        () => _tearDownVideoTest(
+          tester: tester,
+          videoPlatform: videoPlatform,
+          previousPathProvider: previousPathProvider,
+          previousVideoPlatform: previousVideoPlatform,
+          tempDir: tempDir,
+          previewFile: previewFile,
+        ),
+      );
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -155,7 +239,8 @@ void main() {
       expect(videoPlatform.playerInitialized.isCompleted, isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await _pumpUntil(tester, () => videoPlatform.disposeStarted.isCompleted);
+      expect(
+          await _waitForSignal(tester, videoPlatform.disposeStarted), isTrue);
       expect(videoPlatform.disposeStarted.isCompleted, isTrue);
       expect(previewFile!.existsSync(), isTrue);
 
@@ -179,17 +264,17 @@ void main() {
         tempDir.path,
       );
       VideoPlayerPlatform.instance = videoPlatform;
-      addTearDown(() async {
-        if (!videoPlatform.finishDispose.isCompleted) {
-          videoPlatform.finishDispose.complete();
-        }
-        PathProviderPlatform.instance = previousPathProvider;
-        VideoPlayerPlatform.instance = previousVideoPlatform;
-        tempDir.deleteSync(recursive: true);
-        await videoPlatform.close();
-      });
-
       File? previewFile;
+      addTearDown(
+        () => _tearDownVideoTest(
+          tester: tester,
+          videoPlatform: videoPlatform,
+          previousPathProvider: previousPathProvider,
+          previousVideoPlatform: previousVideoPlatform,
+          tempDir: tempDir,
+          previewFile: previewFile,
+        ),
+      );
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -218,7 +303,9 @@ void main() {
       );
       expect(videoPlatform.videoEventsRequested.isCompleted, isTrue);
       videoPlatform.emitInitializationFailure();
-      await _pumpUntil(tester, () => videoPlatform.disposeStarted.isCompleted);
+      await tester.pump();
+      expect(
+          await _waitForSignal(tester, videoPlatform.disposeStarted), isTrue);
       expect(videoPlatform.disposeStarted.isCompleted, isTrue);
       expect(previewFile!.existsSync(), isTrue);
 
@@ -247,17 +334,17 @@ void main() {
         tempDir.path,
       );
       VideoPlayerPlatform.instance = videoPlatform;
-      addTearDown(() async {
-        if (!videoPlatform.finishDispose.isCompleted) {
-          videoPlatform.finishDispose.complete();
-        }
-        PathProviderPlatform.instance = previousPathProvider;
-        VideoPlayerPlatform.instance = previousVideoPlatform;
-        tempDir.deleteSync(recursive: true);
-        await videoPlatform.close();
-      });
-
       File? previewFile;
+      addTearDown(
+        () => _tearDownVideoTest(
+          tester: tester,
+          videoPlatform: videoPlatform,
+          previousPathProvider: previousPathProvider,
+          previousVideoPlatform: previousVideoPlatform,
+          tempDir: tempDir,
+          previewFile: previewFile,
+        ),
+      );
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -283,13 +370,81 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
       expect(previewFile, isNotNull);
+      await _waitForFileDeletion(tester, previewFile!);
+      expect(previewFile!.existsSync(), isFalse);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       expect(videoPlatform.pauseCalls, 0);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    },
+  );
+
+  testWidgets(
+    'cleans up when player creation fails after the sheet is closed',
+    (tester) async {
+      final temporaryDirectory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp(
+          'media_preview_video_create_pending_',
+        ),
+      );
+      final tempDir = temporaryDirectory!;
+      final previousPathProvider = PathProviderPlatform.instance;
+      final previousVideoPlatform = VideoPlayerPlatform.instance;
+      final videoPlatform = _BlockingDisposalVideoPlayerPlatform(
+        failCreation: true,
+        blockCreation: true,
+      );
+      PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
+        tempDir.path,
+      );
+      VideoPlayerPlatform.instance = videoPlatform;
+      File? previewFile;
+      addTearDown(
+        () => _tearDownVideoTest(
+          tester: tester,
+          videoPlatform: videoPlatform,
+          previousPathProvider: previousPathProvider,
+          previousVideoPlatform: previousVideoPlatform,
+          tempDir: tempDir,
+          previewFile: previewFile,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: MediaPreviewSheet(
+                resource: MediaResource(
+                  url: 'https://example.com/preview.mp4',
+                  name: 'sample',
+                  ext: 'mp4',
+                ),
+                taskTitle: 'Preview',
+                downloadToFile: (_, file) async {
+                  previewFile = file;
+                  file.writeAsBytesSync([1, 2, 3, 4]);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(await _waitForSignal(tester, videoPlatform.createStarted), isTrue);
+      expect(previewFile!.existsSync(), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(previewFile!.existsSync(), isTrue);
+      videoPlatform.finishCreate.complete();
+      expect(
+          await _waitForSignal(tester, videoPlatform.createFinished), isTrue);
       await _waitForFileDeletion(tester, previewFile!);
+
       expect(previewFile!.existsSync(), isFalse);
+      expect(videoPlatform.disposeStarted.isCompleted, isFalse);
     },
   );
 
@@ -307,17 +462,17 @@ void main() {
       tempDir.path,
     );
     VideoPlayerPlatform.instance = videoPlatform;
-    addTearDown(() async {
-      if (!videoPlatform.finishDispose.isCompleted) {
-        videoPlatform.finishDispose.complete();
-      }
-      PathProviderPlatform.instance = previousPathProvider;
-      VideoPlayerPlatform.instance = previousVideoPlatform;
-      tempDir.deleteSync(recursive: true);
-      await videoPlatform.close();
-    });
-
     File? previewFile;
+    addTearDown(
+      () => _tearDownVideoTest(
+        tester: tester,
+        videoPlatform: videoPlatform,
+        previousPathProvider: previousPathProvider,
+        previousVideoPlatform: previousVideoPlatform,
+        tempDir: tempDir,
+        previewFile: previewFile,
+      ),
+    );
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
@@ -345,7 +500,7 @@ void main() {
     expect(videoPlatform.playerCreated.isCompleted, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await _pumpUntil(tester, () => videoPlatform.disposeStarted.isCompleted);
+    expect(await _waitForSignal(tester, videoPlatform.disposeStarted), isTrue);
 
     expect(videoPlatform.disposeStarted.isCompleted, isTrue);
     expect(previewFile!.existsSync(), isTrue);
@@ -371,17 +526,17 @@ void main() {
         tempDir.path,
       );
       VideoPlayerPlatform.instance = videoPlatform;
-      addTearDown(() async {
-        if (!videoPlatform.finishDispose.isCompleted) {
-          videoPlatform.finishDispose.complete();
-        }
-        PathProviderPlatform.instance = previousPathProvider;
-        VideoPlayerPlatform.instance = previousVideoPlatform;
-        tempDir.deleteSync(recursive: true);
-        await videoPlatform.close();
-      });
-
       File? previewFile;
+      addTearDown(
+        () => _tearDownVideoTest(
+          tester: tester,
+          videoPlatform: videoPlatform,
+          previousPathProvider: previousPathProvider,
+          previousVideoPlatform: previousVideoPlatform,
+          tempDir: tempDir,
+          previewFile: previewFile,
+        ),
+      );
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -414,15 +569,15 @@ void main() {
       expect(videoPlatform.videoEventsRequested.isCompleted, isTrue);
       videoPlatform.emitInitializationFailure();
       await tester.pump();
-      await tester.pump();
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
-
-      await _waitForFileDeletion(tester, previewFile!);
-      expect(previewFile!.existsSync(), isFalse);
-      expect(videoPlatform.disposeStarted.isCompleted, isTrue);
+      expect(
+          await _waitForSignal(tester, videoPlatform.disposeStarted), isTrue);
+      expect(previewFile!.existsSync(), isTrue);
       expect(videoPlatform.finishDispose.isCompleted, isFalse);
-      await tester.pumpWidget(const SizedBox.shrink());
+
       videoPlatform.finishDispose.complete();
+      await _waitForFileDeletion(tester, previewFile!);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(previewFile!.existsSync(), isFalse);
     },
   );
 }
@@ -431,15 +586,21 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
   _BlockingDisposalVideoPlayerPlatform({
     this.failCreation = false,
     this.returnNullCreation = false,
+    this.blockCreation = false,
   });
 
   final bool failCreation;
   final bool returnNullCreation;
+  final bool blockCreation;
   final StreamController<VideoEvent> _events =
       StreamController<VideoEvent>.broadcast(sync: true);
   final Completer<void> disposeStarted = Completer<void>();
   final Completer<void> finishDispose = Completer<void>();
+  final Completer<void> disposeFinished = Completer<void>();
   final Completer<void> playerCreated = Completer<void>();
+  final Completer<void> createStarted = Completer<void>();
+  final Completer<void> finishCreate = Completer<void>();
+  final Completer<void> createFinished = Completer<void>();
   final Completer<void> videoEventsRequested = Completer<void>();
   final Completer<void> playerInitialized = Completer<void>();
   int pauseCalls = 0;
@@ -468,15 +629,23 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<int?> createWithOptions(VideoCreationOptions options) async {
-    if (failCreation) {
-      throw PlatformException(
-        code: 'create_failed',
-        message: 'Player creation failed',
-      );
+    if (blockCreation) {
+      createStarted.complete();
+      await finishCreate.future;
     }
-    playerCreated.complete();
-    if (returnNullCreation) return null;
-    return 1;
+    try {
+      if (failCreation) {
+        throw PlatformException(
+          code: 'create_failed',
+          message: 'Player creation failed',
+        );
+      }
+      playerCreated.complete();
+      if (returnNullCreation) return null;
+      return 1;
+    } finally {
+      createFinished.complete();
+    }
   }
 
   @override
@@ -517,6 +686,10 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
   @override
   Future<void> dispose(int playerId) async {
     disposeStarted.complete();
-    await finishDispose.future;
+    try {
+      await finishDispose.future;
+    } finally {
+      disposeFinished.complete();
+    }
   }
 }

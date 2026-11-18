@@ -147,6 +147,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
   AudioPlayer? _audioPlayer;
   Future<void>? _videoInitialization;
   bool _videoInitializationFailed = false;
+  bool _videoInitializationFailedBeforePlayerCreation = false;
   bool _wasVideoPlayingBeforePause = false;
   Future<void>? _videoPreviewDisposal;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
@@ -361,12 +362,16 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
   Future<void> _initializeVideoPreview(VideoPlayerController controller) async {
     _videoPlayerController = controller;
     _videoInitializationFailed = false;
+    _videoInitializationFailedBeforePlayerCreation = false;
     final initialization = controller.initialize();
     _videoInitialization = initialization;
     try {
       await initialization;
     } catch (_) {
       _videoInitializationFailed = true;
+      _videoInitializationFailedBeforePlayerCreation =
+          !_videoPlayerWasCreated(controller) &&
+              controller.value.errorDescription == null;
       rethrow;
     } finally {
       _videoInitialization = null;
@@ -427,33 +432,24 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
     final controller = _videoPlayerController;
     var canDeleteTempFile = controller == null;
     if (controller != null) {
-      final creationFailed =
-          _videoInitializationFailed && !_videoPlayerWasCreated(controller);
-      if (creationFailed) {
-        // video_player leaves its creation completer unresolved when
-        // createWithOptions throws. With background playback enabled above,
-        // there is no lifecycle observer or platform player to release here.
-        unawaited(controller.dispose().catchError((_) {}));
+      final initialization = _videoInitialization;
+      if (!_videoPlayerWasCreated(controller) && initialization != null) {
+        try {
+          await initialization;
+        } catch (_) {}
+      }
+
+      if (_videoInitializationFailedBeforePlayerCreation) {
+        // video_player leaves its creation completer unresolved when player
+        // creation fails before a player ID or event subscription is assigned.
+        // Its dispose waits on that completer; background playback also avoids
+        // registering the plugin's lifecycle observer on this path.
         canDeleteTempFile = true;
       } else {
-        final disposal = controller.dispose();
-        final initialization = _videoInitialization;
-        var failedBeforeCreation = false;
-        if (initialization != null) {
-          try {
-            await Future.any<void>([disposal, initialization]);
-          } catch (_) {
-            failedBeforeCreation = !_videoPlayerWasCreated(controller);
-          }
-        }
-        if (failedBeforeCreation) {
+        try {
+          await controller.dispose();
           canDeleteTempFile = true;
-        } else {
-          try {
-            await disposal;
-            canDeleteTempFile = true;
-          } catch (_) {}
-        }
+        } catch (_) {}
       }
     }
     _videoPlayerController = null;
