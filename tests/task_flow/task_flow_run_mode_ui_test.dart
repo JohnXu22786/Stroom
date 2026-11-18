@@ -87,13 +87,6 @@ class _CaptureControl implements TaskFlowExecutionService {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<T> _awaitPickerTestStage<T>(String stage, Future<T> future) async {
-  debugPrint('[TaskFlow manifest picker] $stage started');
-  final result = await future;
-  debugPrint('[TaskFlow manifest picker] $stage completed');
-  return result;
-}
-
 /// Pumps the builder page in run mode with a preloaded single-block flow.
 Future<String> _pumpRunMode(
   WidgetTester tester,
@@ -219,10 +212,8 @@ void main() {
       ManifestDatabase.enableTestMode();
       ImageManifest.invalidateCache();
       final previousDocuments = PathProviderPlatform.instance;
-      final directory = await _awaitPickerTestStage(
-        'create temporary directory',
-        Directory.systemTemp.createTemp('flow_manifest_picker_'),
-      );
+      final directory =
+          Directory.systemTemp.createTempSync('flow_manifest_picker_');
       PathProviderPlatform.instance = _Documents(directory.path);
       final record = ImageRecord(
         id: 'picked-image',
@@ -233,83 +224,44 @@ void main() {
         size: 4,
       );
       addTearDown(() async {
-        await _awaitPickerTestStage(
-          'delete manifest file',
-          ImageManifest.deleteFile(record.storagePath),
-        );
-        await _awaitPickerTestStage(
-          'clear manifest database',
-          ManifestDatabase.clearAllData(),
-        );
+        await ImageManifest.deleteFile(record.storagePath);
+        await ManifestDatabase.clearAllData();
         ImageManifest.invalidateCache();
         PathProviderPlatform.instance = previousDocuments;
-        await _awaitPickerTestStage(
-          'delete temporary directory',
-          directory.delete(recursive: true),
-        );
+        directory.deleteSync(recursive: true);
       });
-      await _awaitPickerTestStage(
-        'add manifest record',
-        ImageManifest.addRecord(record),
-      );
-      final resolvedPath = await _awaitPickerTestStage(
-        'write manifest file',
-        ImageManifest.writeFile(
-          record.storagePath,
-          Uint8List.fromList([1, 2, 3, 4]),
-        ),
+      await ImageManifest.addRecord(record);
+      final resolvedPath = await ImageManifest.writeFile(
+        record.storagePath,
+        Uint8List.fromList([1, 2, 3, 4]),
       );
 
       final control = _CaptureControl();
-      await _awaitPickerTestStage(
-        'mount TaskFlow page',
-        _pumpRunMode(
-          tester,
-          TaskFlowBlock(typeKey: BlockType.ocr),
-          control: control,
-        ),
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.ocr),
+        control: control,
       );
-      await _awaitPickerTestStage(
-        'tap app media picker',
-        tester.tap(find.text('选择图片（可多选）')),
-      );
-      await _awaitPickerTestStage('pump picker frame', tester.pump());
-      await _awaitPickerTestStage(
-        'pump picker transition',
-        tester.pump(const Duration(milliseconds: 300)),
-      );
-      await _awaitPickerTestStage('settle picker frame', tester.pump());
+      await tester.tap(find.text('选择图片（可多选）'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
       expect(find.text('Picked image'), findsOneWidget);
-      await _awaitPickerTestStage(
-        'select manifest image',
-        tester.tap(find.text('Picked image')),
-      );
-      await _awaitPickerTestStage(
-        'confirm media selection',
-        tester.tap(find.byKey(const Key('media_picker_confirm_btn'))),
-      );
-      await _awaitPickerTestStage('pump confirmation frame', tester.pump());
-      await _awaitPickerTestStage(
-        'pump confirmation transition',
-        tester.pump(const Duration(milliseconds: 300)),
-      );
-      await _awaitPickerTestStage('settle confirmation frame', tester.pump());
-      await _awaitPickerTestStage(
-        'launch task flow',
-        tester.tap(find.widgetWithText(FilledButton, '开始任务流')),
-      );
+      await tester.tap(find.text('Picked image'));
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
       // Starting pushes the run page, which may keep scheduled frames active.
-      await _awaitPickerTestStage('pump launch frame', tester.pump());
+      await tester.pump();
 
       final submitted = control.submitted!.single;
       expect(submitted.text, resolvedPath);
       expect(submitted.manifestStoragePath, record.storagePath);
       expect(submitted.manifestType, FlowInputManifestType.image);
       expect(submitted.ownedStoragePath, isNull);
-      await _awaitPickerTestStage(
-        'dispose TaskFlow page',
-        tester.pumpWidget(const SizedBox.shrink()),
-      );
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('a restored generic file input stays a picked file', (
