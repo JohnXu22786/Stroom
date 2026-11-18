@@ -917,7 +917,7 @@ void main() {
       'missing-startup-preferences.zip',
     );
     final missingPreferenceRecoveryDirectory = Directory(
-      '$appDir/.stroom-restore-missing-preferences',
+      '$appDir/.stroom-restore-rollback-missing-preferences',
     );
     await missingPreferenceRecoveryDirectory.create();
     await File(missingPreferenceSnapshot).copy(
@@ -982,7 +982,7 @@ void main() {
       'structured-only-media.zip',
     );
     final structuredOnlyRecoveryDirectory = Directory(
-      '$appDir/.stroom-restore-structured-only',
+      '$appDir/.stroom-restore-rollback-structured-only',
     );
     await structuredOnlyRecoveryDirectory.create();
     await File(structuredOnlySnapshot).copy(
