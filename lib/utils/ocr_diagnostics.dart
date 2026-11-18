@@ -165,6 +165,10 @@ class OcrDiagnosticSnapshot {
     r'''(?:api[\s_-]*key|private[_-]?key|client[_-]?secret|secret[_-]?key|(?:^|[^a-z0-9])key|token|access[_-]?token|refresh[_-]?token|authorization|bearer|password|secret)["']?\s*[:=]''',
     caseSensitive: false,
   );
+  static final _labeledCredentialAssignment = RegExp(
+    r'''((?:^|[^a-z0-9])(?:api[\s_-]*key|private[_-]?key|client[_-]?secret|secret[_-]?key|key|access[_-]?token|refresh[_-]?token|token|authorization|bearer|password|secret)["']?\s*[:=]\s*)(?:Bearer\s+\S+|Basic\s+\S+|"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)''',
+    caseSensitive: false,
+  );
   static final _credentialValue = RegExp(
     r'(?:Bearer\s+\S+|sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})',
     caseSensitive: false,
@@ -240,6 +244,13 @@ class OcrDiagnosticSnapshot {
       ..._credentialValuesFromBody(rawRequest['body']),
     }.toList(growable: false);
   }
+
+  /// Redacts recognizable credential assignments in opaque provider text.
+  static String redactLabeledCredentialAssignments(String value) =>
+      value.replaceAllMapped(
+        _labeledCredentialAssignment,
+        (match) => '${match[1]}[REDACTED]',
+      );
 
   static List<String> _credentialValuesFromBody(dynamic rawBody) {
     final values = <String>{};

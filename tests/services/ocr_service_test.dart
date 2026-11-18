@@ -2634,6 +2634,65 @@ void main() {
         );
       });
 
+      test(
+        'recognize redacts labeled credentials in plain-text HTTP errors',
+        () async {
+          const credential = 'opaque-plaintext-response-secret-r90';
+          const safeDetail =
+              'upstream unavailable; api_key: $credential retry later';
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 403,
+                        data: safeDetail,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(
+                  contains('HTTP 403'),
+                  contains('upstream unavailable'),
+                  contains('retry later'),
+                  isNot(contains(credential)),
+                ),
+              ),
+            ),
+          );
+
+          expect(
+            service.lastResponseData?['raw'],
+            contains('upstream unavailable'),
+          );
+          expect(service.lastResponseData?['raw'], contains('retry later'));
+          expect(service.lastResponseData?['raw'], isNot(contains(credential)));
+          expect(
+            jsonEncode(service.diagnosticResponse()),
+            isNot(contains(credential)),
+          );
+        },
+      );
+
       test('recognize redacts credentials from failed response diagnostics',
           () async {
         const bodyCredential = 'response-body-secret-r79-001';
