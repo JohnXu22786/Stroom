@@ -57,12 +57,26 @@ Future<void> writeAttachmentPreviewFile(
 /// Waits for the media controller to release its file before removing it.
 Future<void> disposePreviewPlayerAndDeleteFile(
   String filePath,
-  Future<void> Function() disposePlayer,
-) async {
-  try {
-    await disposePlayer();
-  } catch (e) {
-    debugPrint('[AttachmentPreview] player disposal failed: $e');
+  Future<void> Function() disposePlayer, {
+  bool Function()? shouldDisposePlayer,
+  Future<void>? initialization,
+}) async {
+  var disposePlayerAfterInitialization = shouldDisposePlayer?.call() ?? true;
+  if (!disposePlayerAfterInitialization && initialization != null) {
+    try {
+      await initialization;
+    } catch (_) {
+      // Failed initialization can leave video_player's creation completer
+      // unresolved when no player was created.
+    }
+    disposePlayerAfterInitialization = shouldDisposePlayer?.call() ?? true;
+  }
+  if (disposePlayerAfterInitialization) {
+    try {
+      await disposePlayer();
+    } catch (e) {
+      debugPrint('[AttachmentPreview] player disposal failed: $e');
+    }
   }
   await deleteAttachmentPreviewFile(filePath);
 }
@@ -74,10 +88,16 @@ class AttachmentPreviewFileLifecycle {
   final String filePath;
   Future<void>? _cleanup;
 
-  Future<void> disposePlayerAndDelete(Future<void> Function() disposePlayer) {
+  Future<void> disposePlayerAndDelete(
+    Future<void> Function() disposePlayer, {
+    bool Function()? shouldDisposePlayer,
+    Future<void>? initialization,
+  }) {
     return _cleanup ??= disposePreviewPlayerAndDeleteFile(
       filePath,
       disposePlayer,
+      shouldDisposePlayer: shouldDisposePlayer,
+      initialization: initialization,
     );
   }
 }
