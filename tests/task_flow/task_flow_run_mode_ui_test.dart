@@ -231,10 +231,14 @@ void main() {
         directory.deleteSync(recursive: true);
       });
       await ImageManifest.addRecord(record);
-      final resolvedPath = await ImageManifest.writeFile(
+      await ImageManifest.writeFile(
         record.storagePath,
         Uint8List.fromList([1, 2, 3, 4]),
       );
+      final persistedRecord = (await ImageManifest.loadRecords()).single;
+      final resolvedPath =
+          await ImageManifest.readFilePath(persistedRecord.storagePath);
+      expect(resolvedPath, isNotNull);
 
       final control = _CaptureControl();
       await _pumpRunMode(
@@ -258,7 +262,7 @@ void main() {
 
       final submitted = control.submitted!.single;
       expect(submitted.text, resolvedPath);
-      expect(submitted.manifestStoragePath, record.storagePath);
+      expect(submitted.manifestStoragePath, persistedRecord.storagePath);
       expect(submitted.manifestType, FlowInputManifestType.image);
       expect(submitted.ownedStoragePath, isNull);
       await tester.pumpWidget(const SizedBox.shrink());
