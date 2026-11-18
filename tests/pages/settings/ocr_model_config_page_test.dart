@@ -74,6 +74,61 @@ Future<void> _simulateSystemBack(WidgetTester tester) async {
 }
 
 void main() {
+  group('OcrModelConfigPage legacy instruction preservation', () {
+    testWidgets(
+      'retains legacy instruction when modern instruction list is empty',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {
+            'userInstructions': <String>[],
+            'userInstruction': 'Keep this legacy OCR instruction',
+          },
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['userInstructions'], isEmpty);
+        expect(
+          saved!.typeConfig['userInstruction'],
+          'Keep this legacy OCR instruction',
+        );
+      },
+    );
+
+    testWidgets(
+      'retains populated modern instructions and the legacy key',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {
+            'userInstructions': <String>['Current OCR instruction'],
+            'userInstruction': 'Keep this legacy OCR instruction',
+          },
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(
+          saved!.typeConfig['userInstructions'],
+          ['Current OCR instruction'],
+        );
+        expect(
+          saved!.typeConfig['userInstruction'],
+          'Keep this legacy OCR instruction',
+        );
+      },
+    );
+  });
+
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
     testWidgets(
       'repairs an enabled temperature value outside the slider range',

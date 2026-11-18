@@ -552,7 +552,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (originalTypeConfig != null) {
       if (originalTypeConfig['userInstructions'] is List) {
         typeConfig['userInstructions'] = originalTypeConfig['userInstructions'];
-      } else if (originalTypeConfig['userInstruction'] is String) {
+      }
+      if (originalTypeConfig['userInstruction'] is String) {
         typeConfig['userInstruction'] = originalTypeConfig['userInstruction'];
       }
     }
