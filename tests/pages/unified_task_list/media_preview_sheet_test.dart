@@ -135,13 +135,13 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await videoPlatform.playerInitialized.future;
+      await tester.runAsync(() => videoPlatform.playerInitialized.future);
 
       expect(previewFile, isNotNull);
       expect(previewFile!.existsSync(), isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await videoPlatform.disposeStarted.future;
+      await tester.runAsync(() => videoPlatform.disposeStarted.future);
       expect(previewFile!.existsSync(), isTrue);
 
       videoPlatform.finishDispose.complete();
@@ -205,7 +205,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await videoPlatform.disposeStarted.future;
+      await tester.runAsync(() => videoPlatform.disposeStarted.future);
       expect(previewFile!.existsSync(), isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -331,7 +331,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await videoPlatform.playerCreated.future;
+      await tester.runAsync(() => videoPlatform.playerCreated.future);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
@@ -351,6 +351,7 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
       });
+      await tester.pump();
       expect(previewFile!.existsSync(), isFalse);
     },
   );
@@ -405,7 +406,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await videoPlatform.playerCreated.future;
+      await tester.runAsync(() => videoPlatform.playerCreated.future);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.runAsync(() async {
@@ -425,6 +426,7 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
       });
+      await tester.pump();
       expect(previewFile!.existsSync(), isFalse);
     },
   );
