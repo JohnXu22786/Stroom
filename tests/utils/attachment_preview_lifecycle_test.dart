@@ -110,12 +110,12 @@ void main() {
       var initializationFailed = false;
       var disposeCalled = false;
 
-      final cleanup = AttachmentPreviewFileLifecycle(file.path)
-          .disposePlayerAndDelete(
-            () async => disposeCalled = true,
-            shouldDisposePlayer: () => initializationFailed,
-            initialization: initialization.future,
-          );
+      final cleanup =
+          AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(
+        () async => disposeCalled = true,
+        shouldDisposePlayer: () => initializationFailed,
+        initialization: initialization.future,
+      );
       await Future<void>.delayed(Duration.zero);
       expect(disposeCalled, isFalse);
       expect(await file.exists(), isTrue);
@@ -139,11 +139,11 @@ void main() {
       final release = Completer<void>();
       var disposeCalled = false;
 
-      final cleanup = AttachmentPreviewFileLifecycle(file.path)
-          .disposePlayerAndDelete(() {
-            disposeCalled = true;
-            return release.future;
-          }, shouldDisposePlayer: () => true);
+      final cleanup =
+          AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(() {
+        disposeCalled = true;
+        return release.future;
+      }, shouldDisposePlayer: () => true);
       await Future<void>.delayed(Duration.zero);
 
       expect(disposeCalled, isTrue);
