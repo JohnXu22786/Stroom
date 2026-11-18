@@ -2782,6 +2782,55 @@ void main() {
       expect(await unrelatedOutput.readAsString(), 'user file');
     });
 
+    test('cleanup removes reserved conversion artifacts and preserves owners',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      final convertedDir = Directory('${directory.path}/catcatch/converted')
+        ..createSync(recursive: true);
+      final removedArtifacts = [
+        File('${convertedDir.path}/video (2).mp4.tmp'),
+        File('${convertedDir.path}/video (3).mp4.spool.tmp'),
+        File('${convertedDir.path}/video (4).mp4.ev1_tmp.flv'),
+        File('${convertedDir.path}/video (5).mp4.reserve'),
+        File('${convertedDir.path}/video (2) (2).mp4.tmp'),
+      ];
+      for (final artifact in removedArtifacts) {
+        artifact.writeAsStringSync('interrupted conversion');
+      }
+      final ownedArtifact = File(
+        '${convertedDir.path}/video (6).mp4.spool.tmp',
+      )..writeAsStringSync('remaining conversion');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        task('removed-conversion').copyWith(selectedMedia: media),
+        appDirPath: directory.path,
+        remainingTasks: [
+          task('remaining-conversion').copyWith(
+            selectedMedia: media,
+            status: TaskStatus.running,
+          ),
+        ],
+      );
+
+      for (final artifact in removedArtifacts) {
+        expect(await artifact.exists(), isTrue, reason: artifact.path);
+      }
+      expect(await ownedArtifact.readAsString(), 'remaining conversion');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        task('removed-conversion').copyWith(selectedMedia: media),
+        appDirPath: directory.path,
+      );
+
+      for (final artifact in [...removedArtifacts, ownedArtifact]) {
+        expect(await artifact.exists(), isFalse, reason: artifact.path);
+      }
+    });
+
     test('removal cleanup rechecks owners selected during its async gap',
         () async {
       const media = MediaResource(

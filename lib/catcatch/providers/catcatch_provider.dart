@@ -622,6 +622,25 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       File(p.join(convertDir, '$convertBase.mp4')),
     ];
 
+    // Conversion reservations can select a numbered output path when another
+    // file already uses the same basename. Remuxers write temporary files next
+    // to that output, so discover those names for both cleanup and ownership
+    // checks instead of relying on the task's persisted output path.
+    final conversionArtifactPattern = RegExp(
+      '^${RegExp.escape(convertBase)}(?: \\(\\d+\\))*\\.mp4'
+      '(?:\\.tmp|\\.spool\\.tmp|\\.ev1_tmp\\.flv|\\.reserve)?\$',
+    );
+    try {
+      for (final entity in Directory(convertDir).listSync(followLinks: false)) {
+        if (entity is File &&
+            conversionArtifactPattern.hasMatch(p.basename(entity.path))) {
+          artifacts.add(entity);
+        }
+      }
+    } on FileSystemException {
+      // The conversion directory may not exist yet.
+    }
+
     // DownloadManager reserves `name (N).ext` when the requested output name
     // already exists. Its resumable single-file partial and playlist parts
     // directory use that reserved name too, so include matching on-disk
