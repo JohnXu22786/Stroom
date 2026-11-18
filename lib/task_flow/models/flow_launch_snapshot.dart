@@ -53,6 +53,7 @@ class FlowLaunchSnapshot {
         'auth',
         'xauthtoken',
         'xauthkey',
+        'xauth',
         'xaccesstoken',
         'cookie',
         'setcookie',
