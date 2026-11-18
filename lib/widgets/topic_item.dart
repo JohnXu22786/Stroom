@@ -261,12 +261,16 @@ class TopicItem extends StatelessWidget {
                                     : cs.onSurfaceVariant,
                               ),
                               const SizedBox(width: 12),
-                              Text(
-                                isUnread
-                                    ? AppLocalizations.of(context)!
-                                        .topicItemMarkRead
-                                    : AppLocalizations.of(context)!
-                                        .topicItemMarkUnread,
+                              Flexible(
+                                child: ConstrainedText(
+                                  isUnread
+                                      ? AppLocalizations.of(context)!
+                                          .topicItemMarkRead
+                                      : AppLocalizations.of(context)!
+                                          .topicItemMarkUnread,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),
