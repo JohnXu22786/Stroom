@@ -76,6 +76,84 @@ void main() {
     },
   );
 
+  test(
+    'failed player creation deletes the preview without disposing',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('preview-test-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/failed.mp4');
+      await file.writeAsString('preview');
+      final initialization = Completer<void>()
+        ..completeError(StateError('failed'));
+      var playerCreated = false;
+      var disposeCalled = false;
+
+      await AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(
+        () async => disposeCalled = true,
+        shouldDisposePlayer: () => playerCreated,
+        initialization: initialization.future,
+      );
+
+      expect(disposeCalled, isFalse);
+      expect(await file.exists(), isFalse);
+    },
+  );
+
+  test(
+    'settled player errors dispose subscriptions even without a player ID',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('preview-test-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/event-error.mp4');
+      await file.writeAsString('preview');
+      final initialization = Completer<void>();
+      var initializationFailed = false;
+      var disposeCalled = false;
+
+      final cleanup =
+          AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(
+        () async => disposeCalled = true,
+        shouldDisposePlayer: () => initializationFailed,
+        initialization: initialization.future,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(disposeCalled, isFalse);
+      expect(await file.exists(), isTrue);
+
+      initializationFailed = true;
+      initialization.completeError(StateError('event error'));
+      await cleanup;
+
+      expect(disposeCalled, isTrue);
+      expect(await file.exists(), isFalse);
+    },
+  );
+
+  test(
+    'created players dispose before their preview file is deleted',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('preview-test-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/created.mp4');
+      await file.writeAsString('preview');
+      final release = Completer<void>();
+      var disposeCalled = false;
+
+      final cleanup =
+          AttachmentPreviewFileLifecycle(file.path).disposePlayerAndDelete(() {
+        disposeCalled = true;
+        return release.future;
+      }, shouldDisposePlayer: () => true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(disposeCalled, isTrue);
+      expect(await file.exists(), isTrue);
+      release.complete();
+      await cleanup;
+      expect(await file.exists(), isFalse);
+    },
+  );
+
   test('external preview cleanup waits for the viewer grace period', () async {
     final directory = await Directory.systemTemp.createTemp('preview-test-');
     addTearDown(() => directory.delete(recursive: true));

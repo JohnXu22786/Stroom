@@ -30,6 +30,7 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
   ChewieController? _chewieController;
   bool _hasError = false;
   late final AttachmentPreviewFileLifecycle _previewLifecycle;
+  Future<void>? _videoPlayerInitialization;
 
   @override
   void initState() {
@@ -42,7 +43,9 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
     try {
       final controller = VideoPlayerController.file(File(widget.filePath));
       _videoPlayerController = controller;
-      await controller.initialize();
+      final initialization = controller.initialize();
+      _videoPlayerInitialization = initialization;
+      await initialization;
       if (!mounted) return;
 
       _chewieController = ChewieController(
@@ -79,7 +82,22 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
   ) {
     return _previewLifecycle.disposePlayerAndDelete(
       () async => controller?.dispose(),
+      // A pre-player creation failure leaves the plugin's creation completer
+      // unresolved, so dispose would never finish. A reported event error
+      // means creation settled and disposing cancels its event subscription.
+      shouldDisposePlayer: () =>
+          controller != null &&
+          (_videoPlayerWasCreated(controller) ||
+              controller.value.errorDescription != null),
+      initialization: _videoPlayerInitialization,
     );
+  }
+
+  bool _videoPlayerWasCreated(VideoPlayerController controller) {
+    // video_player exposes this testing-visible sentinel as its only
+    // indication that platform player creation has not succeeded.
+    // ignore: invalid_use_of_visible_for_testing_member
+    return controller.playerId != VideoPlayerController.kUninitializedPlayerId;
   }
 
   @override
