@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
 import '../l10n/app_localizations.dart';
 import '../providers/locale_provider.dart';
 import '../services/app_log_service.dart';
+import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
 import '../services/data_safety_manager.dart';
 import '../services/startup_data_validation_unavailable.dart';
@@ -112,6 +113,8 @@ class StartupSequenceController {
 
       _publish(l10n.startupProgressDataSafety, '0/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await BackupService.recoverInterruptedRestores();
 
       final versionAhead = await StartupCheckService.checkVersionAhead();
       if (versionAhead != null) {

@@ -238,6 +238,10 @@ class BackupService {
   static bool restorePathsWindowsSeparatorsForTesting = false;
   @visibleForTesting
   static void Function(int entryIndex)? beforeRestoreBinaryPublishForTesting;
+  static const _restoreRollbackDirectoryPrefix = '.stroom-restore-rollback-';
+  static const _restoreInProgressMarker = 'restore-in-progress';
+  static const _startupPreferenceRestoreMarker = 'startup-preferences';
+  static const _sharedPreferenceRestoreMarker = 'shared-preferences';
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
     r'^recording_\d+\.m4a$',
@@ -366,6 +370,327 @@ class BackupService {
       );
       rethrow;
     }
+  }
+
+  /// Rolls back a restore interrupted by process termination.
+  ///
+  /// A completed snapshot is marked immediately before selected data can be
+  /// changed. The marker remains until the restore (or its in-process rollback)
+  /// completes, so startup can safely replay the snapshot after a crash.
+  static Future<void> recoverInterruptedRestores() async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+
+    final appDirectory = Directory(await AppStorage.directory);
+    if (!await appDirectory.exists()) return;
+
+    await for (final entity in appDirectory.list(followLinks: false)) {
+      if (entity is! Directory ||
+          !p
+              .basename(entity.path)
+              .startsWith(_restoreRollbackDirectoryPrefix)) {
+        continue;
+      }
+      final marker = File(p.join(entity.path, _restoreInProgressMarker));
+      if (!await marker.exists()) {
+        // Snapshot creation had not finished, so the restore had not begun.
+        await entity.delete(recursive: true);
+        continue;
+      }
+
+      final archivePath = p.join(entity.path, 'pre-restore.zip');
+      if (!await File(archivePath).exists()) {
+        throw StateError(
+          'Interrupted restore recovery archive is missing: $archivePath',
+        );
+      }
+      final markerContents = await marker.readAsString();
+      final bool useStartupPreferenceAdapter;
+      final BackupSelection originalSelection;
+      final BackupSelection recoverySelection;
+      final bool skipMissingCategories;
+      if (markerContents == _startupPreferenceRestoreMarker ||
+          markerContents == _sharedPreferenceRestoreMarker) {
+        final legacyState = await _readSnapshotSelection(archivePath);
+        useStartupPreferenceAdapter =
+            markerContents == _startupPreferenceRestoreMarker;
+        originalSelection = legacyState.selection;
+        recoverySelection = legacyState.availableSelection;
+        skipMissingCategories = legacyState.skipMissingCategories;
+      } else {
+        final recoveryState = _parseRestoreRecoveryMarker(markerContents);
+        final archiveState = await _readSnapshotSelection(archivePath);
+        final recordedSnapshotSelection = recoveryState.snapshotSelection;
+        if (recordedSnapshotSelection != null &&
+            !_sameRestoreSelection(
+              recordedSnapshotSelection,
+              archiveState.selection,
+            )) {
+          throw const FormatException(
+            'Interrupted restore marker does not match its archive.',
+          );
+        }
+        if (!_restoreSelectionIsSubset(
+          archiveState.selection,
+          recoveryState.selection,
+        )) {
+          throw const FormatException(
+            'Interrupted restore archive exceeds its selected categories.',
+          );
+        }
+        useStartupPreferenceAdapter = recoveryState.useStartupPreferenceAdapter;
+        originalSelection = recoveryState.selection;
+        recoverySelection = archiveState.availableSelection;
+        skipMissingCategories = archiveState.skipMissingCategories;
+      }
+      await _restoreFromZipFile(
+        archivePath,
+        selection: recoverySelection,
+        skipMissingCategories: skipMissingCategories,
+        skipPostRestoreMigration: true,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        skipAnkiMigrationMarkerInvalidation: true,
+        skipAnkiSyncIndexClear: true,
+        skipRollbackSnapshot: true,
+        replaceBrowserCookiesExactly: true,
+      );
+      final absentSelection =
+          _selectionDifference(originalSelection, recoverySelection);
+      if (absentSelection.selectedPartIds.isNotEmpty) {
+        await clearSelectedData(
+          absentSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        );
+      }
+      await entity.delete(recursive: true);
+    }
+  }
+
+  static Future<
+      ({
+        BackupSelection selection,
+        BackupSelection availableSelection,
+        bool skipMissingCategories,
+      })> _readSnapshotSelection(String archivePath) async {
+    final reader = _ZipStreamReader(archivePath);
+    try {
+      final manifestBytes = reader.readMetaFile('manifest.json');
+      if (manifestBytes == null) {
+        throw const BackupValidationException(
+          'Interrupted restore archive has no manifest.',
+        );
+      }
+      final decoded = jsonDecode(utf8.decode(manifestBytes));
+      if (decoded is! Map<String, dynamic>) {
+        throw const BackupValidationException(
+          'Interrupted restore manifest is invalid.',
+        );
+      }
+      final declaredSelection = _selectionFromDeclaredParts(
+        decoded['dataParts'],
+      );
+      final includeMediaFiles = decoded['includeMediaFiles'];
+      if (includeMediaFiles != null && includeMediaFiles is! bool) {
+        throw const BackupValidationException(
+          'Interrupted restore media selection is invalid.',
+        );
+      }
+      final selection = _selectionWithMediaFiles(
+        declaredSelection ?? BackupSelection.all,
+        includeMediaFiles ?? true,
+      );
+      Uint8List? readMetaFile(String name) => reader.readMetaFile(name);
+      final metadata = _validateAndParseMetadata(
+        readMetaFile,
+        selection,
+        archiveEntries: reader.entries.map((entry) => entry.name).toSet(),
+        archiveEntrySizes: {
+          for (final entry in reader.entries)
+            entry.name: entry.uncompressedSize,
+        },
+        skipMissingCategories: true,
+      );
+      if (declaredSelection == null) {
+        return (
+          selection: selection,
+          availableSelection: metadata.restoreSelection,
+          skipMissingCategories: true,
+        );
+      }
+      return (
+        selection: selection,
+        availableSelection: metadata.restoreSelection,
+        skipMissingCategories: true,
+      );
+    } finally {
+      reader.close();
+    }
+  }
+
+  static BackupSelection _selectionWithMediaFiles(
+    BackupSelection selection,
+    bool includeMediaFiles,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: selection.chatRecordsAndAttachments,
+        settings: selection.settings,
+        pictures: selection.pictures,
+        audio: selection.audio,
+        videos: selection.videos,
+        texts: selection.texts,
+        tasks: selection.tasks,
+        ankiData: selection.ankiData,
+        browserCookies: selection.browserCookies,
+        includeMediaFiles: includeMediaFiles,
+      );
+
+  static bool _sameRestoreSelection(
+    BackupSelection first,
+    BackupSelection second,
+  ) =>
+      first.chatRecordsAndAttachments == second.chatRecordsAndAttachments &&
+      first.settings == second.settings &&
+      first.pictures == second.pictures &&
+      first.audio == second.audio &&
+      first.videos == second.videos &&
+      first.texts == second.texts &&
+      first.tasks == second.tasks &&
+      first.ankiData == second.ankiData &&
+      first.browserCookies == second.browserCookies &&
+      first.includeMediaFiles == second.includeMediaFiles;
+
+  static bool _restoreSelectionIsSubset(
+    BackupSelection subset,
+    BackupSelection superset,
+  ) =>
+      (!subset.chatRecordsAndAttachments ||
+          superset.chatRecordsAndAttachments) &&
+      (!subset.settings || superset.settings) &&
+      (!subset.pictures || superset.pictures) &&
+      (!subset.audio || superset.audio) &&
+      (!subset.videos || superset.videos) &&
+      (!subset.texts || superset.texts) &&
+      (!subset.tasks || superset.tasks) &&
+      (!subset.ankiData || superset.ankiData) &&
+      (!subset.browserCookies || superset.browserCookies) &&
+      subset.includeMediaFiles == superset.includeMediaFiles;
+
+  static BackupSelection _selectionDifference(
+    BackupSelection original,
+    BackupSelection snapshot,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: original.chatRecordsAndAttachments &&
+            !snapshot.chatRecordsAndAttachments,
+        settings: original.settings && !snapshot.settings,
+        pictures: original.pictures && !snapshot.pictures,
+        audio: original.audio && !snapshot.audio,
+        videos: original.videos && !snapshot.videos,
+        texts: original.texts && !snapshot.texts,
+        tasks: original.tasks && !snapshot.tasks,
+        ankiData: original.ankiData && !snapshot.ankiData,
+        browserCookies: original.browserCookies && !snapshot.browserCookies,
+        includeMediaFiles: original.includeMediaFiles,
+      );
+
+  static ({
+    BackupSelection selection,
+    BackupSelection? snapshotSelection,
+    bool useStartupPreferenceAdapter,
+  }) _parseRestoreRecoveryMarker(String contents) {
+    final decoded = jsonDecode(contents);
+    if (decoded is! Map) {
+      throw const FormatException('Invalid interrupted restore marker.');
+    }
+    const versionOneKeys = {
+      'version',
+      'useStartupPreferenceAdapter',
+      'selection',
+    };
+    final actualMarkerKeys = decoded.keys.toSet();
+    final version = decoded['version'];
+    const versionTwoKeys = {...versionOneKeys, 'snapshotSelection'};
+    final expectedMarkerKeys = switch (version) {
+      1 => versionOneKeys,
+      2 => versionTwoKeys,
+      _ => throw const FormatException(
+          'Invalid interrupted restore marker version.',
+        ),
+    };
+    if (actualMarkerKeys.length != expectedMarkerKeys.length ||
+        !actualMarkerKeys.containsAll(expectedMarkerKeys)) {
+      throw const FormatException('Invalid interrupted restore marker fields.');
+    }
+    final useStartupPreferenceAdapter = decoded['useStartupPreferenceAdapter'];
+    if (useStartupPreferenceAdapter is! bool) {
+      throw const FormatException('Incomplete interrupted restore marker.');
+    }
+
+    return (
+      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      selection: _parseRestoreSelection(decoded['selection']),
+      snapshotSelection: version == 2
+          ? _parseRestoreSelection(decoded['snapshotSelection'])
+          : null,
+    );
+  }
+
+  static Map<String, bool> _restoreSelectionMarkerFields(
+    BackupSelection selection,
+  ) =>
+      {
+        'chatRecordsAndAttachments': selection.chatRecordsAndAttachments,
+        'settings': selection.settings,
+        'pictures': selection.pictures,
+        'audio': selection.audio,
+        'videos': selection.videos,
+        'texts': selection.texts,
+        'tasks': selection.tasks,
+        'ankiData': selection.ankiData,
+        'browserCookies': selection.browserCookies,
+        'includeMediaFiles': selection.includeMediaFiles,
+      };
+
+  static BackupSelection _parseRestoreSelection(Object? rawSelection) {
+    const selectionKeys = {
+      'chatRecordsAndAttachments',
+      'settings',
+      'pictures',
+      'audio',
+      'videos',
+      'texts',
+      'tasks',
+      'ankiData',
+      'browserCookies',
+      'includeMediaFiles',
+    };
+    if (rawSelection is! Map) {
+      throw const FormatException('Incomplete interrupted restore marker.');
+    }
+    final actualSelectionKeys = rawSelection.keys.toSet();
+    if (actualSelectionKeys.length != selectionKeys.length ||
+        !actualSelectionKeys.containsAll(selectionKeys)) {
+      throw const FormatException('Incomplete interrupted restore selection.');
+    }
+    bool selectionFlag(String key) {
+      final value = rawSelection[key];
+      if (value is! bool) {
+        throw FormatException('Invalid interrupted restore selection: $key.');
+      }
+      return value;
+    }
+
+    return BackupSelection(
+      chatRecordsAndAttachments: selectionFlag('chatRecordsAndAttachments'),
+      settings: selectionFlag('settings'),
+      pictures: selectionFlag('pictures'),
+      audio: selectionFlag('audio'),
+      videos: selectionFlag('videos'),
+      texts: selectionFlag('texts'),
+      tasks: selectionFlag('tasks'),
+      ankiData: selectionFlag('ankiData'),
+      browserCookies: selectionFlag('browserCookies'),
+      includeMediaFiles: selectionFlag('includeMediaFiles'),
+    );
   }
 
   static bool _isSelectedWebStoreKey(
@@ -2318,6 +2643,7 @@ class BackupService {
     bool skipMissingCategories = false,
     bool skipRollbackSnapshot = false,
     bool skipAnkiMigrationMarkerInvalidation = false,
+    bool replaceBrowserCookiesExactly = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2363,10 +2689,12 @@ class BackupService {
     );
     final restoreSelection = metadata.restoreSelection;
     _validateArchiveEntryChecksums(archive, fileMap, restoreSelection);
-    await _preflightBrowserCookieMerge(
-      restoreSelection,
-      metadata.browserCookiesData,
-    );
+    if (!replaceBrowserCookiesExactly) {
+      await _preflightBrowserCookieMerge(
+        restoreSelection,
+        metadata.browserCookiesData,
+      );
+    }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
@@ -2488,6 +2816,7 @@ class BackupService {
       await _restoreBrowserCookiesAfterDataRestore(
         restoreSelection,
         metadata.browserCookiesData,
+        replaceExisting: replaceBrowserCookiesExactly,
       );
     } catch (restoreError, restoreStackTrace) {
       if (rollbackBytes != null) {
@@ -2504,6 +2833,7 @@ class BackupService {
               skipMissingCategories: true,
               skipRollbackSnapshot: true,
               skipAnkiMigrationMarkerInvalidation: true,
+              replaceBrowserCookiesExactly: true,
             );
           } catch (error, stackTrace) {
             rollbackError = error;
@@ -2569,6 +2899,7 @@ class BackupService {
     bool skipAnkiMigrationMarkerInvalidation = false,
     bool skipAnkiSyncIndexClear = false,
     bool skipRollbackSnapshot = false,
+    bool replaceBrowserCookiesExactly = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2612,10 +2943,12 @@ class BackupService {
       );
       final restoreSelection = metadata.restoreSelection;
       _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
-      await _preflightBrowserCookieMerge(
-        restoreSelection,
-        metadata.browserCookiesData,
-      );
+      if (!replaceBrowserCookiesExactly) {
+        await _preflightBrowserCookieMerge(
+          restoreSelection,
+          metadata.browserCookiesData,
+        );
+      }
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
         taskFilesToReplace: metadata.taskFilesToReplace,
@@ -2700,9 +3033,12 @@ class BackupService {
         // staged file cannot be published, the restore can roll back files,
         // manifest records, and selected preferences together.
         String? rollbackArchivePath;
+        File? rollbackMarker;
         if (!skipRollbackSnapshot) {
-          rollbackDirectory = await Directory.systemTemp.createTemp(
-            '.stroom-restore-rollback-$pid-',
+          final rollbackParent =
+              appDir == null ? Directory.systemTemp : Directory(appDir);
+          rollbackDirectory = await rollbackParent.createTemp(
+            '$_restoreRollbackDirectoryPrefix$pid-',
           );
           rollbackArchivePath =
               p.join(rollbackDirectory.path, 'pre-restore.zip');
@@ -2712,6 +3048,26 @@ class BackupService {
             useStartupPreferenceAdapter: useStartupPreferenceAdapter,
             skipMissingSelectedFiles: true,
           );
+          if (appDir != null) {
+            final snapshotState =
+                await _readSnapshotSelection(rollbackArchivePath);
+            rollbackMarker = File(
+              p.join(rollbackDirectory.path, _restoreInProgressMarker),
+            );
+            final markerContents = jsonEncode({
+              'version': 2,
+              'useStartupPreferenceAdapter': useStartupPreferenceAdapter,
+              'selection': _restoreSelectionMarkerFields(restoreSelection),
+              'snapshotSelection':
+                  _restoreSelectionMarkerFields(snapshotState.selection),
+            });
+            final temporaryMarker = File('${rollbackMarker.path}.tmp');
+            await temporaryMarker.writeAsString(
+              markerContents,
+              flush: true,
+            );
+            await temporaryMarker.rename(rollbackMarker.path);
+          }
         }
 
         try {
@@ -2787,6 +3143,7 @@ class BackupService {
           await _restoreBrowserCookiesAfterDataRestore(
             restoreSelection,
             metadata.browserCookiesData,
+            replaceExisting: replaceBrowserCookiesExactly,
           );
           if (restoreSelection.ankiData &&
               restoreSelection.includeMediaFiles &&
@@ -2807,11 +3164,19 @@ class BackupService {
           )) {
             throw _RestoreTemporaryArtifactCleanupException();
           }
+          if (rollbackMarker != null && await rollbackMarker.exists()) {
+            await rollbackMarker.delete();
+          }
           onProgress?.call(1.0);
           return metadata.skippedLabels;
         } catch (restoreError, restoreStackTrace) {
-          if (skipRollbackSnapshot ||
-              restoreError is _RestoreTemporaryArtifactCleanupException) {
+          if (skipRollbackSnapshot) {
+            Error.throwWithStackTrace(restoreError, restoreStackTrace);
+          }
+          if (restoreError is _RestoreTemporaryArtifactCleanupException) {
+            if (rollbackMarker != null && await rollbackMarker.exists()) {
+              await rollbackMarker.delete();
+            }
             Error.throwWithStackTrace(restoreError, restoreStackTrace);
           }
           Object? rollbackError;
@@ -2825,7 +3190,11 @@ class BackupService {
               skipAnkiMigrationMarkerInvalidation: true,
               skipAnkiSyncIndexClear: true,
               skipRollbackSnapshot: true,
+              replaceBrowserCookiesExactly: true,
             );
+            if (rollbackMarker != null && await rollbackMarker.exists()) {
+              await rollbackMarker.delete();
+            }
           } catch (error, stackTrace) {
             rollbackError = error;
             rollbackStackTrace = stackTrace;
@@ -5150,8 +5519,9 @@ class BackupService {
   /// profile entries are ignored by [_restoreArchiveEntry].
   static Future<void> _restoreBrowserCookiesAfterDataRestore(
     BackupSelection selection,
-    Uint8List? cookieData,
-  ) async {
+    Uint8List? cookieData, {
+    bool replaceExisting = false,
+  }) async {
     if (!selection.browserCookies || cookieData == null) return;
 
     await BrowserCookieService.runExclusiveRetentionOperation(() async {
@@ -5159,23 +5529,26 @@ class BackupService {
       final previousRestorePending =
           await BrowserCookieService.hasBackupRestorePending();
       try {
-        final existingCookies =
-            (await BrowserCookieService.getCookiesFromFileChecked())
+        final existingCookies = replaceExisting
+            ? const <Map<String, dynamic>>[]
+            : (await BrowserCookieService.getCookiesFromFileChecked())
                 .values
                 .expand((cookies) => cookies)
                 .toList();
         final importedCookies = (jsonDecode(utf8.decode(cookieData)) as List)
             .cast<Map<String, dynamic>>();
-        final cookieDataToWrite = Uint8List.fromList(
-          utf8.encode(
-            jsonEncode(
-              BrowserCookieService.mergeCookieSnapshots(
-                existingCookies,
-                importedCookies,
-              ),
-            ),
-          ),
-        );
+        final cookieDataToWrite = replaceExisting
+            ? cookieData
+            : Uint8List.fromList(
+                utf8.encode(
+                  jsonEncode(
+                    BrowserCookieService.mergeCookieSnapshots(
+                      existingCookies,
+                      importedCookies,
+                    ),
+                  ),
+                ),
+              );
         await writeBackupFile('', 'browser_cookies.json', cookieDataToWrite);
         await BrowserCookieService.markBackupRestorePending();
         if (!WebFileStore.isTestMode &&
@@ -5194,6 +5567,27 @@ class BackupService {
       }
     });
   }
+
+  @visibleForTesting
+  static Future<void> restoreBrowserCookiesSnapshotForTest(
+    Uint8List cookieData, {
+    bool replaceExisting = false,
+  }) =>
+      _restoreBrowserCookiesAfterDataRestore(
+        const BackupSelection(
+          chatRecordsAndAttachments: false,
+          settings: false,
+          pictures: false,
+          audio: false,
+          videos: false,
+          texts: false,
+          tasks: false,
+          ankiData: false,
+          browserCookies: true,
+        ),
+        cookieData,
+        replaceExisting: replaceExisting,
+      );
 
   static Future<void> _rollbackCookiesAfterFailedRestore({
     required Uint8List? previousFileData,
@@ -6096,6 +6490,7 @@ class BackupService {
   static Future<bool> clearSelectedData(
     BackupSelection selection, {
     void Function(double progress)? onProgress,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -6118,6 +6513,7 @@ class BackupService {
         selection,
         taskFlowAttachmentKeys,
         onProgress,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
     } finally {
       if (guardsBrowserAction) BrowserProfileService.endAction();
@@ -6127,8 +6523,9 @@ class BackupService {
   static Future<bool> _clearSelectedDataAfterPreflight(
     BackupSelection selection,
     Set<String> taskFlowAttachmentKeys,
-    void Function(double progress)? onProgress,
-  ) async {
+    void Function(double progress)? onProgress, {
+    required bool useStartupPreferenceAdapter,
+  }) async {
     var browserWebsiteDataCleared = true;
     // Clear live and persisted Cookies together so browser-close persistence
     // cannot recreate the snapshot after the selected data is deleted.
@@ -6145,13 +6542,26 @@ class BackupService {
 
     // 1. SharedPreferences — 只删除选中类别的键
     if (selection.chatRecordsAndAttachments || selection.settings) {
-      final prefs = await SharedPreferences.getInstance();
-      final keysToRemove = prefs
-          .getKeys()
-          .where((k) => _isKeyInSelection(k, selection))
-          .toList();
+      final SharedPreferences? prefs;
+      final StartupMigrationPreferences? startupPrefs;
+      final Set<String> keys;
+      if (useStartupPreferenceAdapter) {
+        prefs = null;
+        startupPrefs = await StartupMigrationPreferences.load();
+        keys = await startupPrefs.getKeys();
+      } else {
+        prefs = await SharedPreferences.getInstance();
+        startupPrefs = null;
+        keys = prefs.getKeys();
+      }
+      final keysToRemove =
+          keys.where((key) => _isKeyInSelection(key, selection)).toList();
       for (final key in keysToRemove) {
-        await prefs.remove(key);
+        if (prefs != null) {
+          await prefs.remove(key);
+        } else {
+          await startupPrefs!.remove(key);
+        }
       }
       await AppLogService.info(
         'BackupService',

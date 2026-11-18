@@ -15,6 +15,7 @@ import 'package:stroom/services/backup_service_shared.dart';
 import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/startup_preferences.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/utils/web_file_store.dart';
@@ -60,6 +61,36 @@ void main() {
     if (await dir.exists()) {
       await dir.delete(recursive: true);
     }
+  });
+
+  test('rollback cookie restoration replaces the selected snapshot exactly',
+      () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final snapshotCookies = [
+      {
+        'domain': 'snapshot.example',
+        'name': 'session',
+        'value': 'before-restore',
+        'path': '/',
+      },
+    ];
+    await WebFileStore.write(
+      '/browser_cookies.json',
+      Uint8List.fromList(utf8.encode('{malformed cookie data')),
+    );
+    final snapshot =
+        Uint8List.fromList(utf8.encode(jsonEncode(snapshotCookies)));
+
+    await BackupService.restoreBrowserCookiesSnapshotForTest(
+      snapshot,
+      replaceExisting: true,
+    );
+
+    final restored = jsonDecode(
+      utf8.decode((await WebFileStore.read('/browser_cookies.json'))!),
+    ) as List;
+    expect(restored, snapshotCookies);
   });
 
   /// 把一个内存 Archive 编码为磁盘上的 zip 文件，返回其路径。
@@ -753,6 +784,253 @@ void main() {
       expect(await File(retainedArchivePath).exists(), isTrue);
     },
   );
+
+  test('startup restores an interrupted file restore from its durable snapshot',
+      () async {
+    final previousLegacyStartupPreferenceMode =
+        StartupPreferences.debugUseLegacyPreferencesForTesting;
+    StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+    addTearDown(() {
+      StartupPreferences.debugUseLegacyPreferencesForTesting =
+          previousLegacyStartupPreferenceMode;
+    });
+    WebFileStore.disableTestMode();
+    final previousPathProvider = PathProviderPlatform.instance;
+    final appDir = '$workDir/restore_app_data';
+    PathProviderPlatform.instance = _RestoreTestPathProvider(appDir);
+    AppStorage.resetCache();
+    addTearDown(() {
+      PathProviderPlatform.instance = previousPathProvider;
+      AppStorage.resetCache();
+    });
+    await Directory(appDir).create(recursive: true);
+    await Directory('$appDir/pictures').create(recursive: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([1, 2, 3]);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('darkMode', true);
+
+    const selection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+    );
+    final snapshotPath = '$workDir/pre-restore.zip';
+    await BackupService.createBackup(
+      outputPath: snapshotPath,
+      selection: selection,
+      useStartupPreferenceAdapter: true,
+    );
+    final recoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-test',
+    );
+    await recoveryDirectory.create();
+    await File(snapshotPath).copy('${recoveryDirectory.path}/pre-restore.zip');
+    final marker = File('${recoveryDirectory.path}/restore-in-progress');
+    final validMarker = {
+      'version': 2,
+      'useStartupPreferenceAdapter': true,
+      'selection': {
+        'chatRecordsAndAttachments': false,
+        'settings': true,
+        'pictures': true,
+        'audio': false,
+        'videos': false,
+        'texts': false,
+        'tasks': false,
+        'ankiData': true,
+        'browserCookies': false,
+        'includeMediaFiles': true,
+      },
+      'snapshotSelection': {
+        'chatRecordsAndAttachments': false,
+        'settings': true,
+        'pictures': true,
+        'audio': false,
+        'videos': false,
+        'texts': false,
+        'tasks': false,
+        'ankiData': false,
+        'browserCookies': false,
+        'includeMediaFiles': true,
+      },
+    };
+    await marker.writeAsString(
+      jsonEncode({...validMarker, 'unexpected': true}),
+      flush: true,
+    );
+    await File('$appDir/pictures/old.jpg').writeAsBytes([9]);
+    await File('$appDir/pictures/new.jpg').writeAsBytes([8]);
+    await File('$appDir/collection.anki2').writeAsBytes([12]);
+    await prefs.setBool('darkMode', false);
+
+    await expectLater(
+      BackupService.recoverInterruptedRestores(),
+      throwsA(isA<FormatException>()),
+    );
+    await marker.writeAsString('{"version":1}', flush: true);
+    await expectLater(
+      BackupService.recoverInterruptedRestores(),
+      throwsA(isA<FormatException>()),
+    );
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [9]);
+    expect(await File('$appDir/pictures/new.jpg').readAsBytes(), [8]);
+    expect(await File('$appDir/collection.anki2').exists(), isTrue);
+    expect(await recoveryDirectory.exists(), isTrue);
+
+    await marker.writeAsString(jsonEncode(validMarker), flush: true);
+    await BackupService.recoverInterruptedRestores();
+
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
+    expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
+    expect(await File('$appDir/collection.anki2').exists(), isFalse);
+    expect(prefs.getBool('darkMode'), isTrue);
+    expect(await recoveryDirectory.exists(), isFalse);
+
+    final legacyRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-legacy',
+    );
+    await legacyRecoveryDirectory.create();
+    await File(snapshotPath).copy(
+      '${legacyRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File('${legacyRecoveryDirectory.path}/restore-in-progress')
+        .writeAsString('startup-preferences', flush: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([10]);
+    await File('$appDir/pictures/new.jpg').writeAsBytes([11]);
+    await prefs.setBool('darkMode', false);
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
+    expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
+    expect(prefs.getBool('darkMode'), isTrue);
+    expect(await legacyRecoveryDirectory.exists(), isFalse);
+
+    final missingPreferenceSnapshot = await writeArchive(
+      buildV2Archive(dataParts: [DataParts.settings]),
+      'missing-startup-preferences.zip',
+    );
+    final missingPreferenceRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-missing-preferences',
+    );
+    await missingPreferenceRecoveryDirectory.create();
+    await File(missingPreferenceSnapshot).copy(
+      '${missingPreferenceRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File(
+      '${missingPreferenceRecoveryDirectory.path}/restore-in-progress',
+    ).writeAsString(
+      jsonEncode({
+        'version': 2,
+        'useStartupPreferenceAdapter': true,
+        'selection': {
+          'chatRecordsAndAttachments': false,
+          'settings': true,
+          'pictures': false,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': true,
+        },
+        'snapshotSelection': {
+          'chatRecordsAndAttachments': false,
+          'settings': true,
+          'pictures': false,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': true,
+        },
+      }),
+      flush: true,
+    );
+    await prefs.setBool('darkMode', false);
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(prefs.getBool('darkMode'), isNull);
+    expect(await missingPreferenceRecoveryDirectory.exists(), isFalse);
+
+    final structuredOnlySnapshot = await writeArchive(
+      buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'structured-only-image',
+            'name': 'structured-only-image',
+            'hash': 'structured-only-image',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        dataParts: [DataParts.pictures],
+        manifestOverrides: const {'includeMediaFiles': false},
+      ),
+      'structured-only-media.zip',
+    );
+    final structuredOnlyRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-structured-only',
+    );
+    await structuredOnlyRecoveryDirectory.create();
+    await File(structuredOnlySnapshot).copy(
+      '${structuredOnlyRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File(
+      '${structuredOnlyRecoveryDirectory.path}/restore-in-progress',
+    ).writeAsString(
+      jsonEncode({
+        'version': 2,
+        'useStartupPreferenceAdapter': false,
+        'selection': {
+          'chatRecordsAndAttachments': false,
+          'settings': false,
+          'pictures': true,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': false,
+        },
+        'snapshotSelection': {
+          'chatRecordsAndAttachments': false,
+          'settings': false,
+          'pictures': true,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': false,
+        },
+      }),
+      flush: true,
+    );
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(
+      (await ManifestDatabase.getAllImageRecords())
+          .map((record) => record['id']),
+      contains('structured-only-image'),
+    );
+    expect(await structuredOnlyRecoveryDirectory.exists(), isFalse);
+  });
 
   test(
     'restoreFromBytes keeps selected data unchanged when a later binary write fails',
