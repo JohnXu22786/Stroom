@@ -28,11 +28,12 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
 
 Future<void> _waitForFileDeletion(WidgetTester tester, File file) async {
   await tester.pump();
-  await tester.runAsync(() async {
-    for (var i = 0; i < 100 && file.existsSync(); i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-  });
+  for (var i = 0; i < 100 && file.existsSync(); i++) {
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+  }
   await tester.pump();
 }
 
@@ -40,8 +41,13 @@ Future<bool> _waitForSignal(
   WidgetTester tester,
   Completer<void> signal,
 ) async {
-  for (var i = 0; i < 200 && !signal.isCompleted; i++) {
+  for (var i = 0; i < 100 && !signal.isCompleted; i++) {
     await tester.pump(const Duration(milliseconds: 10));
+    if (!signal.isCompleted) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
   }
   return signal.isCompleted;
 }
