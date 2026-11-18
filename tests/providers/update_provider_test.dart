@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, Link, Platform;
 
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
@@ -12,10 +12,20 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+
+class _ApplicationCachePathProvider extends PathProviderPlatform {
+  _ApplicationCachePathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationCachePath() async => path;
+}
 
 /// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse]
 /// wrapped in a list (matching the [/releases] array response).
@@ -1052,6 +1062,104 @@ void main() {
       // downloadError might be set due to auto-install failure in test environment
       // but that is acceptable - the key is download completed
     });
+
+    test('downloadUpdate uses the app cache instead of shared temp storage',
+        () async {
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _ApplicationCachePathProvider(tempDir);
+      addTearDown(() => PathProviderPlatform.instance = previousPathProvider);
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3],
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/update.zip',
+      );
+
+      await notifier.downloadUpdate();
+
+      expect(notifier.state.downloadedFilePath,
+          '${tempDir}${Platform.pathSeparator}update.zip');
+      expect(
+        await File(notifier.state.downloadedFilePath!).readAsBytes(),
+        <int>[1, 2, 3],
+      );
+    });
+
+    test('downloadUpdate rejects encoded path traversal filenames', () async {
+      var requestCount = 0;
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestCount++;
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3],
+            ),
+          );
+        },
+      ));
+      final downloadDirectory = Directory('$tempDir/downloads')..createSync();
+      final victim = File('$tempDir/victim');
+      await victim.writeAsString('keep me');
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/..%2Fvictim',
+      );
+
+      await notifier.downloadUpdate(downloadDir: downloadDirectory.path);
+
+      expect(requestCount, 0);
+      expect(await victim.readAsString(), 'keep me');
+      expect(notifier.state.downloadComplete, false);
+      expect(notifier.state.downloadedFilePath, isNull);
+      expect(notifier.state.downloadError, isNotNull);
+    });
+
+    test('downloadUpdate replaces a destination symlink safely', () async {
+      if (Platform.isWindows) return;
+
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3],
+            ),
+          );
+        },
+      ));
+      final downloadDirectory = Directory('$tempDir/downloads')..createSync();
+      final victim = File('$tempDir/victim');
+      await victim.writeAsString('keep me');
+      await Link('${downloadDirectory.path}/update.zip').create(victim.path);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: downloadDirectory.path);
+
+      expect(await victim.readAsString(), 'keep me');
+      expect(
+        await File('${downloadDirectory.path}/update.zip').readAsBytes(),
+        <int>[1, 2, 3],
+      );
+      expect(notifier.state.downloadComplete, true);
+    },
+        skip: Platform.isWindows
+            ? 'Symlink creation may require privileges'
+            : false);
 
     test('downloadUpdate transitions through download lifecycle states',
         () async {

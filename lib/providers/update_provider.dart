@@ -766,7 +766,19 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final uri = Uri.parse(url);
       final fileName =
           uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'update';
-      final filePath = '$tempDir/$fileName';
+      if (fileName.isEmpty ||
+          fileName == '.' ||
+          fileName == '..' ||
+          fileName.contains('/') ||
+          fileName.contains(r'\')) {
+        throw ArgumentError.value(fileName, 'fileName', 'Invalid filename');
+      }
+      final downloadDirectory =
+          p.normalize(await Directory(tempDir).resolveSymbolicLinks());
+      final filePath = p.normalize(p.join(downloadDirectory, fileName));
+      if (!p.isWithin(downloadDirectory, filePath)) {
+        throw ArgumentError.value(fileName, 'fileName', 'Invalid filename');
+      }
 
       final response = await _dio.get(
         url,
@@ -783,8 +795,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
       if (response.statusCode == 200) {
         final bytes = response.data as List<int>;
-        final file = File(filePath);
-        await file.writeAsBytes(bytes);
+        final stagingDirectory =
+            await Directory(downloadDirectory).createTemp('.stroom-update-');
+        try {
+          final stagedFile = File(p.join(stagingDirectory.path, fileName));
+          await stagedFile.writeAsBytes(bytes);
+          await stagedFile.rename(filePath);
+        } finally {
+          await stagingDirectory.delete(recursive: true);
+        }
 
         state = state.copyWith(
           isDownloading: false,
@@ -825,11 +844,11 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   }
 
   Future<String> _getDownloadDirectory() async {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      final dir = await getApplicationCacheDirectory();
-      return dir.path;
-    }
-    final dir = await getTemporaryDirectory();
+    // A system temporary directory may be shared with other processes (for
+    // example, /tmp on Linux). Keep update publication in the app's own cache
+    // directory so an unrelated process cannot replace the parent directory
+    // while a download is in flight.
+    final dir = await getApplicationCacheDirectory();
     return dir.path;
   }
 
