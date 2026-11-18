@@ -354,6 +354,80 @@ void main() {
       expect(previewFile!.existsSync(), isFalse);
     },
   );
+
+  testWidgets(
+    'cleans up when player creation returns no player and initialization hangs',
+    (tester) async {
+      final temporaryDirectory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('media_preview_video_no_id_'),
+      );
+      final tempDir = temporaryDirectory!;
+      final previousPathProvider = PathProviderPlatform.instance;
+      final previousVideoPlatform = VideoPlayerPlatform.instance;
+      final videoPlatform = _BlockingDisposalVideoPlayerPlatform(
+        neverInitialize: true,
+        returnNullCreation: true,
+      );
+      PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
+        tempDir.path,
+      );
+      VideoPlayerPlatform.instance = videoPlatform;
+      addTearDown(() {
+        if (!videoPlatform.finishDispose.isCompleted) {
+          videoPlatform.finishDispose.complete();
+        }
+        PathProviderPlatform.instance = previousPathProvider;
+        VideoPlayerPlatform.instance = previousVideoPlatform;
+        tempDir.deleteSync(recursive: true);
+      });
+
+      File? previewFile;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: MediaPreviewSheet(
+                resource: MediaResource(
+                  url: 'https://example.com/preview.mp4',
+                  name: 'sample',
+                  ext: 'mp4',
+                ),
+                taskTitle: 'Preview',
+                downloadToFile: (_, file) async {
+                  previewFile = file;
+                  file.writeAsBytesSync([1, 2, 3, 4]);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await videoPlatform.playerCreated.future;
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        for (var i = 0;
+            i < 100 && !videoPlatform.disposeStarted.isCompleted;
+            i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+
+      expect(videoPlatform.disposeStarted.isCompleted, isTrue);
+      expect(previewFile!.existsSync(), isTrue);
+
+      videoPlatform.finishDispose.complete();
+      await tester.runAsync(() async {
+        for (var i = 0; i < 100 && previewFile!.existsSync(); i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      expect(previewFile!.existsSync(), isFalse);
+    },
+  );
 }
 
 class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
@@ -361,11 +435,13 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
     this.failCreation = false,
     this.failInitialization = false,
     this.neverInitialize = false,
+    this.returnNullCreation = false,
   });
 
   final bool failCreation;
   final bool failInitialization;
   final bool neverInitialize;
+  final bool returnNullCreation;
   final Completer<void> disposeStarted = Completer<void>();
   final Completer<void> finishDispose = Completer<void>();
   final Completer<void> playerCreated = Completer<void>();
@@ -383,6 +459,7 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
       );
     }
     playerCreated.complete();
+    if (returnNullCreation) return null;
     return 1;
   }
 

@@ -142,6 +142,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
   Future<void>? _videoInitialization;
+  bool _videoInitializationFailed = false;
   Future<void>? _videoPreviewDisposal;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
   bool _isAudioPlaying = false;
@@ -334,10 +335,14 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
   Future<void> _initializeVideoPreview(VideoPlayerController controller) async {
     _videoPlayerController = controller;
+    _videoInitializationFailed = false;
     final initialization = controller.initialize();
     _videoInitialization = initialization;
     try {
       await initialization;
+    } catch (_) {
+      _videoInitializationFailed = true;
+      rethrow;
     } finally {
       _videoInitialization = null;
     }
@@ -395,32 +400,35 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     _chewieController?.dispose();
     _chewieController = null;
     final controller = _videoPlayerController;
-    if (controller != null &&
-        await _waitForVideoPlayerCreation(controller, _videoInitialization)) {
-      try {
-        await controller.dispose();
-      } catch (_) {}
-    }
-    _videoPlayerController = null;
-    if (!_downloadInProgress) await _deleteTempFile();
-  }
-
-  Future<bool> _waitForVideoPlayerCreation(
-    VideoPlayerController controller,
-    Future<void>? initialization,
-  ) async {
-    while (!_videoPlayerWasCreated(controller)) {
-      if (initialization == null) return false;
-      try {
-        await initialization.timeout(const Duration(milliseconds: 10));
-        return _videoPlayerWasCreated(controller);
-      } on TimeoutException {
-        // Keep the file while a slow player creation is still in progress.
-      } catch (_) {
-        return _videoPlayerWasCreated(controller);
+    var canDeleteTempFile = controller == null;
+    if (controller != null) {
+      final creationFailed =
+          _videoInitializationFailed && !_videoPlayerWasCreated(controller);
+      if (creationFailed) {
+        canDeleteTempFile = true;
+      } else {
+        final disposal = controller.dispose();
+        final initialization = _videoInitialization;
+        var failedBeforeCreation = false;
+        if (initialization != null) {
+          try {
+            await Future.any<void>([disposal, initialization]);
+          } catch (_) {
+            failedBeforeCreation = !_videoPlayerWasCreated(controller);
+          }
+        }
+        if (failedBeforeCreation) {
+          canDeleteTempFile = true;
+        } else {
+          try {
+            await disposal;
+            canDeleteTempFile = true;
+          } catch (_) {}
+        }
       }
     }
-    return true;
+    _videoPlayerController = null;
+    if (canDeleteTempFile && !_downloadInProgress) await _deleteTempFile();
   }
 
   bool _videoPlayerWasCreated(VideoPlayerController controller) {
