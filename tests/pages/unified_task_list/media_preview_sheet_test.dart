@@ -59,25 +59,25 @@ void main() {
       });
 
       Widget previewWidget() => ProviderScope(
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: MediaPreviewSheet(
-              resource: MediaResource(
-                url: 'https://example.com/preview.mp4',
-                name: 'sample',
-                ext: 'mp4',
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: MediaPreviewSheet(
+                  resource: MediaResource(
+                    url: 'https://example.com/preview.mp4',
+                    name: 'sample',
+                    ext: 'mp4',
+                  ),
+                  taskTitle: 'Preview',
+                  downloadToFile: (_, file) {
+                    downloadStarted.complete(file);
+                    return finishDownload.future;
+                  },
+                ),
               ),
-              taskTitle: 'Preview',
-              downloadToFile: (_, file) {
-                downloadStarted.complete(file);
-                return finishDownload.future;
-              },
             ),
-          ),
-        ),
-      );
+          );
 
       await tester.pumpWidget(previewWidget());
       await tester.pump();
