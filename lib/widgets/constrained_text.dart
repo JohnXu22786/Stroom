@@ -362,39 +362,46 @@ class _ConstrainedTextState extends State<ConstrainedText>
             width: width,
             height: _textHeight,
             child: ClipRect(
-              child: AnimatedBuilder(
-                animation: _controller,
-                child: SizedBox(
-                  width: _vertical ? width : _textWidth,
-                  child: Text(
-                    widget.data,
-                    style: style,
-                    strutStyle: widget.strutStyle,
-                    textAlign: widget.marqueeTextAlign ?? textAlign,
-                    textDirection: direction,
-                    locale: locale,
-                    softWrap: _vertical,
-                    overflow: TextOverflow.clip,
-                    textScaler: scaler,
-                    maxLines: _vertical ? null : widget.maxLines ?? 1,
-                    semanticsLabel: widget.semanticsLabel,
-                    selectionColor: widget.selectionColor,
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: _vertical ? width : _textWidth,
+                maxWidth: _vertical ? width : _textWidth,
+                minHeight: _vertical ? _textHeight + _overflow : _textHeight,
+                maxHeight: _vertical ? _textHeight + _overflow : _textHeight,
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  child: SizedBox(
+                    width: _vertical ? width : _textWidth,
+                    child: Text(
+                      widget.data,
+                      style: style,
+                      strutStyle: widget.strutStyle,
+                      textAlign: widget.marqueeTextAlign ?? textAlign,
+                      textDirection: direction,
+                      locale: locale,
+                      softWrap: _vertical,
+                      overflow: TextOverflow.clip,
+                      textScaler: scaler,
+                      maxLines: _vertical ? null : widget.maxLines ?? 1,
+                      semanticsLabel: widget.semanticsLabel,
+                      selectionColor: widget.selectionColor,
+                    ),
                   ),
+                  builder: (context, child) {
+                    final progress = _position.value;
+                    final horizontalOffset = _vertical
+                        ? 0.0
+                        : direction == TextDirection.ltr
+                            ? -_overflow * progress
+                            : -_overflow * (1 - progress);
+                    final verticalOffset =
+                        _vertical ? -_overflow * progress : 0.0;
+                    return Transform.translate(
+                      offset: Offset(horizontalOffset, verticalOffset),
+                      child: child,
+                    );
+                  },
                 ),
-                builder: (context, child) {
-                  final progress = _position.value;
-                  final horizontalOffset = _vertical
-                      ? 0.0
-                      : direction == TextDirection.ltr
-                          ? -_overflow * progress
-                          : -_overflow * (1 - progress);
-                  final verticalOffset =
-                      _vertical ? -_overflow * progress : 0.0;
-                  return Transform.translate(
-                    offset: Offset(horizontalOffset, verticalOffset),
-                    child: child,
-                  );
-                },
               ),
             ),
           ),

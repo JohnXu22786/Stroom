@@ -542,11 +542,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               borderRadius: StroomMenuStyle.borderRadius,
               isExpanded: true,
               value: selectedIndex,
-              hint: Text(
+              hint: ConstrainedText(
                 models.isEmpty
                     ? AppLocalizations.of(context)!
                         .taskFlowUiConfigureModelFirst
                     : AppLocalizations.of(context)!.taskFlowUiModelUnavailable,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               isDense: true,
               decoration: InputDecoration(
@@ -726,13 +728,15 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ),
           ),
           style: TextStyle(fontSize: 13, color: cs.onSurface),
-          hint: Text(
+          hint: ConstrainedText(
             // A persisted voice id that no longer exists must not show the
             // raw id string — guide re-selection instead.
             currentOption == null && current.isNotEmpty
                 ? AppLocalizations.of(context)!.taskFlowUiVoiceUnavailable
                 : AppLocalizations.of(context)!.taskFlowUiSelectVoice,
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           items: voiceOptions.map((o) {
             return DropdownMenuItem<String>(
