@@ -141,6 +141,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   bool _downloadInProgress = false;
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
+  Future<void>? _videoInitialization;
   Future<void>? _videoPreviewDisposal;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
   bool _isAudioPlaying = false;
@@ -216,24 +217,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
       if (isVideoFormat) {
         final controller = VideoPlayerController.file(_tempFile!);
-        _videoPlayerController = controller;
-        await controller.initialize();
-
-        _chewieController = ChewieController(
-          videoPlayerController: controller,
-          autoPlay: true,
-          looping: false,
-          showControls: true,
-          materialProgressColors: ChewieProgressColors(
-            playedColor: Colors.red,
-            handleColor: Colors.red,
-            backgroundColor: Colors.grey,
-            bufferedColor: Colors.white24,
-          ),
-        );
-
-        if (!mounted) return;
-        setState(() => _loading = false);
+        await _initializeVideoPreview(controller);
       }
     } catch (e) {
       // Dispose controller to prevent resource leak on init failure
@@ -350,7 +334,13 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
   Future<void> _initializeVideoPreview(VideoPlayerController controller) async {
     _videoPlayerController = controller;
-    await controller.initialize();
+    final initialization = controller.initialize();
+    _videoInitialization = initialization;
+    try {
+      await initialization;
+    } finally {
+      _videoInitialization = null;
+    }
     if (!mounted) return;
     _chewieController = ChewieController(
       videoPlayerController: controller,
@@ -404,11 +394,41 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   Future<void> _disposeVideoPreviewAndFile() async {
     _chewieController?.dispose();
     _chewieController = null;
-    try {
-      await _videoPlayerController?.dispose();
-    } catch (_) {}
+    final controller = _videoPlayerController;
+    if (controller != null &&
+        await _waitForVideoPlayerCreation(controller, _videoInitialization)) {
+      try {
+        await controller.dispose();
+      } catch (_) {}
+    }
     _videoPlayerController = null;
     if (!_downloadInProgress) await _deleteTempFile();
+  }
+
+  Future<bool> _waitForVideoPlayerCreation(
+    VideoPlayerController controller,
+    Future<void>? initialization,
+  ) async {
+    while (!_videoPlayerWasCreated(controller)) {
+      if (initialization == null) return false;
+      try {
+        await initialization.timeout(const Duration(milliseconds: 10));
+        return _videoPlayerWasCreated(controller);
+      } on TimeoutException {
+        // Keep the file while a slow player creation is still in progress.
+      } catch (_) {
+        return _videoPlayerWasCreated(controller);
+      }
+    }
+    return true;
+  }
+
+  bool _videoPlayerWasCreated(VideoPlayerController controller) {
+    // The plugin has no public lifecycle signal for a failed create call.
+    // Its testing-visible player ID is the only way to distinguish that path
+    // from a controller with an open player that must be disposed first.
+    // ignore: invalid_use_of_visible_for_testing_member
+    return controller.playerId >= 0;
   }
 
   @override
