@@ -264,7 +264,9 @@ class OcrService {
           ? safeValue.replaceAll(credential, '[REDACTED]')
           : safeValue.replaceAll(encodedCredential, '[REDACTED]');
     }
-    return safeValue;
+    return OcrDiagnosticSnapshot.redactLabeledCredentialAssignments(
+      safeValue,
+    );
   }
 
   static dynamic _redactResponseDiagnosticValue(
