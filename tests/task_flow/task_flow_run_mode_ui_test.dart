@@ -243,10 +243,15 @@ void main() {
         control: control,
       );
       await tester.tap(find.text('选择图片（可多选）'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(find.text('Picked image'), findsOneWidget);
       await tester.tap(find.text('Picked image'));
       await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
       await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
       // Starting pushes the run page, which may keep scheduled frames active.
       await tester.pump();
