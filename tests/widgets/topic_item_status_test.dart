@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/topic_item.dart';
 
 Widget _app({
@@ -13,6 +14,9 @@ Widget _app({
   Brightness brightness = Brightness.light,
   VoidCallback? onReadStateToggle,
   Locale? locale,
+  TextScaler? textScaler,
+  double? topicWidth,
+  bool scrollableTopic = false,
 }) {
   return MaterialApp(
     locale: locale,
@@ -22,33 +26,179 @@ Widget _app({
     ),
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+      child: child!,
+    ),
     home: Scaffold(
-      body: TopicItem(
-        topic: Conversation(
-          id: 'topic',
-          title: 'Topic',
-          isTemporary: isTemporary,
-        ),
-        selectionMode: false,
-        isSelected: false,
-        isActive: false,
-        isRunning: isRunning,
-        isUnread: isUnread,
-        isFailed: isFailed,
-        onTap: () {},
-        onDelete: () {},
-        onPinToggle: () {},
-        onRename: () {},
-        onAutoRename: () {},
-        onReadStateToggle: onReadStateToggle ?? () {},
-        onSelectionToggle: () {},
-        onTemporaryToggle: onTemporaryToggle ?? () {},
-      ),
+      body: scrollableTopic
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: topicWidth,
+                child: _topicItem(
+                  isTemporary: isTemporary,
+                  isRunning: isRunning,
+                  isUnread: isUnread,
+                  isFailed: isFailed,
+                  onReadStateToggle: onReadStateToggle,
+                  onTemporaryToggle: onTemporaryToggle,
+                ),
+              ),
+            )
+          : SizedBox(
+              width: topicWidth,
+              child: _topicItem(
+                isTemporary: isTemporary,
+                isRunning: isRunning,
+                isUnread: isUnread,
+                isFailed: isFailed,
+                onReadStateToggle: onReadStateToggle,
+                onTemporaryToggle: onTemporaryToggle,
+              ),
+            ),
     ),
   );
 }
 
+Widget _topicItem({
+  bool isTemporary = false,
+  bool isRunning = false,
+  bool isUnread = true,
+  bool isFailed = false,
+  VoidCallback? onReadStateToggle,
+  VoidCallback? onTemporaryToggle,
+}) {
+  return TopicItem(
+    topic: Conversation(id: 'topic', title: 'Topic', isTemporary: isTemporary),
+    selectionMode: false,
+    isSelected: false,
+    isActive: false,
+    isRunning: isRunning,
+    isUnread: isUnread,
+    isFailed: isFailed,
+    onTap: () {},
+    onDelete: () {},
+    onPinToggle: () {},
+    onRename: () {},
+    onAutoRename: () {},
+    onReadStateToggle: onReadStateToggle ?? () {},
+    onSelectionToggle: () {},
+    onTemporaryToggle: onTemporaryToggle ?? () {},
+  );
+}
+
 void main() {
+  testWidgets(
+    'narrow scaled localized read-state label keeps its row geometry',
+    (tester) async {
+      tester.view.physicalSize = const Size(240, 360);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        _app(
+          locale: const Locale('de'),
+          textScaler: const TextScaler.linear(1.5),
+          topicWidth: 500,
+          scrollableTopic: true,
+        ),
+      );
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(-260, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      const label = 'Als ungelesen markieren';
+      final labelFinder = find.text(label);
+      final constrainedLabel = find.ancestor(
+        of: labelFinder,
+        matching: find.byType(ConstrainedText),
+      );
+      expect(constrainedLabel, findsOneWidget);
+      expect(labelFinder, findsOneWidget);
+
+      final menuItem = find.byWidgetPredicate(
+        (widget) =>
+            widget is PopupMenuItem<String> && widget.value == 'read_state',
+      );
+      final row = find.descendant(of: menuItem, matching: find.byType(Row));
+      expect(row, findsOneWidget);
+      final iconFinder = find.byIcon(Icons.mark_email_unread_outlined);
+      final icon = tester.widget<Icon>(iconFinder);
+      expect(icon.size, 20);
+      final gap = find.descendant(
+        of: row,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is SizedBox && widget.width == 12,
+        ),
+      );
+      expect(gap, findsOneWidget);
+      expect(
+        tester.getRect(find.text(label)).left -
+            tester.getRect(iconFinder).right,
+        12,
+      );
+      const autoName = 'Automatisch benennen';
+      final autoNameFinder = find.text(autoName);
+      final constrainedAutoName = find.ancestor(
+        of: autoNameFinder,
+        matching: find.byType(ConstrainedText),
+      );
+      expect(constrainedAutoName, findsOneWidget);
+      expect(
+        find.descendant(
+          of: constrainedAutoName,
+          matching: find.byType(AnimatedBuilder),
+        ),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 3));
+      expect(
+        find.descendant(
+          of: constrainedAutoName,
+          matching: find.byType(AnimatedBuilder),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('ordinary read-state label remains stationary when it fits', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app());
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+
+    final label = find.text('Mark as unread');
+    final constrainedLabel = find.ancestor(
+      of: label,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(constrainedLabel, findsOneWidget);
+    expect(
+      find.descendant(
+        of: constrainedLabel,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsNothing,
+    );
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(
+      find.descendant(
+        of: constrainedLabel,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('topic menu toggles temporary status in either direction', (
     tester,
   ) async {
@@ -157,8 +307,7 @@ void main() {
             .colorScheme
             .onSurfaceVariant,
         0.4,
-      )!
-          .withValues(alpha: 0.12),
+      )!.withValues(alpha: 0.12),
     );
   });
 
