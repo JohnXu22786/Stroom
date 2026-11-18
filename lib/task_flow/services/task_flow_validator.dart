@@ -290,7 +290,9 @@ Future<void> validateTaskFlow(
           IOType.file,
         ].contains(inputType)) {
       try {
-        if (kIsWeb) {
+        final webStoreReference = kIsWeb ||
+            (WebFileStore.isTestMode && await WebFileStore.exists(text));
+        if (webStoreReference) {
           final bytes = await WebFileStore.read(text);
           if (bytes?.isNotEmpty != true) throw const FileSystemException();
           checkFile(bytes!, bytes.length);

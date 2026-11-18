@@ -248,13 +248,15 @@ void main() {
       await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
-      await tester.pumpAndSettle();
+      // Starting pushes the run page, which may keep scheduled frames active.
+      await tester.pump();
 
       final submitted = control.submitted!.single;
       expect(submitted.text, resolvedPath);
       expect(submitted.manifestStoragePath, record.storagePath);
       expect(submitted.manifestType, FlowInputManifestType.image);
       expect(submitted.ownedStoragePath, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('a restored generic file input stays a picked file', (

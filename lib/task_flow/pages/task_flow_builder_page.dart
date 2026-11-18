@@ -15,6 +15,7 @@ import '../../utils/duration_parser.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/image_manifest.dart';
 import '../../utils/video_manifest.dart';
+import '../../utils/web_file_store.dart';
 import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_payload.dart'
@@ -1775,12 +1776,17 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
 
     if (result == null || !mounted || _isStarting) return;
-    // On web readFilePath returns a WebFileStore key, not a filesystem
-    // path — skip the existence check there (dart:io File throws).
-    final valid = paths.where((p) {
-      if (kIsWeb) return true;
-      return File(p).existsSync();
-    }).toList();
+    // On web and in-memory test mode readFilePath returns a WebFileStore key,
+    // not a filesystem path — skip the existence check there.
+    final valid = <String>[];
+    for (final path in paths) {
+      if (kIsWeb ||
+          (WebFileStore.isTestMode && await WebFileStore.exists(path)) ||
+          File(path).existsSync()) {
+        valid.add(path);
+      }
+    }
+    if (!mounted || _isStarting) return;
     final unavailableCount = unresolvedRecords + paths.length - valid.length;
     if (unavailableCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
