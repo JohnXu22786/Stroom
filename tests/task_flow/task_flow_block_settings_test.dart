@@ -20,6 +20,7 @@ import 'package:stroom/task_flow/widgets/io_type_indicator.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/provider_models.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _FakeEntriesNotifier extends ProviderEntriesNotifier {
   _FakeEntriesNotifier(ProviderEntriesState entries) {
@@ -66,6 +67,8 @@ void main() {
     required TaskFlowBlock block,
     ProviderEntriesState? entries,
     List<Assistant> assistants = const [],
+    Locale locale = const Locale('zh', 'CN'),
+    TextScaler textScaler = TextScaler.noScaling,
     ValueChanged<TaskFlowBlock?>? onSaved,
   }) async {
     await tester.pumpWidget(
@@ -80,7 +83,11 @@ void main() {
           ),
         ],
         child: MaterialApp(
-          locale: const Locale('zh', 'CN'),
+          locale: locale,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
@@ -237,6 +244,69 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+      'model and stale voice hints keep their full localized labels in narrow scaled controls',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(
+        typeKey: BlockType.tts,
+        params: {
+          'modelRef': {'configId': 'deleted', 'modelId': 'deleted'},
+          'voice': 'deleted-voice',
+        },
+      ),
+      entries: _ttsEntries(),
+      locale: const Locale('fr', 'FR'),
+      textScaler: TextScaler.linear(2),
+    );
+
+    final modelField = find.byType(DropdownButtonFormField<int>).first;
+    final voiceField = find.byType(DropdownButtonFormField<String>).first;
+    final localization = AppLocalizations.of(tester.element(modelField))!;
+    final modelLabel = localization.taskFlowUiModelUnavailable;
+    final voiceLabel = localization.taskFlowUiVoiceUnavailable;
+    final modelHint = find.descendant(
+      of: modelField,
+      matching: find.byType(ConstrainedText),
+    );
+    final voiceHint = find.descendant(
+      of: voiceField,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(modelHint, findsOneWidget);
+    expect(tester.widget<ConstrainedText>(modelHint).data, modelLabel);
+    expect(voiceHint, findsOneWidget);
+    expect(tester.widget<ConstrainedText>(voiceHint).data, voiceLabel);
+
+    TextPainter measure(String value, Finder finder) {
+      final context = tester.element(finder);
+      final constrained = tester.widget<ConstrainedText>(finder);
+      return TextPainter(
+        text: TextSpan(
+          text: value,
+          style: DefaultTextStyle.of(context).style.merge(constrained.style),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+    }
+
+    expect(measure(modelLabel, modelHint).width,
+        greaterThan(tester.getSize(modelHint).width));
+    expect(measure(voiceLabel, voiceHint).width,
+        greaterThan(tester.getSize(voiceHint).width));
+    expect(tester.getSemantics(modelHint).label, contains(modelLabel));
+    expect(tester.getSemantics(voiceHint).label, contains(voiceLabel));
+    semantics.dispose();
   });
 
   group('flowFolderSourceFor', () {

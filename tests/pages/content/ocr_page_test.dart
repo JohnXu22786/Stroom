@@ -33,6 +33,7 @@ import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Creates a small valid PNG (8x8) via the real engine, tinted [color]
 /// so distinct images can be told apart (default: green).
@@ -84,6 +85,7 @@ Widget _buildTestApp({
   BackgroundTask? retryTaskGeneration,
   List<OcrPageOutcome> retryPageOutcomes = const [],
   Locale locale = const Locale('zh', 'CN'),
+  TextScaler textScaler = TextScaler.noScaling,
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   ProviderEntriesNotifier? testProviderEntriesNotifier,
@@ -144,6 +146,10 @@ Widget _buildTestApp({
     ],
     child: MaterialApp(
       locale: locale,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: child!,
+      ),
       home: OcrPage(
         testImages: testImages,
         testOcrServiceFactory: testOcrServiceFactory,
@@ -984,6 +990,79 @@ void main() {
   );
 
   group('OcrPage - model selector', () {
+    testWidgets(
+      'model-selection hint uses a one-line constrained label at narrow width and large text scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            locale: const Locale('de', 'DE'),
+            textScaler: TextScaler.linear(2),
+            retryData: {
+              'type': 'ocr',
+              'version': 999,
+              'modelId': 'legacy-model',
+              'images': <Object>[],
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final dropdownFinder = find.byType(DropdownButton<int>).first;
+        final dropdown = tester.widget<DropdownButton<int>>(dropdownFinder);
+        final label = AppLocalizations.of(tester.element(dropdownFinder))!
+            .ocrModelUnavailable;
+        final hint = dropdown.hint!;
+        expect(hint, isA<ConstrainedText>());
+        expect((hint as ConstrainedText).data, label);
+        final hintFinder = find.descendant(
+          of: dropdownFinder,
+          matching: find.byType(ConstrainedText),
+        );
+        final context = tester.element(hintFinder);
+        final painter = TextPainter(
+          text: TextSpan(
+            text: label,
+            style: DefaultTextStyle.of(context).style.merge(hint.style),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        expect(painter.width, greaterThan(tester.getSize(hintFinder).width));
+
+        final semantics = tester.ensureSemantics();
+        expect(tester.getSemantics(hintFinder).label, contains(label));
+        semantics.dispose();
+        final movingText = find.text(label);
+        final start = tester.getTopLeft(movingText);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 2));
+        expect(tester.getTopLeft(movingText).dx, lessThan(start.dx));
+        final slot = tester.getSize(hintFinder).width;
+        final travel = Duration(
+          milliseconds: ((painter.width - slot) / 24 * 1000).round(),
+        );
+        await tester.pump(travel - const Duration(seconds: 2));
+        final clip = find
+            .ancestor(
+              of: movingText,
+              matching: find.byType(ClipRect),
+            )
+            .first;
+        final clipRect = tester.getRect(clip);
+        final endRect = tester.getRect(movingText);
+        expect(endRect.width, greaterThan(clipRect.width));
+        expect(endRect.right, closeTo(clipRect.right, 2));
+        expect(endRect.overlaps(clipRect), isTrue);
+        while (tester.takeException() != null) {}
+      },
+    );
+
     testWidgets('shows model selector when OCR provider has models', (
       tester,
     ) async {
