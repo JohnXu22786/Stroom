@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
@@ -156,28 +157,49 @@ class SnapshotService {
   static Future<List<SnapshotEntry>> readIndex() async {
     try {
       final file = await _indexFile();
-      if (!await file.exists()) return [];
+      if (!await file.exists()) return await _rebuildIndexIfSnapshotsExist();
       final raw = await file.readAsString();
-      if (raw.trim().isEmpty) return [];
+      if (raw.trim().isEmpty) return await _rebuildIndexIfSnapshotsExist();
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        return _rebuildIndexFromDisk();
+        return await _rebuildIndexFromDisk();
       }
       final list = decoded['snapshots'];
-      if (list is! List) return _rebuildIndexFromDisk();
+      if (list is! List) return await _rebuildIndexFromDisk();
       if (list.any((entry) => entry is! Map<String, dynamic>)) {
-        return _rebuildIndexFromDisk();
+        return await _rebuildIndexFromDisk();
       }
       final entries = list
           .whereType<Map<String, dynamic>>()
           .map(SnapshotEntry.fromJson)
           .toList();
-      if (entries.isEmpty && list.isNotEmpty) return _rebuildIndexFromDisk();
+      if (entries.isEmpty) {
+        return list.isEmpty
+            ? await _rebuildIndexIfSnapshotsExist()
+            : await _rebuildIndexFromDisk();
+      }
       return entries;
     } catch (e) {
       debugPrint('[SnapshotService] 读取快照索引失败，扫描目录重建: $e');
       return _rebuildIndexFromDisk();
     }
+  }
+
+  /// Missing/empty indexes are normal for a new snapshots directory. Scan
+  /// only when there is an archive that could need recovery.
+  static Future<List<SnapshotEntry>> _rebuildIndexIfSnapshotsExist() async {
+    try {
+      final dir = await snapshotsDir;
+      final files = await dir.list().toList();
+      final hasSnapshots = files.whereType<File>().any((file) {
+        final name = p.basename(file.path);
+        return name.endsWith('.zip') && _extractTimestamp(name) != null;
+      });
+      if (!hasSnapshots) return [];
+    } catch (_) {
+      // Let the rebuild path report and handle a scan failure consistently.
+    }
+    return _rebuildIndexFromDisk();
   }
 
   /// 从磁盘扫描重建索引（SHA 重算）。
@@ -194,6 +216,12 @@ class SnapshotService {
         final ts = _extractTimestamp(name);
         if (ts == null) continue;
         try {
+          final archive = InputFileStream(f.path);
+          try {
+            ZipDecoder().decodeStream(archive, throwOnError: true);
+          } finally {
+            await archive.close();
+          }
           final sha = await computeSha256ForFile(f.path);
           final partVersions =
               await DataMigrationService.getStoredPartVersions();
