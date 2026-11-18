@@ -107,7 +107,7 @@ lib/pages/notification_settings_page.dart,16,0,30,16,4,30,2,ConstrainedText alre
 lib/pages/ocr/ocr_instruction_dialog.dart,12,5,14,12,15,14,7,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/ocr/ocr_shared.dart,3,2,8,3,2,9,1,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/ocr_model_config_page.dart,34,2,18,37,17,18,8,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
-lib/pages/ocr_page.dart,62,5,75,62,42,75,21,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
+lib/pages/ocr_page.dart,62,5,75,62,42,75,22,Updated: OCR model-selection hint uses a one-line ConstrainedText in the 34 dp dropdown slot and scrolls only when the localized hint clips. Candidate signals overlap.
 lib/pages/platform_tutorial_page.dart,13,0,14,13,4,14,2,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/provider_config_detail_page.dart,12,2,8,12,12,8,6,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/provider_config_page.dart,47,8,44,47,38,44,18,Updated: MCP description now reveals clipped lines vertically within its 2-line slot.
@@ -132,7 +132,7 @@ lib/pages/theme_display_settings_page.dart,8,0,3,8,2,3,1,ConstrainedText already
 lib/pages/topic_selection_page.dart,30,2,9,30,36,9,18,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/tts_create_page.dart,44,8,57,44,21,57,9,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/tts_page.dart,25,0,9,25,16,9,8,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
-lib/pages/unified_task_list/background_task_card.dart,16,2,33,16,8,33,4,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
+lib/pages/unified_task_list/background_task_card.dart,16,2,33,16,8,33,4,Running-state metadata wraps naturally; verified no clip at 360 dp / de-DE / 1.7 scale. ConstrainedText is not needed for this row.
 lib/pages/unified_task_list/catcatch_task_card.dart,41,12,63,41,30,63,15,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/unified_task_list/media_preview_sheet.dart,8,2,9,8,2,9,1,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/unified_task_list/synthesis_task_card.dart,23,4,30,23,14,30,7,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
@@ -167,7 +167,7 @@ lib/task_flow/pages/task_flow_builder_page.dart,51,4,39,51,30,39,14,ConstrainedT
 lib/task_flow/pages/task_flow_list_page.dart,24,6,30,24,18,30,8,Updated: Task Flow definitions label now reveals clipped lines vertically within its 2-line slot.
 lib/task_flow/pages/task_flow_run_page.dart,6,0,0,6,4,0,2,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/task_flow/widgets/block_chain_editor.dart,14,0,30,14,6,30,3,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
-lib/task_flow/widgets/block_editor_dialog.dart,36,9,32,36,23,32,11,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
+lib/task_flow/widgets/block_editor_dialog.dart,36,9,32,36,23,32,13,Updated: model and voice selector hints use one-line ConstrainedText in their form fields and scroll only when the localized hint clips. Candidate signals overlap.
 lib/task_flow/widgets/catcatch_policy_menu.dart,2,0,1,2,2,1,1,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/task_flow/widgets/flow_block_card.dart,9,0,18,9,1,18,1,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/task_flow/widgets/io_type_indicator.dart,1,0,2,1,0,2,0,Updated: Localized input/output type chip has a finite flexible label slot and horizontal marquee on actual overflow.

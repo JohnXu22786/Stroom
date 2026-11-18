@@ -926,9 +926,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
                     hint: selectedIndex == null
-                        ? Text(
+                        ? ConstrainedText(
                             _modelSelectionMessage(selectedIndex) ??
                                 AppLocalizations.of(context)!.ocrSelectModel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           )
                         : null,
                     isDense: true,
