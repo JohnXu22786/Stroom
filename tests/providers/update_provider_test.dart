@@ -12,10 +12,20 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+
+class _ApplicationCachePathProvider extends PathProviderPlatform {
+  _ApplicationCachePathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationCachePath() async => path;
+}
 
 /// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse]
 /// wrapped in a list (matching the [/releases] array response).
@@ -1051,6 +1061,37 @@ void main() {
       expect(notifier.state.downloadedFilePath, isNotNull);
       // downloadError might be set due to auto-install failure in test environment
       // but that is acceptable - the key is download completed
+    });
+
+    test('downloadUpdate uses the app cache instead of shared temp storage',
+        () async {
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _ApplicationCachePathProvider(tempDir);
+      addTearDown(() => PathProviderPlatform.instance = previousPathProvider);
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3],
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/update.zip',
+      );
+
+      await notifier.downloadUpdate();
+
+      expect(notifier.state.downloadedFilePath,
+          '${tempDir}${Platform.pathSeparator}update.zip');
+      expect(
+        await File(notifier.state.downloadedFilePath!).readAsBytes(),
+        <int>[1, 2, 3],
+      );
     });
 
     test('downloadUpdate rejects encoded path traversal filenames', () async {

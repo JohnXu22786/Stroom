@@ -844,11 +844,11 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   }
 
   Future<String> _getDownloadDirectory() async {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      final dir = await getApplicationCacheDirectory();
-      return dir.path;
-    }
-    final dir = await getTemporaryDirectory();
+    // A system temporary directory may be shared with other processes (for
+    // example, /tmp on Linux). Keep update publication in the app's own cache
+    // directory so an unrelated process cannot replace the parent directory
+    // while a download is in flight.
+    final dir = await getApplicationCacheDirectory();
     return dir.path;
   }
 
