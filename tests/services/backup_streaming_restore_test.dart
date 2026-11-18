@@ -15,6 +15,7 @@ import 'package:stroom/services/backup_service_shared.dart';
 import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/startup_preferences.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/utils/web_file_store.dart';
@@ -786,6 +787,13 @@ void main() {
 
   test('startup restores an interrupted file restore from its durable snapshot',
       () async {
+    final previousLegacyStartupPreferenceMode =
+        StartupPreferences.debugUseLegacyPreferencesForTesting;
+    StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+    addTearDown(() {
+      StartupPreferences.debugUseLegacyPreferencesForTesting =
+          previousLegacyStartupPreferenceMode;
+    });
     WebFileStore.disableTestMode();
     final previousPathProvider = PathProviderPlatform.instance;
     final appDir = '$workDir/restore_app_data';
