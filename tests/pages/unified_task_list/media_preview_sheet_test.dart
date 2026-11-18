@@ -40,17 +40,10 @@ Future<bool> _waitForSignal(
   WidgetTester tester,
   Completer<void> signal,
 ) async {
-  await tester.pump();
-  final completed = await tester.runAsync(() async {
-    try {
-      await signal.future.timeout(const Duration(seconds: 2));
-      return true;
-    } on TimeoutException {
-      return false;
-    }
-  });
-  await tester.pump();
-  return completed ?? false;
+  for (var i = 0; i < 200 && !signal.isCompleted; i++) {
+    await tester.pump(const Duration(milliseconds: 10));
+  }
+  return signal.isCompleted;
 }
 
 Future<void> _tearDownVideoTest({
@@ -448,16 +441,96 @@ void main() {
     },
   );
 
-  testWidgets('disposes a created player when initialization never completes', (
-    tester,
-  ) async {
+  testWidgets(
+    'waits for player setup before disposing an assigned player ID',
+    (tester) async {
+      final temporaryDirectory = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('media_preview_video_setup_'),
+      );
+      final tempDir = temporaryDirectory!;
+      final previousPathProvider = PathProviderPlatform.instance;
+      final previousVideoPlatform = VideoPlayerPlatform.instance;
+      final videoPlatform = _BlockingDisposalVideoPlayerPlatform(
+        blockDisplaySleepSetup: true,
+      );
+      PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
+        tempDir.path,
+      );
+      VideoPlayerPlatform.instance = videoPlatform;
+      File? previewFile;
+      addTearDown(
+        () => _tearDownVideoTest(
+          tester: tester,
+          videoPlatform: videoPlatform,
+          previousPathProvider: previousPathProvider,
+          previousVideoPlatform: previousVideoPlatform,
+          tempDir: tempDir,
+          previewFile: previewFile,
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: MediaPreviewSheet(
+                resource: MediaResource(
+                  url: 'https://example.com/preview.mp4',
+                  name: 'sample',
+                  ext: 'mp4',
+                ),
+                taskTitle: 'Preview',
+                downloadToFile: (_, file) async {
+                  previewFile = file;
+                  file.writeAsBytesSync([1, 2, 3, 4]);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        await _waitForSignal(tester, videoPlatform.displaySleepSetupStarted),
+        isTrue,
+      );
+      expect(videoPlatform.videoEventsRequested.isCompleted, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(previewFile!.existsSync(), isTrue);
+      expect(videoPlatform.disposeStarted.isCompleted, isFalse);
+
+      videoPlatform.finishDisplaySleepSetup.complete();
+      expect(
+        await _waitForSignal(
+            tester, videoPlatform.videoEventSubscriptionStarted),
+        isTrue,
+      );
+      expect(
+          await _waitForSignal(tester, videoPlatform.disposeStarted), isTrue);
+      expect(videoPlatform.disposedBeforeEventSubscription, isFalse);
+      expect(previewFile!.existsSync(), isTrue);
+
+      videoPlatform.finishDispose.complete();
+      await _waitForFileDeletion(tester, previewFile!);
+      expect(previewFile!.existsSync(), isFalse);
+    },
+  );
+
+  testWidgets(
+      'disposes a created negative-ID player when initialization never completes',
+      (tester) async {
     final temporaryDirectory = await tester.runAsync(
       () => Directory.systemTemp.createTemp('media_preview_video_pending_'),
     );
     final tempDir = temporaryDirectory!;
     final previousPathProvider = PathProviderPlatform.instance;
     final previousVideoPlatform = VideoPlayerPlatform.instance;
-    final videoPlatform = _BlockingDisposalVideoPlayerPlatform();
+    final videoPlatform = _BlockingDisposalVideoPlayerPlatform(
+      blockCreation: true,
+      blockDisplaySleepSetup: true,
+      creationPlayerId: -7,
+    );
     PathProviderPlatform.instance = _TemporaryDirectoryPathProvider(
       tempDir.path,
     );
@@ -495,14 +568,29 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
-    await _pumpUntil(tester, () => videoPlatform.playerCreated.isCompleted);
-    expect(videoPlatform.playerCreated.isCompleted, isTrue);
-
+    await _pumpUntil(tester, () => videoPlatform.createStarted.isCompleted);
+    expect(videoPlatform.createStarted.isCompleted, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
+    expect(previewFile!.existsSync(), isTrue);
+    expect(videoPlatform.disposeStarted.isCompleted, isFalse);
+
+    videoPlatform.finishCreate.complete();
+    expect(await _waitForSignal(tester, videoPlatform.createFinished), isTrue);
+    expect(
+      await _waitForSignal(tester, videoPlatform.displaySleepSetupStarted),
+      isTrue,
+    );
+    expect(videoPlatform.disposeStarted.isCompleted, isFalse);
+    videoPlatform.finishDisplaySleepSetup.complete();
+    expect(
+      await _waitForSignal(tester, videoPlatform.videoEventSubscriptionStarted),
+      isTrue,
+    );
+    expect(videoPlatform.displaySleepSetupCalls, 2);
     expect(await _waitForSignal(tester, videoPlatform.disposeStarted), isTrue);
 
     expect(videoPlatform.disposeStarted.isCompleted, isTrue);
+    expect(videoPlatform.disposedBeforeEventSubscription, isFalse);
     expect(previewFile!.existsSync(), isTrue);
 
     videoPlatform.finishDispose.complete();
@@ -587,13 +675,15 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
     this.failCreation = false,
     this.returnNullCreation = false,
     this.blockCreation = false,
+    this.blockDisplaySleepSetup = false,
+    this.creationPlayerId = 1,
   });
 
   final bool failCreation;
   final bool returnNullCreation;
   final bool blockCreation;
-  final StreamController<VideoEvent> _events =
-      StreamController<VideoEvent>.broadcast(sync: true);
+  final bool blockDisplaySleepSetup;
+  final int creationPlayerId;
   final Completer<void> disposeStarted = Completer<void>();
   final Completer<void> finishDispose = Completer<void>();
   final Completer<void> disposeFinished = Completer<void>();
@@ -602,8 +692,24 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
   final Completer<void> finishCreate = Completer<void>();
   final Completer<void> createFinished = Completer<void>();
   final Completer<void> videoEventsRequested = Completer<void>();
+  final Completer<void> videoEventSubscriptionStarted = Completer<void>();
+  final Completer<void> displaySleepSetupStarted = Completer<void>();
+  final Completer<void> finishDisplaySleepSetup = Completer<void>();
   final Completer<void> playerInitialized = Completer<void>();
+  late final StreamController<VideoEvent> _events =
+      StreamController<VideoEvent>.broadcast(
+    sync: true,
+    onListen: () {
+      if (!videoEventSubscriptionStarted.isCompleted) {
+        videoEventSubscriptionStarted.complete();
+      }
+    },
+  );
   int pauseCalls = 0;
+  int _displaySleepSetupCalls = 0;
+  bool disposedBeforeEventSubscription = false;
+
+  int get displaySleepSetupCalls => _displaySleepSetupCalls;
 
   Future<void> close() => _events.close();
 
@@ -642,7 +748,7 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
       }
       playerCreated.complete();
       if (returnNullCreation) return null;
-      return 1;
+      return creationPlayerId;
     } finally {
       createFinished.complete();
     }
@@ -684,7 +790,23 @@ class _BlockingDisposalVideoPlayerPlatform extends VideoPlayerPlatform {
   Future<void> setMixWithOthers(bool mixWithOthers) async {}
 
   @override
+  Future<void> setPreventsDisplaySleepDuringVideoPlayback(
+    int playerId,
+    bool preventsDisplaySleepDuringVideoPlayback,
+  ) async {
+    _displaySleepSetupCalls++;
+    if (blockDisplaySleepSetup) {
+      if (!displaySleepSetupStarted.isCompleted) {
+        displaySleepSetupStarted.complete();
+      }
+      await finishDisplaySleepSetup.future;
+    }
+  }
+
+  @override
   Future<void> dispose(int playerId) async {
+    disposedBeforeEventSubscription =
+        !videoEventSubscriptionStarted.isCompleted;
     disposeStarted.complete();
     try {
       await finishDispose.future;

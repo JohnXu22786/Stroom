@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import 'package:uuid/uuid.dart';
 import 'package:chewie/chewie.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
@@ -433,19 +434,29 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
     var canDeleteTempFile = controller == null;
     if (controller != null) {
       final initialization = _videoInitialization;
-      if (!_videoPlayerWasCreated(controller) && initialization != null) {
-        try {
-          await initialization;
-        } catch (_) {}
+      if (initialization != null) {
+        await _waitForVideoPlayerCreationOrInitializationEnd(
+          controller,
+          initialization,
+        );
       }
 
-      if (_videoInitializationFailedBeforePlayerCreation) {
+      if (_videoPlayerWasCreated(controller)) {
+        try {
+          await controller.dispose();
+          canDeleteTempFile = true;
+        } catch (_) {}
+      } else if (_videoInitializationFailedBeforePlayerCreation ||
+          controller.value.errorDescription == null) {
         // video_player leaves its creation completer unresolved when player
         // creation fails before a player ID or event subscription is assigned.
         // Its dispose waits on that completer; background playback also avoids
         // registering the plugin's lifecycle observer on this path.
         canDeleteTempFile = true;
       } else {
+        // A platform can return no player ID and then report an event error.
+        // Creation has settled, so disposal is safe and cancels its event
+        // subscription even though there is no valid player ID.
         try {
           await controller.dispose();
           canDeleteTempFile = true;
@@ -456,12 +467,49 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
     if (canDeleteTempFile && !_downloadInProgress) await _deleteTempFile();
   }
 
+  Future<void> _waitForVideoPlayerCreationOrInitializationEnd(
+    VideoPlayerController controller,
+    Future<void> initialization,
+  ) async {
+    var initializationEnded = false;
+    unawaited(
+      initialization.then<void>(
+        (_) => initializationEnded = true,
+        onError: (Object _, StackTrace _) => initializationEnded = true,
+      ),
+    );
+
+    while (!_videoPlayerWasCreated(controller) && !initializationEnded) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    if (_videoPlayerWasCreated(controller)) {
+      // VideoPlayerController exposes the ID before its initial display-sleep
+      // platform call and event subscription are ready. Repeat that platform
+      // call as a FIFO barrier so disposal cannot race subscription setup.
+      // ignore: invalid_use_of_visible_for_testing_member
+      final playerId = controller.playerId;
+      try {
+        await VideoPlayerPlatform.instance
+            .setPreventsDisplaySleepDuringVideoPlayback(
+          playerId,
+          controller.value.preventsDisplaySleepDuringVideoPlayback,
+        );
+        await Future<void>.delayed(Duration.zero);
+      } catch (_) {
+        // Continue into controller.dispose; it still owns native cleanup.
+      }
+    }
+  }
+
   bool _videoPlayerWasCreated(VideoPlayerController controller) {
     // The plugin has no public lifecycle signal for a failed create call.
     // Its testing-visible player ID is the only way to distinguish that path
-    // from a controller with an open player that must be disposed first.
+    // from a controller with an open player that must be disposed first. FVP
+    // can use negative IDs for players that report an open failure, so only
+    // the plugin's exact uninitialized sentinel means creation is pending.
     // ignore: invalid_use_of_visible_for_testing_member
-    return controller.playerId >= 0;
+    return controller.playerId != VideoPlayerController.kUninitializedPlayerId;
   }
 
   @override
