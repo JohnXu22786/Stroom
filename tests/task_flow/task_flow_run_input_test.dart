@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -156,6 +157,30 @@ void main() {
       );
 
       addTaskCalls = [];
+      final ocrConfig = ProviderConfigItem(
+        id: 'test-ocr-config',
+        providerName: 'Test OCR',
+        host: 'https://example.com',
+        key: 'test-key',
+        models: [
+          ModelConfig(
+            id: 'test-ocr-model',
+            name: 'Test OCR',
+            modelId: 'test-ocr-model',
+          ),
+        ],
+      );
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test-ocr-entry',
+              name: 'Test OCR',
+              type: 'ocr',
+              configs: [ocrConfig],
+            ),
+          ],
+        );
       catcatchNotifier = _MockCatCatchNotifier();
       String? capturedTaskId;
       when(
@@ -180,6 +205,7 @@ void main() {
 
       container = ProviderContainer(
         overrides: [
+          providerEntriesProvider.overrideWith((ref) => providerNotifier),
           taskFlowListProvider.overrideWith((ref) => flowNotifier),
           taskFlowExecutionsProvider.overrideWith(
             (ref) => TaskFlowExecutionNotifier(),
@@ -261,7 +287,17 @@ void main() {
         flowId = container.read(taskFlowListProvider.notifier).addFlow(
           name: '图片流程',
           inputType: IOType.image,
-          blocks: [TaskFlowBlock(typeKey: BlockType.ocr)],
+          blocks: [
+            TaskFlowBlock(
+              typeKey: BlockType.ocr,
+              params: {
+                'modelRef': {
+                  'configId': 'test-ocr-config',
+                  'modelId': 'test-ocr-model',
+                },
+              },
+            ),
+          ],
         );
         final original = TaskFlowExecution(
           flowId: flowId,
