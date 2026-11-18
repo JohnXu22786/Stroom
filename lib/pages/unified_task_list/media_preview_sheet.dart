@@ -29,6 +29,9 @@ const _audioPreviewExtensions = {
 };
 
 const _videoPreviewExtensions = {'mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv'};
+final _previewVideoPlayerOptions = VideoPlayerOptions(
+  allowBackgroundPlayback: true,
+);
 
 /// Whether the preview flow treats this resource as audio.
 bool isAudioPreviewResource(MediaResource resource) =>
@@ -132,7 +135,8 @@ class _MediaPreviewError {
 
 enum _MediaPreviewErrorKind { unsupportedFormat, loadFailed, playbackFailed }
 
-class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
+class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
+    with WidgetsBindingObserver {
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _loading = true;
@@ -143,6 +147,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   AudioPlayer? _audioPlayer;
   Future<void>? _videoInitialization;
   bool _videoInitializationFailed = false;
+  bool _wasVideoPlayingBeforePause = false;
   Future<void>? _videoPreviewDisposal;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
   bool _isAudioPlaying = false;
@@ -152,9 +157,25 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_initPreview());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _videoPlayerController;
+    if (controller == null || _videoInitializationFailed) return;
+
+    if (state == AppLifecycleState.paused) {
+      _wasVideoPlayingBeforePause = controller.value.isPlaying;
+      if (_wasVideoPlayingBeforePause) unawaited(controller.pause());
+    } else if (state == AppLifecycleState.resumed &&
+        _wasVideoPlayingBeforePause) {
+      _wasVideoPlayingBeforePause = false;
+      unawaited(controller.play());
+    }
   }
 
   Future<void> _initPreview() async {
@@ -169,6 +190,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
           VideoPlayerController.networkUrl(
             Uri.parse(resource.url),
             httpHeaders: headers,
+            videoPlayerOptions: _previewVideoPlayerOptions,
           ),
         );
         return;
@@ -217,7 +239,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       if (!mounted) return;
 
       if (isVideoFormat) {
-        final controller = VideoPlayerController.file(_tempFile!);
+        final controller = VideoPlayerController.file(
+          _tempFile!,
+          videoPlayerOptions: _previewVideoPlayerOptions,
+        );
         await _initializeVideoPreview(controller);
       }
     } catch (e) {
@@ -405,6 +430,10 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
       final creationFailed =
           _videoInitializationFailed && !_videoPlayerWasCreated(controller);
       if (creationFailed) {
+        // video_player leaves its creation completer unresolved when
+        // createWithOptions throws. With background playback enabled above,
+        // there is no lifecycle observer or platform player to release here.
+        unawaited(controller.dispose().catchError((_) {}));
         canDeleteTempFile = true;
       } else {
         final disposal = controller.dispose();
@@ -441,6 +470,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _disposeAudioPlayer();
     unawaited(_disposeVideoPreview());
     super.dispose();
