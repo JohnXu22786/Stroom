@@ -117,8 +117,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       final painter = TextPainter(
         text: TextSpan(
           text: 'Hg',
-          style: DefaultTextStyle.of(context).style
-              .copyWith(fontSize: fontSize),
+          style:
+              DefaultTextStyle.of(context).style.copyWith(fontSize: fontSize),
         ),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
