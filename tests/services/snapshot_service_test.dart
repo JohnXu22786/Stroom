@@ -146,6 +146,55 @@ void main() {
       expect(index.first.sha256, isNotEmpty);
     });
 
+    test('missing index is rebuilt from an existing snapshot archive',
+        () async {
+      await snapDir.create(recursive: true);
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      expect(await SnapshotService.readIndex(), isEmpty);
+      expect(await indexFile.exists(), isFalse,
+          reason:
+              'an empty snapshots directory does not need an index rebuild');
+
+      final snapshotFile = await SnapshotService.createSnapshot(force: true);
+      expect(snapshotFile, isNotNull);
+      await indexFile.delete();
+
+      final snapshots = await SnapshotService.listSnapshots();
+
+      expect(snapshots, hasLength(1));
+      expect(snapshots.single.file, p.basename(snapshotFile!.path));
+      expect(snapshots.single.sha256, isNotEmpty);
+      expect(await indexFile.exists(), isTrue);
+    });
+
+    test('empty index is rebuilt from an existing snapshot archive', () async {
+      await snapDir.create(recursive: true);
+      final snapshotFile = await SnapshotService.createSnapshot(force: true);
+      expect(snapshotFile, isNotNull);
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString(jsonEncode({'snapshots': []}));
+
+      final snapshots = await SnapshotService.listSnapshots();
+
+      expect(snapshots, hasLength(1));
+      expect(snapshots.single.file, p.basename(snapshotFile!.path));
+      expect(snapshots.single.sha256, isNotEmpty);
+      expect(jsonDecode(await indexFile.readAsString())['snapshots'],
+          hasLength(1));
+    });
+
+    test('invalid archive is not added to a rebuilt index', () async {
+      await snapDir.create(recursive: true);
+      const snapshotName = 'backup_2026-10-01T18-29-18.268046.zip';
+      await File(p.join(snapDir.path, snapshotName)).writeAsBytes([1, 2, 3]);
+
+      final snapshots = await SnapshotService.listSnapshots();
+
+      expect(snapshots, isEmpty);
+    });
+
     test('mixed valid and malformed index entries rebuild from disk', () async {
       final snapshot = await SnapshotService.createSnapshot(force: true);
       expect(snapshot, isNotNull);
@@ -193,11 +242,10 @@ void main() {
     });
 
     test('rebuilt index preserves fractional timestamp precision', () async {
-      await snapDir.create(recursive: true);
-      final snapshotFile = File(
-        p.join(snapDir.path, 'backup_2026-10-01T18-29-18.268046.zip'),
-      );
-      await snapshotFile.writeAsBytes([1, 2, 3]);
+      final timestamp = DateTime.parse('2026-10-01T18:29:18.268046');
+      SnapshotService.debugNow = () => timestamp;
+      final snapshotFile = await SnapshotService.createSnapshot(force: true);
+      expect(snapshotFile, isNotNull);
 
       final indexFile =
           File(p.join(snapDir.path, SnapshotService.manifestName));
@@ -205,7 +253,7 @@ void main() {
 
       final index = await SnapshotService.readIndex();
       expect(index, hasLength(1));
-      expect(index.single.file, p.basename(snapshotFile.path));
+      expect(index.single.file, p.basename(snapshotFile!.path));
       expect(index.single.createdAt, '2026-10-01T18:29:18.268046');
     });
 
