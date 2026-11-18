@@ -260,6 +260,7 @@ void main() {
         );
         flowId = container.read(taskFlowListProvider.notifier).addFlow(
           name: '图片流程',
+          inputType: IOType.image,
           blocks: [TaskFlowBlock(typeKey: BlockType.ocr)],
         );
         final original = TaskFlowExecution(
