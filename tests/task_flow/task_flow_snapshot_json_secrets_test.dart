@@ -132,6 +132,8 @@ void main() {
         String modelClientKey,
         String configClientSecret,
         String modelClientSecret,
+        String configAuth,
+        String modelAuth,
         String traceId) {
       final state = modelProviders('provider-secret', '0.5');
       final config = state.entries.single.configs.single;
@@ -139,11 +141,13 @@ void main() {
       config.typeConfig['headers'] = jsonEncode({
         'clientKey': configClientKey,
         'X-Client-Secret': configClientSecret,
+        'X-Auth': configAuth,
         'X-Trace-Id': traceId,
       });
       config.models.single.typeConfig['headers'] = jsonEncode({
         'X-Client-Key': modelClientKey,
         'X-Client-Secret': modelClientSecret,
+        'X-Auth': modelAuth,
         'X-Trace-Id': traceId,
       });
       return state;
@@ -161,6 +165,8 @@ void main() {
         'launch-model-client-key',
         'launch-config-client-secret',
         'launch-model-client-secret',
+        'launch-config-auth-secret',
+        'launch-model-auth-secret',
         'launch-trace',
       ),
       [],
@@ -170,9 +176,12 @@ void main() {
     expect(encoded, isNot(contains('launch-model-client-key')));
     expect(encoded, isNot(contains('launch-config-client-secret')));
     expect(encoded, isNot(contains('launch-model-client-secret')));
+    expect(encoded, isNot(contains('launch-config-auth-secret')));
+    expect(encoded, isNot(contains('launch-model-auth-secret')));
     expect(encoded, isNot(contains('clientKey')));
     expect(encoded, isNot(contains('X-Client-Key')));
     expect(encoded, isNot(contains('X-Client-Secret')));
+    expect(encoded, isNot(contains('X-Auth')));
 
     final resolved = resolveProviderModel(
       FlowLaunchSnapshot.fromMap(snapshot.toMap()).resolveProviders(
@@ -181,6 +190,8 @@ void main() {
           'current-model-client-key',
           'current-config-client-secret',
           'current-model-client-secret',
+          'current-config-auth-secret',
+          'current-model-auth-secret',
           'live-trace',
         ),
       ),
@@ -190,11 +201,13 @@ void main() {
     expect(jsonDecode(resolved.config.typeConfig['headers'] as String), {
       'clientKey': 'current-config-client-key',
       'X-Client-Secret': 'current-config-client-secret',
+      'X-Auth': 'current-config-auth-secret',
       'X-Trace-Id': 'launch-trace',
     });
     expect(jsonDecode(resolved.model.typeConfig['headers'] as String), {
       'X-Client-Key': 'current-model-client-key',
       'X-Client-Secret': 'current-model-client-secret',
+      'X-Auth': 'current-model-auth-secret',
       'X-Trace-Id': 'launch-trace',
     });
   });
