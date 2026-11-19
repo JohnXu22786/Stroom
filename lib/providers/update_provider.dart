@@ -1475,6 +1475,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 timeout /t 3 /nobreak > nul
 taskkill /f /im $exeName 2>nul
 xcopy /E /Y "$updateDir\\*" "$installDir\\"
+if errorlevel 1 exit /b %errorlevel%
+rmdir /S /Q "$updateDir"
 start "" "$installDir\\$exeName"
 del "%~f0"
 ''';
@@ -1482,6 +1484,11 @@ del "%~f0"
     await scriptFile.writeAsString(scriptContent);
     return scriptFile.path;
   }
+
+  @visibleForTesting
+  Future<String> createWindowsUpdateScriptForTesting(
+          String installDir, String updateDir, String extractedExe) =>
+      _createWindowsUpdateScript(installDir, updateDir, extractedExe);
 
   /// macOS/Linux 更新脚本 (.sh)
   Future<String> _createUnixUpdateScript(
@@ -1491,7 +1498,8 @@ del "%~f0"
     final scriptContent = '''#!/bin/bash
 sleep 3
 pkill -9 "$exeName" 2>/dev/null
-cp -R "$updateDir/"* "$installDir/"
+cp -R "$updateDir/"* "$installDir/" || exit \$?
+rm -rf -- "$updateDir"
 chmod +x "$exePath"
 "$exePath" &
 rm -- "\$0"
@@ -1502,6 +1510,11 @@ rm -- "\$0"
     await Process.run('chmod', ['+x', scriptFile.path]);
     return scriptFile.path;
   }
+
+  @visibleForTesting
+  Future<String> createUnixUpdateScriptForTesting(
+          String installDir, String updateDir, String extractedExe) =>
+      _createUnixUpdateScript(installDir, updateDir, extractedExe);
 
   /// Retries installation of the already-downloaded file.
   ///
