@@ -34,6 +34,7 @@ void main() {
     SnapshotService.debugAfterBackupCreated = null;
     SnapshotService.debugBeforeIndexCleanup = null;
     SnapshotService.debugBeforeIndexWrite = null;
+    SnapshotService.debugBeforeDirectoryListing = null;
     try {
       if (await snapDir.exists()) {
         await snapDir.delete(recursive: true);
@@ -92,6 +93,20 @@ void main() {
       expect(index.map((entry) => entry.file).toSet(),
           archives.map((file) => p.basename(file.path)).toSet(),
           reason: 'a later index read reconciles the unindexed archive');
+    });
+
+    test('readIndex keeps parsed entries when archive directory scan fails',
+        () async {
+      final snapshot = await SnapshotService.createSnapshot(force: true);
+      expect(snapshot, isNotNull);
+
+      SnapshotService.debugBeforeDirectoryListing = () {
+        throw const FileSystemException('simulated directory listing failure');
+      };
+      final index = await SnapshotService.readIndex();
+
+      expect(index.map((entry) => entry.file), [p.basename(snapshot!.path)],
+          reason: 'a failed unindexed-archive check must not hide valid entries');
     });
 
     test('snapshot is skipped within the 1-hour rule', () async {
