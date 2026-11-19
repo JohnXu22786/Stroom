@@ -607,7 +607,13 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(strings.batchDlgLoad),
+                          Flexible(
+                            child: ConstrainedText(
+                              strings.batchDlgLoad,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           Icon(Icons.arrow_drop_down, size: 18),
                         ],
                       ),
@@ -835,29 +841,34 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         spacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          DropdownButton<_PreviewFilter>(
-            dropdownColor: StroomMenuStyle.surface(context),
-            borderRadius: StroomMenuStyle.borderRadius,
-            value: _filter,
-            onChanged: (v) => setState(() => _filter = v!),
-            items: [
-              for (final f in _PreviewFilter.values)
-                DropdownMenuItem(
-                  value: f,
-                  child: ConstrainedText(
-                    switch (f) {
-                      _PreviewFilter.all => strings.batchDlgFilterAll,
-                      _PreviewFilter.changed => strings.batchDlgFilterChanged,
-                      _PreviewFilter.errors => strings.batchDlgFilterErrors,
-                      _PreviewFilter.unchanged =>
-                        strings.batchDlgFilterUnchanged,
-                      _PreviewFilter.excluded => strings.batchDlgFilterExcluded,
-                    },
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          SizedBox(
+            width: 220,
+            child: DropdownButton<_PreviewFilter>(
+              isExpanded: true,
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _filter,
+              onChanged: (v) => setState(() => _filter = v!),
+              items: [
+                for (final f in _PreviewFilter.values)
+                  DropdownMenuItem(
+                    value: f,
+                    child: ConstrainedText(
+                      switch (f) {
+                        _PreviewFilter.all => strings.batchDlgFilterAll,
+                        _PreviewFilter.changed => strings.batchDlgFilterChanged,
+                        _PreviewFilter.errors => strings.batchDlgFilterErrors,
+                        _PreviewFilter.unchanged =>
+                          strings.batchDlgFilterUnchanged,
+                        _PreviewFilter.excluded =>
+                          strings.batchDlgFilterExcluded,
+                      },
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
           PopupMenuButton<String>(
             tooltip: strings.batchDlgParticipants,
@@ -908,7 +919,13 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(strings.batchDlgScope),
+                  Flexible(
+                    child: ConstrainedText(
+                      strings.batchDlgScope,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   Icon(Icons.arrow_drop_down, size: 18),
                 ],
               ),
@@ -1222,29 +1239,38 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    TextButton(
-                      key: const Key('batch_rename_cancel_btn'),
-                      onPressed: () => Navigator.pop(context),
-                      child: ConstrainedText(
-                        strings.batchDlgCancel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          key: const Key('batch_rename_cancel_btn'),
+                          onPressed: () => Navigator.pop(context),
+                          child: ConstrainedText(
+                            strings.batchDlgCancel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    FilledButton(
-                      key: const Key('batch_rename_apply_btn'),
-                      onPressed: !_previewing &&
-                              _previewError == null &&
-                              _plan.canApply &&
-                              _invalid.isEmpty
-                          ? () => Navigator.pop(context, _plan)
-                          : null,
-                      child: ConstrainedText(
-                        strings
-                            .batchDlgRenameCount(_plan.changeCount.toString()),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          key: const Key('batch_rename_apply_btn'),
+                          onPressed: !_previewing &&
+                                  _previewError == null &&
+                                  _plan.canApply &&
+                                  _invalid.isEmpty
+                              ? () => Navigator.pop(context, _plan)
+                              : null,
+                          child: ConstrainedText(
+                            strings.batchDlgRenameCount(
+                                _plan.changeCount.toString()),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ),
                     ),
                   ],
