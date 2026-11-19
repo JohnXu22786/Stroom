@@ -34,6 +34,7 @@ class WebFileStore {
 
   static bool _testMode = false;
   static final Map<String, Uint8List> _inMemoryStore = {};
+  static Future<Uint8List?> Function(Object?)? readBlobOverrideForTesting;
 
   /// Enable in-memory test mode — all operations use a [Map] instead of
   /// IndexedDB.  Call before any read/write/delete/exists in tests.
@@ -237,6 +238,9 @@ class WebFileStore {
     }
   }
 
+  static Future<Uint8List?> _readBlob(Object? value) =>
+      readBlobOverrideForTesting?.call(value) ?? blob_store.readBlob(value);
+
   /// 读取文件
   static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
@@ -253,7 +257,7 @@ class WebFileStore {
       );
       await txn.completed;
       _checkReadLimit(result.value, maxBytes);
-      return await blob_store.readBlob(result.value);
+      return await _readBlob(result.value);
     }
     final txn = db.transaction('files', idbModeReadOnly);
     final result = await txn.objectStore('files').getObject(key);
@@ -317,7 +321,16 @@ class WebFileStore {
         completed,
       );
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;
-      if (_isAttachmentKey(key)) return await blob_store.readBlob(value);
+      if (_isAttachmentKey(key)) {
+        final bytes = await Future.any<Uint8List?>([
+          _readBlob(value),
+          cancelToken.whenCancel.then<Uint8List?>(
+            (_) => throw cancelToken.cancelError!,
+          ),
+        ]);
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        return bytes;
+      }
       return _toUint8List(value, key);
     } catch (_) {
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;

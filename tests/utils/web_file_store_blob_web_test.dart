@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:idb_shim/idb_shim.dart' show idbModeReadWrite;
@@ -61,7 +63,27 @@ void main() {
               maxBytes: latePayload.length),
           orderedEquals(latePayload),
         );
+
+        final readStarted = Completer<void>();
+        final materialized = Completer<Uint8List?>();
+        WebFileStore.readBlobOverrideForTesting = (_) {
+          readStarted.complete();
+          return materialized.future;
+        };
+        final cancelToken = CancelToken();
+        final cancellableRead = WebFileStore.readCancellable(
+          attachmentKey,
+          cancelToken: cancelToken,
+        );
+        await readStarted.future;
+        cancelToken.cancel('cancel during Blob materialization');
+        materialized.complete(payload);
+        await expectLater(
+          cancellableRead,
+          throwsA(same(cancelToken.cancelError)),
+        );
       } finally {
+        WebFileStore.readBlobOverrideForTesting = null;
         await WebFileStore.delete(attachmentKey);
         await WebFileStore.delete(lateAttachmentKey);
         db.close();
