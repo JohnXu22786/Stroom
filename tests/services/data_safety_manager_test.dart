@@ -369,6 +369,50 @@ void main() {
           reason: 'referenced original attachments must stay intact');
     });
 
+    test(
+        'cleanupOrphans removes aged cache colliding with a legacy original '
+        'but keeps the original and recent cache', () async {
+      const legacyName = 'legacy-content-hash.jpg';
+      SharedPreferences.setMockInitialValues({
+        'conversations':
+            '[{"id":"c1","messages":[{"attachments":[{"storagePath":"attachments/$legacyName"}]}]}]',
+      });
+      final oldTimestamp = DateTime.now().subtract(const Duration(days: 10));
+      final oldCacheDir = Directory(p.join(
+        appDir,
+        'attachments',
+        'temp_compressed',
+        'conversation-old',
+      ));
+      final recentCacheDir = Directory(p.join(
+        appDir,
+        'attachments',
+        'temp_compressed',
+        'conversation-recent',
+      ));
+      await oldCacheDir.create(recursive: true);
+      await recentCacheDir.create(recursive: true);
+
+      final agedCache = File(p.join(oldCacheDir.path, legacyName));
+      await agedCache.writeAsString('regenerable compressed cache');
+      await agedCache.setLastModified(oldTimestamp);
+      final recentCache = File(p.join(recentCacheDir.path, legacyName));
+      await recentCache.writeAsString('recent compressed cache');
+      final original = File(p.join(appDir, 'attachments', legacyName));
+      await original.parent.create(recursive: true);
+      await original.writeAsString('legacy original attachment');
+      await original.setLastModified(oldTimestamp);
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedCache.exists(), isFalse,
+          reason: 'aged caches are disposable despite a referenced basename');
+      expect(await original.exists(), isTrue,
+          reason: 'the referenced legacy original must remain intact');
+      expect(await recentCache.exists(), isTrue,
+          reason: 'the three-day grace period still applies to caches');
+    });
+
     test('cleanupOrphans continues past unreadable cache folders and files',
         () async {
       final cacheRoot = Directory(
