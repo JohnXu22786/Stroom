@@ -222,49 +222,68 @@ bool attachmentHasReadyPayload(Attachment att, {required int maxBytes}) {
 /// [AttachmentReadStatus.tooLarge] 占位。
 ///
 /// 非图片附件（音频/视频等）超过 [maxAttachmentBytes] 仍返回
-/// [AttachmentReadStatus.tooLarge]（无法无损压缩，且提前按 fileSize
-/// 拦截可避免读取超大文件）。
+/// [AttachmentReadStatus.tooLarge]（无法无损压缩；缓存分块解码，磁盘读取也
+/// 按实际字节数设限）。
 ///
 /// 读取失败返回 [AttachmentReadStatus.unreadable]。
 Future<AttachmentReadOutcome> readAttachmentBase64(
   Attachment att, {
   int maxBytes = imageCompressThresholdBytes,
 }) async {
-  // 已缓存：先尝试解码缓存（损坏缓存回退磁盘读取）
-  Uint8List? bytes;
-  if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-    try {
-      bytes = base64Decode(att.base64Data!);
-    } catch (_) {
-      bytes = null;
+  Uint8List? loadedBytes;
+  if (att.fileType == 'image') {
+    // 图片压缩需要完整源载荷；非图片缓存走下方的有界分块解码。
+    if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+      try {
+        loadedBytes = base64Decode(att.base64Data!);
+      } catch (_) {
+        loadedBytes = null;
+      }
     }
-  }
-
-  if (bytes == null) {
-    try {
-      // Non-image payloads cannot be compressed, so bound the disk read by
-      // their actual bytes. Images still need the complete source for the
-      // compression path below; fileSize is only a hint and can be stale.
-      final diskBytes = await AttachmentStorage.readFile(
-        att.storagePath,
-        maxBytes: att.fileType == 'image' ? null : maxAttachmentBytes,
-      );
-      if (diskBytes == null || diskBytes.isEmpty) {
+    if (loadedBytes == null) {
+      try {
+        final diskBytes = await AttachmentStorage.readFile(att.storagePath);
+        if (diskBytes == null || diskBytes.isEmpty) {
+          return const AttachmentReadOutcome(
+            AttachmentReadStatus.unreadable,
+            null,
+          );
+        }
+        loadedBytes = diskBytes;
+      } catch (e) {
+        // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
+        // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
+        debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
         return const AttachmentReadOutcome(
           AttachmentReadStatus.unreadable,
           null,
         );
       }
-      bytes = diskBytes;
-    } on AttachmentTooLargeException {
-      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
-    } catch (e) {
-      // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
-      // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
-      debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
-      return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
     }
+  } else {
+    // 非图片没有压缩路径。忽略可能过期的 fileSize 元数据，并对缓存和
+    // 磁盘都用同一硬上限，避免解码或读取后才发现载荷过大。
+    final outcome = await readRawAttachmentBytesBounded(
+      att,
+      maxBytes: maxAttachmentBytes,
+    );
+    if (outcome.status == AttachmentReadStatus.tooLarge) {
+      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+    }
+    if (outcome.status != AttachmentReadStatus.ok ||
+        outcome.bytes == null ||
+        outcome.bytes!.isEmpty) {
+      return const AttachmentReadOutcome(
+        AttachmentReadStatus.unreadable,
+        null,
+      );
+    }
+    loadedBytes = outcome.bytes;
   }
+  if (loadedBytes == null || loadedBytes.isEmpty) {
+    return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
+  }
+  var bytes = loadedBytes;
 
   // 图片超过通用阈值 → 自动压缩（替代旧行为的"跳过"）
   String? mimeTypeOverride;
@@ -448,8 +467,8 @@ const List<String> textAttachmentExtensions = [
 ///
 /// 超过 [maxAttachmentBytes]（10MB）硬顶的返回"文件过大已跳过"占位
 /// ——与视频/音频/文档等其余附件类型一致：内容要么完整发送、要么
-/// 明确提示跳过，绝不静默截断。超限附件按 [fileSize] 在读取前拦截，
-/// 避免把超大文件整包读入内存（与 readAttachmentBase64 一致）。
+/// 明确提示跳过，绝不静默截断。读取按实际存储字节数设限，避免把
+/// 超大文件整包读入内存；缓存的 fileSize 元数据可能过期。
 /// 失败返回 null。
 Future<String?> readTextAttachmentContent(
   String fileName,

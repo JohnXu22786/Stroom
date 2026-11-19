@@ -948,7 +948,7 @@ void main() {
       expect(outcome.base64, b64, reason: '阈值以内的图片字节必须原样保留');
       expect(outcome.mimeType, 'image/png', reason: '载荷格式按魔数检测（与声明一致时结果相同）');
     });
-    test('超限非图片（音频）仍返回 tooLarge（不读盘）', () async {
+    test('actual oversized cached non-image bytes return tooLarge', () async {
       final fakeAudio = Uint8List.fromList(List.filled(11 * 1024 * 1024, 0x55));
       final att = Attachment(
         fileName: 'big.wav',
@@ -956,7 +956,7 @@ void main() {
         fileType: 'audio',
         hash: 'h',
         storagePath: 'attachments/h_big.wav',
-        fileSize: fakeAudio.length,
+        fileSize: 0,
       )..base64Data = base64Encode(fakeAudio);
 
       final outcome = await readAttachmentBase64(att);
