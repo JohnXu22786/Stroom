@@ -11,6 +11,7 @@ import '../../providers/background_task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../l10n/app_localizations.dart';
 import '../../task_flow/services/task_flow_execution_service.dart';
+import '../../widgets/constrained_text.dart';
 
 // =============================================================================
 // 工具函数
@@ -24,11 +25,6 @@ String formatSize(int? bytes, AppLocalizations strings) {
     return (bytes / (1024 * 1024)).toStringAsFixed(1) + ' MB';
   }
   return (bytes / (1024 * 1024 * 1024)).toStringAsFixed(1) + ' GB';
-}
-
-String truncateUrl(String url, {int maxLen = 40}) {
-  if (url.length <= maxLen) return url;
-  return '${url.substring(0, maxLen ~/ 2)}...${url.substring(url.length - maxLen ~/ 2)}';
 }
 
 String formatDurationSimple(String duration, AppLocalizations strings) {
@@ -83,23 +79,59 @@ String getStatusLabel(TaskStatus status, AppLocalizations strings) {
 }
 
 Widget buildInfoRow(ColorScheme cs, IconData icon, String label, String value) {
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, size: 14, color: cs.onSurfaceVariant),
-      const SizedBox(width: 6),
-      Text(
-        '$label: ',
-        style: TextStyle(
-          fontSize: 12,
-          color: cs.onSurfaceVariant,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      Expanded(
-        child: Text(value, style: TextStyle(fontSize: 12, color: cs.onSurface)),
-      ),
-    ],
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      const labelStyle = TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      );
+      const valueStyle = TextStyle(fontSize: 12);
+      final scaler = MediaQuery.textScalerOf(context);
+      final direction = Directionality.of(context);
+      final locale = Localizations.maybeLocaleOf(context);
+      double textWidth(String text, TextStyle style) => (TextPainter(
+            text: TextSpan(text: text, style: style),
+            textDirection: direction,
+            textScaler: scaler,
+            locale: locale,
+            maxLines: 1,
+          )..layout())
+              .width;
+
+      final labelText = '$label: ';
+      final labelWidth = textWidth(labelText, labelStyle);
+      final valueWidth = textWidth(value, valueStyle);
+      final availableWidth =
+          (constraints.maxWidth - 20).clamp(0.0, double.infinity);
+      final minimumValueWidth =
+          valueWidth < availableWidth * 0.6 ? valueWidth : availableWidth * 0.6;
+      final labelSlotWidth = (availableWidth - minimumValueWidth)
+          .clamp(0.0, labelWidth)
+          .toDouble();
+
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: cs.onSurfaceVariant),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: labelSlotWidth,
+            child: ConstrainedText(
+              labelText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: labelStyle.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: valueStyle.copyWith(color: cs.onSurface),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }
 

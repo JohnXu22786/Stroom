@@ -310,9 +310,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ConstrainedText(
-                          task.title.isNotEmpty
-                              ? task.title
-                              : truncateUrl(task.url),
+                          task.title.isNotEmpty ? task.title : task.url,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
@@ -776,7 +774,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ConstrainedText(
-            pageTitle.isNotEmpty ? pageTitle : truncateUrl(task.url),
+            pageTitle.isNotEmpty ? pageTitle : task.url,
             key: const Key('catcatch_selection_title'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -1198,9 +1196,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? () => showMediaPreview(
                           context,
                           media,
-                          task.title.isNotEmpty
-                              ? task.title
-                              : truncateUrl(task.url),
+                          task.title.isNotEmpty ? task.title : task.url,
                         )
                     : null,
                 padding: EdgeInsets.zero,
@@ -1430,9 +1426,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     showMediaPreview(
                       context,
                       media,
-                      task.title.isNotEmpty
-                          ? task.title
-                          : truncateUrl(task.url),
+                      task.title.isNotEmpty ? task.title : task.url,
                     );
                   },
                 )

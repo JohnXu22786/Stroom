@@ -23,7 +23,6 @@ export 'unified_task_list/media_preview_sheet.dart' show showMediaPreview;
 export 'unified_task_list/task_utils.dart'
     show
         formatSize,
-        truncateUrl,
         formatDurationSimple,
         parseDurationToSeconds,
         stepIcon,
