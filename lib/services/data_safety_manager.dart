@@ -505,8 +505,12 @@ class DataSafetyManager {
 
       for (final dirPath in dirsToScan) {
         final dir = Directory(dirPath);
-        if (!await dir.exists()) continue;
-        final entries = await dir.list().toList();
+        final directoryType = await FileSystemEntity.type(
+          dirPath,
+          followLinks: false,
+        );
+        if (directoryType != FileSystemEntityType.directory) continue;
+        final entries = await dir.list(followLinks: false).toList();
         for (final entry in entries) {
           if (entry is! File) continue;
           await deleteIfOrphaned(entry);
