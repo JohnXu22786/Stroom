@@ -286,7 +286,8 @@ void main() {
             expect(
               prefs.getString('provider_entries'),
               originalProviderEntries,
-              reason: 'A failed backup must not overwrite corrupt provider data',
+              reason:
+                  'A failed backup must not overwrite corrupt provider data',
             );
             expect(
               prefs.getString('chat_configs'),
