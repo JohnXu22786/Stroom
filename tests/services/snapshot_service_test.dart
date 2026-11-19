@@ -106,7 +106,8 @@ void main() {
       final index = await SnapshotService.readIndex();
 
       expect(index.map((entry) => entry.file), [p.basename(snapshot!.path)],
-          reason: 'a failed unindexed-archive check must not hide valid entries');
+          reason:
+              'a failed unindexed-archive check must not hide valid entries');
     });
 
     test('snapshot is skipped within the 1-hour rule', () async {
