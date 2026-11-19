@@ -85,6 +85,20 @@ void main() {
         );
         expect(find.byType(DropdownButton<String>), findsNWidgets(4));
         final dialogRect = tester.getRect(find.byType(Dialog));
+        final cancelButton = find.ancestor(
+          of: find.text(localizations.batchDlgCancel),
+          matching: find.byType(TextButton),
+        );
+        final saveButton = find.ancestor(
+          of: find.text(localizations.mermaidSaveButton),
+          matching: find.byType(FilledButton),
+        );
+        for (final action in [cancelButton, saveButton]) {
+          final actionRect = tester.getRect(action);
+          expect(actionRect.left, greaterThanOrEqualTo(dialogRect.left));
+          expect(actionRect.right, lessThanOrEqualTo(dialogRect.right));
+          expect(actionRect.height, greaterThanOrEqualTo(48));
+        }
         for (final label in [
           localizations.providerFallbackMethod,
           localizations.providerUploadMethod,
@@ -193,26 +207,11 @@ void main() {
             lessThan(20),
           );
         }
-        final renderException = tester.takeException();
-        final knownOutOfScopeOverflow = switch ((width, locale.languageCode)) {
-          (360.0, 'de') => '58 pixels on the right',
-          (360.0, 'pt') => '1.4 pixels on the right',
-          (800.0, 'de') => '15 pixels on the right',
-          _ => null,
-        };
-        if (knownOutOfScopeOverflow != null) {
-          // These are existing overflows in the dialog footer (de/pt at
-          // 360 px) and custom-parameter header (de at 800 px). Keep the
-          // tab/ASR audit assertions active without expanding this unit.
-          expect(renderException, isA<FlutterError>());
-          expect(renderException.toString(), contains(knownOutOfScopeOverflow));
-        } else {
-          expect(
-            renderException,
-            isNull,
-            reason: 'Dialog width: $width, locale: $locale',
-          );
-        }
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'Dialog width: $width, locale: $locale',
+        );
         await tester.tap(find.text(localizations.batchDlgCancel));
         await tester.pumpAndSettle();
       }

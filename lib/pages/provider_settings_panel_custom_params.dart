@@ -187,11 +187,13 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
       else
         Row(
           children: [
-            Text(
-              AppLocalizations.of(context)!.chatCustomParameters,
-              style: TextStyle(fontWeight: FontWeight.w600),
+            Flexible(
+              child: Text(
+                AppLocalizations.of(context)!.chatCustomParameters,
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             TextButton.icon(
               icon: const Icon(Icons.add, size: 18),
               label: ConstrainedText(
