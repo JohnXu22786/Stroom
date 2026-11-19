@@ -259,6 +259,47 @@ void main() {
       );
     });
 
+    test(
+      'top-level corrupt provider entries and legacy settings survive failed backup',
+      () async {
+        const legacyChatConfigsJson = '[{"providerName":"Legacy provider",'
+            '"host":"https://legacy.example.com","key":"legacy-key",'
+            '"models":[{"modelId":"legacy-model"}]}]';
+        const corruptProviderEntries = [
+          '{"not":"an array"}',
+          'not-json{{{',
+        ];
+
+        for (final originalProviderEntries in corruptProviderEntries) {
+          SharedPreferences.setMockInitialValues({});
+          final previousStore = SharedPreferencesStorePlatform.instance;
+          SharedPreferencesStorePlatform.instance =
+              _FailingProviderCorruptBackupStore({
+            'flutter.provider_entries': originalProviderEntries,
+            'flutter.chat_configs': legacyChatConfigsJson,
+          });
+          try {
+            final notifier = ProviderEntriesNotifier();
+            await notifier.load();
+
+            final prefs = await SharedPreferences.getInstance();
+            expect(
+              prefs.getString('provider_entries'),
+              originalProviderEntries,
+              reason: 'A failed backup must not overwrite corrupt provider data',
+            );
+            expect(
+              prefs.getString('chat_configs'),
+              legacyChatConfigsJson,
+              reason: 'Legacy provider data must remain available for recovery',
+            );
+          } finally {
+            SharedPreferencesStorePlatform.instance = previousStore;
+          }
+        }
+      },
+    );
+
     test('usable LLM entry does not suppress unmatched legacy configs',
         () async {
       final existingEntriesJson = jsonEncode([
