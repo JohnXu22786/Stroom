@@ -357,8 +357,8 @@ class OcrRetryStorage {
         p.join(await AppStorage.directory, _cacheDirectoryName),
       );
       if (!await directory.exists()) return;
-      final staleBefore =
-          (debugNow?.call() ?? DateTime.now()).subtract(_staleAtomicWriteTempAge);
+      final staleBefore = (debugNow?.call() ?? DateTime.now())
+          .subtract(_staleAtomicWriteTempAge);
       final staleStagingDirectories = <Directory>[];
       await for (final entry in directory.list(followLinks: false)) {
         if (entry is File) {

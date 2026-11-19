@@ -497,8 +497,8 @@ void main() {
         malformed.create(),
         unrelated.create(),
       ]);
-      OcrRetryStorage.debugNow = () =>
-          DateTime.now().add(const Duration(days: 2));
+      OcrRetryStorage.debugNow =
+          () => DateTime.now().add(const Duration(days: 2));
 
       await OcrRetryStorage.cleanupUnreferencedCache(referenced: const {});
 
@@ -554,8 +554,8 @@ void main() {
         '.tmp-active-write',
       );
       await staging.create(recursive: true);
-      OcrRetryStorage.debugNow = () =>
-          DateTime.now().add(const Duration(days: 2));
+      OcrRetryStorage.debugNow =
+          () => DateTime.now().add(const Duration(days: 2));
 
       await OcrRetryStorage.cleanupUnreferencedCache(referenced: const {});
       expect(await staging.exists(), isTrue);
