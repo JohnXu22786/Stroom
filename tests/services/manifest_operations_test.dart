@@ -3250,17 +3250,7 @@ void main() {
     });
 
     test('backup cleanup failure leaves journal for restart cleanup', () async {
-      final originalPathProvider = PathProviderPlatform.instance;
-      final directory = await Directory.systemTemp.createTemp(
-        'manifest-delete-backup-cleanup-test-',
-      );
-      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
-      WebFileStore.disableTestMode();
-      addTearDown(() async {
-        PathProviderPlatform.instance = originalPathProvider;
-        WebFileStore.enableTestMode();
-        await directory.delete(recursive: true);
-      });
+      WebFileStore.enableTestMode();
 
       final operations = ManifestOperations<ImageRecord>(
         manifestKey: 'delete_backup_cleanup_failure',
@@ -3288,10 +3278,10 @@ void main() {
       };
       await operations.deleteRecord(record.id);
 
-      final journalNames = await Directory(await operations.storageDirPath)
-          .list()
-          .map((entry) => entry.uri.pathSegments.last)
-          .where((name) => name.startsWith('.manifest-delete-journal-'))
+      final journalNames = (await WebFileStore.keysWithPrefix(
+        'pictures/.manifest-delete-journal-',
+      ))
+          .map((key) => key.substring('pictures/'.length))
           .toList();
       expect(backupName, isNotNull);
       expect(journalNames, hasLength(1));
