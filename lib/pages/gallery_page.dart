@@ -714,7 +714,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         folders: selectedFolders,
       );
       for (final folderName in selectedFolders) {
-        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+        await createUserVisibleExportDirectory(outputDir, folderName);
       }
 
       for (var i = 0; i < folderFiles.length; i++) {
@@ -723,7 +723,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         if (data == null) continue;
         final outputPath = outputPaths[i];
         final fileDir = p.dirname(outputPath);
-        await Directory(fileDir).create(recursive: true);
+        await createUserVisibleExportDirectory(
+          outputDir,
+          p.relative(fileDir, from: outputDir),
+        );
         await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }

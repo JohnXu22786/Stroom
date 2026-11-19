@@ -229,6 +229,41 @@ Future<List<String>> resolveNonClobberingExportPaths({
   return resolved;
 }
 
+/// Creates an export directory beneath [destination], rejecting existing
+/// symlinks and any path that resolves outside the selected directory.
+Future<void> createUserVisibleExportDirectory(
+  String destination,
+  String relativePath,
+) async {
+  if (relativePath.isEmpty) return;
+  validateUserVisibleExportPaths(files: const [], folders: [relativePath]);
+
+  final root = Directory(destination);
+  if (!await root.exists()) {
+    throw FileSystemException('Export destination does not exist', destination);
+  }
+  final canonicalRoot = await root.resolveSymbolicLinks();
+  var current = canonicalRoot;
+  for (final segment in relativePath.replaceAll('\\', '/').split('/')) {
+    current = p.join(current, segment);
+    final type = await FileSystemEntity.type(current, followLinks: false);
+    if (type == FileSystemEntityType.link) {
+      throw FileSystemException('Export path contains a symbolic link', current);
+    }
+    if (type == FileSystemEntityType.notFound) {
+      await Directory(current).create();
+    } else if (type != FileSystemEntityType.directory) {
+      throw FileSystemException('Export path component is not a directory', current);
+    }
+
+    final resolved = await Directory(current).resolveSymbolicLinks();
+    if (!p.equals(resolved, canonicalRoot) && !p.isWithin(canonicalRoot, resolved)) {
+      throw FileSystemException('Export path escapes the selected destination', current);
+    }
+    current = resolved;
+  }
+}
+
 /// Writes an export only when [path] does not already exist.
 Future<void> writeUserVisibleExportFile(
   String path,
