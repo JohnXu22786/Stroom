@@ -1148,7 +1148,6 @@ void main() {
     });
 
     tearDown(() {
-      AttachmentStorage.readFileBoundedOverrideForTesting = null;
       try {
         tmpRoot.deleteSync(recursive: true);
       } catch (_) {
@@ -1479,6 +1478,7 @@ void main() {
     });
 
     tearDown(() {
+      AttachmentStorage.readFileBoundedOverrideForTesting = null;
       try {
         tmpRoot.deleteSync(recursive: true);
       } catch (_) {
