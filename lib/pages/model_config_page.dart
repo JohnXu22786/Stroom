@@ -105,6 +105,87 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     return false;
   }
 
+  Widget _buildBooleanSettingCard({
+    required IconData icon,
+    required String title,
+    required String help,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final compact = constraints.maxWidth < 260 * textScale;
+            final description = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title),
+                Text(
+                  help,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.grey),
+                ),
+              ],
+            );
+            final choices = Wrap(
+              spacing: 8,
+              children: [
+                ToggleButton(
+                  label: AppLocalizations.of(context)!.taskFlowUiYes,
+                  value: true,
+                  currentValue: value,
+                  onChanged: onChanged,
+                ),
+                ToggleButton(
+                  label: AppLocalizations.of(context)!.taskFlowUiNo,
+                  value: false,
+                  currentValue: value,
+                  onChanged: onChanged,
+                ),
+              ],
+            );
+
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(icon, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(child: description),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerRight, child: choices),
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: description),
+                const SizedBox(width: 12),
+                choices,
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   ProviderEntry? get _entry {
     final state = ref.read(providerEntriesProvider);
     try {
@@ -861,9 +942,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       final connectivityTest =
           models[widget.modelIndex].typeConfig['connectivityTest'];
       if (connectivityTest is Map) {
-        modelConfig
-            .typeConfig = Map<String, dynamic>.from(modelConfig.typeConfig)
-          ..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
+        modelConfig.typeConfig = Map<String, dynamic>.from(
+          modelConfig.typeConfig,
+        )..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
       }
       models[widget.modelIndex] = modelConfig;
     } else {
@@ -988,9 +1069,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                Text(
-                  AppLocalizations.of(context)!.modelNameLabel,
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Flexible(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.modelNameLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
@@ -1019,9 +1104,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                Text(
-                  '${AppLocalizations.of(context)!.modelIdLabel} *',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Flexible(
+                  child: ConstrainedText(
+                    '${AppLocalizations.of(context)!.modelIdLabel} *',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
@@ -1171,23 +1260,76 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // 自定义参数
             // ==========================================================
-            Row(
-              children: [
-                Text(
-                  AppLocalizations.of(context)!.chatCustomParameters,
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                TextButton.icon(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final title =
+                    AppLocalizations.of(context)!.chatCustomParameters;
+                final addLabel =
+                    AppLocalizations.of(context)!.assistantAddParameter;
+                final direction = Directionality.of(context);
+                final scaler = MediaQuery.textScalerOf(context);
+                final titleStyle = DefaultTextStyle.of(context)
+                    .style
+                    .copyWith(fontWeight: FontWeight.w600);
+                final buttonStyle = Theme.of(context).textTheme.labelLarge ??
+                    const TextStyle(fontSize: 14);
+                final titleWidth = TextPainter(
+                  text: TextSpan(text: title, style: titleStyle),
+                  textDirection: direction,
+                  textScaler: scaler,
+                  locale: Localizations.localeOf(context),
+                )..layout();
+                final actionTextWidth = TextPainter(
+                  text: TextSpan(text: addLabel, style: buttonStyle),
+                  textDirection: direction,
+                  textScaler: scaler,
+                  locale: Localizations.localeOf(context),
+                )..layout();
+                final actionWidth = actionTextWidth.width + 18 + 8 + 24;
+                final fitsSideBySide =
+                    constraints.maxWidth >= titleWidth.width + actionWidth;
+                final action = TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
                   label: ConstrainedText(
-                    AppLocalizations.of(context)!.assistantAddParameter,
+                    addLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   onPressed: _addCustomParam,
-                ),
-              ],
+                );
+                final heading = ConstrainedText(
+                  title,
+                  style: titleStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                );
+
+                if (!fitsSideBySide) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      heading,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth,
+                          ),
+                          child: action,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Flexible(child: heading),
+                    const Spacer(),
+                    action,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
 
@@ -1346,105 +1488,24 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // instruction 参数开关
             // ==========================================================
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.description, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)!
-                                .ttsInstructionSupported,
-                          ),
-                          Text(
-                            AppLocalizations.of(context)!.ttsInstructionHelp,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiYes,
-                      value: true,
-                      currentValue: _supportInstruction,
-                      onChanged: (v) => setState(() => _supportInstruction = v),
-                    ),
-                    const SizedBox(width: 8),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiNo,
-                      value: false,
-                      currentValue: _supportInstruction,
-                      onChanged: (v) => setState(() => _supportInstruction = v),
-                    ),
-                  ],
-                ),
-              ),
+            _buildBooleanSettingCard(
+              icon: Icons.description,
+              title: AppLocalizations.of(context)!.ttsInstructionSupported,
+              help: AppLocalizations.of(context)!.ttsInstructionHelp,
+              value: _supportInstruction,
+              onChanged: (v) => setState(() => _supportInstruction = v),
             ),
             const SizedBox(height: 8),
 
             // ==========================================================
             // 流式输出开关
             // ==========================================================
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.stream, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)!.ttsStreamSupported,
-                          ),
-                          Text(
-                            AppLocalizations.of(context)!.ttsStreamHelp,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiYes,
-                      value: true,
-                      currentValue: _supportStream,
-                      onChanged: (v) => setState(() => _supportStream = v),
-                    ),
-                    const SizedBox(width: 8),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiNo,
-                      value: false,
-                      currentValue: _supportStream,
-                      onChanged: (v) => setState(() => _supportStream = v),
-                    ),
-                  ],
-                ),
-              ),
+            _buildBooleanSettingCard(
+              icon: Icons.stream,
+              title: AppLocalizations.of(context)!.ttsStreamSupported,
+              help: AppLocalizations.of(context)!.ttsStreamHelp,
+              value: _supportStream,
+              onChanged: (v) => setState(() => _supportStream = v),
             ),
             const SizedBox(height: 8),
 
