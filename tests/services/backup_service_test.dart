@@ -134,6 +134,142 @@ void main() {
     TextManifest.invalidateCache();
   });
 
+  group('Web restore rollback journal', () {
+    setUp(() {
+      WebFileStore.enableTestMode();
+      BackupService.beforeRestoreBinaryPublishForTesting = null;
+      BackupService.skipRestoreRollbackForTesting = false;
+    });
+
+    tearDown(() {
+      BackupService.beforeRestoreBinaryPublishForTesting = null;
+      BackupService.skipRestoreRollbackForTesting = false;
+      WebFileStore.disableTestMode();
+    });
+
+    testWidgets(
+      'publication failure restores selected files and keeps other categories',
+      (WidgetTester t) async {
+        await WebFileStore.write(
+          'task_flows/executions.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'task_state/app_launches.json',
+          Uint8List.fromList(utf8.encode('{"sentinel":"old"}')),
+        );
+        await WebFileStore.write(
+          'pictures/keep.jpg',
+          Uint8List.fromList([7, 8, 9]),
+        );
+        var reachedPublicationFailure = false;
+        BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+          if (index == 1) {
+            reachedPublicationFailure = true;
+            throw StateError('injected publication failure');
+          }
+        };
+
+        await expectLater(
+          BackupService.restoreFromBytesForTest(
+            _pendingTemporaryArtifactBackup(artifactExecutionId: 'execution'),
+            selection: _taskOnlyBackupSelection,
+          ),
+          throwsStateError,
+        );
+        expect(reachedPublicationFailure, isTrue);
+
+        expect(
+          await WebFileStore.read('task_flows/executions.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('synthesis/tasks.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('task_state/app_launches.json'),
+          utf8.encode('{"sentinel":"old"}'),
+        );
+        expect(await WebFileStore.read('pictures/keep.jpg'), [7, 8, 9]);
+        expect(
+          await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets(
+      'startup replays an interrupted journal repeatedly and preserves unselected files',
+      (WidgetTester t) async {
+        await WebFileStore.write(
+          'task_flows/executions.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'task_state/app_launches.json',
+          Uint8List.fromList(utf8.encode('{"sentinel":"old"}')),
+        );
+        await WebFileStore.write(
+          'pictures/keep.jpg',
+          Uint8List.fromList([7, 8, 9]),
+        );
+        var reachedPublicationFailure = false;
+        BackupService.skipRestoreRollbackForTesting = true;
+        BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+          if (index == 1) {
+            reachedPublicationFailure = true;
+            throw StateError('simulated process interruption');
+          }
+        };
+
+        await expectLater(
+          BackupService.restoreFromBytesForTest(
+            _pendingTemporaryArtifactBackup(artifactExecutionId: 'execution'),
+            selection: _taskOnlyBackupSelection,
+          ),
+          throwsStateError,
+        );
+        expect(reachedPublicationFailure, isTrue);
+        expect(await WebFileStore.read('task_state/app_launches.json'), isNull);
+        expect(
+          await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
+          isNotEmpty,
+        );
+
+        BackupService.skipRestoreRollbackForTesting = false;
+        await BackupService.recoverInterruptedRestores();
+        await BackupService.recoverInterruptedRestores();
+
+        expect(
+          await WebFileStore.read('task_flows/executions.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('synthesis/tasks.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('task_state/app_launches.json'),
+          utf8.encode('{"sentinel":"old"}'),
+        );
+        expect(await WebFileStore.read('pictures/keep.jpg'), [7, 8, 9]);
+        expect(
+          await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
+          isEmpty,
+        );
+      },
+    );
+  });
+
   testWidgets(
       'pending temporary artifact after its successor succeeds is optional in backups',
       (WidgetTester t) async {

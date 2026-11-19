@@ -14,6 +14,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
+import 'package:uuid/uuid.dart';
 
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
@@ -238,7 +239,11 @@ class BackupService {
   static bool restorePathsWindowsSeparatorsForTesting = false;
   @visibleForTesting
   static void Function(int entryIndex)? beforeRestoreBinaryPublishForTesting;
+  @visibleForTesting
+  static bool skipRestoreRollbackForTesting = false;
   static const _restoreRollbackDirectoryPrefix = '.stroom-restore-rollback-';
+  static const _webRestoreRollbackPrefix = '.stroom-restore-rollback-web-';
+  static const _webRestoreRollbackUuid = Uuid();
   static const _restoreInProgressMarker = 'restore-in-progress';
   static const _startupPreferenceRestoreMarker = 'startup-preferences';
   static const _sharedPreferenceRestoreMarker = 'shared-preferences';
@@ -378,7 +383,10 @@ class BackupService {
   /// changed. The marker remains until the restore (or its in-process rollback)
   /// completes, so startup can safely replay the snapshot after a crash.
   static Future<void> recoverInterruptedRestores() async {
-    if (kIsWeb || WebFileStore.isTestMode) return;
+    if (kIsWeb || WebFileStore.isTestMode) {
+      await _recoverInterruptedWebStoreRestores();
+      return;
+    }
 
     final appDirectory = Directory(await AppStorage.directory);
     if (!await appDirectory.exists()) return;
@@ -462,6 +470,85 @@ class BackupService {
         );
       }
       await entity.delete(recursive: true);
+    }
+  }
+
+  /// Replays WebFileStore snapshots left by an interrupted selected restore.
+  /// The journal marker is written only after every snapshot entry is durable.
+  static Future<void> _recoverInterruptedWebStoreRestores() async {
+    final keys = await WebFileStore.keysWithPrefix(_webRestoreRollbackPrefix);
+    final journalIds = <String>{};
+    for (final key in keys) {
+      final remainder = key.substring(_webRestoreRollbackPrefix.length);
+      final separator = remainder.indexOf('/');
+      if (separator >= 0) journalIds.add(remainder.substring(0, separator));
+    }
+
+    for (final journalId in journalIds) {
+      await _replayWebStoreRollbackJournal(journalId);
+    }
+  }
+
+  static Future<void> _replayWebStoreRollbackJournal(String journalId) async {
+    final journalPrefix = '$_webRestoreRollbackPrefix$journalId/';
+    final marker = await WebFileStore.read('${journalPrefix}journal');
+    if (marker == null) {
+      // Snapshot creation had not committed, so live data was not touched.
+      await _deleteWebStoreRollbackJournal(journalId);
+      return;
+    }
+
+    final decoded = jsonDecode(utf8.decode(marker));
+    if (decoded is! Map || decoded['version'] != 1) {
+      throw const FormatException('Invalid Web restore rollback journal.');
+    }
+    final selection = _parseRestoreSelection(decoded['selection']);
+    final rawEntries = decoded['entries'];
+    if (rawEntries is! List || rawEntries.any((entry) => entry is! String)) {
+      throw const FormatException('Invalid Web restore rollback entries.');
+    }
+    final entries = <MapEntry<String, Uint8List>>[];
+    for (var index = 0; index < rawEntries.length; index++) {
+      final key = rawEntries[index] as String;
+      if (!_isSelectedWebStoreKey(key, selection)) {
+        throw const FormatException(
+          'Web restore rollback journal contains an unselected key.',
+        );
+      }
+      final bytes = await WebFileStore.read('${journalPrefix}data/$index');
+      if (bytes == null) {
+        throw const FormatException(
+          'Web restore rollback journal snapshot entry is missing.',
+        );
+      }
+      entries.add(MapEntry(key, bytes));
+    }
+
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (!key.startsWith(_webRestoreRollbackPrefix) &&
+          _isSelectedWebStoreKey(key, selection)) {
+        await WebFileStore.delete(key);
+      }
+    }
+    for (final entry in entries) {
+      await WebFileStore.write(entry.key, entry.value);
+    }
+    await _deleteWebStoreRollbackJournal(journalId);
+  }
+
+  static Future<void> _deleteWebStoreRollbackJournal(String journalId) async {
+    final prefix = '$_webRestoreRollbackPrefix$journalId/';
+    // The live restore or replay is complete. Remove the commit marker first
+    // so an interruption during snapshot cleanup is treated as an orphan.
+    await WebFileStore.delete('${prefix}journal');
+    try {
+      for (final key in await WebFileStore.keysWithPrefix(prefix)) {
+        await WebFileStore.delete(key);
+      }
+    } catch (error) {
+      // Leftover payloads are harmless without the marker and are retried at
+      // startup. Cleanup failure must not roll back a completed restore.
+      debugPrint('Web restore rollback journal cleanup deferred: $error');
     }
   }
 
@@ -730,30 +817,34 @@ class BackupService {
     return false;
   }
 
-  static Future<Map<String, Uint8List>> _snapshotSelectedWebStoreFiles(
+  static Future<String> _snapshotSelectedWebStoreFiles(
     BackupSelection selection,
   ) async {
-    final snapshot = <String, Uint8List>{};
+    final journalId = _webRestoreRollbackUuid.v4();
+    final prefix = '$_webRestoreRollbackPrefix$journalId/';
+    final keys = <String>[];
     for (final key in await WebFileStore.keysWithPrefix('')) {
       if (!_isSelectedWebStoreKey(key, selection)) continue;
       final bytes = await WebFileStore.read(key);
-      if (bytes != null) snapshot[key] = bytes;
+      if (bytes == null) continue;
+      await WebFileStore.write('${prefix}data/${keys.length}', bytes);
+      keys.add(key);
     }
-    return snapshot;
-  }
-
-  static Future<void> _restoreSelectedWebStoreFiles(
-    BackupSelection selection,
-    Map<String, Uint8List> snapshot,
-  ) async {
-    for (final key in await WebFileStore.keysWithPrefix('')) {
-      if (_isSelectedWebStoreKey(key, selection)) {
-        await WebFileStore.delete(key);
-      }
-    }
-    for (final entry in snapshot.entries) {
-      await WebFileStore.write(entry.key, entry.value);
-    }
+    // This final write is the commit point: recovery ignores partial snapshots
+    // created before live selected data could have been changed.
+    await WebFileStore.write(
+      '${prefix}journal',
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'version': 1,
+            'selection': _restoreSelectionMarkerFields(selection),
+            'entries': keys,
+          }),
+        ),
+      ),
+    );
+    return journalId;
   }
 
   // ================================================================
@@ -2781,7 +2872,7 @@ class BackupService {
     final rollbackBytes = skipRollbackSnapshot
         ? null
         : await _buildBackupBytes(selection: restoreSelection);
-    final webStoreSnapshot =
+    final webStoreJournal =
         skipRollbackSnapshot || !(kIsWeb || WebFileStore.isTestMode)
             ? null
             : await _snapshotSelectedWebStoreFiles(restoreSelection);
@@ -2845,7 +2936,13 @@ class BackupService {
         metadata.browserCookiesData,
         replaceExisting: replaceBrowserCookiesExactly,
       );
+      if (webStoreJournal != null) {
+        await _deleteWebStoreRollbackJournal(webStoreJournal);
+      }
     } catch (restoreError, restoreStackTrace) {
+      if (skipRestoreRollbackForTesting) {
+        Error.throwWithStackTrace(restoreError, restoreStackTrace);
+      }
       if (rollbackBytes != null) {
         final publishHook = beforeRestoreBinaryPublishForTesting;
         beforeRestoreBinaryPublishForTesting = null;
@@ -2866,12 +2963,9 @@ class BackupService {
             rollbackError = error;
             rollbackStackTrace = stackTrace;
           }
-          if (webStoreSnapshot != null) {
+          if (webStoreJournal != null) {
             try {
-              await _restoreSelectedWebStoreFiles(
-                restoreSelection,
-                webStoreSnapshot,
-              );
+              await _replayWebStoreRollbackJournal(webStoreJournal);
             } catch (error, stackTrace) {
               rollbackError ??= error;
               rollbackStackTrace ??= stackTrace;
