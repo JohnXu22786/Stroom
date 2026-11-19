@@ -22,6 +22,12 @@ class AttachmentDeleteRollbackException implements Exception {
       '$deleteError';
 }
 
+class AttachmentTooLargeException implements Exception {
+  const AttachmentTooLargeException(this.maxBytes);
+
+  final int maxBytes;
+}
+
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
   static const _uuid = Uuid();
@@ -83,6 +89,21 @@ class AttachmentStorage {
   }
 
   static String _webKey(String storagePath) => storagePath;
+
+  static Uint8List? _checkMaxBytes(Uint8List? bytes, int? maxBytes) {
+    if (maxBytes != null && bytes != null && bytes.length > maxBytes) {
+      throw AttachmentTooLargeException(maxBytes);
+    }
+    return bytes;
+  }
+
+  static Future<Uint8List?> _readWebFile(String key, int? maxBytes) async {
+    try {
+      return await WebFileStore.read(key, maxBytes: maxBytes);
+    } on WebFileStoreReadLimitExceededException catch (e) {
+      throw AttachmentTooLargeException(e.maxBytes);
+    }
+  }
 
   static Future<String> get _storageDir async {
     if (kIsWeb) return '';
@@ -162,29 +183,22 @@ class AttachmentStorage {
   }) async {
     final override = readFileOverrideForTesting;
     if (override != null) {
-      final bytes = await override(storagePath);
-      return maxBytes != null && bytes != null && bytes.length > maxBytes
-          ? null
-          : bytes;
+      return _checkMaxBytes(await override(storagePath), maxBytes);
     }
 
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {
-        final data = await WebFileStore.read(_webKey(storagePath));
+        final data = await _readWebFile(_webKey(storagePath), maxBytes);
         if (data != null || !storagePath.startsWith('temp_edited/')) {
-          return maxBytes != null && data != null && data.length > maxBytes
-              ? null
-              : data;
+          return _checkMaxBytes(data, maxBytes);
         }
         // Cross-device backups normalize edited files into attachments/.
-        final fallback =
-            await WebFileStore.read('attachments/${p.basename(storagePath)}');
-        return maxBytes != null &&
-                fallback != null &&
-                fallback.length > maxBytes
-            ? null
-            : fallback;
+        final fallback = await _readWebFile(
+          'attachments/${p.basename(storagePath)}',
+          maxBytes,
+        );
+        return _checkMaxBytes(fallback, maxBytes);
       }
       final dir = await _storageDir;
       final name = p.basename(storagePath);
@@ -194,13 +208,23 @@ class AttachmentStorage {
         if (maxBytes == null) return await file.readAsBytes();
         final handle = await file.open();
         try {
-          final bytes = await handle.read(maxBytes + 1);
-          return bytes.length > maxBytes ? null : Uint8List.fromList(bytes);
+          final bytes = BytesBuilder(copy: false);
+          while (bytes.length < maxBytes + 1) {
+            final chunk = await handle.read(maxBytes + 1 - bytes.length);
+            if (chunk.isEmpty) break;
+            bytes.add(chunk);
+          }
+          if (bytes.length > maxBytes) {
+            throw AttachmentTooLargeException(maxBytes);
+          }
+          return bytes.takeBytes();
         } finally {
           await handle.close();
         }
       }
       return null;
+    } on AttachmentTooLargeException {
+      rethrow;
     } catch (e) {
       await AppLogService.error('AttachmentStorage', '读取文件失败: $storagePath', e);
       rethrow;

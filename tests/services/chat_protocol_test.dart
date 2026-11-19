@@ -95,7 +95,10 @@ void main() {
         );
         final parts = req.messages.single['content'] as List;
         expect(parts.where((part) => (part as Map)['type'] == 'file'), isEmpty);
-        expect(parts.cast<Map>().single['text'], contains('document.pdf'));
+        expect(
+          parts.cast<Map>().single['text'],
+          contains('[文件过大已跳过: document.pdf]'),
+        );
       } finally {
         PathProviderPlatform.instance = previousPathProvider;
         tmpRoot.deleteSync(recursive: true);
@@ -119,7 +122,47 @@ void main() {
       );
       final parts = req.messages.single['content'] as List;
       expect(parts.where((part) => (part as Map)['type'] == 'file'), isEmpty);
-      expect(parts.cast<Map>().single['text'], contains('inline.pdf'));
+      expect(
+        parts.cast<Map>().single['text'],
+        contains('[文件过大已跳过: inline.pdf]'),
+      );
+    });
+
+    test('超长损坏的内联缓存回退到可读的文档文件', () async {
+      final tmpRoot = Directory.systemTemp.createTempSync(
+        'stroom_openai_raw_attachment_fallback_',
+      );
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+      try {
+        final storagePath = await AttachmentStorage.saveFile(
+          'cached.pdf',
+          Uint8List.fromList(utf8.encode('persisted pdf bytes')),
+        );
+        final attachment = Attachment(
+          fileName: 'cached.pdf',
+          mimeType: 'application/pdf',
+          fileType: 'file',
+          hash: 'cached',
+          storagePath: storagePath,
+          fileSize: 1,
+        )..base64Data = '!' * (4 * ((maxAttachmentBytes + 2) ~/ 3) + 1);
+        final req = await OpenAIProtocol().buildRequest(
+          history: [
+            ChatMessage(role: 'user', content: '', attachments: [attachment]),
+          ],
+        );
+        final parts = req.messages.single['content'] as List;
+        final filePart = parts.cast<Map>().single;
+        expect(filePart['type'], 'file');
+        expect(
+          (filePart['file'] as Map)['file_data'],
+          'data:application/pdf;base64,${base64Encode(utf8.encode('persisted pdf bytes'))}',
+        );
+      } finally {
+        PathProviderPlatform.instance = previousPathProvider;
+        tmpRoot.deleteSync(recursive: true);
+      }
     });
 
     test('文档附件实际内容在限制内时仍作为文件块发送', () async {

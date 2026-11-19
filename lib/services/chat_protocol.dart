@@ -473,39 +473,84 @@ bool isTextAttachment(Attachment att) {
   return textAttachmentExtensions.contains(ext);
 }
 
+/// 非文本附件原始字节读取结果。
+class RawAttachmentReadOutcome {
+  final AttachmentReadStatus status;
+  final Uint8List? bytes;
+
+  const RawAttachmentReadOutcome(this.status, this.bytes);
+}
+
+class _BoundedBase64Sink implements Sink<List<int>> {
+  _BoundedBase64Sink(this.maxBytes);
+
+  final int? maxBytes;
+  final BytesBuilder _bytes = BytesBuilder(copy: false);
+  int _byteLength = 0;
+  bool _tooLarge = false;
+
+  bool get tooLarge => _tooLarge;
+
+  @override
+  void add(List<int> chunk) {
+    _byteLength += chunk.length;
+    if (maxBytes != null && _byteLength > maxBytes!) {
+      _tooLarge = true;
+      _bytes.clear();
+    } else if (!_tooLarge) {
+      _bytes.add(chunk);
+    }
+  }
+
+  Uint8List takeBytes() => _bytes.takeBytes();
+
+  @override
+  void close() {}
+}
+
 /// 读取非文本附件的原始字节（用于 PDF 等文档）。
-/// 返回 null 表示无法读取。
-Future<Uint8List?> readRawAttachmentBytes(
+/// 超限与读取失败分别返回 [AttachmentReadStatus.tooLarge] 和
+/// [AttachmentReadStatus.unreadable]。
+Future<RawAttachmentReadOutcome> readRawAttachmentBytes(
   Attachment att, {
   int? maxBytes,
 }) async {
   if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-    // Reject obviously oversized inline caches before base64Decode allocates
-    // the decoded copy. A valid base64 string for maxBytes or fewer bytes
-    // cannot exceed this encoded length.
-    final maxEncodedLength =
-        maxBytes == null ? null : 4 * ((maxBytes + 2) ~/ 3);
-    if (maxEncodedLength != null && att.base64Data!.length > maxEncodedLength) {
-      return null;
-    }
+    final sink = _BoundedBase64Sink(maxBytes);
     try {
-      final bytes = base64Decode(att.base64Data!);
-      if (maxBytes != null && bytes.length > maxBytes) return null;
-      return bytes;
+      base64.decoder.startChunkedConversion(sink)
+        ..add(att.base64Data!)
+        ..close();
+      if (sink.tooLarge) {
+        return const RawAttachmentReadOutcome(
+          AttachmentReadStatus.tooLarge,
+          null,
+        );
+      }
+      return RawAttachmentReadOutcome(
+        AttachmentReadStatus.ok,
+        sink.takeBytes(),
+      );
     } catch (_) {
       // 缓存损坏，回退到磁盘读取
     }
   }
   try {
-    return await AttachmentStorage.readFile(
+    final bytes = await AttachmentStorage.readFile(
       att.storagePath,
       maxBytes: maxBytes,
     );
+    return bytes == null
+        ? const RawAttachmentReadOutcome(AttachmentReadStatus.unreadable, null)
+        : RawAttachmentReadOutcome(AttachmentReadStatus.ok, bytes);
+  } on AttachmentTooLargeException {
+    return const RawAttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
   } catch (e) {
-    // 瞬时 IO 异常（权限、磁盘满等）：返回 null 走占位降级，
+    // 瞬时 IO 异常（权限、磁盘满等）：走占位降级，
     // 不让整次发送失败。
     debugPrint('[ChatProtocol] 附件原始字节读取失败: ${att.fileName}: $e');
-    return null;
+    return const RawAttachmentReadOutcome(
+        AttachmentReadStatus.unreadable, null);
   }
 }
 

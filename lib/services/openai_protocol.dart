@@ -160,10 +160,11 @@ class OpenAIProtocol implements ChatProtocol {
                   'text': '[文件过大已跳过: ${att.fileName}]',
                 });
               } else {
-                final bytes = await readRawAttachmentBytes(
+                final outcome = await readRawAttachmentBytes(
                   att,
                   maxBytes: maxAttachmentBytes,
                 );
+                final bytes = outcome.bytes;
                 if (bytes != null && bytes.isNotEmpty) {
                   final b64 = base64Encode(bytes);
                   final dataUri = 'data:${att.mimeType};base64,$b64';
@@ -173,6 +174,11 @@ class OpenAIProtocol implements ChatProtocol {
                       'filename': att.fileName,
                       'file_data': dataUri,
                     },
+                  });
+                } else if (outcome.status == AttachmentReadStatus.tooLarge) {
+                  parts.add({
+                    'type': 'text',
+                    'text': '[文件过大已跳过: ${att.fileName}]',
                   });
                 } else {
                   parts.add({
