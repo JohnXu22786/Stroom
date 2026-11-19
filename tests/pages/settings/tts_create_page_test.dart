@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -495,7 +496,12 @@ void main() {
         ..state = ProviderEntriesState(entries: [entry]);
       final container = ProviderContainer(
         overrides: [
-          taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
+          taskListProvider.overrideWith((ref) {
+            final notifier = TaskListNotifier(ref);
+            // ignore: invalid_use_of_visible_for_testing_member
+            notifier.debugSynthesize = (_, _, _) async => Uint8List(0);
+            return notifier;
+          }),
           providerEntriesProvider.overrideWith((ref) => entriesNotifier),
         ],
       );
