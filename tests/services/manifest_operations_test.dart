@@ -3299,9 +3299,7 @@ void main() {
       expect(await restarted.fileExists(backupName!), isFalse);
     });
 
-    testWidgets('restores single and batch media from durable journals', (
-      t,
-    ) async {
+    test('restores single and batch media from durable journals', () async {
       Future<void> verifyRecovery({required bool useWebFileStore}) async {
         final originalPathProvider = PathProviderPlatform.instance;
         final directory = useWebFileStore
