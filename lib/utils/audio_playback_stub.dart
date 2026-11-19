@@ -49,7 +49,7 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
-    _disposePlayer();
+    await _disposePlayer();
     _player = AudioPlayer();
     _setupListeners();
 
@@ -96,8 +96,8 @@ class AudioPlayerAdapter {
   }
 
   /// 释放资源
-  void dispose() {
-    _disposePlayer();
+  Future<void> dispose() async {
+    await _disposePlayer();
   }
 
   void _setupListeners() {
@@ -112,14 +112,14 @@ class AudioPlayerAdapter {
     });
   }
 
-  void _disposePlayer() {
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _stateSub?.cancel();
+  Future<void> _disposePlayer() async {
+    await _posSub?.cancel();
+    await _durSub?.cancel();
+    await _stateSub?.cancel();
     _posSub = null;
     _durSub = null;
     _stateSub = null;
-    _player?.dispose();
+    await _player?.dispose();
     _player = null;
   }
 }
