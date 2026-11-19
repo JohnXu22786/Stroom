@@ -70,15 +70,17 @@ class AnkiMediaSync {
   }) async {
     final docs =
         documentsPath ?? (await getApplicationDocumentsDirectory()).path;
-    final mediaPath = p.join(docs, 'collection.media');
-    final folder = Directory(mediaPath);
+    final requestedMediaPath = p.join(docs, 'collection.media');
+    late final Directory folder;
+    late final String mediaPath;
     final indexPath = _indexPath(
       docs,
       syncIdentity ?? client.destinationIdentity,
     );
     late final Database index;
     try {
-      if (!await folder.exists()) await folder.create(recursive: true);
+      folder = await _ensureManagedMediaDirectory(requestedMediaPath);
+      mediaPath = folder.path;
       index = await openDatabase(
         indexPath,
         version: 1,
@@ -530,6 +532,37 @@ class AnkiMediaSync {
       if (error is FileSystemException) throw _localFileFailure;
       rethrow;
     }
+  }
+
+  static Future<Directory> _ensureManagedMediaDirectory(
+    String mediaPath,
+  ) async {
+    final type = await FileSystemEntity.type(mediaPath, followLinks: false);
+    if (type == FileSystemEntityType.link) {
+      throw FileSystemException(
+        'Anki media directory must not be a symlink',
+        mediaPath,
+      );
+    }
+    if (type == FileSystemEntityType.notFound) {
+      await Directory(mediaPath).create(recursive: true);
+    } else if (type != FileSystemEntityType.directory) {
+      throw FileSystemException('Anki media path is not a directory', mediaPath);
+    }
+
+    final canonicalMediaPath = await Directory(mediaPath).resolveSymbolicLinks();
+    final canonicalDocumentsPath =
+        await Directory(p.dirname(mediaPath)).resolveSymbolicLinks();
+    final expectedPath = p.normalize(
+      p.join(canonicalDocumentsPath, p.basename(mediaPath)),
+    );
+    if (p.normalize(canonicalMediaPath) != expectedPath) {
+      throw FileSystemException(
+        'Anki media directory resolves outside the managed documents directory',
+        mediaPath,
+      );
+    }
+    return Directory(canonicalMediaPath);
   }
 
   static String _indexPath(String docs, String identity) {
