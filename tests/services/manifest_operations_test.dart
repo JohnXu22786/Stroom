@@ -3149,29 +3149,32 @@ void main() {
       };
       final deleting = operations.deleteRecord(record.id);
       final backupName = await backupWritten.future;
-      final journalNames = await directory
+      final journalNames = await Directory(await operations.storageDirPath)
           .list()
           .map((entry) => entry.uri.pathSegments.last)
           .where((name) => name.startsWith('.manifest-delete-journal-'))
           .toList();
-      expect(journalNames, hasLength(1));
+      try {
+        expect(journalNames, hasLength(1));
 
-      final reloader = ManifestOperations<ImageRecord>(
-        manifestKey: 'delete_active_journal',
-        storageDirName: 'pictures',
-        fromMap: ImageRecord.fromMap,
-        tableName: ManifestTables.imageRecords,
-        toMap: (record) => record.toMap(),
-      );
-      expect(
-        (await reloader.loadRecords(forceRefresh: true)).map((item) => item.id),
-        [record.id],
-      );
-      expect(await reloader.fileExists(journalNames.single), isTrue);
-      expect(await reloader.fileExists(backupName), isTrue);
-
-      finishSnapshot.complete();
-      await deleting;
+        final reloader = ManifestOperations<ImageRecord>(
+          manifestKey: 'delete_active_journal',
+          storageDirName: 'pictures',
+          fromMap: ImageRecord.fromMap,
+          tableName: ManifestTables.imageRecords,
+          toMap: (record) => record.toMap(),
+        );
+        expect(
+          (await reloader.loadRecords(forceRefresh: true))
+              .map((item) => item.id),
+          [record.id],
+        );
+        expect(await reloader.fileExists(journalNames.single), isTrue);
+        expect(await reloader.fileExists(backupName), isTrue);
+      } finally {
+        if (!finishSnapshot.isCompleted) finishSnapshot.complete();
+        await deleting;
+      }
       expect(await operations.loadRecords(forceRefresh: true), isEmpty);
       expect(await operations.fileExists(journalNames.single), isFalse);
       expect(await operations.fileExists(backupName), isFalse);
@@ -3223,7 +3226,7 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
-      final journalNames = await directory
+      final journalNames = await Directory(await operations.storageDirPath)
           .list()
           .map((entry) => entry.uri.pathSegments.last)
           .where((name) => name.startsWith('.manifest-delete-journal-'))
@@ -3285,7 +3288,7 @@ void main() {
       };
       await operations.deleteRecord(record.id);
 
-      final journalNames = await directory
+      final journalNames = await Directory(await operations.storageDirPath)
           .list()
           .map((entry) => entry.uri.pathSegments.last)
           .where((name) => name.startsWith('.manifest-delete-journal-'))
