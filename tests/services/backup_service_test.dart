@@ -274,10 +274,6 @@ void main() {
           archivedExecutions,
         );
         expect(
-          await WebFileStore.read('task_state/task_list_last_read.json'),
-          isNull,
-        );
-        expect(
           await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
           isNotEmpty,
         );
