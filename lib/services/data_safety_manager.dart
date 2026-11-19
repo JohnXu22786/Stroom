@@ -528,7 +528,7 @@ class DataSafetyManager {
                   await Directory(entry.path).list(followLinks: false).toList();
               for (final cacheFile in cacheFiles) {
                 if (cacheFile is File) {
-                  await deleteIfOrphaned(cacheFile);
+                  await deleteIfOrphaned(File(cacheFile.path));
                 }
               }
             } catch (e) {
