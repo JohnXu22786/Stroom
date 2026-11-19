@@ -139,6 +139,8 @@ void main() {
           'cached.pdf',
           Uint8List.fromList(utf8.encode('persisted pdf bytes')),
         );
+        final oversizedValidBase64Prefix =
+            'A' * (4 * ((maxAttachmentBytes + 2) ~/ 3));
         final attachment = Attachment(
           fileName: 'cached.pdf',
           mimeType: 'application/pdf',
@@ -146,7 +148,7 @@ void main() {
           hash: 'cached',
           storagePath: storagePath,
           fileSize: 1,
-        )..base64Data = '!' * (4 * ((maxAttachmentBytes + 2) ~/ 3) + 1);
+        )..base64Data = '$oversizedValidBase64Prefix!';
         final req = await OpenAIProtocol().buildRequest(
           history: [
             ChatMessage(role: 'user', content: '', attachments: [attachment]),

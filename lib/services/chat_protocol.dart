@@ -511,16 +511,25 @@ class _BoundedBase64Sink implements Sink<List<int>> {
 /// 读取非文本附件的原始字节（用于 PDF 等文档）。
 /// 超限与读取失败分别返回 [AttachmentReadStatus.tooLarge] 和
 /// [AttachmentReadStatus.unreadable]。
+const _rawBase64DecodeChunkChars = 64 * 1024;
+
 Future<RawAttachmentReadOutcome> readRawAttachmentBytesBounded(
   Attachment att, {
   int? maxBytes,
 }) async {
   if (att.base64Data != null && att.base64Data!.isNotEmpty) {
     final sink = _BoundedBase64Sink(maxBytes);
+    final encoded = att.base64Data!;
     try {
-      base64.decoder.startChunkedConversion(sink)
-        ..add(att.base64Data!)
-        ..close();
+      final decoder = base64.decoder.startChunkedConversion(sink);
+      for (var start = 0; start < encoded.length;) {
+        var end = start + _rawBase64DecodeChunkChars;
+        if (end > encoded.length) end = encoded.length;
+        if (end < encoded.length) end -= (end - start) % 4;
+        decoder.add(encoded.substring(start, end));
+        start = end;
+      }
+      decoder.close();
       if (sink.tooLarge) {
         return const RawAttachmentReadOutcome(
           AttachmentReadStatus.tooLarge,
