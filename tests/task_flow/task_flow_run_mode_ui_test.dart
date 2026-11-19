@@ -206,6 +206,68 @@ void main() {
       },
     );
 
+    testWidgets('app image picker submits its durable manifest identity',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      ManifestDatabase.enableTestMode();
+      ImageManifest.invalidateCache();
+      final previousDocuments = PathProviderPlatform.instance;
+      final directory =
+          Directory.systemTemp.createTempSync('flow_manifest_picker_');
+      PathProviderPlatform.instance = _Documents(directory.path);
+      final record = ImageRecord(
+        id: 'picked-image',
+        name: 'Picked image',
+        hash: 'task-flow-picker/image',
+        format: 'png',
+        createdAt: DateTime(2026, 1, 1),
+        size: 4,
+      );
+      addTearDown(() async {
+        await ImageManifest.deleteFile(record.storagePath);
+        await ManifestDatabase.clearAllData();
+        ImageManifest.invalidateCache();
+        PathProviderPlatform.instance = previousDocuments;
+        directory.deleteSync(recursive: true);
+      });
+      await ImageManifest.addRecord(record);
+      await ImageManifest.writeFile(
+        record.storagePath,
+        Uint8List.fromList([1, 2, 3, 4]),
+      );
+      final persistedRecord = (await ImageManifest.loadRecords()).single;
+      final resolvedPath =
+          await ImageManifest.readFilePath(persistedRecord.storagePath);
+      expect(resolvedPath, isNotNull);
+
+      final control = _CaptureControl();
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.ocr),
+        control: control,
+      );
+      await tester.tap(find.text('选择图片（可多选）'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(find.text('Picked image'), findsOneWidget);
+      await tester.tap(find.text('Picked image'));
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
+      // Starting pushes the run page, which may keep scheduled frames active.
+      await tester.pump();
+
+      final submitted = control.submitted!.single;
+      expect(submitted.text, resolvedPath);
+      expect(submitted.manifestStoragePath, persistedRecord.storagePath);
+      expect(submitted.manifestType, FlowInputManifestType.image);
+      expect(submitted.ownedStoragePath, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('a restored generic file input stays a picked file', (
       tester,
     ) async {
