@@ -30,6 +30,8 @@ import 'manifest_database.dart';
 /// Each record type creates a singleton [ManifestOperations] instance
 /// and forwards its static API to it (see [FileManifest] and [ImageManifest]).
 class ManifestOperations<T extends FileRecord> {
+  static final Set<String> _activeNonAudioDeleteJournalKeys = {};
+
   final String manifestKey;
   final String storageDirName;
   final bool useAppSupportDir; // false = app documents dir
@@ -94,6 +96,12 @@ class ManifestOperations<T extends FileRecord> {
 
   @visibleForTesting
   Future<void> Function(String name)? beforeNonAudioFileDeleteForTesting;
+
+  @visibleForTesting
+  Future<void> Function(String name)? beforeNonAudioBackupDeleteForTesting;
+
+  @visibleForTesting
+  Future<void> Function(String name)? afterNonAudioBackupWriteForTesting;
 
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
@@ -394,37 +402,40 @@ class ManifestOperations<T extends FileRecord> {
     }
     final backups = <String, String>{};
     final journalName = '.manifest-delete-journal-${const Uuid().v4()}.json';
+    final journalKey = _webKey(journalName);
+    _activeNonAudioDeleteJournalKeys.add(journalKey);
     var journalWriteStarted = false;
     try {
       for (final name in names) {
         final bytes = await _readStoredFile(name);
         if (bytes != null) {
           final backupName = '.manifest-delete-backup-${const Uuid().v4()}';
-          await _writeStoredFile(backupName, bytes);
           backups[name] = backupName;
-        }
-      }
-      if (backups.isNotEmpty) {
-        final journalBytes = Uint8List.fromList(
-          utf8.encode(jsonEncode({'files': backups})),
-        );
-        journalWriteStarted = true;
-        if (_useWebFileStore) {
-          await WebFileStore.write(_webKey(journalName), journalBytes);
-        } else {
-          final directory = await _storageDir;
-          await AtomicFile.writeBytes(
-            File(await _storedFilePath(directory, journalName)),
-            journalBytes,
+          final journalBytes = Uint8List.fromList(
+            utf8.encode(jsonEncode({'files': backups})),
           );
+          journalWriteStarted = true;
+          if (_useWebFileStore) {
+            await WebFileStore.write(_webKey(journalName), journalBytes);
+          } else {
+            final directory = await _storageDir;
+            await AtomicFile.writeBytes(
+              File(await _storedFilePath(directory, journalName)),
+              journalBytes,
+            );
+          }
+          await _writeStoredFile(backupName, bytes);
+          await afterNonAudioBackupWriteForTesting?.call(backupName);
         }
       }
     } catch (_) {
       // A failed journal write can still have committed before reporting an
-      // I/O error. Keep the backups so any visible journal remains usable.
+      // I/O error. Keep backups until any visible journal has been recovered.
+      _activeNonAudioDeleteJournalKeys.remove(journalKey);
       if (!journalWriteStarted) await _discardNonAudioBackups(backups.values);
       rethrow;
     }
+    if (backups.isEmpty) _activeNonAudioDeleteJournalKeys.remove(journalKey);
     return _NonAudioFileSnapshot(
       backups: backups,
       journalName: backups.isEmpty ? null : journalName,
@@ -457,6 +468,10 @@ class ManifestOperations<T extends FileRecord> {
     }
     if (recoveryComplete) {
       await _finishNonAudioFileSnapshot(snapshot, recoveredBackups);
+    } else if (snapshot.journalName != null) {
+      _activeNonAudioDeleteJournalKeys.remove(
+        _webKey(snapshot.journalName!),
+      );
     }
   }
 
@@ -464,20 +479,29 @@ class ManifestOperations<T extends FileRecord> {
     _NonAudioFileSnapshot snapshot, [
     Iterable<String>? backupNames,
   ]) async {
-    if (snapshot.journalName != null) {
-      try {
-        await _deleteStoredFile(snapshot.journalName!);
-      } catch (error, stackTrace) {
-        await AppLogService.error(
-          'ManifestOperations($manifestKey)',
-          'failed to remove media deletion recovery journal',
-          error,
-          stackTrace,
-        );
+    try {
+      if (!await _discardNonAudioBackups(
+        backupNames ?? snapshot.backups.values,
+      )) {
         return;
       }
+      if (snapshot.journalName != null) {
+        await _deleteStoredFile(snapshot.journalName!);
+      }
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'failed to remove media deletion recovery journal',
+        error,
+        stackTrace,
+      );
+    } finally {
+      if (snapshot.journalName != null) {
+        _activeNonAudioDeleteJournalKeys.remove(
+          _webKey(snapshot.journalName!),
+        );
+      }
     }
-    await _discardNonAudioBackups(backupNames ?? snapshot.backups.values);
   }
 
   Future<void> _recoverNonAudioDeleteJournals() async {
@@ -499,6 +523,9 @@ class ManifestOperations<T extends FileRecord> {
     }
 
     for (final journalName in journalFiles) {
+      if (_activeNonAudioDeleteJournalKeys.contains(_webKey(journalName))) {
+        continue;
+      }
       try {
         final bytes = await _readStoredFile(journalName);
         if (bytes == null) continue;
@@ -555,9 +582,11 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> _discardNonAudioBackups(Iterable<String> names) async {
+  Future<bool> _discardNonAudioBackups(Iterable<String> names) async {
+    var complete = true;
     for (final name in names) {
       try {
+        await beforeNonAudioBackupDeleteForTesting?.call(name);
         if (_useWebFileStore) {
           await WebFileStore.delete(_webKey(name));
         } else {
@@ -572,8 +601,10 @@ class ManifestOperations<T extends FileRecord> {
           error,
           stackTrace,
         );
+        complete = false;
       }
     }
+    return complete;
   }
 
   Future<Map<String, Uint8List>> _snapshotAudioSidecars(
@@ -1899,7 +1930,9 @@ class _NonAudioFileSnapshot {
     required this.journalName,
   });
 
-  const _NonAudioFileSnapshot.empty() : backups = const {}, journalName = null;
+  const _NonAudioFileSnapshot.empty()
+      : backups = const {},
+        journalName = null;
 
   final Map<String, String> backups;
   final String? journalName;
