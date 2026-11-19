@@ -35,17 +35,17 @@ void main() {
     final sameTick = DateTime(2025, 1, 1);
 
     Future<File?> write(List<int> bytes) => writeAudioPlayerTempFile(
-          getTempDirectory: () async => directory,
-          now: () => sameTick,
-          bytes: bytes,
-          extension: 'wav',
-          isDisposed: () => false,
-          writeBytes: (file, fileBytes) async {
-            paths.add(file.path);
-            await finishWrites.future;
-            await file.writeAsBytes(fileBytes);
-          },
-        );
+      getTempDirectory: () async => directory,
+      now: () => sameTick,
+      bytes: bytes,
+      extension: 'wav',
+      isDisposed: () => false,
+      writeBytes: (file, fileBytes) async {
+        paths.add(file.path);
+        await finishWrites.future;
+        await file.writeAsBytes(fileBytes);
+      },
+    );
 
     final firstWrite = write(firstBytes);
     final secondWrite = write(secondBytes);
@@ -123,5 +123,30 @@ void main() {
       deleteAudioPlayerTempFile(File(directory.path)),
       throwsA(isA<FileSystemException>()),
     );
+  });
+
+  test('ignores a temp file that was already removed', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/already_removed.wav');
+
+    await deleteAudioPlayerTempFile(file);
+  });
+
+  test('does not delete the temp file when player disposal fails', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/playing.wav');
+    await file.writeAsBytes([1, 2, 3]);
+    final disposalError = StateError('player disposal failed');
+
+    await expectLater(
+      disposeAudioPlayerTempFile(
+        tempFilePath: file.path,
+        disposePlayer: () async => throw disposalError,
+      ),
+      throwsA(same(disposalError)),
+    );
+    expect(await file.exists(), isTrue);
   });
 }

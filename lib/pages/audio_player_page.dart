@@ -176,9 +176,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               const SizedBox(height: 24),
               Text(
                 _l10n.audioPlayerSourceTextSource,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
+                style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
@@ -430,9 +428,12 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           debugPrint('AudioPlayerPage 清理失败: $disposeError');
         }
         if (!mounted) return;
-        final ext =
-            path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
-        final diag = '文件: ${path.basename(widget.filePath)} | '
+        final ext = path
+            .extension(widget.filePath)
+            .replaceAll('.', '')
+            .toLowerCase();
+        final diag =
+            '文件: ${path.basename(widget.filePath)} | '
             '扩展名: $ext | '
             '源错: $e';
         debugPrint('AudioPlayerPage 错误: $diag');
@@ -446,8 +447,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   }
 
   Future<void> _loadAudio() async {
-    final extension =
-        path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
+    final extension = path
+        .extension(widget.filePath)
+        .replaceAll('.', '')
+        .toLowerCase();
 
     if (!kIsWeb) {
       // Native: read into memory, validate/convert format, play from temp
@@ -534,8 +537,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     // 获取支持流式输出的模型
     final entriesState = ref.read(providerEntriesProvider);
-    final ttsEntry =
-        entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
+    final ttsEntry = entriesState.entries
+        .where((e) => e.name == 'TTS供应商')
+        .firstOrNull;
     if (ttsEntry == null) {
       _showSnackBar(_l10n.audioPlayerConfigureTtsProvider);
       return;
@@ -619,7 +623,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   void _startStreamingPlayback(String text, StreamModelOption opt) {
     // 使用 TTSStateNotifier 的 startStreaming 方法
-    ref.read(ttsStateProvider.notifier).startStreaming(
+    ref
+        .read(ttsStateProvider.notifier)
+        .startStreaming(
           text,
           providerConfig: opt.configItem,
           modelConfig: opt.model,
@@ -735,9 +741,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
+                                    color: Theme.of(context).colorScheme.primary
                                         .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -781,9 +785,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
+                                    color: Theme.of(context).colorScheme.primary
                                         .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
