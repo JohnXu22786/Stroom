@@ -519,15 +519,13 @@ class DataSafetyManager {
       );
       try {
         if (await compressedCacheRoot.exists()) {
-          final conversations = await compressedCacheRoot
-              .list(followLinks: false)
-              .toList();
+          final conversations =
+              await compressedCacheRoot.list(followLinks: false).toList();
           for (final entry in conversations) {
             if (entry is! Directory) continue;
             try {
-              final cacheFiles = await Directory(entry.path)
-                  .list(followLinks: false)
-                  .toList();
+              final cacheFiles =
+                  await Directory(entry.path).list(followLinks: false).toList();
               for (final cacheFile in cacheFiles) {
                 if (cacheFile is File) {
                   await deleteIfOrphaned(cacheFile);
