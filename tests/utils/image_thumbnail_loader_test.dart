@@ -61,6 +61,7 @@ void main() {
     ImageThumbnailLoader.clear();
     ImageThumbnailLoader.generationCount = 0;
     ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
+    ImageThumbnailLoader.afterExistingThumbnailReadForTesting = null;
   });
 
   group('ImageThumbnailLoader', () {
@@ -209,6 +210,53 @@ void main() {
 
       expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
           reason: 'after invalidate the stale memory entry must not be used');
+    });
+
+    testWidgets(
+        'an existing-thumbnail read cannot repopulate the cache after '
+        'invalidation and deletion', (tester) async {
+      final record = _makeRecord(hash: 'delete_during_thumbnail_read');
+      final thumb = Uint8List.fromList([4, 3, 2, 1]);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
+        await ImageManifest.addRecord(record);
+      });
+
+      final result = await tester.runAsync(() async {
+        final readReady = Completer<void>();
+        final resumeRead = Completer<void>();
+        Future<void>? deletion;
+        Future<Uint8List?>? loading;
+        ImageThumbnailLoader.afterExistingThumbnailReadForTesting = () async {
+          readReady.complete();
+          await resumeRead.future;
+        };
+        try {
+          loading = ImageThumbnailLoader.loadThumbnail(record);
+          await readReady.future.timeout(const Duration(seconds: 5));
+
+          ImageThumbnailLoader.invalidate(record.hash);
+          deletion = ImageManifest.deleteRecord(record.id);
+          await deletion.timeout(const Duration(seconds: 5));
+          resumeRead.complete();
+          return await loading.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!resumeRead.isCompleted) resumeRead.complete();
+          ImageThumbnailLoader.afterExistingThumbnailReadForTesting = null;
+          try {
+            await Future.wait([
+              if (deletion != null) deletion,
+              if (loading != null) loading,
+            ]).timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
+      });
+
+      expect(result, isNull,
+          reason:
+              'invalidation must discard a thumbnail read already in flight');
+      expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
+          reason: 'stale bytes must not be restored to the memory cache');
     });
 
     testWidgets(
