@@ -127,7 +127,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/folder_path_utils_test.dart",
         "utils/folder_path_console_names_test.dart",
         "utils/storage_file_publication_test.dart",
-        "utils/web_file_store_blob*_test.dart",
+        "utils/web_file_store_blob_stub_test.dart",
         "utils/tts_audio_saver_test.dart",
         "utils/*manifest*_test.dart",
         "utils/natural_sort_test.dart",
@@ -266,6 +266,12 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
     "application-shared": "application-shared",
 }
 
+# These tests require a browser runtime and are executed by dedicated Chrome
+# steps in .github/workflows/ci.yml, not by the native Flutter test runner.
+BROWSER_ONLY_TESTS: dict[str, str] = {
+    "utils/web_file_store_blob_web_test.dart": "built-in-components",
+}
+
 CI_GROUPS: tuple[str, ...] = (
     "component-integrations",
     "built-in-components",
@@ -304,6 +310,12 @@ def discover_and_validate() -> dict[str, list[str]]:
     assignments: dict[str, list[str]] = {group: [] for group in CI_GROUPS}
     errors: list[str] = []
 
+    missing_browser_tests = set(BROWSER_ONLY_TESTS) - set(files)
+    if missing_browser_tests:
+        errors.append(
+            f"browser-only tests are missing: {sorted(missing_browser_tests)}"
+        )
+
     unmapped_suites = set(FUNCTIONAL_SUITES) - set(FUNCTIONAL_TO_CI_GROUP)
     unknown_groups = set(FUNCTIONAL_TO_CI_GROUP.values()) - set(CI_GROUPS)
     if unmapped_suites:
@@ -312,6 +324,11 @@ def discover_and_validate() -> dict[str, list[str]]:
         errors.append(f"functional suites map to unknown CI groups: {sorted(unknown_groups)}")
 
     for path in files:
+        if path in BROWSER_ONLY_TESTS:
+            group = BROWSER_ONLY_TESTS[path]
+            if group not in CI_GROUPS:
+                errors.append(f"{path}: browser test maps to unknown CI group {group}")
+            continue
         matches = [
             suite
             for suite, patterns in FUNCTIONAL_SUITES.items()
