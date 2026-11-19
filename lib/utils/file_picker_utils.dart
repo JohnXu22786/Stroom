@@ -248,17 +248,21 @@ Future<void> createUserVisibleExportDirectory(
     current = p.join(current, segment);
     final type = await FileSystemEntity.type(current, followLinks: false);
     if (type == FileSystemEntityType.link) {
-      throw FileSystemException('Export path contains a symbolic link', current);
+      throw FileSystemException(
+          'Export path contains a symbolic link', current);
     }
     if (type == FileSystemEntityType.notFound) {
       await Directory(current).create();
     } else if (type != FileSystemEntityType.directory) {
-      throw FileSystemException('Export path component is not a directory', current);
+      throw FileSystemException(
+          'Export path component is not a directory', current);
     }
 
     final resolved = await Directory(current).resolveSymbolicLinks();
-    if (!p.equals(resolved, canonicalRoot) && !p.isWithin(canonicalRoot, resolved)) {
-      throw FileSystemException('Export path escapes the selected destination', current);
+    if (!p.equals(resolved, canonicalRoot) &&
+        !p.isWithin(canonicalRoot, resolved)) {
+      throw FileSystemException(
+          'Export path escapes the selected destination', current);
     }
     current = resolved;
   }
