@@ -74,16 +74,17 @@ class CardDao {
     return result.first['cnt'] as int;
   }
 
-  Future<int> insert(Card card) async {
+  Future<int> insert(Card card, {DatabaseExecutor? executor}) async {
+    final db = executor ?? _db;
     card
       ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
       ..usn = -1;
-    await _db.insert(
+    await db.insert(
       'cards',
       card.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    await _touchCollection();
+    await _touchCollection(db);
     return card.id;
   }
 
@@ -117,10 +118,10 @@ class CardDao {
     });
   }
 
-  Future<void> _touchCollection() => _db.rawUpdate(
-        'UPDATE col SET mod = ? WHERE id = 1',
-        [DateTime.now().millisecondsSinceEpoch ~/ 1000],
-      );
+  Future<void> _touchCollection([DatabaseExecutor? executor]) =>
+      (executor ?? _db).rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ]);
 
   Future<int> totalCount(int deckId) async {
     final result = await _db.rawQuery(

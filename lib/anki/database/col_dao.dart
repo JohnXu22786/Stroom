@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../models/card.dart';
 import '../models/deck.dart';
 import '../models/model.dart';
 import '../models/note.dart';
@@ -185,6 +186,42 @@ class ColDao {
         where: 'id = 1');
     _savedDecks = _decks.map((id, value) => MapEntry(id, value.toJson()));
     _savedModels = _snapshotModels();
+  }
+
+  /// Creates a note and its card atomically, including the collection update.
+  Future<int> addNoteAndCard(
+    (Note, Card, List<Notetype>) Function() create,
+  ) async {
+    return _db.transaction((txn) async {
+      List<Notetype>? createdModels;
+      try {
+        final (note, card, newModels) = create();
+        createdModels = newModels;
+        final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        for (final model in newModels) {
+          model
+            ..mtime = nowSecs
+            ..usn = -1;
+        }
+        // Persist note types before deriving note fields, in the same
+        // transaction as the note, card, and collection modification updates.
+        await txn.update(
+          'col',
+          {'models': jsonEncode(_modelsToJson())},
+          where: 'id = 1',
+        );
+        await notes.insert(note, executor: txn);
+        await cards.insert(card, executor: txn);
+        return note.id;
+      } catch (_) {
+        for (final model in createdModels ?? <Notetype>[]) {
+          if (identical(_models[model.id], model)) {
+            _models.remove(model.id);
+          }
+        }
+        rethrow;
+      }
+    });
   }
 
   /// Rewrites local references when a remote media filename is made safe for

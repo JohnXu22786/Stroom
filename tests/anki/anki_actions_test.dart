@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,134 @@ void main() {
     await collection.close();
     await workDir.delete(recursive: true);
   });
+
+  test(
+      'addCard rolls back the note and collection update when card creation fails',
+      () async {
+    await collection.db.update(
+        'col',
+        {
+          'models': '{}',
+          'mod': 1,
+        },
+        where: 'id = 1');
+    await collection.col.reload();
+    expect(collection.col.modelList, isEmpty);
+    final defaultDeck = collection.col.deckList.first;
+    defaultDeck
+      ..name = 'Pending edit'
+      ..mtimeSecs = 1
+      ..usn = 5;
+
+    await collection.db.update('col', {'mod': 1}, where: 'id = 1');
+    final initialCollection = (await collection.db.query(
+      'col',
+      columns: ['mod'],
+      where: 'id = 1',
+    ))
+        .single['mod'];
+    await collection.db.execute('''
+      CREATE TRIGGER fail_card_insert
+      BEFORE INSERT ON cards
+      BEGIN
+        SELECT RAISE(ABORT, 'injected card insert failure');
+      END
+    ''');
+
+    final container = ProviderContainer(
+      overrides: [
+        ankiColDaoProvider.overrideWith((ref) async => collection.col),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await expectLater(
+      container.read(ankiActionsProvider).addCard(1, 'front', 'back'),
+      throwsA(isA<Exception>()),
+    );
+
+    expect(await collection.notes.all(), isEmpty);
+    expect(await collection.cards.all(), isEmpty);
+    expect(collection.col.modelList, isEmpty);
+    expect(
+      identical(collection.col.getDeck(defaultDeck.id), defaultDeck),
+      isTrue,
+    );
+    expect(collection.col.getDeck(defaultDeck.id)!.name, 'Pending edit');
+    expect(collection.col.getDeck(defaultDeck.id)!.mtimeSecs, 1);
+    expect(collection.col.getDeck(defaultDeck.id)!.usn, 5);
+    final collectionAfterFailure = await collection.db.query(
+      'col',
+      columns: ['mod', 'models'],
+      where: 'id = 1',
+    );
+    expect(collectionAfterFailure.single['mod'], initialCollection);
+    expect(collectionAfterFailure.single['models'], '{}');
+  });
+
+  test(
+    'failed queued addCard keeps model state consistent with a later success',
+    () async {
+      await collection.db.update('col', {'models': '{}'}, where: 'id = 1');
+      await collection.col.reload();
+      expect(collection.col.modelList, isEmpty);
+      await collection.db.execute('''
+      CREATE TRIGGER fail_selected_card_insert
+      BEFORE INSERT ON cards
+      WHEN (SELECT flds FROM notes WHERE id = NEW.nid) LIKE 'fail%'
+      BEGIN
+        SELECT RAISE(ABORT, 'injected selected card insert failure');
+      END
+    ''');
+
+      final container = ProviderContainer(
+        overrides: [
+          ankiColDaoProvider.overrideWith((ref) async => collection.col),
+        ],
+      );
+      addTearDown(container.dispose);
+      final actions = container.read(ankiActionsProvider);
+
+      final successfulCreation = actions.addCard(1, 'first', 'card');
+      final failedCreation = actions.addCard(1, 'fail after first', 'card');
+      await successfulCreation;
+      await expectLater(failedCreation, throwsA(isA<Exception>()));
+
+      expect(await collection.notes.all(), hasLength(1));
+      expect(await collection.cards.all(), hasLength(1));
+      expect(collection.col.modelList, hasLength(2));
+
+      await collection.db.update('col', {'models': '{}'}, where: 'id = 1');
+      await collection.col.reload();
+      expect(collection.col.modelList, isEmpty);
+
+      final failedBeforeSuccess =
+          actions.addCard(1, 'fail before success', 'card');
+      final successfulAfterFailure = actions.addCard(1, 'second', 'card');
+      await expectLater(failedBeforeSuccess, throwsA(isA<Exception>()));
+      await successfulAfterFailure;
+
+      expect(await collection.notes.all(), hasLength(2));
+      expect(await collection.cards.all(), hasLength(2));
+      expect(collection.col.modelList, hasLength(2));
+      expect(
+        collection.col.modelList.every((model) => model.usn == -1),
+        isTrue,
+      );
+      final persistedModels = jsonDecode(
+        (await collection.db.query(
+          'col',
+          columns: ['models'],
+          where: 'id = 1',
+        ))
+            .single['models'] as String,
+      ) as Map<String, dynamic>;
+      expect(
+        persistedModels.values.every((model) => model['usn'] == -1),
+        isTrue,
+      );
+    },
+  );
 
   test(
     'removeNote rolls back all note data when deleting a dependent card fails',
