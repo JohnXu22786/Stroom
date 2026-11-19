@@ -48,6 +48,10 @@ void main() {
         const Locale('en', 'US'),
       );
       expect(
+        resolveSystemLocale(const Locale('it', 'IT')),
+        const Locale('en', 'US'),
+      );
+      expect(
         resolveSystemLocale(const Locale('fr', 'FR')),
         const Locale('fr', 'FR'),
       );
@@ -230,6 +234,29 @@ void main() {
     expect(find.text('Chinese (Simplified)（简体中文）'), findsOneWidget);
     expect(find.text('en-us'), findsOneWidget);
     expect(find.text('zh-cn'), findsOneWidget);
+    final languageTags = find
+        .descendant(
+          of: languageCard,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                RegExp(r'^[a-z]{2}-[a-z]{2}$').hasMatch(widget.data ?? ''),
+          ),
+        )
+        .evaluate()
+        .map((element) => (element.widget as Text).data!)
+        .toList();
+    expect(languageTags, <String>[
+      'ar-sa',
+      'de-de',
+      'en-us',
+      'es-es',
+      'fr-fr',
+      'ja-jp',
+      'ko-kr',
+      'pt-br',
+      'zh-cn',
+    ]);
     expect(find.byType(Card), findsNWidgets(2));
     expect(find.text('system'), findsOneWidget);
 
