@@ -516,12 +516,12 @@ extension _HomePageHomeContentExt on _HomePageState {
                   final minHeadingWidth = math.min(48.0, constraints.maxWidth);
                   final viewAll = AppLocalizations.of(context)!.homeViewAll;
                   final actionStyle = DefaultTextStyle.of(context).style.merge(
-                    TextStyle(
-                      fontSize: 12,
-                      color: cs.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  );
+                        TextStyle(
+                          fontSize: 12,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      );
                   final textDirection = Directionality.of(context);
                   final textScaler = MediaQuery.textScalerOf(context);
                   final locale = Localizations.localeOf(context);

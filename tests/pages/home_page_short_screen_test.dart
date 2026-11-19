@@ -209,16 +209,16 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
     Widget home(Locale locale) => ProviderScope(
-      child: TickerMode(
-        enabled: false,
-        child: MaterialApp(
-          locale: locale,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: HomePage(),
-        ),
-      ),
-    );
+          child: TickerMode(
+            enabled: false,
+            child: MaterialApp(
+              locale: locale,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: HomePage(),
+            ),
+          ),
+        );
 
     const englishLocale = Locale('en');
     await tester.pumpWidget(home(englishLocale));
@@ -235,9 +235,8 @@ void main() {
       expect(label, findsOneWidget);
       final paragraph = tester.renderObject<RenderParagraph>(label);
       final actionLabel = find.text(english.homeViewAll);
-      final action = find
-          .ancestor(of: actionLabel, matching: find.byType(InkWell))
-          .first;
+      final action =
+          find.ancestor(of: actionLabel, matching: find.byType(InkWell)).first;
       final actionParagraph = tester.renderObject<RenderParagraph>(actionLabel);
       expect(
         paragraph.didExceedMaxLines,
@@ -306,12 +305,10 @@ void main() {
     expect(constrainedViewAll, findsOneWidget);
     expect(viewAll, findsOneWidget);
 
-    final headingRow = find
-        .ancestor(of: heading, matching: find.byType(Row))
-        .first;
-    final action = find
-        .ancestor(of: viewAll, matching: find.byType(InkWell))
-        .first;
+    final headingRow =
+        find.ancestor(of: heading, matching: find.byType(Row)).first;
+    final action =
+        find.ancestor(of: viewAll, matching: find.byType(InkWell)).first;
     final headingRect = tester.getRect(heading);
     final actionRect = tester.getRect(action);
     expect(
@@ -335,12 +332,10 @@ void main() {
         (widget) => widget is ConstrainedText && widget.data == label,
       );
       expect(statusLabel, findsOneWidget);
-      final statusRow = find
-          .ancestor(of: statusLabel, matching: find.byType(Row))
-          .first;
-      final statusColumn = find
-          .ancestor(of: statusLabel, matching: find.byType(Column))
-          .first;
+      final statusRow =
+          find.ancestor(of: statusLabel, matching: find.byType(Row)).first;
+      final statusColumn =
+          find.ancestor(of: statusLabel, matching: find.byType(Column)).first;
       final count = tester.getRect(
         find.descendant(of: statusColumn, matching: find.text('0')),
       );
@@ -371,9 +366,8 @@ void main() {
           widget is ConstrainedText && widget.data == arabic.homeRecentTasks,
     );
     final arabicActionLabel = find.text(arabic.homeViewAll);
-    final arabicHeaderRow = find
-        .ancestor(of: arabicHeading, matching: find.byType(Row))
-        .first;
+    final arabicHeaderRow =
+        find.ancestor(of: arabicHeading, matching: find.byType(Row)).first;
     final arabicAction = find
         .ancestor(of: arabicActionLabel, matching: find.byType(InkWell))
         .first;
