@@ -47,6 +47,7 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   SynthesisConfigNotifier() : super(const SynthesisConfig());
 
   Future<void> _loading = Future<void>.value();
+  Future<void> _saveQueue = Future<void>.value();
   Future<void> get ready => _loading;
 
   /// 已知的 voice ID 白名单（非语音名称）
@@ -92,29 +93,43 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   }
 
   Future<void> saveConfig(SynthesisConfig config) async {
-    try {
-      state = config;
+    await _enqueueConfigSave((_) => config);
+  }
+
+  Future<void> _enqueueConfigSave(
+    SynthesisConfig Function(SynthesisConfig current) buildConfig,
+  ) {
+    final save = _saveQueue.catchError((Object _) {}).then((_) async {
+      await _loading;
+      final config = buildConfig(state);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
-    } catch (e) {
-      debugPrint('Failed to save synthesis config: $e');
-    }
+      final persisted = await prefs.setString(
+        'synthesis_config',
+        jsonEncode(config.toMap()),
+      );
+      if (!persisted) {
+        throw StateError('Failed to persist synthesis config');
+      }
+      state = config;
+    });
+    _saveQueue = save;
+    return save;
   }
 
   Future<void> updateVoice(String voice) async {
-    await saveConfig(state.copyWith(voice: voice));
+    await _enqueueConfigSave((current) => current.copyWith(voice: voice));
   }
 
   Future<void> updateSpeed(double speed) async {
-    await saveConfig(state.copyWith(speed: speed));
+    await _enqueueConfigSave((current) => current.copyWith(speed: speed));
   }
 
   Future<void> updateVolume(double volume) async {
-    await saveConfig(state.copyWith(volume: volume));
+    await _enqueueConfigSave((current) => current.copyWith(volume: volume));
   }
 
   Future<void> updateFormat(String format) async {
-    await saveConfig(state.copyWith(format: format));
+    await _enqueueConfigSave((current) => current.copyWith(format: format));
   }
 
   Future<void> resetToDefaults() async {

@@ -83,6 +83,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   /// 表单校验错误（显示在底部错误横幅中，样式与 OCR/ASR 页面一致）
   String? _errorMessage;
+  bool _isSubmitting = false;
 
   /// "请输入要转换的文本" 错误横幅是否正在显示。用标志位而不是
   /// 字符串比较，避免文案改动后自动收起逻辑静默失效。
@@ -305,7 +306,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return _modelConfig != null;
   }
 
-  void _generateSpeech() {
+  Future<void> _generateSpeech() async {
+    if (_isSubmitting) return;
+
     if (!_isTTSConfigured() ||
         _availableModels.isEmpty ||
         _selectedModelIndex == null ||
@@ -330,12 +333,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     // 保存当前配置
     final synthNotifier = ref.read(synthesisConfigProvider.notifier);
-    if (_modelConfig!.voices.isNotEmpty) {
-      // 异步保存，不等待
-      synthNotifier.updateVoice(_selectedVoice);
+    setState(() {
+      _isSubmitting = true;
+    });
+    try {
+      await Future.wait([
+        if (_modelConfig!.voices.isNotEmpty)
+          synthNotifier.updateVoice(_selectedVoice),
+        synthNotifier.updateSpeed(_speed),
+        synthNotifier.updateVolume(_volume),
+      ]);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = error.toString();
+      });
+      return;
     }
-    synthNotifier.updateSpeed(_speed);
-    synthNotifier.updateVolume(_volume);
+    if (!mounted) return;
 
     // 查找裁切预设
     Map<String, dynamic>? trimPreset;
@@ -1300,7 +1316,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _generateSpeech,
+                onPressed: _isSubmitting ? null : _generateSpeech,
                 icon: const Icon(Icons.audio_file, size: 20),
                 label: ConstrainedText(
                   l10n.ttsGenerateRecording,

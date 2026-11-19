@@ -95,7 +95,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   }
 
   /// 在后台执行合成任务
-  Future<void> _executeTask(SynthesisTask task) async {
+  Future<void> _executeTask(
+    SynthesisTask task, {
+    bool syncVoiceFromModel = false,
+  }) async {
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
@@ -106,6 +109,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         state.any((t) => t.id == task.id && t.status == TaskStatus.running);
 
     try {
+      if (syncVoiceFromModel) {
+        await _syncVoiceFromModelConfig(task.modelConfig);
+        if (!isCurrent()) return;
+      }
       final synthConfig = ref.read(synthesisConfigProvider);
 
       final provider = tts_provider_base.createProviderFromConfig(
@@ -425,18 +432,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     state = newState;
     _persistTasks();
 
-    // 确保 SynthesisConfig 使用当前模型的 voice ID，而非过期的 voice name
-    _syncVoiceFromModelConfig(updated.modelConfig);
-
-    // 执行
-    _executeTask(updated);
+    // 确保合成使用已成功保存的模型 voice ID。
+    _executeTask(updated, syncVoiceFromModel: true);
   }
 
   /// 从模型配置中同步 voice ID 到 SynthesisConfig（防止过期的 voice name 被发送）
-  void _syncVoiceFromModelConfig(ModelConfig modelConfig) {
+  Future<void> _syncVoiceFromModelConfig(ModelConfig modelConfig) async {
     if (modelConfig.voices.isNotEmpty) {
       final notifier = ref.read(synthesisConfigProvider.notifier);
-      notifier.updateVoice(modelConfig.voices.first.id);
+      await notifier.updateVoice(modelConfig.voices.first.id);
     }
   }
 
