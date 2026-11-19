@@ -100,14 +100,24 @@ Dio _createNon200Dio(int statusCode) {
   return dio;
 }
 
-List<int> _validApplicationExecutableHeader({bool universalMachO = false}) {
-  final bytes = Uint8List(Platform.isWindows
-      ? 228
+enum _ExecutableHeaderFormat { pe, elf, machO }
+
+List<int> _validApplicationExecutableHeader({
+  bool universalMachO = false,
+  _ExecutableHeaderFormat? format,
+}) {
+  format ??= Platform.isWindows
+      ? _ExecutableHeaderFormat.pe
       : Platform.isMacOS
-          ? 133
-          : 128);
+          ? _ExecutableHeaderFormat.machO
+          : _ExecutableHeaderFormat.elf;
+  final bytes = Uint8List(switch (format) {
+    _ExecutableHeaderFormat.pe => 228,
+    _ExecutableHeaderFormat.machO => 133,
+    _ExecutableHeaderFormat.elf => 128,
+  });
   final data = ByteData.sublistView(bytes);
-  if (Platform.isWindows) {
+  if (format == _ExecutableHeaderFormat.pe) {
     bytes[0] = 0x4d;
     bytes[1] = 0x5a;
     data.setUint32(60, 64, Endian.little);
@@ -125,7 +135,7 @@ List<int> _validApplicationExecutableHeader({bool universalMachO = false}) {
     bytes[224] = 0xc3;
     return bytes;
   }
-  if (Platform.isMacOS) {
+  if (format == _ExecutableHeaderFormat.machO) {
     bytes.setRange(0, 4, const [0xcf, 0xfa, 0xed, 0xfe]);
     data.setUint32(4, 0x0100000c, Endian.little);
     data.setUint32(12, 2, Endian.little);
@@ -305,6 +315,38 @@ void main() {
         '${outputDir.path}/bundle/$executableName',
       );
     });
+
+    test('rejects a valid executable from another platform format', () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final foreignFormat = Platform.isMacOS
+          ? _ExecutableHeaderFormat.elf
+          : _ExecutableHeaderFormat.machO;
+      final executableName = Platform.isWindows ? 'stroom.exe' : 'stroom';
+      final executableBytes =
+          _validApplicationExecutableHeader(format: foreignFormat);
+      final executable = ArchiveFile(
+        'bundle/$executableName',
+        executableBytes.length,
+        executableBytes,
+      )..mode = 0x1ed;
+      final archive = Archive()..addFile(executable);
+      final zipFile = File('${tempDir.path}/update.zip');
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      final notifier = UpdateNotifier();
+
+      await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+      expect(
+        () => notifier.findExecutableForTesting(
+          outputDir.path,
+          currentExecutableName: executableName,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    }, skip: !Platform.isWindows && !Platform.isMacOS && !Platform.isLinux);
 
     test(
       'accepts a valid universal Mach-O executable package',

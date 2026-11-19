@@ -1142,8 +1142,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           _hasValidPeHeader(file);
     }
     if (file.statSync().mode & 0x49 == 0) return false;
-
-    return _hasValidElfHeader(file) || _hasValidMachOHeader(file);
+    if (Platform.isMacOS) return _hasValidMachOHeader(file);
+    if (Platform.isLinux) return _hasValidElfHeader(file);
+    return false;
   }
 
   bool _hasValidElfHeader(File file) {
