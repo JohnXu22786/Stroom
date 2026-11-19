@@ -24,6 +24,23 @@ class _FailingWriteStore extends InMemorySharedPreferencesStore {
       false;
 }
 
+class _FailingMigrationWriteStore extends InMemorySharedPreferencesStore {
+  _FailingMigrationWriteStore(super.data) : super.withData();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      false;
+}
+
+class _ThrowingMigrationWriteStore extends InMemorySharedPreferencesStore {
+  _ThrowingMigrationWriteStore(super.data) : super.withData();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    throw StateError('migration write failed');
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -59,6 +76,52 @@ void main() {
     );
 
     expect(notifier.state, same(original));
+    notifier.dispose();
+  });
+
+  test('failed voice migration keeps the persisted config in state', () async {
+    const legacyVoice = '女声';
+    const persistedConfig = SynthesisConfig(
+      voice: legacyVoice,
+      speed: 1.25,
+      format: 'mp3',
+    );
+    SharedPreferencesStorePlatform.instance = _FailingMigrationWriteStore({
+      'flutter.synthesis_config': jsonEncode(persistedConfig.toMap()),
+    });
+    final notifier = SynthesisConfigNotifier();
+
+    await notifier.loadConfig();
+
+    expect(notifier.state.voice, legacyVoice);
+    expect(notifier.state.speed, persistedConfig.speed);
+    expect(notifier.state.format, persistedConfig.format);
+    final stored = await SharedPreferencesStorePlatform.instance.getAll();
+    expect(
+      jsonDecode(stored['flutter.synthesis_config']! as String)['voice'],
+      legacyVoice,
+    );
+    notifier.dispose();
+  });
+
+  test('thrown voice migration write keeps the persisted config in state',
+      () async {
+    const legacyVoice = '女声';
+    const persistedConfig = SynthesisConfig(
+      voice: legacyVoice,
+      speed: 1.25,
+      format: 'mp3',
+    );
+    SharedPreferencesStorePlatform.instance = _ThrowingMigrationWriteStore({
+      'flutter.synthesis_config': jsonEncode(persistedConfig.toMap()),
+    });
+    final notifier = SynthesisConfigNotifier();
+
+    await notifier.loadConfig();
+
+    expect(notifier.state.voice, legacyVoice);
+    expect(notifier.state.speed, persistedConfig.speed);
+    expect(notifier.state.format, persistedConfig.format);
     notifier.dispose();
   });
 

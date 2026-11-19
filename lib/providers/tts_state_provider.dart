@@ -70,7 +70,8 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
         final configMap = Map<String, dynamic>.from(
           (jsonDecode(configJson) as Map).cast<String, dynamic>(),
         );
-        var config = SynthesisConfig.fromMap(configMap);
+        final persistedConfig = SynthesisConfig.fromMap(configMap);
+        var config = persistedConfig;
         // 统一强制为 wav 格式，忽略旧数据中的 mp3
         config = config.copyWith(format: 'wav');
 
@@ -82,7 +83,20 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
                 !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(voice))) {
           config = config.copyWith(voice: 'female');
           // 覆写持久化值
-          await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
+          late final bool persisted;
+          try {
+            persisted = await prefs.setString(
+              'synthesis_config',
+              jsonEncode(config.toMap()),
+            );
+          } catch (_) {
+            state = persistedConfig;
+            rethrow;
+          }
+          if (!persisted) {
+            state = persistedConfig;
+            return;
+          }
         }
 
         state = config;

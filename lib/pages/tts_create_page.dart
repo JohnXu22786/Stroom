@@ -331,6 +331,24 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     _focusNode.unfocus();
 
+    final modelOption = _availableModels[_selectedModelIndex!];
+    final selectedVoice = _selectedVoice;
+    final speed = _speed;
+    final volume = _volume;
+    final trimPresetId = modelOption.config.selectedTrimPresetId;
+    final customTrimPresets =
+        trimPresetId == null ? null : ref.read(customTrimPresetsProvider);
+    final customParams = <String, String>{};
+    for (final entry in _customParamControllers.entries) {
+      customParams[entry.key] = entry.value.text;
+    }
+    final instruction = _instructionController.text.trim();
+    if (instruction.isNotEmpty) {
+      customParams['instructions'] = instruction;
+    }
+    final title = _titleController.text.trim();
+    final folder = _saveFolder;
+
     // 保存当前配置
     final synthNotifier = ref.read(synthesisConfigProvider.notifier);
     setState(() {
@@ -338,10 +356,10 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     });
     try {
       await Future.wait([
-        if (_modelConfig!.voices.isNotEmpty)
-          synthNotifier.updateVoice(_selectedVoice),
-        synthNotifier.updateSpeed(_speed),
-        synthNotifier.updateVolume(_volume),
+        if (modelOption.config.voices.isNotEmpty)
+          synthNotifier.updateVoice(selectedVoice),
+        synthNotifier.updateSpeed(speed),
+        synthNotifier.updateVolume(volume),
       ]);
     } catch (error) {
       if (!mounted) return;
@@ -355,29 +373,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     // 查找裁切预设
     Map<String, dynamic>? trimPreset;
-    if (_modelConfig!.selectedTrimPresetId != null) {
-      final customPresets = ref.read(customTrimPresetsProvider);
+    if (trimPresetId != null) {
       trimPreset = getTrimPresetById(
-        _modelConfig!.selectedTrimPresetId!,
-        customPresets,
+        trimPresetId,
+        customTrimPresets!,
       );
     }
-
-    // 获取选中的供应商配置
-    final modelOption = _availableModels[_selectedModelIndex!];
-
-    // 收集自定义参数值
-    final customParams = <String, String>{};
-    for (final entry in _customParamControllers.entries) {
-      customParams[entry.key] = entry.value.text;
-    }
-    // instruction 参数
-    final instruction = _instructionController.text.trim();
-    if (instruction.isNotEmpty) {
-      customParams['instructions'] = instruction;
-    }
-
-    final title = _titleController.text.trim();
 
     // 添加到任务列表，在后台执行合成
     ref.read(taskListProvider.notifier).addTask(
@@ -389,7 +390,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           modelConfig: modelOption.config,
           customParams: customParams,
           trimPreset: trimPreset,
-          folder: _saveFolder,
+          folder: folder,
           replaceRecordId:
               widget.replaceRecordId ?? widget.retryTask?.replaceRecordId,
         );
