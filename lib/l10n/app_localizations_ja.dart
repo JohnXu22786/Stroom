@@ -11709,6 +11709,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       '範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'このプロバイダーに設定した Responses API の URL（例: /v1/responses）を使用します。Stroom は URL を変更せずに送信します。';
 }
 
 /// The translations for Japanese, as used in Japan (`ja_JP`).
@@ -23415,4 +23422,11 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   @override
   String get ocrSamplingSliderRepairRequired =>
       '範囲外のサンプリングスライダーを調整するか、保存する前に設定をオフにしてください。';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'このプロバイダーに設定した Responses API の URL（例: /v1/responses）を使用します。Stroom は URL を変更せずに送信します。';
 }

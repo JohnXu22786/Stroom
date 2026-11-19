@@ -12250,6 +12250,13 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Utilisez l’URL Responses configurée pour ce fournisseur, par exemple /v1/responses. Stroom l’envoie telle quelle.';
 }
 
 /// The translations for French, as used in France (`fr_FR`).
@@ -24497,4 +24504,11 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Réglez chaque curseur d’échantillonnage hors plage ou désactivez l’option avant d’enregistrer.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Utilisez l’URL Responses configurée pour ce fournisseur, par exemple /v1/responses. Stroom l’envoie telle quelle.';
 }

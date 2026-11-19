@@ -1359,6 +1359,11 @@ extension _ChatPageBubblesExt on _ChatPageState {
   }) {
     final reasoningSections = _reasoningContents[message.id];
     final segments = _chatSegments[message.id];
+    final assistantAttachments = _history
+            .where((item) => item.id == message.id)
+            .firstOrNull
+            ?.attachments ??
+        const <Attachment>[];
     final isWaitingForFirstToken = message.id == _streamingMsgId &&
         message.text.isEmpty &&
         isStreaming &&
@@ -1466,6 +1471,23 @@ extension _ChatPageBubblesExt on _ChatPageState {
               physics: const NeverScrollableScrollPhysics(),
               config: markdownConfig,
               markdownGenerator: markdownGenerator,
+            ),
+          if (assistantAttachments.isNotEmpty)
+            Padding(
+              key: const ValueKey('assistant-message-attachment-area'),
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: assistantAttachments.length,
+                  itemBuilder: (context, index) =>
+                      _buildMessageAttachmentPreview(
+                    assistantAttachments[index],
+                  ),
+                ),
+              ),
             ),
         ],
       ),

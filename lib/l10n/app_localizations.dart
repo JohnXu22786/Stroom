@@ -19775,6 +19775,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Adjust each out-of-range sampling slider or turn it off before saving.'**
   String get ocrSamplingSliderRepairRequired;
+
+  /// No description provided for @endpointResponsesApi.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI Responses API'**
+  String get endpointResponsesApi;
+
+  /// No description provided for @providerResponsesEndpointHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.'**
+  String get providerResponsesEndpointHelp;
 }
 
 class _AppLocalizationsDelegate
