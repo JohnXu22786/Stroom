@@ -188,8 +188,12 @@ extension _HomePageHomeContentExt on _HomePageState {
                       for (final card in _moduleCards())
                         SizedBox(
                           width: cardWidth,
-                          height: cardWidth / 1.2,
-                          child: card,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: cardWidth / 1.2,
+                            ),
+                            child: card,
+                          ),
                         ),
                     ],
                   );
@@ -507,59 +511,100 @@ extension _HomePageHomeContentExt on _HomePageState {
             // Header row: "最近任务" on left, "查看全部 >" on right
             Padding(
               padding: const EdgeInsets.only(left: 4, right: 6),
-              child: Row(
-                children: [
-                  Text(
-                    AppLocalizations.of(context)!.homeRecentTasks,
-                    style: TextStyle(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final minHeadingWidth = math.min(48.0, constraints.maxWidth);
+                  final viewAll = AppLocalizations.of(context)!.homeViewAll;
+                  final actionStyle = DefaultTextStyle.of(context).style.merge(
+                    TextStyle(
                       fontSize: 12,
-                      color: cs.onSurfaceVariant,
+                      color: cs.primary,
                       fontWeight: FontWeight.w500,
                     ),
-                  ),
-                  const Spacer(),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const UnifiedTaskListPage(initialTab: 0),
+                  );
+                  final textDirection = Directionality.of(context);
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  final locale = Localizations.localeOf(context);
+                  final labelPainter = TextPainter(
+                    text: TextSpan(text: viewAll, style: actionStyle),
+                    textDirection: textDirection,
+                    textScaler: textScaler,
+                    locale: locale,
+                  )..layout();
+                  final arrowPainter = TextPainter(
+                    text: TextSpan(text: '>', style: actionStyle),
+                    textDirection: textDirection,
+                    textScaler: textScaler,
+                    locale: locale,
+                  )..layout();
+                  final naturalActionWidth =
+                      labelPainter.width + arrowPainter.width + 13;
+                  final actionWidth = math.min(
+                    constraints.maxWidth - minHeadingWidth,
+                    naturalActionWidth,
+                  );
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: ConstrainedText.home(
+                          text: AppLocalizations.of(context)!.homeRecentTasks,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)!.homeViewAll,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.primary,
-                              fontWeight: FontWeight.w500,
+                      SizedBox(
+                        width: actionWidth,
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const UnifiedTaskListPage(initialTab: 0),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: ConstrainedText.home(
+                                      text: AppLocalizations.of(context)!
+                                          .homeViewAll,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.end,
+                                      marqueeTextAlign: TextAlign.end,
+                                      style: actionStyle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 1),
+                                  Text(
+                                    '>',
+                                    style: actionStyle.copyWith(height: 1.2),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 1),
-                          Text(
-                            '>',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.primary,
-                              fontWeight: FontWeight.w500,
-                              height: 1.2,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 4),

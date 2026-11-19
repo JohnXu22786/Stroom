@@ -51,9 +51,12 @@ void main() {
 
     final text = find.text('A deliberately long value that will scroll');
     final start = tester.getTopLeft(text);
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump(const Duration(seconds: 1));
-    expect(tester.getTopLeft(text).dx, lessThan(start.dx));
+    await tester.pump(const Duration(milliseconds: 999));
+    expect(tester.getTopLeft(text).dx, closeTo(start.dx, 0.01));
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(tester.getTopLeft(text).dx, closeTo(start.dx, 0.01));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(start.dx - tester.getTopLeft(text).dx, closeTo(6, 1));
   });
 
   testWidgets('shows the trailing text at the horizontal endpoint', (
