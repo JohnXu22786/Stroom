@@ -28,8 +28,23 @@ Future<Uint8List?> readBlob(Object? value) async {
 
 /// Converts a legacy IndexedDB byte value to a Blob without dartifying its
 /// payload into a Uint8List first.
-Future<bool> migrateStoredValueToBlob(Object objectStore, String key) async {
-  final store = (objectStore as dynamic).idbObjectStore as web.IDBObjectStore;
+Future<({Object? value, bool converted})> migrateStoredValueToBlob(
+  Object objectStore,
+  String key,
+) async {
+  final dynamic nativeStore;
+  try {
+    // idb_shim's native browser store exposes its raw IndexedDB object store;
+    // only its non-IndexedDB fallback needs the Dart conversion path below.
+    nativeStore = (objectStore as dynamic).idbObjectStore;
+  } catch (_) {
+    return _migrateThroughShim(objectStore, key);
+  }
+  if (!(nativeStore as JSAny?).isA<web.IDBObjectStore>()) {
+    return _migrateThroughShim(objectStore, key);
+  }
+
+  final store = nativeStore as web.IDBObjectStore;
   final request = store.get(key.toJS);
   final completer = Completer<JSAny?>();
   request.onsuccess = ((web.Event _) {
@@ -41,12 +56,38 @@ Future<bool> migrateStoredValueToBlob(Object objectStore, String key) async {
     );
   }).toJS;
   final value = await completer.future;
-  if (value == null || value.isA<web.Blob>()) return false;
+  if (value == null) return (value: null, converted: false);
+  if (value.isA<web.Blob>()) {
+    return (value: IdbNativeValue(value), converted: false);
+  }
   if (!value.isA<JSUint8Array>() && !value.isA<JSArrayBuffer>()) {
     throw StateError('Cannot migrate attachment storage value: $key');
   }
 
   final blob = web.Blob([value].toJS);
   store.put(blob, key.toJS);
-  return true;
+  return (value: IdbNativeValue(blob), converted: true);
+}
+
+Future<({Object? value, bool converted})> _migrateThroughShim(
+  Object objectStore,
+  String key,
+) async {
+  final dynamic store = objectStore;
+  final value = await store.getObject(key) as Object?;
+  if (value == null || isBlob(value)) {
+    return (value: value, converted: false);
+  }
+
+  final bytes = switch (value) {
+    Uint8List bytes => bytes,
+    List<int> bytes => Uint8List.fromList(bytes),
+    _ => null,
+  };
+  if (bytes == null) {
+    throw StateError('Cannot migrate attachment storage value: $key');
+  }
+  final blob = createBlob(bytes);
+  await store.put(blob, key);
+  return (value: blob, converted: true);
 }

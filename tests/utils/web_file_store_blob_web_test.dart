@@ -11,6 +11,7 @@ void main() {
     'migrates attachment records to Blobs and bounds later reads',
     () async {
       const attachmentKey = 'attachments/blob-read-regression';
+      const lateAttachmentKey = 'attachments/blob-read-after-migration';
       const markerKey = '__web_file_store_format__';
       const maxAttachmentBytes = 10 * 1024 * 1024;
       final payload = Uint8List(maxAttachmentBytes + 1);
@@ -44,8 +45,25 @@ void main() {
           await WebFileStore.read(attachmentKey, maxBytes: payload.length),
           orderedEquals(payload),
         );
+
+        // Simulate a still-open older tab writing a legacy Uint8Array after
+        // startup migration has already set the format marker.
+        final latePayload = Uint8List.fromList(payload.take(16).toList());
+        final lateTxn = db.transaction('files', idbModeReadWrite);
+        await lateTxn.objectStore('files').put(latePayload, lateAttachmentKey);
+        await lateTxn.completed;
+        await expectLater(
+          WebFileStore.read(lateAttachmentKey, maxBytes: 8),
+          throwsA(isA<WebFileStoreReadLimitExceededException>()),
+        );
+        expect(
+          await WebFileStore.read(lateAttachmentKey,
+              maxBytes: latePayload.length),
+          orderedEquals(latePayload),
+        );
       } finally {
         await WebFileStore.delete(attachmentKey);
+        await WebFileStore.delete(lateAttachmentKey);
         db.close();
       }
     },

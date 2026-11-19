@@ -245,6 +245,16 @@ class WebFileStore {
       return val != null ? Uint8List.fromList(val) : null;
     }
     final db = await _database;
+    if (_isAttachmentKey(key)) {
+      final txn = db.transaction('files', idbModeReadWrite);
+      final result = await blob_store.migrateStoredValueToBlob(
+        txn.objectStore('files'),
+        key,
+      );
+      await txn.completed;
+      _checkReadLimit(result.value, maxBytes);
+      return await blob_store.readBlob(result.value);
+    }
     final txn = db.transaction('files', idbModeReadOnly);
     final result = await txn.objectStore('files').getObject(key);
     await txn.completed;
@@ -282,9 +292,16 @@ class WebFileStore {
     if (_testMode) return read(key);
     final db = await _database;
     if (cancelToken.isCancelled) throw cancelToken.cancelError!;
-    final transaction = db.transaction('files', idbModeReadOnly);
+    final transaction = db.transaction(
+      'files',
+      _isAttachmentKey(key) ? idbModeReadWrite : idbModeReadOnly,
+    );
     final completed = transaction.completed;
-    final request = transaction.objectStore('files').getObject(key);
+    final request = _isAttachmentKey(key)
+        ? blob_store
+            .migrateStoredValueToBlob(transaction.objectStore('files'), key)
+            .then<Object?>((result) => result.value)
+        : transaction.objectStore('files').getObject(key);
     unawaited(
       cancelToken.whenCancel.then<void>((_) {
         try {
@@ -300,13 +317,7 @@ class WebFileStore {
         completed,
       );
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;
-      if (_isAttachmentKey(key) && value != null && !blob_store.isBlob(value)) {
-        throw StateError(
-          'Attachment storage format migration has not completed for $key',
-        );
-      }
-      final blobBytes = await blob_store.readBlob(value);
-      if (blobBytes != null) return blobBytes;
+      if (_isAttachmentKey(key)) return await blob_store.readBlob(value);
       return _toUint8List(value, key);
     } catch (_) {
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;
@@ -343,7 +354,8 @@ class WebFileStore {
       final txn = db.transaction('files', idbModeReadWrite);
       final store = txn.objectStore('files');
       try {
-        convertedAny |= await blob_store.migrateStoredValueToBlob(store, key);
+        final result = await blob_store.migrateStoredValueToBlob(store, key);
+        convertedAny |= result.converted;
         await txn.completed;
       } catch (_) {
         await _abortTransaction(txn);

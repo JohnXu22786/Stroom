@@ -8,5 +8,8 @@ Object createBlob(Uint8List bytes) => bytes;
 
 Future<Uint8List?> readBlob(Object? value) async => null;
 
-Future<bool> migrateStoredValueToBlob(Object objectStore, String key) async =>
-    false;
+Future<({Object? value, bool converted})> migrateStoredValueToBlob(
+  Object objectStore,
+  String key,
+) async =>
+    (value: null, converted: false);
