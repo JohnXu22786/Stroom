@@ -513,49 +513,12 @@ class DataSafetyManager {
         final entries = await dir.list(followLinks: false).toList();
         for (final entry in entries) {
           if (entry is! File) continue;
+          final name = p.basename(entry.path);
+          // Manifest deletion backups and journals may be the only durable
+          // copy of media after an interrupted delete. ManifestOperations
+          // owns recovery and cleanup of these reserved files.
+          if (name.startsWith('.manifest-delete-')) continue;
           await deleteIfOrphaned(entry);
-        }
-      }
-
-      // Compressed attachment caches are disposable but live one directory
-      // below attachments: temp_compressed/<conversationId>/<cache-file>.
-      // Restrict this scan to that namespace and one level so user folders
-      // under attachments are never recursively traversed.
-      final attachmentsRoot = Directory(p.join(appDir, 'attachments'));
-      final compressedCacheRoot = Directory(
-        p.join(appDir, 'attachments', 'temp_compressed'),
-      );
-      try {
-        final attachmentsType = await FileSystemEntity.type(
-          attachmentsRoot.path,
-          followLinks: false,
-        );
-        final cacheRootType = await FileSystemEntity.type(
-          compressedCacheRoot.path,
-          followLinks: false,
-        );
-        if (attachmentsType == FileSystemEntityType.directory &&
-            cacheRootType == FileSystemEntityType.directory) {
-          final conversations =
-              await compressedCacheRoot.list(followLinks: false).toList();
-          for (final entry in conversations) {
-            if (entry is! Directory) continue;
-            try {
-              final cacheFiles =
-                  await Directory(entry.path).list(followLinks: false).toList();
-              for (final cacheFile in cacheFiles) {
-                if (cacheFile is File) {
-                  await deleteIfOrphaned(
-                    File(cacheFile.path),
-                    checkReferences: false,
-                  );
-                }
-              }
-            } catch (e) {
-              debugPrint(
-                '[DataSafetyManager] 读取压缩缓存目录失败 ${entry.path}: $e',
-              );
-            }
           }
         }
       } catch (e) {

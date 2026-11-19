@@ -3107,6 +3107,97 @@ void main() {
 
   // ====================================================================
   // non-audio deletion cleanup errors
+  group('interrupted non-audio deletion recovery', () {
+    testWidgets('restores single and batch media from durable journals', (
+      t,
+    ) async {
+      Future<void> verifyRecovery({required bool useWebFileStore}) async {
+        final originalPathProvider = PathProviderPlatform.instance;
+        final directory = useWebFileStore
+            ? null
+            : await Directory.systemTemp.createTemp(
+                'manifest-delete-recovery-test-',
+              );
+        if (useWebFileStore) {
+          WebFileStore.enableTestMode();
+        } else {
+          PathProviderPlatform.instance = _DocumentsDirectory(directory!.path);
+          WebFileStore.disableTestMode();
+        }
+
+        try {
+          for (final count in [1, 2]) {
+            final operations = ManifestOperations<ImageRecord>(
+              manifestKey: 'delete_recovery_${useWebFileStore}_$count',
+              storageDirName: 'pictures',
+              fromMap: ImageRecord.fromMap,
+              tableName: ManifestTables.imageRecords,
+              toMap: (record) => record.toMap(),
+            );
+            final records = [
+              for (var i = 0; i < count; i++)
+                ImageRecord(
+                  id: 'delete_recovery_${useWebFileStore}_${count}_$i',
+                  name: 'media $i',
+                  hash: 'delete_recovery_hash_${useWebFileStore}_${count}_$i',
+                  format: 'jpg',
+                  createdAt: DateTime(2024),
+                  size: i + 1,
+                ),
+            ];
+            final backups = <String, String>{};
+            for (var i = 0; i < records.length; i++) {
+              final record = records[i];
+              final originalName = record.storagePath;
+              final originalBytes = Uint8List.fromList([i + 10, i + 20]);
+              await operations.writeFile(originalName, originalBytes);
+              await operations.addRecord(record);
+              final backupName = '.manifest-delete-backup-recovery-$i';
+              await operations.writeFile(backupName, originalBytes);
+              backups[originalName] = backupName;
+              await operations.deleteFile(originalName);
+            }
+            final journalName = '.manifest-delete-journal-recovery-$count.json';
+            await operations.writeFile(
+              journalName,
+              Uint8List.fromList(utf8.encode(jsonEncode({'files': backups}))),
+            );
+
+            final restarted = ManifestOperations<ImageRecord>(
+              manifestKey: 'delete_recovery_${useWebFileStore}_$count',
+              storageDirName: 'pictures',
+              fromMap: ImageRecord.fromMap,
+              tableName: ManifestTables.imageRecords,
+              toMap: (record) => record.toMap(),
+            );
+            final loaded = await restarted.loadRecords();
+            expect(
+              loaded.map((record) => record.id),
+              unorderedEquals(records.map((record) => record.id)),
+            );
+            for (var i = 0; i < records.length; i++) {
+              expect(
+                await restarted.readFile(records[i].storagePath),
+                [i + 10, i + 20],
+              );
+            }
+            expect(await restarted.fileExists(journalName), isFalse);
+            for (final backupName in backups.values) {
+              expect(await restarted.fileExists(backupName), isFalse);
+            }
+          }
+        } finally {
+          PathProviderPlatform.instance = originalPathProvider;
+          if (directory != null) await directory.delete(recursive: true);
+          WebFileStore.enableTestMode();
+        }
+      }
+
+      await verifyRecovery(useWebFileStore: false);
+      await verifyRecovery(useWebFileStore: true);
+    });
+  });
+
   group('non-audio cleanup failure', () {
     testWidgets('single deletion keeps row and file for retry', (t) async {
       final op = ManifestOperations<ImageRecord>(
