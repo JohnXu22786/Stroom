@@ -187,6 +187,30 @@ void main() {
         'data:application/pdf;base64,${base64Encode(utf8.encode('pdf bytes'))}',
       );
     });
+
+    test('文档附件元数据过大但实际内容在限制内时仍发送', () async {
+      final bytes = utf8.encode('pdf bytes');
+      final attachment = Attachment(
+        fileName: 'stale-size.pdf',
+        mimeType: 'application/pdf',
+        fileType: 'file',
+        hash: 'stale-size',
+        storagePath: '/nonexistent',
+        fileSize: maxAttachmentBytes + 1,
+        base64Data: base64Encode(bytes),
+      );
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(role: 'user', content: '', attachments: [attachment]),
+        ],
+      );
+      final parts = req.messages.single['content'] as List;
+      expect(parts.cast<Map>().single['type'], 'file');
+      expect(
+        (parts.cast<Map>().single['file'] as Map)['file_data'],
+        'data:application/pdf;base64,${base64Encode(bytes)}',
+      );
+    });
   });
 
   group('AnthropicProtocol.buildRequest', () {

@@ -511,7 +511,7 @@ class _BoundedBase64Sink implements Sink<List<int>> {
 /// 读取非文本附件的原始字节（用于 PDF 等文档）。
 /// 超限与读取失败分别返回 [AttachmentReadStatus.tooLarge] 和
 /// [AttachmentReadStatus.unreadable]。
-Future<RawAttachmentReadOutcome> readRawAttachmentBytes(
+Future<RawAttachmentReadOutcome> readRawAttachmentBytesBounded(
   Attachment att, {
   int? maxBytes,
 }) async {
@@ -552,6 +552,13 @@ Future<RawAttachmentReadOutcome> readRawAttachmentBytes(
     return const RawAttachmentReadOutcome(
         AttachmentReadStatus.unreadable, null);
   }
+}
+
+/// 读取非文本附件的原始字节（用于其他 provider 的文档处理）。
+/// 返回 null 表示无法读取。
+Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
+  final outcome = await readRawAttachmentBytesBounded(att);
+  return outcome.bytes;
 }
 
 // ============================================================================
