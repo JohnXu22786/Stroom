@@ -22,6 +22,7 @@ class AnkiApkgExporter {
   static Future<String> export({
     String? dbPath,
     @visibleForTesting Future<void> Function(File, List<int>)? writeBytes,
+    @visibleForTesting DateTime Function()? clock,
   }) async {
     final docsDir = await getApplicationDocumentsDirectory();
     final src = dbPath ?? p.join(docsDir.path, 'collection.anki2');
@@ -64,13 +65,38 @@ class AnkiApkgExporter {
 
     // Write to downloads directory
     final dlDir = await getApplicationDocumentsDirectory();
-    final timestamp = DateTime.now().toIso8601String().replaceAll(
+    final timestamp = (clock ?? DateTime.now)().toIso8601String().replaceAll(
           RegExp(r'[:.]'),
           '-',
         );
-    final outPath = p.join(dlDir.path, 'stroom_anki_$timestamp.apkg');
+    final fileStem = p.join(dlDir.path, 'stroom_anki_$timestamp');
+    String? outPath;
+    File? reservationFile;
     Directory? tempDir;
     try {
+      // A sidecar reservation coordinates exporters without exposing an
+      // incomplete .apkg at its final path. Rename publishes the staged file.
+      for (var suffix = 0; outPath == null; suffix++) {
+        final candidatePath = '$fileStem${suffix == 0 ? '' : '_$suffix'}.apkg';
+        final candidateReservation = File('$candidatePath.reserve');
+        try {
+          await candidateReservation.create(exclusive: true);
+        } on FileSystemException catch (error) {
+          final errorCode = error.osError?.errorCode;
+          final alreadyExists =
+              errorCode == 17 || errorCode == 80 || errorCode == 183;
+          if (!alreadyExists && !await candidateReservation.exists()) rethrow;
+          continue;
+        }
+
+        if (await File(candidatePath).exists()) {
+          await candidateReservation.delete();
+          continue;
+        }
+        outPath = candidatePath;
+        reservationFile = candidateReservation;
+      }
+
       tempDir = await Directory(dlDir.path).createTemp('.stroom_anki_export_');
       final tempFile = File(p.join(tempDir.path, 'export.apkg.part'));
       await (writeBytes ?? (file, bytes) => file.writeAsBytes(bytes))(
@@ -79,13 +105,20 @@ class AnkiApkgExporter {
       );
       await tempFile.rename(outPath);
     } catch (_) {
-      throw AnkiApkgException.unexpectedError(outPath);
+      throw AnkiApkgException.unexpectedError(outPath ?? fileStem);
     } finally {
+      if (reservationFile != null) {
+        try {
+          await reservationFile.delete();
+        } catch (_) {
+          // Preserve the export result if reservation cleanup fails.
+        }
+      }
       if (tempDir != null) {
         try {
           await tempDir.delete(recursive: true);
         } catch (_) {
-          // A successful rename leaves the published file outside this directory.
+          // Preserve the export result if staging cleanup fails.
         }
       }
     }
