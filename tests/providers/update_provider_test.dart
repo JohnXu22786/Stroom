@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Directory, File, Link, Platform;
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
@@ -99,6 +100,82 @@ Dio _createNon200Dio(int statusCode) {
   return dio;
 }
 
+List<int> _validApplicationExecutableHeader({bool universalMachO = false}) {
+  final bytes = Uint8List(Platform.isWindows
+      ? 228
+      : Platform.isMacOS
+          ? 133
+          : 128);
+  final data = ByteData.sublistView(bytes);
+  if (Platform.isWindows) {
+    bytes[0] = 0x4d;
+    bytes[1] = 0x5a;
+    data.setUint32(60, 64, Endian.little);
+    bytes.setRange(64, 68, const [0x50, 0x45, 0, 0]);
+    data.setUint16(70, 1, Endian.little);
+    data.setUint16(86, 0x0002, Endian.little);
+    data.setUint16(84, 96, Endian.little);
+    data.setUint16(88, 0x10b, Endian.little);
+    data.setUint32(104, 0x1000, Endian.little);
+    data.setUint32(192, 4, Endian.little);
+    data.setUint32(196, 0x1000, Endian.little);
+    data.setUint32(200, 4, Endian.little);
+    data.setUint32(204, 224, Endian.little);
+    data.setUint32(220, 0x20000000, Endian.little);
+    bytes[224] = 0xc3;
+    return bytes;
+  }
+  if (Platform.isMacOS) {
+    bytes.setRange(0, 4, const [0xcf, 0xfa, 0xed, 0xfe]);
+    data.setUint32(4, 0x0100000c, Endian.little);
+    data.setUint32(12, 2, Endian.little);
+    data.setUint32(16, 2, Endian.little);
+    data.setUint32(20, 96, Endian.little);
+    data.setUint32(32, 0x19, Endian.little);
+    data.setUint32(36, 72, Endian.little);
+    data.setUint64(72, 0, Endian.little);
+    data.setUint64(80, bytes.length, Endian.little);
+    data.setUint32(92, 5, Endian.little);
+    data.setUint32(104, 0x80000028, Endian.little);
+    data.setUint32(108, 24, Endian.little);
+    data.setUint64(112, 128, Endian.little);
+    bytes.setRange(128, 132, const [0xc0, 0x03, 0x5f, 0xd6]);
+    if (universalMachO) {
+      final fat = Uint8List(32 + bytes.length);
+      final fatData = ByteData.sublistView(fat);
+      fat.setRange(0, 4, const [0xca, 0xfe, 0xba, 0xbe]);
+      fatData.setUint32(4, 1, Endian.big);
+      fatData.setUint32(8, 0x01000007, Endian.big);
+      fatData.setUint32(12, 3, Endian.big);
+      fatData.setUint32(16, 32, Endian.big);
+      fatData.setUint32(20, bytes.length, Endian.big);
+      fat.setRange(32, fat.length, bytes);
+      return fat;
+    }
+    return bytes;
+  }
+  bytes.setRange(0, 4, const [0x7f, 0x45, 0x4c, 0x46]);
+  bytes[4] = 2;
+  bytes[5] = 1;
+  bytes[6] = 1;
+  data.setUint16(16, 2, Endian.little);
+  data.setUint16(18, 62, Endian.little);
+  data.setUint32(20, 1, Endian.little);
+  data.setUint64(24, 0x400000, Endian.little);
+  data.setUint64(32, 64, Endian.little);
+  data.setUint16(52, 64, Endian.little);
+  data.setUint16(54, 56, Endian.little);
+  data.setUint16(56, 1, Endian.little);
+  data.setUint32(64, 1, Endian.little);
+  data.setUint32(68, 5, Endian.little);
+  data.setUint64(72, 120, Endian.little);
+  data.setUint64(80, 0x400000, Endian.little);
+  data.setUint64(96, 8, Endian.little);
+  data.setUint64(104, 8, Endian.little);
+  bytes[120] = 0xc3;
+  return bytes;
+}
+
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
     {String body = '',
@@ -169,6 +246,154 @@ String _githubReleases(List<(String, bool, String, String)> releases) {
 
 void main() {
   group('ZIP self-update extraction', () {
+    test('selects a named app executable from a valid package layout',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final zipFile = File('${tempDir.path}/update.zip');
+      final executableName = Platform.isWindows ? 'stroom.exe' : 'stroom';
+      final executableBytes = _validApplicationExecutableHeader();
+      final executable = ArchiveFile(
+        'Stroom.app/Contents/MacOS/$executableName',
+        executableBytes.length,
+        executableBytes,
+      )..mode = 0x1ed;
+      final archive = Archive()
+        ..addFile(ArchiveFile('README.txt', 4, utf8.encode('info')))
+        ..addFile(executable);
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+
+      final notifier = UpdateNotifier();
+      await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+      expect(
+        notifier.findExecutableForTesting(
+          outputDir.path,
+          currentExecutableName: executableName,
+        ),
+        '${outputDir.path}/Stroom.app/Contents/MacOS/$executableName',
+      );
+    });
+
+    test('uses a valid executable fallback when the app name differs',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final zipFile = File('${tempDir.path}/update.zip');
+      final executableName = Platform.isWindows ? 'other-app.exe' : 'other-app';
+      final executableBytes = _validApplicationExecutableHeader();
+      final executable = ArchiveFile(
+        'bundle/$executableName',
+        executableBytes.length,
+        executableBytes,
+      )..mode = 0x1ed;
+      final archive = Archive()..addFile(executable);
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      final notifier = UpdateNotifier();
+
+      await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+      expect(
+        notifier.findExecutableForTesting(
+          outputDir.path,
+          currentExecutableName: Platform.isWindows ? 'stroom.exe' : 'stroom',
+        ),
+        '${outputDir.path}/bundle/$executableName',
+      );
+    });
+
+    test(
+      'accepts a valid universal Mach-O executable package',
+      () async {
+        final tempDir =
+            await Directory.systemTemp.createTemp('stroom_zip_test_');
+        addTearDown(() => tempDir.delete(recursive: true));
+        final outputDir = Directory('${tempDir.path}/update');
+        await outputDir.create();
+        final zipFile = File('${tempDir.path}/update.zip');
+        final executableBytes =
+            _validApplicationExecutableHeader(universalMachO: true);
+        final executable = ArchiveFile(
+          'Stroom.app/Contents/MacOS/stroom',
+          executableBytes.length,
+          executableBytes,
+        )..mode = 0x1ed;
+        final archive = Archive()..addFile(executable);
+        await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+        final notifier = UpdateNotifier();
+
+        await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+        expect(
+          notifier.findExecutableForTesting(
+            outputDir.path,
+            currentExecutableName: 'stroom',
+          ),
+          '${outputDir.path}/Stroom.app/Contents/MacOS/stroom',
+        );
+      },
+      skip: !Platform.isMacOS,
+    );
+
+    test(
+        'rejects packages without an app executable before update side effects',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final installDir = Directory('${tempDir.path}/install');
+      await installDir.create();
+      final installedFile = File('${installDir.path}/stroom');
+      await installedFile.writeAsString('installed app');
+      final zipFile = File('${tempDir.path}/update.zip');
+      final helperScript = ArchiveFile.string(
+        'Stroom.app/Contents/MacOS/install.sh',
+        '#!/bin/sh\necho helper\n',
+      )..mode = 0x1ed;
+      final truncatedExecutable = ArchiveFile(
+        'Stroom.app/Contents/MacOS/${Platform.isWindows ? 'stroom.exe' : 'stroom'}',
+        4,
+        Platform.isWindows
+            ? [0x4d, 0x5a, 0, 0]
+            : Platform.isMacOS
+                ? [0xcf, 0xfa, 0xed, 0xfe]
+                : [0x7f, 0x45, 0x4c, 0x46],
+      )..mode = 0x1ed;
+      final archive = Archive()
+        ..addFile(ArchiveFile(
+            'Stroom.app/Contents/Resources/data.txt', 4, utf8.encode('data')))
+        ..addFile(helperScript)
+        ..addFile(truncatedExecutable);
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      final notifier = UpdateNotifier();
+      var createScriptCalled = false;
+      var startScriptCalled = false;
+
+      await expectLater(
+        notifier.selfUpdateFromZipForTesting(
+          zipFile.path,
+          installDir.path,
+          createScript: (_, __, ___) async {
+            createScriptCalled = true;
+            return '${tempDir.path}/replacement.sh';
+          },
+          startScript: (_) async {
+            startScriptCalled = true;
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+
+      expect(createScriptCalled, isFalse);
+      expect(startScriptCalled, isFalse);
+      expect(await installedFile.readAsString(), 'installed app');
+    });
+
     test('rejects archive entries that escape the extraction directory',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');

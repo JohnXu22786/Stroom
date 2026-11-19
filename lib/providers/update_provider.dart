@@ -985,24 +985,57 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final executablePath = Platform.resolvedExecutable;
     final installDir = File(executablePath).parent;
 
+    await _runZipUpdate(
+      zipPath,
+      installDir.path,
+      createScript: (installDir, updateDir, extractedExe) => Platform.isWindows
+          ? _createWindowsUpdateScript(installDir, updateDir, extractedExe)
+          : _createUnixUpdateScript(installDir, updateDir, extractedExe),
+      startScript: (scriptPath) async {
+        if (Platform.isWindows) {
+          await Process.start(scriptPath, [], runInShell: true);
+        } else {
+          await Process.start('/bin/bash', [scriptPath], runInShell: false);
+        }
+      },
+    );
+  }
+
+  @visibleForTesting
+  Future<void> selfUpdateFromZipForTesting(
+    String zipPath,
+    String installDir, {
+    required Future<String> Function(
+            String installDir, String updateDir, String extractedExe)
+        createScript,
+    required Future<void> Function(String scriptPath) startScript,
+  }) =>
+      _runZipUpdate(
+        zipPath,
+        installDir,
+        createScript: createScript,
+        startScript: startScript,
+      );
+
+  Future<void> _runZipUpdate(
+    String zipPath,
+    String installDir, {
+    required Future<String> Function(
+            String installDir, String updateDir, String extractedExe)
+        createScript,
+    required Future<void> Function(String scriptPath) startScript,
+  }) async {
     // 2. 解压到临时更新目录
     final updateDir = Directory.systemTemp.createTempSync('stroom_update_');
-    await _extractZip(zipPath, updateDir.path);
-    final extractedExe = _findExecutable(updateDir.path);
+    final extractedExe =
+        await _extractAndFindExecutable(zipPath, updateDir.path);
 
     // 3. 创建更新脚本
-    final scriptPath = Platform.isWindows
-        ? await _createWindowsUpdateScript(
-            installDir.path, updateDir.path, extractedExe)
-        : await _createUnixUpdateScript(
-            installDir.path, updateDir.path, extractedExe);
+    final scriptPath =
+        await createScript(installDir, updateDir.path, extractedExe);
 
     // 4. 启动脚本
-    if (Platform.isWindows) {
-      await Process.start(scriptPath, [], runInShell: true);
-    } else {
-      await Process.start('/bin/bash', [scriptPath], runInShell: false);
-    }
+    await startScript(scriptPath);
 
     // 5. 弹出更新脚本后退出应用
     // 脚本会：等待 → 杀掉当前进程 → 替换文件 → 启动新版本
@@ -1044,6 +1077,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         final file = File(entryPath);
         await file.parent.create(recursive: true);
         await file.writeAsBytes(entry.content as List<int>);
+        if (!Platform.isWindows && entry.mode & 0x49 != 0) {
+          await Process.run('chmod', ['+x', file.path]);
+        }
       } else {
         await Directory(entryPath).create(recursive: true);
       }
@@ -1059,34 +1095,376 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   Future<void> extractZipForTesting(String zipPath, String outputDir) =>
       _extractZip(zipPath, outputDir);
 
+  Future<String> _extractAndFindExecutable(
+      String zipPath, String outputDir) async {
+    await _extractZip(zipPath, outputDir);
+    return _findExecutable(outputDir);
+  }
+
   String _fileName(String path) => path.split(Platform.pathSeparator).last;
 
   /// 在提取目录中查找主可执行文件
-  String _findExecutable(String dirPath) {
+  String _findExecutable(String dirPath, {String? currentExecutableName}) {
     final dir = Directory(dirPath);
-    final exts = Platform.isWindows ? ['.exe'] : [''];
-    final files = dir.listSync(recursive: true);
+    final files = dir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where(_isApplicationExecutable)
+        .toList();
 
     // 查找第一个可执行文件（优先与当前 exe 同名的）
-    final currentExeName = _fileName(Platform.resolvedExecutable);
+    final currentExeName =
+        currentExecutableName ?? _fileName(Platform.resolvedExecutable);
     for (final file in files) {
       final name = _fileName(file.path);
-      if (exts.any((e) => name.toLowerCase().endsWith(e)) &&
-          !name.contains('msvcp') &&
-          !name.contains('vcruntime')) {
+      if (_isUpdateExecutableName(name) &&
+          !name.toLowerCase().contains('msvcp') &&
+          !name.toLowerCase().contains('vcruntime')) {
         if (name == currentExeName) return file.path;
       }
     }
     // 没找到同名，返回第一个 exe
     for (final file in files) {
       final name = _fileName(file.path);
-      if (exts.any((e) => name.toLowerCase().endsWith(e))) {
+      if (_isUpdateExecutableName(name) &&
+          !name.toLowerCase().contains('msvcp') &&
+          !name.toLowerCase().contains('vcruntime')) {
         return file.path;
       }
     }
-    // 还找不到，返回解压目录本身
-    return dirPath;
+    throw const FormatException(
+        'ZIP update does not contain a valid application executable.');
   }
+
+  bool _isApplicationExecutable(File file) {
+    if (Platform.isWindows) {
+      return _fileName(file.path).toLowerCase().endsWith('.exe') &&
+          _hasValidPeHeader(file);
+    }
+    if (file.statSync().mode & 0x49 == 0) return false;
+
+    return _hasValidElfHeader(file) || _hasValidMachOHeader(file);
+  }
+
+  bool _hasValidElfHeader(File file) {
+    final prefix = _readBytesAt(file, 0, 16);
+    if (prefix.length < 16 ||
+        !_bytesStartWith(prefix, const [0x7f, 0x45, 0x4c, 0x46])) {
+      return false;
+    }
+    final is64Bit = prefix[4] == 2;
+    if ((!is64Bit && prefix[4] != 1) ||
+        (prefix[5] != 1 && prefix[5] != 2) ||
+        prefix[6] != 1) {
+      return false;
+    }
+    final littleEndian = prefix[5] == 1;
+    final headerSize = is64Bit ? 64 : 52;
+    if (file.lengthSync() < headerSize) return false;
+    final header = _readBytesAt(file, 0, headerSize);
+    final programOffset = _readUnsigned(
+        header, is64Bit ? 32 : 28, is64Bit ? 8 : 4,
+        littleEndian: littleEndian);
+    final programEntrySize =
+        _readUnsigned(header, is64Bit ? 54 : 42, 2, littleEndian: littleEndian);
+    final programCount =
+        _readUnsigned(header, is64Bit ? 56 : 44, 2, littleEndian: littleEndian);
+    final expectedEntrySize = is64Bit ? 56 : 32;
+    final elfType = _readUnsigned(header, 16, 2, littleEndian: littleEndian);
+    final entryPoint =
+        _readUnsigned(header, 24, is64Bit ? 8 : 4, littleEndian: littleEndian);
+    final declaredHeaderSize =
+        _readUnsigned(header, is64Bit ? 52 : 40, 2, littleEndian: littleEndian);
+    if ((elfType != 2 && elfType != 3) ||
+        entryPoint == 0 ||
+        declaredHeaderSize != headerSize ||
+        programCount == 0 ||
+        programEntrySize != expectedEntrySize ||
+        programOffset < headerSize ||
+        programOffset + programEntrySize * programCount > file.lengthSync()) {
+      return false;
+    }
+    final programHeaders =
+        _readBytesAt(file, programOffset, programEntrySize * programCount);
+    var hasExecutableLoadSegment = false;
+    var hasInterpreter = false;
+    for (var i = 0; i < programCount; i++) {
+      final offset = i * programEntrySize;
+      final type =
+          _readUnsigned(programHeaders, offset, 4, littleEndian: littleEndian);
+      final flags = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 4 : 24),
+        4,
+        littleEndian: littleEndian,
+      );
+      final dataOffset = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 8 : 4),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final dataSize = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 32 : 16),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final hasFileData =
+          dataSize > 0 && dataOffset + dataSize <= file.lengthSync();
+      final virtualAddress = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 16 : 8),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final memorySize = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 40 : 20),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      hasExecutableLoadSegment |= type == 1 &&
+          flags & 1 != 0 &&
+          hasFileData &&
+          entryPoint >= virtualAddress &&
+          entryPoint - virtualAddress < dataSize &&
+          entryPoint < virtualAddress + memorySize;
+      hasInterpreter |= type == 3 && hasFileData;
+    }
+    return hasExecutableLoadSegment && (elfType != 3 || hasInterpreter);
+  }
+
+  bool _hasValidMachOHeader(File file) {
+    if (_hasValidMachOExecutableAt(file, 0, file.lengthSync())) return true;
+    final magic = _readBytesAt(file, 0, 8);
+    final fatFormats = <(List<int>, bool, bool)>[
+      ([0xca, 0xfe, 0xba, 0xbe], false, false),
+      ([0xbe, 0xba, 0xfe, 0xca], true, false),
+      ([0xca, 0xfe, 0xba, 0xbf], false, true),
+      ([0xbf, 0xba, 0xfe, 0xca], true, true),
+    ];
+    final fatFormat =
+        fatFormats.where((format) => _bytesStartWith(magic, format.$1));
+    if (fatFormat.isEmpty || magic.length < 8) return false;
+    final (_, littleEndian, is64Bit) = fatFormat.first;
+    final architectureCount =
+        _readUnsigned(magic, 4, 4, littleEndian: littleEndian);
+    final architectureSize = is64Bit ? 32 : 20;
+    final tableEnd = 8 + architectureCount * architectureSize;
+    if (architectureCount == 0 ||
+        architectureCount > 32 ||
+        tableEnd > file.lengthSync()) {
+      return false;
+    }
+    for (var i = 0; i < architectureCount; i++) {
+      final offset = 8 + i * architectureSize;
+      final architecture = _readBytesAt(file, offset, architectureSize);
+      final sliceOffset = _readUnsigned(
+        architecture,
+        8,
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final sliceSize = _readUnsigned(
+        architecture,
+        is64Bit ? 16 : 4,
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      if (sliceOffset < tableEnd ||
+          sliceSize == 0 ||
+          sliceOffset + sliceSize > file.lengthSync()) {
+        return false;
+      }
+      if (_hasValidMachOExecutableAt(file, sliceOffset, sliceSize)) return true;
+    }
+    return false;
+  }
+
+  bool _hasValidMachOExecutableAt(File file, int offset, int sliceSize) {
+    final magic = _readBytesAt(file, offset, 4);
+    final formats = <(List<int>, bool, bool)>[
+      ([0xfe, 0xed, 0xfa, 0xce], false, false),
+      ([0xce, 0xfa, 0xed, 0xfe], true, false),
+      ([0xfe, 0xed, 0xfa, 0xcf], false, true),
+      ([0xcf, 0xfa, 0xed, 0xfe], true, true),
+    ];
+    final format = formats.where((format) => _bytesStartWith(magic, format.$1));
+    if (format.isEmpty) return false;
+    final (_, littleEndian, is64Bit) = format.first;
+    final headerSize = is64Bit ? 32 : 28;
+    if (sliceSize < headerSize) return false;
+    final header = _readBytesAt(file, offset, headerSize);
+    final fileType = _readUnsigned(header, 12, 4, littleEndian: littleEndian);
+    final commandCount =
+        _readUnsigned(header, 16, 4, littleEndian: littleEndian);
+    final commandBytes =
+        _readUnsigned(header, 20, 4, littleEndian: littleEndian);
+    if (fileType != 2 ||
+        commandCount == 0 ||
+        commandBytes < 24 ||
+        headerSize + commandBytes > sliceSize) {
+      return false;
+    }
+    final commandsEnd = offset + headerSize + commandBytes;
+    var commandOffset = offset + headerSize;
+    var entryOffset = -1;
+    final executableRanges = <(int, int)>[];
+    for (var i = 0; i < commandCount; i++) {
+      final command = _readBytesAt(file, commandOffset, 8);
+      if (command.length < 8) return false;
+      final commandType =
+          _readUnsigned(command, 0, 4, littleEndian: littleEndian);
+      final commandSize =
+          _readUnsigned(command, 4, 4, littleEndian: littleEndian);
+      if (commandSize < 8 || commandOffset + commandSize > commandsEnd) {
+        return false;
+      }
+      if (commandType == 0x80000028 && commandSize >= 24) {
+        final mainCommand = _readBytesAt(file, commandOffset, 24);
+        entryOffset =
+            _readUnsigned(mainCommand, 8, 8, littleEndian: littleEndian);
+      } else if (commandType == 0x19 && is64Bit && commandSize >= 72) {
+        final segment = _readBytesAt(file, commandOffset, 72);
+        final fileOffset =
+            _readUnsigned(segment, 40, 8, littleEndian: littleEndian);
+        final fileSize =
+            _readUnsigned(segment, 48, 8, littleEndian: littleEndian);
+        final protections =
+            _readUnsigned(segment, 60, 4, littleEndian: littleEndian);
+        if (protections & 4 != 0 &&
+            fileSize > 0 &&
+            fileOffset + fileSize <= sliceSize) {
+          executableRanges.add((fileOffset, fileOffset + fileSize));
+        }
+      } else if (commandType == 0x1 && !is64Bit && commandSize >= 56) {
+        final segment = _readBytesAt(file, commandOffset, 56);
+        final fileOffset =
+            _readUnsigned(segment, 32, 4, littleEndian: littleEndian);
+        final fileSize =
+            _readUnsigned(segment, 36, 4, littleEndian: littleEndian);
+        final protections =
+            _readUnsigned(segment, 44, 4, littleEndian: littleEndian);
+        if (protections & 4 != 0 &&
+            fileSize > 0 &&
+            fileOffset + fileSize <= sliceSize) {
+          executableRanges.add((fileOffset, fileOffset + fileSize));
+        }
+      }
+      commandOffset += commandSize;
+    }
+    return commandOffset == commandsEnd &&
+        entryOffset >= 0 &&
+        executableRanges
+            .any((range) => entryOffset >= range.$1 && entryOffset < range.$2);
+  }
+
+  bool _hasValidPeHeader(File file) {
+    final fileLength = file.lengthSync();
+    if (fileLength < 64) return false;
+    final handle = file.openSync();
+    try {
+      final dosHeader = handle.readSync(64);
+      if (!_bytesStartWith(dosHeader, const [0x4d, 0x5a])) return false;
+      final peOffset = _readUnsigned(dosHeader, 60, 4, littleEndian: true);
+      if (peOffset < 64 || peOffset + 24 > fileLength) return false;
+      handle.setPositionSync(peOffset);
+      final peHeader = handle.readSync(24);
+      if (!_bytesStartWith(peHeader, const [0x50, 0x45, 0, 0])) return false;
+      final sectionCount = _readUnsigned(peHeader, 6, 2, littleEndian: true);
+      final optionalSize = _readUnsigned(peHeader, 20, 2, littleEndian: true);
+      final imageCharacteristics =
+          _readUnsigned(peHeader, 22, 2, littleEndian: true);
+      final optionalOffset = peOffset + 24;
+      if (sectionCount == 0 ||
+          imageCharacteristics & 0x0002 == 0 ||
+          imageCharacteristics & 0x2000 != 0 ||
+          optionalSize < 96 ||
+          optionalOffset + optionalSize > fileLength) {
+        return false;
+      }
+      handle.setPositionSync(optionalOffset);
+      final optionalHeader = handle.readSync(optionalSize);
+      final optionalMagic =
+          _readUnsigned(optionalHeader, 0, 2, littleEndian: true);
+      final entryPoint =
+          _readUnsigned(optionalHeader, 16, 4, littleEndian: true);
+      final minimumOptionalSize = optionalMagic == 0x10b
+          ? 96
+          : optionalMagic == 0x20b
+              ? 112
+              : optionalSize + 1;
+      if (optionalSize < minimumOptionalSize || entryPoint == 0) return false;
+      final sectionOffset = optionalOffset + optionalSize;
+      final sectionTableSize = sectionCount * 40;
+      if (sectionOffset + sectionTableSize > fileLength) return false;
+      handle.setPositionSync(sectionOffset);
+      final sections = handle.readSync(sectionTableSize);
+      for (var i = 0; i < sectionCount; i++) {
+        final offset = i * 40;
+        final rawSize =
+            _readUnsigned(sections, offset + 16, 4, littleEndian: true);
+        final rawOffset =
+            _readUnsigned(sections, offset + 20, 4, littleEndian: true);
+        final virtualSize =
+            _readUnsigned(sections, offset + 8, 4, littleEndian: true);
+        final virtualAddress =
+            _readUnsigned(sections, offset + 12, 4, littleEndian: true);
+        final characteristics =
+            _readUnsigned(sections, offset + 36, 4, littleEndian: true);
+        if (characteristics & 0x20000000 != 0 &&
+            rawSize > 0 &&
+            rawOffset + rawSize <= fileLength &&
+            entryPoint >= virtualAddress &&
+            entryPoint - virtualAddress < rawSize &&
+            entryPoint <
+                virtualAddress +
+                    (virtualSize > rawSize ? virtualSize : rawSize)) {
+          return true;
+        }
+      }
+      return false;
+    } finally {
+      handle.closeSync();
+    }
+  }
+
+  List<int> _readBytesAt(File file, int offset, int length) {
+    if (offset < 0 || length < 0 || offset + length > file.lengthSync()) {
+      return const [];
+    }
+    final handle = file.openSync();
+    try {
+      handle.setPositionSync(offset);
+      return handle.readSync(length);
+    } finally {
+      handle.closeSync();
+    }
+  }
+
+  bool _bytesStartWith(List<int> bytes, List<int> prefix) =>
+      bytes.length >= prefix.length &&
+      List.generate(prefix.length, (index) => bytes[index] == prefix[index])
+          .every((matches) => matches);
+
+  int _readUnsigned(List<int> bytes, int offset, int length,
+      {required bool littleEndian}) {
+    var value = 0;
+    for (var i = 0; i < length; i++) {
+      final byte = bytes[offset + (littleEndian ? i : length - i - 1)];
+      value |= byte << (i * 8);
+    }
+    return value;
+  }
+
+  bool _isUpdateExecutableName(String name) =>
+      Platform.isWindows ? name.toLowerCase().endsWith('.exe') : true;
+
+  @visibleForTesting
+  String findExecutableForTesting(String dirPath,
+          {String? currentExecutableName}) =>
+      _findExecutable(dirPath, currentExecutableName: currentExecutableName);
 
   /// Windows 更新脚本 (.bat)
   Future<String> _createWindowsUpdateScript(
