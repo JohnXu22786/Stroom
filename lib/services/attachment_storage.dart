@@ -52,6 +52,9 @@ class AttachmentStorage {
   @visibleForTesting
   static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
 
+  static Future<Uint8List?> Function(String, {required int? maxBytes})?
+      readFileBoundedOverrideForTesting;
+
   @visibleForTesting
   static Future<void> Function(String, Uint8List)?
       restoreFileOverrideForTesting;
@@ -63,6 +66,7 @@ class AttachmentStorage {
     deleteFileOverrideForTesting = null;
     deleteCompressedImageOverrideForTesting = null;
     readFileOverrideForTesting = null;
+    readFileBoundedOverrideForTesting = null;
     restoreFileOverrideForTesting = null;
   }
 
@@ -181,6 +185,13 @@ class AttachmentStorage {
     String storagePath, {
     int? maxBytes,
   }) async {
+    final boundedOverride = readFileBoundedOverrideForTesting;
+    if (maxBytes != null && boundedOverride != null) {
+      return _checkMaxBytes(
+        await boundedOverride(storagePath, maxBytes: maxBytes),
+        maxBytes,
+      );
+    }
     final override = readFileOverrideForTesting;
     if (override != null) {
       return _checkMaxBytes(await override(storagePath), maxBytes);

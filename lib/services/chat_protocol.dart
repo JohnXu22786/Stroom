@@ -456,12 +456,17 @@ Future<String?> readTextAttachmentContent(
     return '[文件过大已跳过: $fileName]';
   }
   try {
-    final bytes = await AttachmentStorage.readFile(storagePath);
+    final bytes = await AttachmentStorage.readFile(
+      storagePath,
+      maxBytes: maxAttachmentBytes,
+    );
     if (bytes == null || bytes.isEmpty) return null;
     if (bytes.length > maxAttachmentBytes) {
       return '[文件过大已跳过: $fileName]';
     }
     return utf8.decode(bytes);
+  } on AttachmentTooLargeException {
+    return '[文件过大已跳过: $fileName]';
   } catch (_) {
     return null;
   }

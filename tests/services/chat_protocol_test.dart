@@ -1148,6 +1148,7 @@ void main() {
     });
 
     tearDown(() {
+      AttachmentStorage.readFileBoundedOverrideForTesting = null;
       try {
         tmpRoot.deleteSync(recursive: true);
       } catch (_) {
@@ -1547,6 +1548,28 @@ void main() {
       final result = await readTextAttachmentContent('stale.txt', path, 0);
 
       expect(result, '[文件过大已跳过: stale.txt]');
+    });
+
+    test('stale text metadata passes the size limit to the bounded read',
+        () async {
+      final path = await AttachmentStorage.saveFile(
+        'stale-bounded.txt',
+        Uint8List.fromList([1]),
+      );
+      int? requestedMaxBytes;
+      AttachmentStorage.readFileBoundedOverrideForTesting = (
+        storagePath, {
+        required maxBytes,
+      }) async {
+        requestedMaxBytes = maxBytes;
+        throw AttachmentTooLargeException(maxBytes!);
+      };
+
+      final result =
+          await readTextAttachmentContent('stale-bounded.txt', path, 0);
+
+      expect(requestedMaxBytes, maxAttachmentBytes);
+      expect(result, '[文件过大已跳过: stale-bounded.txt]');
     });
 
     test('文件不存在返回 null（调用方渲染"无法读取"占位）', () async {
