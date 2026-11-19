@@ -18,8 +18,8 @@
 - **Other tab content checked:** the long assistant override helper and enabled SwitchListTile labels remained readable; seed label/value fields were not clipped; long custom parameter name and value wrapped naturally. pt-BR dark theme wrapped `Pesquisa na web`; Arabic dark theme used RTL alignment and kept the controls visible. The change does not touch an editable value field, so keyboard/caret behavior is unchanged.
 - **Motion:** the component waits 1 s before moving at 24 logical px/s and holds 2 s at each endpoint before reversing. The 16.12 s WebM spans a full prefix-to-suffix reveal and the trailing-end hold. Start endpoint is offset 0 (leading text); end endpoint is offset −overflow (trailing text).
 
-| Before, de-DE light | After, de-DE light — leading endpoint |
-|---|---|
-| ![Before: 8.3 px overflow at 320 × 640 and 1.8×](docs/images/assistant-param-before.png) | ![After: constrained heading at the leading endpoint](docs/images/assistant-param-after.png) |
+Matched comparison, de-DE light, 320 × 640 CSS px at 1.8× text scale:
 
-The after tail endpoint is saved separately at [assistant-param-after-endpoint.png](docs/images/assistant-param-after-endpoint.png). Additional Chromium captures: [English at 1×](docs/images/assistant-param-after-en-1x.png), [pt-BR dark](docs/images/assistant-param-after-pt-dark.png) and [Arabic dark / RTL](docs/images/assistant-param-after-ar-dark.png). The shorter English label uses the same reveal at the narrow size; no locale branch was added. [Play the 16.12 s heading reveal preview](docs/videos/assistant-param-heading-motion.webm).
+![Before and after: assistant parameter heading overflow and constrained reveal](docs/images/assistant-param-before-after.png)
+
+Endpoint and locale verification captures: [after tail endpoint](docs/images/assistant-param-after-endpoint.png), [English at 1×](docs/images/assistant-param-after-en-1x.png), [pt-BR dark](docs/images/assistant-param-after-pt-dark.png) and [Arabic dark / RTL](docs/images/assistant-param-after-ar-dark.png). The shorter English label uses the same reveal at the narrow size; no locale branch was added. [Play the 16.12 s heading reveal preview](docs/videos/assistant-param-heading-motion.webm).
