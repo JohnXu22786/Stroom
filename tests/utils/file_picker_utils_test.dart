@@ -194,6 +194,37 @@ void main() {
     expect(await File(outputPaths.single).readAsString(), 'new photo');
   });
 
+  test('folder export directories reject symlinked path components', () async {
+    final destination = await Directory.systemTemp.createTemp('export_root_');
+    final outside = await Directory.systemTemp.createTemp('export_outside_');
+    addTearDown(() => destination.delete(recursive: true));
+    addTearDown(() => outside.delete(recursive: true));
+    await Link(p.join(destination.path, 'photos')).create(outside.path);
+
+    await expectLater(
+      createUserVisibleExportDirectory(destination.path, 'photos/nested'),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await Directory(outside.path).list().toList(), isEmpty);
+  });
+
+  test('folder export directories stay inside the selected destination',
+      () async {
+    final destination = await Directory.systemTemp.createTemp('export_root_');
+    addTearDown(() => destination.delete(recursive: true));
+
+    await createUserVisibleExportDirectory(destination.path, 'photos/nested');
+
+    expect(
+      await Directory(p.join(destination.path, 'photos', 'nested')).exists(),
+      isTrue,
+    );
+    await expectLater(
+      createUserVisibleExportDirectory(destination.path, '../outside'),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
+
   test('desktop save applies the extension filter and writes selected bytes',
       () async {
     final directory = await Directory.systemTemp.createTemp('picker_save_');

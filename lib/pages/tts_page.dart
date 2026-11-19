@@ -677,7 +677,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             FileSystemEntityType.notFound,
       );
       for (final folderName in selectedFolders) {
-        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+        await createUserVisibleExportDirectory(outputDir, folderName);
       }
 
       for (var index = 0; index < folderFiles.length; index++) {
@@ -701,7 +701,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         }
         final outputPath = resolvedOutputPaths[index];
         final fileDir = p.dirname(outputPath);
-        await Directory(fileDir).create(recursive: true);
+        await createUserVisibleExportDirectory(
+          outputDir,
+          p.relative(fileDir, from: outputDir),
+        );
         await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }

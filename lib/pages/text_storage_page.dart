@@ -586,7 +586,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         folders: selectedFolders,
       );
       for (final folderName in selectedFolders) {
-        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+        await createUserVisibleExportDirectory(outputDir, folderName);
       }
 
       for (var i = 0; i < folderFiles.length; i++) {
@@ -595,7 +595,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         if (content == null) continue;
         final outputPath = outputPaths[i];
         final fileDir = p.dirname(outputPath);
-        await Directory(fileDir).create(recursive: true);
+        await createUserVisibleExportDirectory(
+          outputDir,
+          p.relative(fileDir, from: outputDir),
+        );
         await writeUserVisibleExportFile(
           outputPath,
           Uint8List.fromList(utf8.encode(content)),
