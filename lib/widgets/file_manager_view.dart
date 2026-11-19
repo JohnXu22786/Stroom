@@ -1485,11 +1485,15 @@ class _FileManagerViewState<T extends FileRecord>
                             file.folder != _currentFolder) ...[
                           Icon(Icons.folder, size: 12, color: Colors.grey[400]),
                           const SizedBox(width: 3),
-                          Text(
-                            file.folder,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[400],
+                          Flexible(
+                            child: ConstrainedText(
+                              file.folder,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[400],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -1503,11 +1507,15 @@ class _FileManagerViewState<T extends FileRecord>
                           ),
                           const SizedBox(width: 6),
                         ],
-                        Text(
-                          dateStr,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        Flexible(
+                          child: ConstrainedText(
+                            dateStr,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -1520,11 +1528,15 @@ class _FileManagerViewState<T extends FileRecord>
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          fileSizeStr,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        Flexible(
+                          child: ConstrainedText(
+                            fileSizeStr,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
                           ),
                         ),
                       ],
