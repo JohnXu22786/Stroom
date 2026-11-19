@@ -547,10 +547,12 @@ class AnkiMediaSync {
     if (type == FileSystemEntityType.notFound) {
       await Directory(mediaPath).create(recursive: true);
     } else if (type != FileSystemEntityType.directory) {
-      throw FileSystemException('Anki media path is not a directory', mediaPath);
+      throw FileSystemException(
+          'Anki media path is not a directory', mediaPath);
     }
 
-    final canonicalMediaPath = await Directory(mediaPath).resolveSymbolicLinks();
+    final canonicalMediaPath =
+        await Directory(mediaPath).resolveSymbolicLinks();
     final canonicalDocumentsPath =
         await Directory(p.dirname(mediaPath)).resolveSymbolicLinks();
     final expectedPath = p.normalize(
