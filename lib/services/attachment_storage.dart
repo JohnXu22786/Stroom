@@ -178,8 +178,8 @@ class AttachmentStorage {
               : data;
         }
         // Cross-device backups normalize edited files into attachments/.
-        final fallback = await WebFileStore.read(
-            'attachments/${p.basename(storagePath)}');
+        final fallback =
+            await WebFileStore.read('attachments/${p.basename(storagePath)}');
         return maxBytes != null &&
                 fallback != null &&
                 fallback.length > maxBytes
