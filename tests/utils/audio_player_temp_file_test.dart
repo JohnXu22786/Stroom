@@ -25,6 +25,33 @@ void main() {
 
     expect(directory.listSync(), isEmpty);
   });
+
+  test(
+    'preserves the temp-write error when partial-file cleanup fails',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('audio_player_');
+      addTearDown(() => directory.delete(recursive: true));
+      final writeError = StateError('simulated write failure');
+      Directory? partialArtifact;
+
+      await expectLater(
+        writeAudioPlayerTempFile(
+          getTempDirectory: () async => directory,
+          bytes: [1, 2, 3],
+          extension: 'wav',
+          isDisposed: () => false,
+          writeBytes: (file, _) async {
+            partialArtifact = await Directory(file.path).create();
+            throw writeError;
+          },
+        ),
+        throwsA(same(writeError)),
+      );
+
+      expect(await partialArtifact!.exists(), isTrue);
+    },
+  );
+
   test('keeps overlapping same-extension temp writes independent', () async {
     final directory = await Directory.systemTemp.createTemp('audio_player_');
     addTearDown(() => directory.delete(recursive: true));

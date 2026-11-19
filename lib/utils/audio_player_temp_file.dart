@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -27,8 +28,15 @@ Future<File?> writeAudioPlayerTempFile({
       file,
       bytes,
     );
-  } catch (_) {
-    await deleteAudioPlayerTempFile(file);
+  } catch (writeError) {
+    try {
+      await deleteAudioPlayerTempFile(file);
+    } catch (cleanupError) {
+      debugPrint(
+        'Failed to remove partial audio file ${file.path} after write error '
+        '($writeError): $cleanupError',
+      );
+    }
     rethrow;
   }
 
