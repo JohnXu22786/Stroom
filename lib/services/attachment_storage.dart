@@ -22,6 +22,12 @@ class AttachmentDeleteRollbackException implements Exception {
       '$deleteError';
 }
 
+class AttachmentTooLargeException implements Exception {
+  const AttachmentTooLargeException(this.maxBytes);
+
+  final int maxBytes;
+}
+
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
   static const _uuid = Uuid();
@@ -46,6 +52,9 @@ class AttachmentStorage {
   @visibleForTesting
   static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
 
+  static Future<Uint8List?> Function(String, {required int? maxBytes})?
+      readFileBoundedOverrideForTesting;
+
   @visibleForTesting
   static Future<void> Function(String, Uint8List)?
       restoreFileOverrideForTesting;
@@ -57,6 +66,7 @@ class AttachmentStorage {
     deleteFileOverrideForTesting = null;
     deleteCompressedImageOverrideForTesting = null;
     readFileOverrideForTesting = null;
+    readFileBoundedOverrideForTesting = null;
     restoreFileOverrideForTesting = null;
   }
 
@@ -83,6 +93,21 @@ class AttachmentStorage {
   }
 
   static String _webKey(String storagePath) => storagePath;
+
+  static Uint8List? _checkMaxBytes(Uint8List? bytes, int? maxBytes) {
+    if (maxBytes != null && bytes != null && bytes.length > maxBytes) {
+      throw AttachmentTooLargeException(maxBytes);
+    }
+    return bytes;
+  }
+
+  static Future<Uint8List?> _readWebFile(String key, int? maxBytes) async {
+    try {
+      return await WebFileStore.read(key, maxBytes: maxBytes);
+    } on WebFileStoreReadLimitExceededException catch (e) {
+      throw AttachmentTooLargeException(e.maxBytes);
+    }
+  }
 
   static Future<String> get _storageDir async {
     if (kIsWeb) return '';
@@ -156,27 +181,61 @@ class AttachmentStorage {
     return storagePath;
   }
 
-  static Future<Uint8List?> readFile(String storagePath) async {
+  static Future<Uint8List?> readFile(
+    String storagePath, {
+    int? maxBytes,
+  }) async {
+    final boundedOverride = readFileBoundedOverrideForTesting;
+    if (maxBytes != null && boundedOverride != null) {
+      return _checkMaxBytes(
+        await boundedOverride(storagePath, maxBytes: maxBytes),
+        maxBytes,
+      );
+    }
     final override = readFileOverrideForTesting;
-    if (override != null) return override(storagePath);
+    if (override != null) {
+      return _checkMaxBytes(await override(storagePath), maxBytes);
+    }
 
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {
-        final data = await WebFileStore.read(_webKey(storagePath));
+        final data = await _readWebFile(_webKey(storagePath), maxBytes);
         if (data != null || !storagePath.startsWith('temp_edited/')) {
-          return data;
+          return _checkMaxBytes(data, maxBytes);
         }
         // Cross-device backups normalize edited files into attachments/.
-        return await WebFileStore.read(
-            'attachments/${p.basename(storagePath)}');
+        final fallback = await _readWebFile(
+          'attachments/${p.basename(storagePath)}',
+          maxBytes,
+        );
+        return _checkMaxBytes(fallback, maxBytes);
       }
       final dir = await _storageDir;
       final name = p.basename(storagePath);
       final filePath = p.join(dir, name);
       final file = File(filePath);
-      if (await file.exists()) return await file.readAsBytes();
+      if (await file.exists()) {
+        if (maxBytes == null) return await file.readAsBytes();
+        final handle = await file.open();
+        try {
+          final bytes = BytesBuilder(copy: false);
+          while (bytes.length < maxBytes + 1) {
+            final chunk = await handle.read(maxBytes + 1 - bytes.length);
+            if (chunk.isEmpty) break;
+            bytes.add(chunk);
+          }
+          if (bytes.length > maxBytes) {
+            throw AttachmentTooLargeException(maxBytes);
+          }
+          return bytes.takeBytes();
+        } finally {
+          await handle.close();
+        }
+      }
       return null;
+    } on AttachmentTooLargeException {
+      rethrow;
     } catch (e) {
       await AppLogService.error('AttachmentStorage', '读取文件失败: $storagePath', e);
       rethrow;
