@@ -30,12 +30,20 @@ class OcrRetryStorage {
   OcrRetryStorage._();
 
   static const _cacheDirectoryName = 'ocr_retry_cache';
+  static const _staleAtomicWriteTempAge = Duration(days: 1);
+  static final _atomicWriteTempNamePattern = RegExp(
+    r'^\.[0-9a-f]{64}\.bin\.tmp-[a-zA-Z0-9_-]+$',
+  );
   static final Map<String, Future<void>> _taskWrites = {};
+  static final Map<String, int> _activeNativeCacheWrites = {};
   static Future<void>? _cacheMaintenanceTail;
 
   @visibleForTesting
   static Future<void> Function(String reference, Uint8List bytes)?
       debugBeforeCacheWrite;
+
+  @visibleForTesting
+  static DateTime Function()? debugNow;
 
   @visibleForTesting
   static Future<void> Function(String reference)? debugBeforeNativeReadAsBytes;
@@ -349,14 +357,43 @@ class OcrRetryStorage {
         p.join(await AppStorage.directory, _cacheDirectoryName),
       );
       if (!await directory.exists()) return;
+      final staleBefore =
+          (debugNow?.call() ?? DateTime.now()).subtract(_staleAtomicWriteTempAge);
+      final staleStagingDirectories = <Directory>[];
       await for (final entry in directory.list(followLinks: false)) {
         if (entry is File) {
           candidates.add('$_cacheDirectoryName/${p.basename(entry.path)}');
+          continue;
+        }
+        final name = p.basename(entry.path);
+        if (entry is! Directory ||
+            !_atomicWriteTempNamePattern.hasMatch(name) ||
+            _isActiveStagingDirectory(name)) {
+          continue;
+        }
+        final stat = await entry.stat();
+        if (stat.type == FileSystemEntityType.directory &&
+            stat.modified.isBefore(staleBefore)) {
+          staleStagingDirectories.add(entry);
         }
       }
+      await deleteUnreferenced(candidates: candidates, referenced: referenced);
+      for (final stagingDirectory in staleStagingDirectories) {
+        try {
+          await stagingDirectory.delete(recursive: true);
+        } on FileSystemException {
+          if (await stagingDirectory.exists()) rethrow;
+        }
+      }
+      return;
     }
     await deleteUnreferenced(candidates: candidates, referenced: referenced);
   }
+
+  static bool _isActiveStagingDirectory(String name) =>
+      _activeNativeCacheWrites.keys.any(
+        (reference) => name.startsWith('.${p.basename(reference)}.tmp-'),
+      );
 
   static String _referenceFor(String taskId, int index) {
     final hash = sha256.convert(utf8.encode('$taskId:$index')).toString();
@@ -410,14 +447,29 @@ class OcrRetryStorage {
   ) async {
     final existing = await read(reference);
     if (existing != null && _sameBytes(existing, bytes)) return existing;
-    await debugBeforeCacheWrite?.call(reference, bytes);
     if (_usesWebStore) {
+      await debugBeforeCacheWrite?.call(reference, bytes);
       await WebFileStore.write(reference, bytes);
       return existing;
     }
-    final file = await _nativeFile(reference, createDirectory: true);
-    await AtomicFile.writeBytes(file, bytes);
-    return existing;
+    _activeNativeCacheWrites.update(
+      reference,
+      (activeWrites) => activeWrites + 1,
+      ifAbsent: () => 1,
+    );
+    try {
+      await debugBeforeCacheWrite?.call(reference, bytes);
+      final file = await _nativeFile(reference, createDirectory: true);
+      await AtomicFile.writeBytes(file, bytes);
+      return existing;
+    } finally {
+      final activeWrites = _activeNativeCacheWrites[reference];
+      if (activeWrites == 1) {
+        _activeNativeCacheWrites.remove(reference);
+      } else if (activeWrites != null) {
+        _activeNativeCacheWrites[reference] = activeWrites - 1;
+      }
+    }
   }
 
   static bool _sameBytes(Uint8List left, Uint8List right) {

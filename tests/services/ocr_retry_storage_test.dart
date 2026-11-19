@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -31,6 +32,7 @@ void main() {
     BackgroundTaskNotifier.debugStorageDirectoryOverride = taskDirectory.path;
     WebFileStore.enableTestMode();
     OcrRetryStorage.debugBeforeNativeReadAsBytes = null;
+    OcrRetryStorage.debugNow = null;
   });
 
   tearDown(() async {
@@ -464,6 +466,102 @@ void main() {
       expect(await OcrRetryStorage.read(liveReference), imageBytes);
       expect(await WebFileStore.read(unrelatedKey), [4, 5, 6]);
       expect(await WebFileStore.read(malformedCacheKey), [7, 8, 9]);
+    },
+  );
+
+  test(
+    'orphan cleanup removes stale exact AtomicFile staging directories only',
+    () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      WebFileStore.disableTestMode();
+      PathProviderPlatform.instance = _DocumentsDirectory(taskDirectory.path);
+      AppStorage.resetCache();
+      addTearDown(() {
+        PathProviderPlatform.instance = originalPathProvider;
+        AppStorage.resetCache();
+      });
+
+      final cacheDirectory = Directory(
+        '${taskDirectory.path}${Platform.pathSeparator}ocr_retry_cache',
+      );
+      await cacheDirectory.create();
+      final staleName = '.${List.filled(64, 'a').join()}.bin.tmp-abandoned';
+      final freshName = '.${List.filled(64, 'b').join()}.bin.tmp-in-progress';
+      const malformedName = '.not-an-ocr-reference.bin.tmp-abandoned';
+      const unrelatedName = 'unrelated.tmp-abandoned';
+      final stale = Directory('${cacheDirectory.path}/$staleName');
+      final malformed = Directory('${cacheDirectory.path}/$malformedName');
+      final unrelated = Directory('${cacheDirectory.path}/$unrelatedName');
+      await Future.wait([
+        stale.create(),
+        malformed.create(),
+        unrelated.create(),
+      ]);
+      OcrRetryStorage.debugNow = () =>
+          DateTime.now().add(const Duration(days: 2));
+
+      await OcrRetryStorage.cleanupUnreferencedCache(referenced: const {});
+
+      expect(await stale.exists(), isFalse);
+
+      OcrRetryStorage.debugNow = null;
+      final fresh = Directory('${cacheDirectory.path}/$freshName');
+      await fresh.create();
+      await OcrRetryStorage.cleanupUnreferencedCache(referenced: const {});
+      expect(await fresh.exists(), isTrue);
+      expect(await malformed.exists(), isTrue);
+      expect(await unrelated.exists(), isTrue);
+    },
+  );
+
+  test(
+    'orphan cleanup preserves a stale staging directory for an active write',
+    () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      WebFileStore.disableTestMode();
+      PathProviderPlatform.instance = _DocumentsDirectory(taskDirectory.path);
+      AppStorage.resetCache();
+      addTearDown(() {
+        PathProviderPlatform.instance = originalPathProvider;
+        AppStorage.resetCache();
+      });
+
+      final writeEntered = Completer<void>();
+      final releaseWrite = Completer<void>();
+      String? activeReference;
+      OcrRetryStorage.debugBeforeCacheWrite = (reference, _) async {
+        activeReference = reference;
+        writeEntered.complete();
+        await releaseWrite.future;
+      };
+      addTearDown(() {
+        OcrRetryStorage.debugBeforeCacheWrite = null;
+        OcrRetryStorage.debugNow = null;
+        if (!releaseWrite.isCompleted) releaseWrite.complete();
+      });
+      final write = OcrRetryStorage.cacheSnapshot(
+        taskId: 'active-staging-cleanup',
+        snapshot: OcrRetrySnapshot.capture(
+          images: [
+            OcrRetryImage(bytes: Uint8List.fromList([1, 2, 3]), format: 'png'),
+          ],
+        ),
+      );
+      await writeEntered.future;
+      final staging = Directory(
+        '${taskDirectory.path}${Platform.pathSeparator}ocr_retry_cache'
+        '${Platform.pathSeparator}.${activeReference!.split('/').last}'
+        '.tmp-active-write',
+      );
+      await staging.create(recursive: true);
+      OcrRetryStorage.debugNow = () =>
+          DateTime.now().add(const Duration(days: 2));
+
+      await OcrRetryStorage.cleanupUnreferencedCache(referenced: const {});
+      expect(await staging.exists(), isTrue);
+
+      releaseWrite.complete();
+      await write;
     },
   );
 
