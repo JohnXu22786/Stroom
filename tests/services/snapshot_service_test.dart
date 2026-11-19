@@ -33,6 +33,7 @@ void main() {
     SnapshotService.debugNow = null;
     SnapshotService.debugAfterBackupCreated = null;
     SnapshotService.debugBeforeIndexCleanup = null;
+    SnapshotService.debugBeforeIndexWrite = null;
     try {
       if (await snapDir.exists()) {
         await snapDir.delete(recursive: true);
@@ -58,6 +59,34 @@ void main() {
       expect(index.first.file, p.basename(file.path));
       expect(index.first.sha256, isNotEmpty);
       expect(index.first.partVersions['chat'], 1);
+    });
+
+    test('index write failure reports failure and keeps archive recoverable',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"index_failure"}]',
+      });
+      final original = await SnapshotService.createSnapshot(force: true);
+      expect(original, isNotNull);
+
+      SnapshotService.debugBeforeIndexWrite = () {
+        throw const FileSystemException('simulated index write failure');
+      };
+      final failed = await SnapshotService.createSnapshot(force: true);
+      expect(failed, isNull);
+      SnapshotService.debugBeforeIndexWrite = null;
+
+      final archives = (await snapDir.list().toList())
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.zip'))
+          .toList();
+      expect(archives, hasLength(2),
+          reason: 'a completed archive remains available for recovery');
+
+      final index = await SnapshotService.readIndex();
+      expect(index.map((entry) => entry.file).toSet(),
+          archives.map((file) => p.basename(file.path)).toSet(),
+          reason: 'a later index read reconciles the unindexed archive');
     });
 
     test('snapshot is skipped within the 1-hour rule', () async {

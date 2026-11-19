@@ -99,6 +99,9 @@ class SnapshotService {
   @visibleForTesting
   static Future<void> Function()? debugBeforeIndexCleanup;
 
+  @visibleForTesting
+  static void Function()? debugBeforeIndexWrite;
+
   // Keep active paths registered so retention cleanup cannot remove them.
   static final Set<String> _activeTemporaryPaths = {};
   static final Set<String> _reservedSnapshotPaths = {};
@@ -178,6 +181,16 @@ class SnapshotService {
             ? await _rebuildIndexIfSnapshotsExist()
             : await _rebuildIndexFromDisk();
       }
+      final indexedFiles = entries.map((entry) => entry.file).toSet();
+      final dir = await snapshotsDir;
+      final hasUnindexedSnapshot = (await dir.list().toList())
+          .whereType<File>()
+          .map((file) => p.basename(file.path))
+          .any((name) =>
+              name.endsWith('.zip') &&
+              _extractTimestamp(name) != null &&
+              !indexedFiles.contains(name));
+      if (hasUnindexedSnapshot) return await _rebuildIndexFromDisk();
       return entries;
     } catch (e) {
       debugPrint('[SnapshotService] 读取快照索引失败，扫描目录重建: $e');
@@ -246,6 +259,7 @@ class SnapshotService {
   /// 写入快照索引（原子）。
   static Future<void> _writeIndex(List<SnapshotEntry> entries) async {
     try {
+      debugBeforeIndexWrite?.call();
       final file = await _indexFile();
       await AtomicFile.writeString(
         file,
@@ -253,6 +267,7 @@ class SnapshotService {
       );
     } catch (e) {
       debugPrint('[SnapshotService] 写入快照索引失败: $e');
+      rethrow;
     }
   }
 
