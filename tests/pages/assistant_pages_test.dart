@@ -34,6 +34,7 @@ Widget createTestApp({
               prompt: a.prompt,
               emoji: a.emoji,
               description: a.description,
+              settings: a.settings,
             );
           }
           return notifier;
@@ -1115,6 +1116,85 @@ void main() {
       expect(find.text('联网搜索'), findsOneWidget);
       expect(find.text('自定义参数'), findsOneWidget);
     });
+
+    testWidgets(
+      'German custom-parameter heading stays accessible beside its action at large text',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        tester.view.platformDispatcher.textScaleFactorTestValue = 1.8;
+        addTearDown(
+            tester.view.platformDispatcher.clearTextScaleFactorTestValue);
+        const parameterName = 'very_long_parameter_name_for_layout';
+        await tester.pumpWidget(
+          createTestApp(
+            locale: const Locale('de'),
+            assistants: [
+              Assistant(
+                name: 'Layout assistant',
+                prompt: 'P1',
+                settings: AssistantSettings(
+                  enableTemperature: true,
+                  enableTopP: true,
+                  enableMaxTokens: true,
+                  enableMaxToolCalls: true,
+                  enableFrequencyPenalty: true,
+                  enablePresencePenalty: true,
+                  enableSeed: true,
+                  seed: 73214,
+                  customParameters: [
+                    CustomParameter(
+                      name: parameterName,
+                      type: 'string',
+                      value: 'a long value to demonstrate natural wrapping',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.more_vert).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Bearbeiten'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Parameter'));
+        await tester.pumpAndSettle();
+        final heading = find.text('Benutzerdefinierte Parameter');
+        final headingRow = find
+            .ancestor(
+              of: heading,
+              matching: find.byType(Row),
+            )
+            .first;
+        expect(
+          tester.getSize(heading).width,
+          greaterThan(tester.getSize(headingRow).width * 0.6),
+        );
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Wenn aktiviert, haben Assistentenparameter'),
+          findsOneWidget,
+        );
+        expect(find.text('Benutzerdefinierte Parameter'), findsOneWidget);
+        expect(find.text(parameterName), findsOneWidget);
+
+        expect(
+          tester.getSize(find.text('Benutzerdefinierte Parameter')).height,
+          lessThan(44),
+        );
+        expect(find.byIcon(Icons.add_circle_outline), findsOneWidget);
+        expect(
+          find.textContaining('a long value to demonstrate natural wrapping'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
       'edit dialog shows three centered tabs with label-sized indicator',

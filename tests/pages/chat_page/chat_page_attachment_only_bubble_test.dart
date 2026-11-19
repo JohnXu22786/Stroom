@@ -46,15 +46,16 @@ Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
       }),
     ],
     child: const MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: ChatPage()),
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: ChatPage(),
+    ),
   );
 }
 
@@ -98,6 +99,17 @@ Attachment _namedDocumentAttachment(String fileName) {
   );
 }
 
+Attachment _generatedImageAttachment() {
+  return Attachment(
+    fileName: 'generated-1.png',
+    mimeType: 'image/png',
+    fileType: 'image',
+    hash: 'generated-image',
+    storagePath: '/tmp/generated-1.png',
+    fileSize: 2048,
+  );
+}
+
 /// Pumps until messages are loaded (same cadence as the existing tests).
 Future<void> _pumpLoadedChatPage(
   WidgetTester tester,
@@ -120,8 +132,9 @@ void main() {
   });
 
   tearDown(() {
-    VisibilityDetectorController.instance.updateInterval =
-        const Duration(milliseconds: 500);
+    VisibilityDetectorController.instance.updateInterval = const Duration(
+      milliseconds: 500,
+    );
   });
 
   group('ChatPage user message bubble visibility', () {
@@ -201,25 +214,44 @@ void main() {
     );
 
     testWidgets(
-      'attachment-only message does not add extra spacing above the '
-      'previews (no bubble to separate from)',
-      (tester) async {
-        await _pumpLoadedChatPage(tester, [
-          _userMessage(
-            id: 'u1',
-            content: '',
-            attachments: [_documentAttachment()],
-          ),
-        ]);
+        'attachment-only message does not add extra spacing above the '
+        'previews (no bubble to separate from)', (tester) async {
+      await _pumpLoadedChatPage(tester, [
+        _userMessage(
+          id: 'u1',
+          content: '',
+          attachments: [_documentAttachment()],
+        ),
+      ]);
 
-        // No bubble above → the attachment area must not carry the
-        // bubble-separation top padding.
-        final padding = tester.widget<Padding>(
-          find.byKey(const ValueKey('user-message-attachment-area')),
-        );
-        expect(padding.padding.resolve(TextDirection.ltr).top, 0);
-      },
+      // No bubble above → the attachment area must not carry the
+      // bubble-separation top padding.
+      final padding = tester.widget<Padding>(
+        find.byKey(const ValueKey('user-message-attachment-area')),
+      );
+      expect(padding.padding.resolve(TextDirection.ltr).top, 0);
+    });
+  });
+
+  testWidgets('assistant generated image attachment is shown in the bubble', (
+    tester,
+  ) async {
+    await _pumpLoadedChatPage(tester, [
+      ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'Here is the image',
+        attachments: [_generatedImageAttachment()],
+        createdAt: DateTime(2025, 1, 1),
+      ),
+    ]);
+
+    expect(
+      find.byKey(const ValueKey('assistant-message-attachment-area')),
+      findsOneWidget,
     );
+    expect(find.byType(MessageAttachmentPreview), findsOneWidget);
+    expect(find.text('generated-1.png'), findsOneWidget);
   });
 
   group('ChatPage user message attachment preview order', () {

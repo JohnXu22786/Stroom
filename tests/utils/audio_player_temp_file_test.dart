@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_player_temp_file.dart';
 
@@ -25,6 +26,33 @@ void main() {
 
     expect(directory.listSync(), isEmpty);
   });
+
+  test(
+    'preserves the temp-write error when partial-file cleanup fails',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('audio_player_');
+      addTearDown(() => directory.delete(recursive: true));
+      final writeError = StateError('simulated write failure');
+      Directory? partialArtifact;
+
+      await expectLater(
+        writeAudioPlayerTempFile(
+          getTempDirectory: () async => directory,
+          bytes: [1, 2, 3],
+          extension: 'wav',
+          isDisposed: () => false,
+          writeBytes: (file, _) async {
+            partialArtifact = await Directory(file.path).create();
+            throw writeError;
+          },
+        ),
+        throwsA(same(writeError)),
+      );
+
+      expect(await partialArtifact!.exists(), isTrue);
+    },
+  );
+
   test('keeps overlapping same-extension temp writes independent', () async {
     final directory = await Directory.systemTemp.createTemp('audio_player_');
     addTearDown(() => directory.delete(recursive: true));
@@ -90,4 +118,93 @@ void main() {
       expect(directory.listSync(), isEmpty);
     },
   );
+
+  test('logs cleanup failures when disposal happens during the write',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final previousDebugPrint = debugPrint;
+    final logMessages = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logMessages.add(message);
+    };
+    addTearDown(() => debugPrint = previousDebugPrint);
+    var disposed = false;
+
+    await expectLater(
+      writeAudioPlayerTempFile(
+        getTempDirectory: () async => directory,
+        bytes: [1, 2, 3],
+        extension: 'wav',
+        isDisposed: () => disposed,
+        writeBytes: (file, _) async {
+          await Directory(file.path).create();
+          disposed = true;
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(logMessages, hasLength(1));
+    expect(logMessages.single, contains('Failed to remove disposed audio'));
+  });
+
+  test('waits for player disposal before deleting its temp file', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/playing.wav');
+    await file.writeAsBytes([1, 2, 3]);
+    final disposalStarted = Completer<void>();
+    final finishDisposal = Completer<void>();
+
+    final cleanup = disposeAudioPlayerTempFile(
+      tempFilePath: file.path,
+      disposePlayer: () async {
+        disposalStarted.complete();
+        await finishDisposal.future;
+      },
+    );
+
+    await disposalStarted.future;
+    expect(await file.exists(), isTrue);
+    finishDisposal.complete();
+    await cleanup;
+
+    expect(await file.exists(), isFalse);
+  });
+
+  test('surfaces temp-file deletion failures', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+
+    await expectLater(
+      deleteAudioPlayerTempFile(File(directory.path)),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
+
+  test('ignores a temp file that was already removed', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/already_removed.wav');
+
+    await deleteAudioPlayerTempFile(file);
+  });
+
+  test('does not delete the temp file when player disposal fails', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/playing.wav');
+    await file.writeAsBytes([1, 2, 3]);
+    final disposalError = StateError('player disposal failed');
+
+    await expectLater(
+      disposeAudioPlayerTempFile(
+        tempFilePath: file.path,
+        disposePlayer: () async => throw disposalError,
+      ),
+      throwsA(same(disposalError)),
+    );
+    expect(await file.exists(), isTrue);
+  });
 }

@@ -14,126 +14,207 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    for (final width in [360.0, 800.0, 1100.0]) {
-      tester.view.physicalSize = Size(width, 2400);
-      tester.view.devicePixelRatio = 1;
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('en'),
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          theme: ThemeData(
-            dialogTheme: const DialogThemeData(
-              constraints: BoxConstraints(maxWidth: 1200),
+    for (final locale in const [
+      Locale('en'),
+      Locale('de'),
+      Locale('pt', 'BR'),
+    ]) {
+      for (final width in [360.0, 440.0, 800.0, 1100.0]) {
+        tester.view.physicalSize = Size(width, 2400);
+        tester.view.devicePixelRatio = 1;
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            theme: ThemeData(
+              dialogTheme: const DialogThemeData(
+                constraints: BoxConstraints(maxWidth: 1200),
+              ),
             ),
-          ),
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => Center(
-                child: ElevatedButton(
-                  onPressed: () => showProviderSettingsPanel(
-                    context: context,
-                    config: ProviderConfigItem(
-                      providerName: 'ASR provider',
-                      host: 'https://api.example.com',
-                      key: 'test-key',
-                      typeConfig: {
-                        'fallbackMethod': 'none',
-                        'preprocessing': 'resampleMono',
-                        'chunking': 'silence',
-                        'compression': 'flac',
-                      },
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: ElevatedButton(
+                    onPressed: () => showProviderSettingsPanel(
+                      context: context,
+                      config: ProviderConfigItem(
+                        providerName: 'ASR provider',
+                        host: 'https://api.example.com',
+                        key: 'test-key',
+                        typeConfig: {
+                          'fallbackMethod': 'none',
+                          'preprocessing': 'resampleMono',
+                          'chunking': 'silence',
+                          'compression': 'flac',
+                        },
+                      ),
+                      providerType: 'asr',
                     ),
-                    providerType: 'asr',
+                    child: const Text('Open provider settings'),
                   ),
-                  child: const Text('Open provider settings'),
                 ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.tap(find.text('Open provider settings'));
-      await tester.pumpAndSettle();
-      final tabController = DefaultTabController.of(
-        tester.element(find.byType(TabBar)),
-      );
-      tabController.animateTo(1, duration: Duration.zero);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(tabController.index, 1);
+        );
+        await tester.tap(find.text('Open provider settings'));
+        await tester.pumpAndSettle();
+        final tabController = DefaultTabController.of(
+          tester.element(find.byType(TabBar)),
+        );
+        tabController.animateTo(1, duration: Duration.zero);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tabController.index, 1);
 
-      expect(find.text('Fallback method'), findsOneWidget);
-      expect(find.text('Preprocessing method'), findsOneWidget);
-      expect(find.text('Compression method'), findsOneWidget);
-      expect(find.byType(DropdownButton<String>), findsNWidgets(4));
-      final dialogRect = tester.getRect(find.byType(Dialog));
-      final customParamsHeader = tester.getRect(find.text('Custom parameters'));
-      final addCustomParamButton = tester.getRect(
-        find.ancestor(
-          of: find.text('Add parameter'),
+        final localizations = AppLocalizations.of(
+          tester.element(find.byType(Dialog)),
+        )!;
+        expect(find.text(localizations.providerFallbackMethod), findsOneWidget);
+        expect(find.text(localizations.providerUploadMethod), findsOneWidget);
+        expect(
+          find.text(localizations.providerPreprocessingMethod),
+          findsOneWidget,
+        );
+        expect(find.text(localizations.providerMaxUploadSize), findsOneWidget);
+        expect(find.text(localizations.providerChunkingMode), findsOneWidget);
+        expect(
+          find.text(localizations.providerCompressionMode),
+          findsOneWidget,
+        );
+        expect(find.byType(DropdownButton<String>), findsNWidgets(4));
+        final dialogRect = tester.getRect(find.byType(Dialog));
+        final cancelButton = find.ancestor(
+          of: find.text(localizations.batchDlgCancel),
           matching: find.byType(TextButton),
-        ),
-      );
-      for (final controlRect in [customParamsHeader, addCustomParamButton]) {
-        expect(controlRect.left, greaterThanOrEqualTo(dialogRect.left));
-        expect(controlRect.right, lessThanOrEqualTo(dialogRect.right));
-      }
-      if (width < 800) {
-        expect(
-          addCustomParamButton.top,
-          greaterThanOrEqualTo(customParamsHeader.bottom),
         );
-      } else {
-        expect(
-          (addCustomParamButton.center.dy - customParamsHeader.center.dy).abs(),
-          lessThan(20),
+        final saveButton = find.ancestor(
+          of: find.text(localizations.mermaidSaveButton),
+          matching: find.byType(FilledButton),
         );
-      }
-      final localizations = AppLocalizations.of(
-        tester.element(find.byType(Dialog)),
-      )!;
-      for (final tabLabel in [
-        localizations.providerBasicInfoTab,
-        localizations.providerParameterSettingsTab,
-      ]) {
-        final tabRect = tester.getRect(find.text(tabLabel));
-        expect(tabRect.left, greaterThanOrEqualTo(0));
-        expect(tabRect.right, lessThanOrEqualTo(width));
-      }
-      final uploadLabel = tester.getRect(find.text('Upload method'));
-      final uploadControl = tester.getRect(
-        find.byType(DropdownButton<AudioUploadMethod>),
-      );
-      final maxSizeLabel = tester.getRect(find.text('Maximum upload size'));
-      final maxSizeControl = tester.getRect(find.byType(TextField).first);
-      if (width < 800) {
-        expect(uploadControl.top, greaterThanOrEqualTo(uploadLabel.bottom));
-        expect(maxSizeControl.top, greaterThanOrEqualTo(maxSizeLabel.bottom));
-      } else {
+        for (final action in [cancelButton, saveButton]) {
+          final actionRect = tester.getRect(action);
+          expect(actionRect.left, greaterThanOrEqualTo(dialogRect.left));
+          expect(actionRect.right, lessThanOrEqualTo(dialogRect.right));
+          expect(actionRect.height, greaterThanOrEqualTo(48));
+        }
+        for (final label in [
+          localizations.providerFallbackMethod,
+          localizations.providerUploadMethod,
+          localizations.providerPreprocessingMethod,
+          localizations.providerMaxUploadSize,
+          localizations.providerChunkingMode,
+          localizations.providerCompressionMode,
+        ]) {
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(dialogRect.left));
+          expect(labelRect.right, lessThanOrEqualTo(dialogRect.right));
+        }
+        final customParamsHeader = tester.getRect(
+          find.text(localizations.chatCustomParameters),
+        );
+        final addCustomParamButton = tester.getRect(
+          find.ancestor(
+            of: find.text(localizations.providerAddCustomParam),
+            matching: find.byType(TextButton),
+          ),
+        );
+        for (final controlRect in [customParamsHeader, addCustomParamButton]) {
+          expect(controlRect.left, greaterThanOrEqualTo(dialogRect.left));
+          expect(controlRect.right, lessThanOrEqualTo(dialogRect.right));
+        }
+        if (width < 800) {
+          expect(
+            addCustomParamButton.top,
+            greaterThanOrEqualTo(customParamsHeader.bottom),
+          );
+        } else {
+          expect(
+            (addCustomParamButton.center.dy - customParamsHeader.center.dy)
+                .abs(),
+            lessThan(20),
+          );
+        }
+        var hasNarrowClippedTab = false;
+        for (final tabLabel in [
+          localizations.providerBasicInfoTab,
+          localizations.providerParameterSettingsTab,
+        ]) {
+          final textRect = tester.getRect(find.text(tabLabel));
+          final tabRect = tester.getRect(
+            find.ancestor(of: find.text(tabLabel), matching: find.byType(Tab)),
+          );
+          final tabBarRect = tester.getRect(find.byType(TabBar));
+          expect(tabRect.left, greaterThanOrEqualTo(tabBarRect.left));
+          expect(tabRect.right, lessThanOrEqualTo(tabBarRect.right));
+          if (textRect.width > tabRect.width + 0.5) {
+            hasNarrowClippedTab = true;
+            final textClip = tester.getRect(
+              find
+                  .ancestor(
+                    of: find.text(tabLabel),
+                    matching: find.byType(ClipRect),
+                  )
+                  .first,
+            );
+            expect(textClip.left, greaterThanOrEqualTo(tabRect.left));
+            expect(textClip.right, lessThanOrEqualTo(tabRect.right));
+          }
+        }
+        if (width < 800 && locale.languageCode != 'en') {
+          expect(
+            hasNarrowClippedTab,
+            isTrue,
+            reason: 'Long $locale tab text should scroll inside its Tab slot',
+          );
+        }
+        final uploadLabel = tester.getRect(
+          find.text(localizations.providerUploadMethod),
+        );
+        final uploadControl = tester.getRect(
+          find.byType(DropdownButton<AudioUploadMethod>),
+        );
+        final maxSizeLabel = tester.getRect(
+          find.text(localizations.providerMaxUploadSize),
+        );
+        final maxSizeControl = tester.getRect(find.byType(TextField).first);
         for (var i = 0; i < 4; i++) {
           final dropdownRect = tester.getRect(
             find.byType(DropdownButton<String>).at(i),
           );
           expect(
+            dropdownRect.left,
+            greaterThanOrEqualTo(dialogRect.left + 16),
+            reason: 'ASR dropdown $i should stay inside dialog content',
+          );
+          expect(
             dropdownRect.right,
             lessThanOrEqualTo(dialogRect.right - 16),
-            reason: 'ASR dropdown $i should fit within the dialog content',
+            reason: 'ASR dropdown $i should stay inside dialog content',
+          );
+        }
+        if (width < 800) {
+          expect(uploadControl.top, greaterThanOrEqualTo(uploadLabel.bottom));
+          expect(maxSizeControl.top, greaterThanOrEqualTo(maxSizeLabel.bottom));
+        } else {
+          expect(
+            (uploadControl.center.dy - uploadLabel.center.dy).abs(),
+            lessThan(20),
+          );
+          expect(
+            (maxSizeControl.center.dy - maxSizeLabel.center.dy).abs(),
+            lessThan(20),
           );
         }
         expect(
-          (uploadControl.center.dy - uploadLabel.center.dy).abs(),
-          lessThan(20),
+          tester.takeException(),
+          isNull,
+          reason: 'Dialog width: $width, locale: $locale',
         );
-        expect(
-          (maxSizeControl.center.dy - maxSizeLabel.center.dy).abs(),
-          lessThan(20),
-        );
+        await tester.tap(find.text(localizations.batchDlgCancel));
+        await tester.pumpAndSettle();
       }
-      expect(tester.takeException(), isNull, reason: 'Dialog width: $width');
-
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
     }
   });
 }

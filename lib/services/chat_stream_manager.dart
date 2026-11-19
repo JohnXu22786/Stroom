@@ -22,6 +22,7 @@ import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
+import 'attachment_storage.dart';
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 import 'chat_retry_policy.dart'

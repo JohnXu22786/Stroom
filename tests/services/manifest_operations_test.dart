@@ -3107,6 +3107,433 @@ void main() {
 
   // ====================================================================
   // non-audio deletion cleanup errors
+  group('interrupted non-audio deletion recovery', () {
+    test('interrupted backup write keeps the intact original', () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_missing_backup',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_missing_backup',
+        name: 'intact original',
+        hash: 'delete_missing_backup_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([3, 4]));
+      await operations.addRecord(record);
+
+      operations.beforeNonAudioBackupWriteForTesting = (_) async {
+        throw StateError('simulated interruption before backup commit');
+      };
+      await expectLater(
+        operations.deleteRecord(record.id),
+        throwsA(isA<StateError>()),
+      );
+      final journalKeys = await WebFileStore.keysWithPrefix(
+        'pictures/.manifest-delete-journal-',
+      );
+      expect(journalKeys, hasLength(1));
+      expect(
+        await WebFileStore.keysWithPrefix('pictures/.manifest-delete-backup-'),
+        isEmpty,
+      );
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_missing_backup',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(
+          (await restarted.loadRecords()).map((item) => item.id), [record.id]);
+      expect(await restarted.readFile(record.storagePath), [3, 4]);
+      expect(
+        await restarted.fileExists(
+          journalKeys.single.substring('pictures/'.length),
+        ),
+        isFalse,
+      );
+      await restarted.deleteRecord(record.id);
+    });
+
+    test('concurrent journal recovery retries after a failed attempt',
+        () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_concurrent_recovery',
+        name: 'concurrent recovery',
+        hash: 'delete_concurrent_recovery_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      final originalBytes = Uint8List.fromList([8, 9]);
+      await operations.writeFile(record.storagePath, originalBytes);
+      await operations.addRecord(record);
+
+      const backupName = '.manifest-delete-backup-concurrent';
+      const journalName = '.manifest-delete-journal-concurrent.json';
+      await operations.writeFile(backupName, originalBytes);
+      await operations.deleteFile(record.storagePath);
+      await operations.writeFile(
+        journalName,
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({
+              'files': {record.storagePath: backupName},
+            }),
+          ),
+        ),
+      );
+
+      final firstReload = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final secondReload = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final backupRead = Completer<void>();
+      final finishRecovery = Completer<void>();
+      firstReload.beforeNonAudioRecoveryBackupReadForTesting = (_) async {
+        backupRead.complete();
+        await finishRecovery.future;
+        throw StateError('injected backup read failure');
+      };
+
+      final firstLoad = firstReload.loadRecords();
+      await backupRead.future;
+      var secondLoadCompleted = false;
+      final secondLoad = secondReload.loadRecords().then((records) {
+        secondLoadCompleted = true;
+        return records;
+      });
+      await Future<void>.delayed(Duration.zero);
+      try {
+        expect(secondLoadCompleted, isFalse);
+      } finally {
+        finishRecovery.complete();
+      }
+
+      expect(await firstLoad, isEmpty);
+      expect((await secondLoad).map((item) => item.id), [record.id]);
+      expect(await secondReload.readFile(record.storagePath), [8, 9]);
+      expect(await secondReload.fileExists(journalName), isFalse);
+      expect(await secondReload.fileExists(backupName), isFalse);
+      await secondReload.deleteRecord(record.id);
+    });
+
+    test('concurrent reload does not finalize an active delete journal',
+        () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'manifest-delete-active-journal-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
+
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_active_journal',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_active_journal',
+        name: 'active journal',
+        hash: 'delete_active_journal_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([6, 7]));
+      await operations.addRecord(record);
+
+      final backupWritten = Completer<String>();
+      final finishSnapshot = Completer<void>();
+      operations.afterNonAudioBackupWriteForTesting = (name) async {
+        backupWritten.complete(name);
+        await finishSnapshot.future;
+      };
+      final deleting = operations.deleteRecord(record.id);
+      final backupName = await backupWritten.future;
+      final journalNames = await Directory(await operations.storageDirPath)
+          .list()
+          .map((entry) => entry.uri.pathSegments.last)
+          .where((name) => name.startsWith('.manifest-delete-journal-'))
+          .toList();
+      try {
+        expect(journalNames, hasLength(1));
+
+        final reloader = ManifestOperations<ImageRecord>(
+          manifestKey: 'delete_active_journal',
+          storageDirName: 'pictures',
+          fromMap: ImageRecord.fromMap,
+          tableName: ManifestTables.imageRecords,
+          toMap: (record) => record.toMap(),
+        );
+        expect(
+          (await reloader.loadRecords(forceRefresh: true))
+              .map((item) => item.id),
+          [record.id],
+        );
+        expect(await reloader.fileExists(journalNames.single), isTrue);
+        expect(await reloader.fileExists(backupName), isTrue);
+      } finally {
+        if (!finishSnapshot.isCompleted) finishSnapshot.complete();
+        await deleting;
+      }
+      expect(await operations.loadRecords(forceRefresh: true), isEmpty);
+      expect(await operations.fileExists(journalNames.single), isFalse);
+      expect(await operations.fileExists(backupName), isFalse);
+    });
+
+    test('journal tracks backups created during snapshot preparation',
+        () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'manifest-delete-snapshot-crash-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
+
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_snapshot_crash',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_snapshot_crash',
+        name: 'snapshot crash',
+        hash: 'delete_snapshot_crash_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([4, 5]));
+      await operations.addRecord(record);
+
+      String? backupName;
+      operations.afterNonAudioBackupWriteForTesting = (name) async {
+        backupName = name;
+        throw StateError('simulated interruption after backup write');
+      };
+      operations.beforeNonAudioBackupDeleteForTesting = (_) async {
+        throw FileSystemException('injected backup cleanup failure');
+      };
+      await expectLater(
+        operations.deleteRecord(record.id),
+        throwsA(isA<StateError>()),
+      );
+
+      final journalNames = await Directory(await operations.storageDirPath)
+          .list()
+          .map((entry) => entry.uri.pathSegments.last)
+          .where((name) => name.startsWith('.manifest-delete-journal-'))
+          .toList();
+      expect(backupName, isNotNull);
+      expect(journalNames, hasLength(1));
+      expect(await operations.fileExists(backupName!), isTrue);
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_snapshot_crash',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(
+          (await restarted.loadRecords()).map((item) => item.id), [record.id]);
+      expect(await restarted.readFile(record.storagePath), [4, 5]);
+      expect(await restarted.fileExists(journalNames.single), isFalse);
+      expect(await restarted.fileExists(backupName!), isFalse);
+      await restarted.deleteRecord(record.id);
+    });
+
+    test('backup cleanup failure leaves journal for restart cleanup', () async {
+      WebFileStore.enableTestMode();
+
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_backup_cleanup_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_backup_cleanup_failure',
+        name: 'cleanup retry',
+        hash: 'delete_backup_cleanup_failure_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([1, 2]));
+      await operations.addRecord(record);
+
+      String? backupName;
+      operations.beforeNonAudioBackupDeleteForTesting = (name) async {
+        backupName = name;
+        throw FileSystemException('injected backup cleanup failure', name);
+      };
+      await operations.deleteRecord(record.id);
+
+      final journalNames = (await WebFileStore.keysWithPrefix(
+        'pictures/.manifest-delete-journal-',
+      ))
+          .map((key) => key.substring('pictures/'.length))
+          .toList();
+      expect(backupName, isNotNull);
+      expect(journalNames, hasLength(1));
+      expect(await operations.fileExists(backupName!), isTrue);
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_backup_cleanup_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(await restarted.loadRecords(), isEmpty);
+      expect(await restarted.fileExists(journalNames.single), isFalse);
+      expect(await restarted.fileExists(backupName!), isFalse);
+    });
+
+    test('restores single and batch media from durable journals', () async {
+      Future<void> verifyRecovery({required bool useWebFileStore}) async {
+        final originalPathProvider = PathProviderPlatform.instance;
+        final directory = useWebFileStore
+            ? null
+            : await Directory.systemTemp.createTemp(
+                'manifest-delete-recovery-test-',
+              );
+        if (useWebFileStore) {
+          WebFileStore.enableTestMode();
+        } else {
+          PathProviderPlatform.instance = _DocumentsDirectory(directory!.path);
+          WebFileStore.disableTestMode();
+        }
+
+        try {
+          for (final count in [1, 2]) {
+            final operations = ManifestOperations<ImageRecord>(
+              manifestKey: 'delete_recovery_${useWebFileStore}_$count',
+              storageDirName: 'pictures',
+              fromMap: ImageRecord.fromMap,
+              tableName: ManifestTables.imageRecords,
+              toMap: (record) => record.toMap(),
+            );
+            final records = [
+              for (var i = 0; i < count; i++)
+                ImageRecord(
+                  id: 'delete_recovery_${useWebFileStore}_${count}_$i',
+                  name: 'media $i',
+                  hash: 'delete_recovery_hash_${useWebFileStore}_${count}_$i',
+                  format: 'jpg',
+                  createdAt: DateTime(2024),
+                  size: i + 1,
+                ),
+            ];
+            final backups = <String, String>{};
+            for (var i = 0; i < records.length; i++) {
+              final record = records[i];
+              final originalName = record.storagePath;
+              final originalBytes = Uint8List.fromList([i + 10, i + 20]);
+              await operations.writeFile(originalName, originalBytes);
+              await operations.addRecord(record);
+              final backupName = '.manifest-delete-backup-recovery-$i';
+              await operations.writeFile(backupName, originalBytes);
+              backups[originalName] = backupName;
+              await operations.deleteFile(originalName);
+              if (i == 0) {
+                // Simulate a partial destination left by an interrupted
+                // restore. Recovery must verify contents, not just existence.
+                await operations.writeFile(
+                  originalName,
+                  Uint8List.fromList([0]),
+                );
+              }
+            }
+            final journalName = '.manifest-delete-journal-recovery-$count.json';
+            await operations.writeFile(
+              journalName,
+              Uint8List.fromList(utf8.encode(jsonEncode({'files': backups}))),
+            );
+
+            final restarted = ManifestOperations<ImageRecord>(
+              manifestKey: 'delete_recovery_${useWebFileStore}_$count',
+              storageDirName: 'pictures',
+              fromMap: ImageRecord.fromMap,
+              tableName: ManifestTables.imageRecords,
+              toMap: (record) => record.toMap(),
+            );
+            final loaded = await restarted.loadRecords();
+            expect(
+              loaded.map((record) => record.id),
+              unorderedEquals(records.map((record) => record.id)),
+            );
+            for (var i = 0; i < records.length; i++) {
+              expect(
+                await restarted.readFile(records[i].storagePath),
+                [i + 10, i + 20],
+              );
+            }
+            expect(await restarted.fileExists(journalName), isFalse);
+            for (final backupName in backups.values) {
+              expect(await restarted.fileExists(backupName), isFalse);
+            }
+            await restarted.deleteRecords(
+              records.map((record) => record.id).toList(),
+            );
+          }
+        } finally {
+          PathProviderPlatform.instance = originalPathProvider;
+          if (directory != null) await directory.delete(recursive: true);
+          WebFileStore.enableTestMode();
+        }
+      }
+
+      await verifyRecovery(useWebFileStore: false);
+      await verifyRecovery(useWebFileStore: true);
+    });
+  });
+
   group('non-audio cleanup failure', () {
     testWidgets('single deletion keeps row and file for retry', (t) async {
       final op = ManifestOperations<ImageRecord>(

@@ -7123,5 +7123,8 @@
   "ocrSamplingTopPOutOfRange": "Der gespeicherte top-P-Wert liegt außerhalb von 0–1. Passe den Regler an oder deaktiviere die Option vor dem Speichern.",
   "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
   "ocrSamplingSliderRepairRequired": "Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "endpointResponsesApi": "OpenAI Responses API",
+  "providerResponsesEndpointHelp": "Verwende die für diesen Anbieter konfigurierte Responses-URL, zum Beispiel /v1/responses. Stroom sendet die URL unverändert."
+
 }

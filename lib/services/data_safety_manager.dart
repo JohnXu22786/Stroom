@@ -485,24 +485,120 @@ class DataSafetyManager {
       ];
       final cutoff = DateTime.now().subtract(orphanGracePeriod);
       var deleted = 0;
+
+      Future<void> deleteIfOrphaned(
+        File file, {
+        bool checkReferences = true,
+      }) async {
+        final name = p.basename(file.path);
+        if (checkReferences && referenced.contains(name)) return;
+        try {
+          final stat = await file.stat();
+          if (stat.modified.isAfter(cutoff)) return;
+          await file.delete();
+          deleted++;
+          debugPrint('[DataSafetyManager] 清理孤儿文件: $name');
+        } catch (e) {
+          debugPrint('[DataSafetyManager] 清理孤儿文件失败 $name: $e');
+        }
+      }
+
       for (final dirPath in dirsToScan) {
         final dir = Directory(dirPath);
-        if (!await dir.exists()) continue;
-        final entries = await dir.list().toList();
+        final directoryType = await FileSystemEntity.type(
+          dirPath,
+          followLinks: false,
+        );
+        if (directoryType != FileSystemEntityType.directory) continue;
+
+        final journaledBackupNames = <String>{};
+        var hasUnreadableDeleteJournal = false;
+        await for (final entry in dir.list(followLinks: false)) {
+          if (entry is! File ||
+              !p.basename(entry.path).startsWith('.manifest-delete-journal-')) {
+            continue;
+          }
+          try {
+            final decoded = jsonDecode(await entry.readAsString());
+            if (decoded is! Map || decoded['files'] is! Map) {
+              throw const FormatException('Invalid media deletion journal');
+            }
+            for (final backupName in (decoded['files'] as Map).values) {
+              if (backupName is! String ||
+                  p.basename(backupName) != backupName ||
+                  !backupName.startsWith('.manifest-delete-backup-')) {
+                throw const FormatException(
+                  'Invalid media deletion backup name',
+                );
+              }
+              journaledBackupNames.add(backupName);
+            }
+          } catch (e) {
+            // Preserve possible recovery data when a journal cannot be read.
+            hasUnreadableDeleteJournal = true;
+            debugPrint(
+              '[DataSafetyManager] 读取媒体删除日志失败，保留备份文件: $e',
+            );
+          }
+        }
+
+        final entries = await dir.list(followLinks: false).toList();
         for (final entry in entries) {
           if (entry is! File) continue;
           final name = p.basename(entry.path);
-          if (referenced.contains(name)) continue;
-          try {
-            final stat = await entry.stat();
-            if (stat.modified.isAfter(cutoff)) continue;
-            await entry.delete();
-            deleted++;
-            debugPrint('[DataSafetyManager] 清理孤儿文件: $name');
-          } catch (e) {
-            debugPrint('[DataSafetyManager] 清理孤儿文件失败 $name: $e');
+          if (name.startsWith('.manifest-delete-journal-')) continue;
+          if (name.startsWith('.manifest-delete-backup-') &&
+              (hasUnreadableDeleteJournal ||
+                  journaledBackupNames.contains(name))) {
+            continue;
+          }
+          await deleteIfOrphaned(entry);
+        }
+      }
+
+      // Compressed attachment caches are disposable but live one directory
+      // below attachments: temp_compressed/<conversationId>/<cache-file>.
+      // Restrict this scan to that namespace and one level so user folders
+      // under attachments are never recursively traversed.
+      final attachmentsRoot = Directory(p.join(appDir, 'attachments'));
+      final compressedCacheRoot = Directory(
+        p.join(appDir, 'attachments', 'temp_compressed'),
+      );
+      try {
+        final attachmentsType = await FileSystemEntity.type(
+          attachmentsRoot.path,
+          followLinks: false,
+        );
+        final cacheRootType = await FileSystemEntity.type(
+          compressedCacheRoot.path,
+          followLinks: false,
+        );
+        if (attachmentsType == FileSystemEntityType.directory &&
+            cacheRootType == FileSystemEntityType.directory) {
+          final conversations =
+              await compressedCacheRoot.list(followLinks: false).toList();
+          for (final entry in conversations) {
+            if (entry is! Directory) continue;
+            try {
+              final cacheFiles =
+                  await Directory(entry.path).list(followLinks: false).toList();
+              for (final cacheFile in cacheFiles) {
+                if (cacheFile is File) {
+                  await deleteIfOrphaned(
+                    File(cacheFile.path),
+                    checkReferences: false,
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint(
+                '[DataSafetyManager] 读取压缩缓存目录失败 ${entry.path}: $e',
+              );
+            }
           }
         }
+      } catch (e) {
+        debugPrint('[DataSafetyManager] 扫描压缩缓存目录失败: $e');
       }
       if (deleted > 0) {
         await AppLogService.info(

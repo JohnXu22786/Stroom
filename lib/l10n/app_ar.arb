@@ -7123,5 +7123,8 @@
   "ocrSamplingTopPOutOfRange": "قيمة top-P المحفوظة خارج النطاق 0–1. حرّك شريط التمرير أو عطّل الخيار قبل الحفظ.",
   "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
   "ocrSamplingSliderRepairRequired": "اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "endpointResponsesApi": "OpenAI Responses API",
+  "providerResponsesEndpointHelp": "استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو."
+
 }

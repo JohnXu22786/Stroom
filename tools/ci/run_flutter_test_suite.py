@@ -47,6 +47,8 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "models/reasoning_event_test.dart",
         "models/attachment_base64_test.dart",
         "services/*chat*_test.dart",
+        "services/responses_image_persistence_test.dart",
+        "services/responses_protocol_test.dart",
         "services/anthropic_provider_test.dart",
         "services/assistant_catalog_service_test.dart",
         "services/assistant_prompt_safety_review_test.dart",
@@ -65,6 +67,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/custom_param*_test.dart",
         "providers/conversation*_test.dart",
         "providers/chat*_test.dart",
+        "providers/responses_provider_test.dart",
         "providers/mcp*_test.dart",
         "providers/system_assistant_provider_test.dart",
         "providers/api_headers_test.dart",
@@ -124,10 +127,12 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/folder_path_utils_test.dart",
         "utils/folder_path_console_names_test.dart",
         "utils/storage_file_publication_test.dart",
+        "utils/web_file_store_blob_stub_test.dart",
         "utils/tts_audio_saver_test.dart",
         "utils/*manifest*_test.dart",
         "utils/natural_sort_test.dart",
         "pages/backup_restore_page_test.dart",
+        "pages/backup_restore_constrained_text_test.dart",
         "pages/files_page*_test.dart",
         "pages/content/text_storage_shared_test.dart",
         "pages/content/text_storage_page_empty_file_test.dart",
@@ -144,6 +149,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/ocr*_test.dart",
         "providers/background_task_provider_test.dart",
         "providers/ocr*_test.dart",
+        "providers/tts_config_persistence_test.dart",
         "providers/tts_save_cancellation_test.dart",
         "utils/ocr_page_failure_summary_test.dart",
         "utils/ocr_request_size_failure_summary_test.dart",
@@ -153,6 +159,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/ocr_image_payload_test.dart",
         "utils/image_send_compressor_test.dart",
         "utils/image_thumbnail_loader_test.dart",
+        "utils/video_thumbnail_temp_file_test.dart",
         "utils/partial_import_refresh_test.dart",
         "utils/system_gallery_picker_localization_test.dart",
         "utils/web_thumbnail_test.dart",
@@ -212,6 +219,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/window_manager_legacy_stub_test.dart",
         "services/ios_continued_task_service_test.dart",
         "services/notification_service_test.dart",
+        "providers/notification_provider_test.dart",
         "services/startup_preferences_io_test.dart",
         "providers/update_provider_test.dart",
         "providers/locale_provider_test.dart",
@@ -260,6 +268,12 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
     "application-shared": "application-shared",
 }
 
+# These tests require a browser runtime and are executed by dedicated Chrome
+# steps in .github/workflows/ci.yml, not by the native Flutter test runner.
+BROWSER_ONLY_TESTS: dict[str, str] = {
+    "utils/web_file_store_blob_web_test.dart": "built-in-components",
+}
+
 CI_GROUPS: tuple[str, ...] = (
     "component-integrations",
     "built-in-components",
@@ -298,6 +312,12 @@ def discover_and_validate() -> dict[str, list[str]]:
     assignments: dict[str, list[str]] = {group: [] for group in CI_GROUPS}
     errors: list[str] = []
 
+    missing_browser_tests = set(BROWSER_ONLY_TESTS) - set(files)
+    if missing_browser_tests:
+        errors.append(
+            f"browser-only tests are missing: {sorted(missing_browser_tests)}"
+        )
+
     unmapped_suites = set(FUNCTIONAL_SUITES) - set(FUNCTIONAL_TO_CI_GROUP)
     unknown_groups = set(FUNCTIONAL_TO_CI_GROUP.values()) - set(CI_GROUPS)
     if unmapped_suites:
@@ -306,6 +326,11 @@ def discover_and_validate() -> dict[str, list[str]]:
         errors.append(f"functional suites map to unknown CI groups: {sorted(unknown_groups)}")
 
     for path in files:
+        if path in BROWSER_ONLY_TESTS:
+            group = BROWSER_ONLY_TESTS[path]
+            if group not in CI_GROUPS:
+                errors.append(f"{path}: browser test maps to unknown CI group {group}")
+            continue
         matches = [
             suite
             for suite, patterns in FUNCTIONAL_SUITES.items()

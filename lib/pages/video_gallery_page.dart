@@ -24,6 +24,7 @@ import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/thumbnail_utils.dart';
+import '../utils/video_thumbnail_temp_file.dart';
 import '../utils/storage_file_publication.dart';
 import '../utils/partial_import_refresh.dart';
 import '../widgets/file_manager_view.dart';
@@ -1277,22 +1278,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       return generateThumbnailFromBytes(videoBytes);
     }
     try {
-      // Write bytes to a temporary file so the per-platform generator can read
-      final tempDir = Directory.systemTemp;
-      final tempFile = File(
-        '${tempDir.path}/stroom_thumb_${DateTime.now().millisecondsSinceEpoch}.mp4',
+      return await withVideoThumbnailTempFile(
+        videoBytes,
+        _generateThumbnailFromPath,
       );
-      try {
-        await tempFile.writeAsBytes(videoBytes);
-        return await _generateThumbnailFromPath(tempFile.path);
-      } finally {
-        // Clean up temp file
-        try {
-          if (await tempFile.exists()) {
-            await tempFile.delete();
-          }
-        } catch (_) {}
-      }
     } catch (e) {
       debugPrint('_generateThumbnailFromBytes error: $e');
     }

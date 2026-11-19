@@ -16,9 +16,11 @@ import 'context_manager.dart'
         kToolOutputTruncatedSuffix,
         truncateByChars;
 import 'openai_protocol.dart';
+import 'responses_protocol.dart';
 
 export 'anthropic_protocol.dart' show AnthropicProtocol;
 export 'openai_protocol.dart' show OpenAIProtocol;
+export 'responses_protocol.dart' show ResponsesProtocol;
 
 // ============================================================================
 // ChatProtocol — 聊天协议抽象层
@@ -220,43 +222,68 @@ bool attachmentHasReadyPayload(Attachment att, {required int maxBytes}) {
 /// [AttachmentReadStatus.tooLarge] 占位。
 ///
 /// 非图片附件（音频/视频等）超过 [maxAttachmentBytes] 仍返回
-/// [AttachmentReadStatus.tooLarge]（无法无损压缩，且提前按 fileSize
-/// 拦截可避免读取超大文件）。
+/// [AttachmentReadStatus.tooLarge]（无法无损压缩；缓存分块解码，磁盘读取也
+/// 按实际字节数设限）。
 ///
 /// 读取失败返回 [AttachmentReadStatus.unreadable]。
 Future<AttachmentReadOutcome> readAttachmentBase64(
   Attachment att, {
   int maxBytes = imageCompressThresholdBytes,
 }) async {
-  // 已缓存：先尝试解码缓存（损坏缓存回退磁盘读取）
-  Uint8List? bytes;
-  if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-    try {
-      bytes = base64Decode(att.base64Data!);
-    } catch (_) {
-      bytes = null;
+  Uint8List? loadedBytes;
+  if (att.fileType == 'image') {
+    // 图片压缩需要完整源载荷；非图片缓存走下方的有界分块解码。
+    if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+      try {
+        loadedBytes = base64Decode(att.base64Data!);
+      } catch (_) {
+        loadedBytes = null;
+      }
     }
-  }
-
-  if (bytes == null) {
-    // 非图片超限：按 fileSize 提前拦截，避免加载超大文件
-    if (att.fileSize > maxAttachmentBytes && att.fileType != 'image') {
+    if (loadedBytes == null) {
+      try {
+        final diskBytes = await AttachmentStorage.readFile(att.storagePath);
+        if (diskBytes == null || diskBytes.isEmpty) {
+          return const AttachmentReadOutcome(
+            AttachmentReadStatus.unreadable,
+            null,
+          );
+        }
+        loadedBytes = diskBytes;
+      } catch (e) {
+        // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
+        // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
+        debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
+        return const AttachmentReadOutcome(
+          AttachmentReadStatus.unreadable,
+          null,
+        );
+      }
+    }
+  } else {
+    // 非图片没有压缩路径。忽略可能过期的 fileSize 元数据，并对缓存和
+    // 磁盘都用同一硬上限，避免解码或读取后才发现载荷过大。
+    final outcome = await readRawAttachmentBytesBounded(
+      att,
+      maxBytes: maxAttachmentBytes,
+    );
+    if (outcome.status == AttachmentReadStatus.tooLarge) {
       return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
     }
-    try {
-      final diskBytes = await AttachmentStorage.readFile(att.storagePath);
-      if (diskBytes == null || diskBytes.isEmpty) {
-        return const AttachmentReadOutcome(
-            AttachmentReadStatus.unreadable, null);
-      }
-      bytes = diskBytes;
-    } catch (e) {
-      // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
-      // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
-      debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
-      return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
+    if (outcome.status != AttachmentReadStatus.ok ||
+        outcome.bytes == null ||
+        outcome.bytes!.isEmpty) {
+      return const AttachmentReadOutcome(
+        AttachmentReadStatus.unreadable,
+        null,
+      );
     }
+    loadedBytes = outcome.bytes;
   }
+  if (loadedBytes == null || loadedBytes.isEmpty) {
+    return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
+  }
+  var bytes = loadedBytes;
 
   // 图片超过通用阈值 → 自动压缩（替代旧行为的"跳过"）
   String? mimeTypeOverride;
@@ -284,10 +311,7 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
       mimeTypeOverride = _detectImagePayloadMimeType(bytes);
       att.compressedCachePersisted = true;
     } else {
-      final compression = await compressImageForSend(
-        bytes,
-        maxBytes: maxBytes,
-      );
+      final compression = await compressImageForSend(bytes, maxBytes: maxBytes);
       if (compression.decodable && compression.compressed != null) {
         bytes = compression.compressed!.bytes;
         mimeTypeOverride = compression.compressed!.mimeType;
@@ -350,8 +374,11 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
   final b64 = base64Encode(bytes);
   // 缓存（压缩后的）base64 供后续复用
   att.base64Data = b64;
-  return AttachmentReadOutcome(AttachmentReadStatus.ok, b64,
-      mimeType: mimeTypeOverride);
+  return AttachmentReadOutcome(
+    AttachmentReadStatus.ok,
+    b64,
+    mimeType: mimeTypeOverride,
+  );
 }
 
 /// 按魔数检测图片载荷的真实格式（PNG/JPEG）。
@@ -440,24 +467,26 @@ const List<String> textAttachmentExtensions = [
 ///
 /// 超过 [maxAttachmentBytes]（10MB）硬顶的返回"文件过大已跳过"占位
 /// ——与视频/音频/文档等其余附件类型一致：内容要么完整发送、要么
-/// 明确提示跳过，绝不静默截断。超限附件按 [fileSize] 在读取前拦截，
-/// 避免把超大文件整包读入内存（与 readAttachmentBase64 一致）。
+/// 明确提示跳过，绝不静默截断。读取按实际存储字节数设限，避免把
+/// 超大文件整包读入内存；缓存的 fileSize 元数据可能过期。
 /// 失败返回 null。
 Future<String?> readTextAttachmentContent(
   String fileName,
   String storagePath,
   int fileSize,
 ) async {
-  if (fileSize > maxAttachmentBytes) {
-    return '[文件过大已跳过: $fileName]';
-  }
   try {
-    final bytes = await AttachmentStorage.readFile(storagePath);
+    final bytes = await AttachmentStorage.readFile(
+      storagePath,
+      maxBytes: maxAttachmentBytes,
+    );
     if (bytes == null || bytes.isEmpty) return null;
     if (bytes.length > maxAttachmentBytes) {
       return '[文件过大已跳过: $fileName]';
     }
     return utf8.decode(bytes);
+  } on AttachmentTooLargeException {
+    return '[文件过大已跳过: $fileName]';
   } catch (_) {
     return null;
   }
@@ -469,24 +498,101 @@ bool isTextAttachment(Attachment att) {
   return textAttachmentExtensions.contains(ext);
 }
 
+/// 非文本附件原始字节读取结果。
+class RawAttachmentReadOutcome {
+  final AttachmentReadStatus status;
+  final Uint8List? bytes;
+
+  const RawAttachmentReadOutcome(this.status, this.bytes);
+}
+
+class _BoundedBase64Sink implements Sink<List<int>> {
+  _BoundedBase64Sink(this.maxBytes);
+
+  final int? maxBytes;
+  final BytesBuilder _bytes = BytesBuilder(copy: false);
+  int _byteLength = 0;
+  bool _tooLarge = false;
+
+  bool get tooLarge => _tooLarge;
+
+  @override
+  void add(List<int> chunk) {
+    _byteLength += chunk.length;
+    if (maxBytes != null && _byteLength > maxBytes!) {
+      _tooLarge = true;
+      _bytes.clear();
+    } else if (!_tooLarge) {
+      _bytes.add(chunk);
+    }
+  }
+
+  Uint8List takeBytes() => _bytes.takeBytes();
+
+  @override
+  void close() {}
+}
+
 /// 读取非文本附件的原始字节（用于 PDF 等文档）。
-/// 返回 null 表示无法读取。
-Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
+/// 超限与读取失败分别返回 [AttachmentReadStatus.tooLarge] 和
+/// [AttachmentReadStatus.unreadable]。
+const _rawBase64DecodeChunkChars = 64 * 1024;
+
+Future<RawAttachmentReadOutcome> readRawAttachmentBytesBounded(
+  Attachment att, {
+  int? maxBytes,
+}) async {
   if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+    final sink = _BoundedBase64Sink(maxBytes);
+    final encoded = att.base64Data!;
     try {
-      return base64Decode(att.base64Data!);
+      final decoder = base64.decoder.startChunkedConversion(sink);
+      for (var start = 0; start < encoded.length;) {
+        var end = start + _rawBase64DecodeChunkChars;
+        if (end > encoded.length) end = encoded.length;
+        if (end < encoded.length) end -= (end - start) % 4;
+        decoder.add(encoded.substring(start, end));
+        start = end;
+      }
+      decoder.close();
+      if (sink.tooLarge) {
+        return const RawAttachmentReadOutcome(
+          AttachmentReadStatus.tooLarge,
+          null,
+        );
+      }
+      return RawAttachmentReadOutcome(
+        AttachmentReadStatus.ok,
+        sink.takeBytes(),
+      );
     } catch (_) {
       // 缓存损坏，回退到磁盘读取
     }
   }
   try {
-    return await AttachmentStorage.readFile(att.storagePath);
+    final bytes = await AttachmentStorage.readFile(
+      att.storagePath,
+      maxBytes: maxBytes,
+    );
+    return bytes == null
+        ? const RawAttachmentReadOutcome(AttachmentReadStatus.unreadable, null)
+        : RawAttachmentReadOutcome(AttachmentReadStatus.ok, bytes);
+  } on AttachmentTooLargeException {
+    return const RawAttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
   } catch (e) {
-    // 瞬时 IO 异常（权限、磁盘满等）：返回 null 走占位降级，
+    // 瞬时 IO 异常（权限、磁盘满等）：走占位降级，
     // 不让整次发送失败。
     debugPrint('[ChatProtocol] 附件原始字节读取失败: ${att.fileName}: $e');
-    return null;
+    return const RawAttachmentReadOutcome(
+        AttachmentReadStatus.unreadable, null);
   }
+}
+
+/// 读取非文本附件的原始字节（用于其他 provider 的文档处理）。
+/// 返回 null 表示无法读取。
+Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
+  final outcome = await readRawAttachmentBytesBounded(att);
+  return outcome.bytes;
 }
 
 // ============================================================================
@@ -536,7 +642,7 @@ String rebuildToolResultText(ToolCallData tc, {int? maxChars}) {
 // ============================================================================
 
 abstract class ChatProtocol {
-  /// 协议名称：'openai' | 'anthropic'
+  /// 协议名称：'openai' | 'anthropic' | 'responses'
   String get name;
 
   /// 将中立历史构建为 API 请求消息。
@@ -583,16 +689,20 @@ abstract class ChatProtocol {
 
 /// 根据端点类型创建协议实例。
 ///
-/// [endpointType] 取值 'anthropic' 或 'openai'（默认）。
+/// [endpointType] 取值 'anthropic'、'responses' 或 'openai'（默认）。
 ChatProtocol createChatProtocol(String endpointType) {
-  return endpointType == 'anthropic' ? AnthropicProtocol() : OpenAIProtocol();
+  if (endpointType == 'anthropic') return const AnthropicProtocol();
+  if (endpointType == 'responses') return const ResponsesProtocol();
+  return const OpenAIProtocol();
 }
 
 /// 计算有效端点类型：模型覆盖 > 供应商 > 'openai'。
 ///
 /// 旧配置（没有 endpointType 字段）天然落到 'openai'，即数据迁移的默认路径。
 String effectiveEndpointType(
-    String? modelEndpointType, String? providerEndpointType) {
+  String? modelEndpointType,
+  String? providerEndpointType,
+) {
   if (modelEndpointType != null && modelEndpointType.isNotEmpty) {
     return modelEndpointType;
   }

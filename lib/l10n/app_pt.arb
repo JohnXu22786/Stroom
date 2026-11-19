@@ -7123,5 +7123,8 @@
   "ocrSamplingTopPOutOfRange": "O valor top-P salvo está fora do intervalo de 0–1. Ajuste o controle deslizante ou desative a opção antes de salvar.",
   "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
   "ocrSamplingSliderRepairRequired": "Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.",
-  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."}
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "endpointResponsesApi": "OpenAI Responses API",
+  "providerResponsesEndpointHelp": "Use a URL de Responses configurada para este provedor, como /v1/responses. O Stroom a envia sem alterações."
+
 }

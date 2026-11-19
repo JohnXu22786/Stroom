@@ -29,6 +29,15 @@ class ReasoningEvent extends ChatEvent {
   const ReasoningEvent(this.text);
 }
 
+/// A provider returned an image payload. The stream manager persists it as a
+/// normal attachment before the assistant message is finalized.
+class GeneratedImageEvent extends ChatEvent {
+  final String base64Data;
+  final String mimeType;
+
+  const GeneratedImageEvent({required this.base64Data, required this.mimeType});
+}
+
 /// Signals that the current reasoning section has ended and a new one will
 /// begin. Used by the UI to split multi-step reasoning chains into separate
 /// panels when tool calls create distinct reasoning rounds.

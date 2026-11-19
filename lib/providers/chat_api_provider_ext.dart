@@ -15,7 +15,24 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     bool stream = false,
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
+    String? system,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
   }) {
+    if (endpointType == 'responses') {
+      return {
+        'model': model ?? defaultParams['model'],
+        'input': messages,
+        if (system != null && system.isNotEmpty) 'instructions': system,
+        if (maxTokens != null) 'max_output_tokens': maxTokens,
+        if (temperature != null) 'temperature': temperature,
+        'stream': stream,
+        if (tools != null && tools.isNotEmpty) 'tools': tools,
+        if (reasoning)
+          'reasoning': {'effort': reasoningEffort, 'summary': 'auto'},
+        if (extraParams != null) ...extraParams,
+      };
+    }
     return {
       'model': model ?? defaultParams['model'],
       'messages': messages,
@@ -70,7 +87,7 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
         _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
       } else if (e.response?.data is String) {
         _lastResponseData = <String, dynamic>{
-          'raw': e.response!.data as String
+          'raw': e.response!.data as String,
         };
       } else {
         // When ResponseType.stream is used, non-2xx error response data
@@ -91,11 +108,17 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
       // BUT: if _lastResponseData already holds an API error frame
       // (set before throwIfApiError threw), keep it — otherwise the
       // error body is lost from the diagnostics slot.
-      if (_lastResponseData?['error'] == null) {
+      final responseFailureFrame =
+          _lastResponseData?['type'] == 'response.failed' ||
+              (_endpointType == 'responses' &&
+                  _lastResponseData?['type'] == 'error');
+      if (_lastResponseData?['error'] == null && !responseFailureFrame) {
         _lastResponseData = null;
       }
-      _lastResponseStatusCode = null;
-      _lastResponseHeaders = null;
+      if (!responseFailureFrame) {
+        _lastResponseStatusCode = null;
+        _lastResponseHeaders = null;
+      }
     }
   }
 
@@ -103,9 +126,10 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
   ///
   /// 与 `chatStream` 中的 toolCallAccumulators 状态配合使用。
   void _accumulateToolCallDeltas(
-      Map<String, dynamic> data,
-      Map<int, Map<String, dynamic>> accumulators,
-      Map<int, StringBuffer> argumentBuffers) {
+    Map<String, dynamic> data,
+    Map<int, Map<String, dynamic>> accumulators,
+    Map<int, StringBuffer> argumentBuffers,
+  ) {
     // Tool call deltas (streamed in chunks by index) — handled here
     // because accumulation requires state across multiple SSE events.
     final choices = data['choices'] as List?;
@@ -144,8 +168,9 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
 
   /// 流结束时将累计的 tool_calls 组装为事件（若无累计则返回 null）。
   AIStreamEvent? _buildToolCallEvent(
-      Map<int, Map<String, dynamic>> accumulators,
-      Map<int, StringBuffer> argumentBuffers) {
+    Map<int, Map<String, dynamic>> accumulators,
+    Map<int, StringBuffer> argumentBuffers,
+  ) {
     // After stream ends, yield tool calls if any were accumulated
     if (accumulators.isEmpty) return null;
     final toolCalls = accumulators.entries.map((e) {

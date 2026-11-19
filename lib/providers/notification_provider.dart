@@ -29,7 +29,7 @@ class NotificationSettingsNotifier extends StateNotifier<bool> {
   }
 
   Future<void> setEnabled(bool value) async {
-    state = value;
     await NotificationService().setEnabled(value);
+    state = value;
   }
 }

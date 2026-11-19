@@ -52,13 +52,14 @@ class TaskCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       buildStatusChip(
                         task.status,
                         AppLocalizations.of(context)!,
                       ),
-                      const SizedBox(width: 8),
                       Text(
                         formatRelativeTime(
                           task.createdAt,

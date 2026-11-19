@@ -99,6 +99,12 @@ class SnapshotService {
   @visibleForTesting
   static Future<void> Function()? debugBeforeIndexCleanup;
 
+  @visibleForTesting
+  static void Function()? debugBeforeIndexWrite;
+
+  @visibleForTesting
+  static void Function()? debugBeforeDirectoryListing;
+
   // Keep active paths registered so retention cleanup cannot remove them.
   static final Set<String> _activeTemporaryPaths = {};
   static final Set<String> _reservedSnapshotPaths = {};
@@ -178,6 +184,24 @@ class SnapshotService {
             ? await _rebuildIndexIfSnapshotsExist()
             : await _rebuildIndexFromDisk();
       }
+      final indexedFiles = entries.map((entry) => entry.file).toSet();
+      final dir = await snapshotsDir;
+      List<FileSystemEntity> snapshotFiles;
+      try {
+        debugBeforeDirectoryListing?.call();
+        snapshotFiles = await dir.list().toList();
+      } catch (e) {
+        debugPrint('[SnapshotService] 检查未索引快照失败，保留已读取索引: $e');
+        return entries;
+      }
+      final hasUnindexedSnapshot = snapshotFiles
+          .whereType<File>()
+          .map((file) => p.basename(file.path))
+          .any((name) =>
+              name.endsWith('.zip') &&
+              _extractTimestamp(name) != null &&
+              !indexedFiles.contains(name));
+      if (hasUnindexedSnapshot) return await _rebuildIndexFromDisk();
       return entries;
     } catch (e) {
       debugPrint('[SnapshotService] 读取快照索引失败，扫描目录重建: $e');
@@ -207,6 +231,7 @@ class SnapshotService {
     try {
       final dir = await snapshotsDir;
       final entries = <SnapshotEntry>[];
+      debugBeforeDirectoryListing?.call();
       final files = (await dir.list().toList())
           .whereType<File>()
           .where((f) => f.path.endsWith('.zip'))
@@ -235,7 +260,11 @@ class SnapshotService {
           debugPrint('[SnapshotService] 重建索引跳过文件 $name: $e');
         }
       }
-      await _writeIndex(entries);
+      try {
+        await _writeIndex(entries);
+      } catch (e) {
+        debugPrint('[SnapshotService] 重建索引写入失败，返回扫描结果: $e');
+      }
       return entries;
     } catch (e) {
       debugPrint('[SnapshotService] 重建索引失败: $e');
@@ -246,6 +275,7 @@ class SnapshotService {
   /// 写入快照索引（原子）。
   static Future<void> _writeIndex(List<SnapshotEntry> entries) async {
     try {
+      debugBeforeIndexWrite?.call();
       final file = await _indexFile();
       await AtomicFile.writeString(
         file,
@@ -253,6 +283,7 @@ class SnapshotService {
       );
     } catch (e) {
       debugPrint('[SnapshotService] 写入快照索引失败: $e');
+      rethrow;
     }
   }
 

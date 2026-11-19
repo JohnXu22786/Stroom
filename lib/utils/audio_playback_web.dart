@@ -195,7 +195,7 @@ class AudioPlayerAdapter {
   }
 
   /// 释放资源
-  void dispose() {
+  Future<void> dispose() async {
     _disposed = true;
     _loadGeneration++;
     _pendingLoad?.cancel();

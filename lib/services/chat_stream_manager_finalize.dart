@@ -100,10 +100,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         (!hadStreamError || state.replaceHistoryOnError)) {
       final storedMessagesById = <String, ChatMessage>{};
       for (final storedMessage in state.history) {
-        storedMessagesById.putIfAbsent(
-          storedMessage.id,
-          () => storedMessage,
-        );
+        storedMessagesById.putIfAbsent(storedMessage.id, () => storedMessage);
       }
       state.history = state.historyOnSuccess!
           .map((message) => storedMessagesById[message.id] ?? message)
@@ -146,8 +143,47 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // joins only when that consumer explicitly asks for a String. Synthetic
     // error replies are not represented by text sections and stay explicit.
     final fullReply = state.hasSyntheticErrorReply ? state.fullReply : null;
-    final textChunks =
-        state.hasSyntheticErrorReply ? <String>[] : finalTextChunks;
+    final textChunks = state.hasSyntheticErrorReply
+        ? <String>[]
+        : List<String>.from(finalTextChunks);
+    final imageAttachments = <Attachment>[];
+    var imageSaveFailed = false;
+    for (final image in state.generatedImages) {
+      try {
+        final bytes = base64Decode(image.base64Data);
+        if (bytes.isEmpty) throw const FormatException('Empty image output');
+        final extension = switch (image.mimeType.toLowerCase()) {
+          'image/jpeg' => 'jpg',
+          'image/webp' => 'webp',
+          'image/gif' => 'gif',
+          _ => 'png',
+        };
+        final fileName =
+            'generated-${DateTime.now().microsecondsSinceEpoch}.$extension';
+        final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
+        imageAttachments.add(
+          Attachment(
+            fileName: fileName,
+            mimeType: image.mimeType,
+            fileType: 'image',
+            hash: AttachmentStorage.computeHash(bytes),
+            storagePath: storagePath,
+            fileSize: bytes.length,
+            conversationId: convId,
+          ),
+        );
+      } catch (e, s) {
+        imageSaveFailed = true;
+        debugPrint('[ChatStreamManager] 保存生成图片失败: $e\n$s');
+      }
+    }
+    if (imageSaveFailed) {
+      if (textChunks.isEmpty) {
+        textChunks.add('[生成的图片未能保存，请重试]');
+      } else {
+        textChunks[textChunks.length - 1] += '\n[生成的图片未能保存，请重试]';
+      }
+    }
     final hasTextContent = textChunks.any((chunk) => chunk.isNotEmpty);
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
@@ -156,6 +192,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
       final hasContent = wasCancelled ||
+          imageAttachments.isNotEmpty ||
           (fullReply?.isNotEmpty ?? hasTextContent) ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
@@ -170,9 +207,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           toolCallRoundStarts: state.toolCallRoundStarts,
         );
         if (wasCancelled) {
-          final cancelledMessage =
-              appLocalizationsForLocale(_ref?.read(localeProvider))
-                  .chatErrorCancelled;
+          final cancelledMessage = appLocalizationsForLocale(
+            _ref?.read(localeProvider),
+          ).chatErrorCancelled;
           blocks.add(ErrorBlock(message: cancelledMessage));
         } else if (hadStreamError &&
             (textChunks.any((chunk) => chunk.isNotEmpty) ||
@@ -192,6 +229,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
               !state.hasSyntheticErrorReply && hasTextContent,
           id: state.streamingMsgId ?? '',
           isError: isError,
+          attachments: imageAttachments,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
           toolCalls: state.accumulatedToolCalls.isNotEmpty
@@ -223,8 +261,10 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // 新用户消息）不得覆盖新流已持久化的数据。
     try {
       if (state.history.isNotEmpty && _streams[convId] == state) {
-        await AppLogService.info('ChatStreamManager',
-            '[STREAM-MGR] startStreaming: persisting historyLen=${state.history.length}');
+        await AppLogService.info(
+          'ChatStreamManager',
+          '[STREAM-MGR] startStreaming: persisting historyLen=${state.history.length}',
+        );
         await _saveMessages(convId: convId, history: state.history);
         // 保存 await 期间新流可能已注册（Stop→re-Send）：此时本次
         // 保存已把旧历史写入（updateMessages 全量替换），若新流已
@@ -233,13 +273,17 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (_streams[convId] != state &&
             _streams[convId]?.history.isNotEmpty == true) {
           await _saveMessages(
-              convId: convId,
-              history: List<ChatMessage>.from(_streams[convId]!.history));
+            convId: convId,
+            history: List<ChatMessage>.from(_streams[convId]!.history),
+          );
         }
       }
     } catch (e) {
       await AppLogService.error(
-          'ChatStreamManager', '[STREAM-MGR] save failed', e);
+        'ChatStreamManager',
+        '[STREAM-MGR] save failed',
+        e,
+      );
     }
 
     final streamStatus = wasCancelled
@@ -330,7 +374,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // to a different state object), keep it in the streaming set.
     if (!_streams.containsKey(convId)) {
       final activeSet = <String>{
-        ..._ref?.read(streamingConversationsProvider) ?? const {}
+        ..._ref?.read(streamingConversationsProvider) ?? const {},
       };
       activeSet.remove(convId);
       _setProvider(streamingConversationsProvider, activeSet);
@@ -345,10 +389,12 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 的旧 service 冲突。失败静默（保留截断标题）。
       if (!wasCancelled && !hadStreamError && state.history.isNotEmpty) {
         // ignore: discarded_futures
-        unawaited(_maybeGenerateTitle(
-          convId: convId,
-          history: List<ChatMessage>.from(state.history),
-        ));
+        unawaited(
+          _maybeGenerateTitle(
+            convId: convId,
+            history: List<ChatMessage>.from(state.history),
+          ),
+        );
       }
     }
 
