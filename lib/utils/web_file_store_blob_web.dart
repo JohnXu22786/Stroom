@@ -26,6 +26,50 @@ Future<Uint8List?> readBlob(Object? value) async {
   return Uint8List.view(buffer.toDart);
 }
 
+Future<Uint8List?> readBlobCancellable(
+  Object? value,
+  Future<void> cancellation,
+) async {
+  final blob = _blobFromStoredValue(value);
+  if (blob == null) return null;
+
+  final reader = blob.stream().getReader() as web.ReadableStreamDefaultReader;
+  final cancelled = Completer<void>();
+  final chunks = BytesBuilder(copy: false);
+  final subscription = cancellation.asStream().listen((_) {
+    try {
+      unawaited(
+        reader.cancel().toDart.then<void>((_) {}, onError: (Object _) {}),
+      );
+    } catch (_) {
+      // The stream may already have closed when cancellation arrives.
+    }
+    if (!cancelled.isCompleted) cancelled.complete();
+  });
+
+  try {
+    while (true) {
+      final next = await Future.any<Object?>([
+        reader.read().toDart,
+        cancelled.future.then<Object?>((_) => null),
+      ]);
+      if (next == null) break;
+
+      final result = next as web.ReadableStreamReadResult;
+      if (result.done) break;
+      final value = result.value;
+      if (value == null || !value.isA<JSUint8Array>()) {
+        throw StateError('Blob stream returned a non-byte chunk');
+      }
+      chunks.add((value as JSUint8Array).toDart);
+    }
+    return chunks.takeBytes();
+  } finally {
+    await subscription.cancel();
+    reader.releaseLock();
+  }
+}
+
 /// Converts a legacy IndexedDB byte value to a Blob without dartifying its
 /// payload into a Uint8List first.
 Future<({Object? value, bool converted})> migrateStoredValueToBlob(

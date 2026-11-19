@@ -241,6 +241,18 @@ class WebFileStore {
   static Future<Uint8List?> _readBlob(Object? value) =>
       readBlobOverrideForTesting?.call(value) ?? blob_store.readBlob(value);
 
+  static Future<Uint8List?> _readBlobCancellable(
+    Object? value,
+    CancelToken cancelToken,
+  ) {
+    final override = readBlobOverrideForTesting;
+    if (override != null) return override(value);
+    return blob_store.readBlobCancellable(
+      value,
+      cancelToken.whenCancel.then<void>((_) {}),
+    );
+  }
+
   /// 读取文件
   static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
@@ -323,7 +335,7 @@ class WebFileStore {
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;
       if (_isAttachmentKey(key)) {
         final bytes = await Future.any<Uint8List?>([
-          _readBlob(value),
+          _readBlobCancellable(value, cancelToken),
           cancelToken.whenCancel.then<Uint8List?>(
             (_) => throw cancelToken.cancelError!,
           ),

@@ -1,14 +1,38 @@
 import 'dart:async';
+import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:idb_shim/idb_shim.dart' show IdbNativeValue;
 import 'package:idb_shim/idb_shim.dart' show idbModeReadWrite;
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
+import 'package:web/web.dart' as web;
 import 'package:stroom/utils/web_file_store.dart';
+import 'package:stroom/utils/web_file_store_blob_web.dart' as blob_store;
 
 void main() {
+  test(
+    'cancelling a Blob stream stops materializing its remaining bytes',
+    () async {
+      const payloadSize = 8 * 1024 * 1024;
+      final blob = web.Blob([Uint8List(payloadSize).toJS].toJS);
+      final cancelRead = Completer<void>();
+      final read = blob_store.readBlobCancellable(
+        IdbNativeValue(blob),
+        cancelRead.future,
+      );
+
+      cancelRead.complete();
+      final bytes = await read;
+
+      expect(bytes, isNotNull);
+      expect(bytes!.length, lessThan(payloadSize));
+    },
+    skip: !kIsWeb,
+  );
+
   test(
     'migrates attachment records to Blobs and bounds later reads',
     () async {

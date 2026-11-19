@@ -8,6 +8,12 @@ Object createBlob(Uint8List bytes) => bytes;
 
 Future<Uint8List?> readBlob(Object? value) async => null;
 
+Future<Uint8List?> readBlobCancellable(
+  Object? value,
+  Future<void> cancellation,
+) async =>
+    null;
+
 Future<({Object? value, bool converted})> migrateStoredValueToBlob(
   Object objectStore,
   String key,
