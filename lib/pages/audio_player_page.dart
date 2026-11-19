@@ -13,6 +13,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
 import '../utils/file_manifest.dart';
+import '../utils/audio_source_text_saver.dart';
 import '../utils/text_manifest.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_player_temp_file.dart';
@@ -363,23 +364,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   /// 保存源文本到伴生文件并更新 AudioRecord
   Future<void> _saveSourceText(String text) async {
-    // 从 audio filePath 推导 hash
-    final withoutExt = path.withoutExtension(widget.filePath);
-    final hash = path.basename(withoutExt);
-
-    // 保存伴生 .txt 文件
-    final textBytes = Uint8List.fromList(utf8.encode(text));
-    await FileManifest.writeFile('$hash.txt', textBytes);
-
-    // 更新 AudioRecord 中的 sourceText 字段
-    final record = await FileManifest.getRecordByHash(hash);
-    if (record != null) {
-      final updated = record.copyWith(sourceText: text);
-      await FileManifest.updateRecord(updated);
-    } else {
-      // 如果找不到记录（创建新记录），仍然保存了文本文件
-      debugPrint('AudioPlayerPage: 未找到 hash=$hash 对应的 AudioRecord');
-    }
+    await saveAudioSourceText(widget.filePath, text);
   }
 
   Future<void> _initPlayer() async {
