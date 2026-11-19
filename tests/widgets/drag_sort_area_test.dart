@@ -183,9 +183,9 @@ void main() {
         textDirection: TextDirection.ltr,
         textScaler: MediaQuery.textScalerOf(tester.element(find.text('del-a'))),
       )..layout();
-      final paragraph = tester.renderObject<RenderParagraph>(find.text('del-a'));
-      expect(paragraph.didExceedMaxLines, isFalse,
-          reason: '删除按钮不应导致文字省略');
+      final paragraph =
+          tester.renderObject<RenderParagraph>(find.text('del-a'));
+      expect(paragraph.didExceedMaxLines, isFalse, reason: '删除按钮不应导致文字省略');
       expect(textRect.width, greaterThanOrEqualTo(painter.width),
           reason: '文字槽位应足以显示完整标签');
 
