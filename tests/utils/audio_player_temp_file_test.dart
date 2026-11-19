@@ -62,17 +62,17 @@ void main() {
     final sameTick = DateTime(2025, 1, 1);
 
     Future<File?> write(List<int> bytes) => writeAudioPlayerTempFile(
-      getTempDirectory: () async => directory,
-      now: () => sameTick,
-      bytes: bytes,
-      extension: 'wav',
-      isDisposed: () => false,
-      writeBytes: (file, fileBytes) async {
-        paths.add(file.path);
-        await finishWrites.future;
-        await file.writeAsBytes(fileBytes);
-      },
-    );
+          getTempDirectory: () async => directory,
+          now: () => sameTick,
+          bytes: bytes,
+          extension: 'wav',
+          isDisposed: () => false,
+          writeBytes: (file, fileBytes) async {
+            paths.add(file.path);
+            await finishWrites.future;
+            await file.writeAsBytes(fileBytes);
+          },
+        );
 
     final firstWrite = write(firstBytes);
     final secondWrite = write(secondBytes);
