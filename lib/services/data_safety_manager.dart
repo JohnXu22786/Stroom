@@ -485,24 +485,63 @@ class DataSafetyManager {
       ];
       final cutoff = DateTime.now().subtract(orphanGracePeriod);
       var deleted = 0;
+
+      Future<void> deleteIfOrphaned(File file) async {
+        final name = p.basename(file.path);
+        if (referenced.contains(name)) return;
+        try {
+          final stat = await file.stat();
+          if (stat.modified.isAfter(cutoff)) return;
+          await file.delete();
+          deleted++;
+          debugPrint('[DataSafetyManager] 清理孤儿文件: $name');
+        } catch (e) {
+          debugPrint('[DataSafetyManager] 清理孤儿文件失败 $name: $e');
+        }
+      }
+
       for (final dirPath in dirsToScan) {
         final dir = Directory(dirPath);
         if (!await dir.exists()) continue;
         final entries = await dir.list().toList();
         for (final entry in entries) {
           if (entry is! File) continue;
-          final name = p.basename(entry.path);
-          if (referenced.contains(name)) continue;
-          try {
-            final stat = await entry.stat();
-            if (stat.modified.isAfter(cutoff)) continue;
-            await entry.delete();
-            deleted++;
-            debugPrint('[DataSafetyManager] 清理孤儿文件: $name');
-          } catch (e) {
-            debugPrint('[DataSafetyManager] 清理孤儿文件失败 $name: $e');
+          await deleteIfOrphaned(entry);
+        }
+      }
+
+      // Compressed attachment caches are disposable but live one directory
+      // below attachments: temp_compressed/<conversationId>/<cache-file>.
+      // Restrict this scan to that namespace and one level so user folders
+      // under attachments are never recursively traversed.
+      final compressedCacheRoot = Directory(
+        p.join(appDir, 'attachments', 'temp_compressed'),
+      );
+      try {
+        if (await compressedCacheRoot.exists()) {
+          final conversations = await compressedCacheRoot
+              .list(followLinks: false)
+              .toList();
+          for (final entry in conversations) {
+            if (entry is! Directory) continue;
+            try {
+              final cacheFiles = await Directory(entry.path)
+                  .list(followLinks: false)
+                  .toList();
+              for (final cacheFile in cacheFiles) {
+                if (cacheFile is File) {
+                  await deleteIfOrphaned(cacheFile);
+                }
+              }
+            } catch (e) {
+              debugPrint(
+                '[DataSafetyManager] 读取压缩缓存目录失败 ${entry.path}: $e',
+              );
+            }
           }
         }
+      } catch (e) {
+        debugPrint('[DataSafetyManager] 扫描压缩缓存目录失败: $e');
       }
       if (deleted > 0) {
         await AppLogService.info(
