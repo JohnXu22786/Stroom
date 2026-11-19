@@ -1,17 +1,26 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
 
+import 'package:idb_shim/idb_shim.dart' show IdbNativeValue;
 import 'package:web/web.dart' as web;
 
-bool isBlob(Object? value) => (value as JSAny?).isA<web.Blob>();
+web.Blob? _blobFromStoredValue(Object? value) {
+  if (value is! IdbNativeValue) return null;
+  final jsValue = value.jsObject as JSAny?;
+  if (!jsValue.isA<web.Blob>()) return null;
+  return value.jsObject as web.Blob;
+}
 
-int? blobByteLength(Object? value) =>
-    isBlob(value) ? (value as web.Blob).size.toInt() : null;
+bool isBlob(Object? value) => _blobFromStoredValue(value) != null;
 
-Object createBlob(Uint8List bytes) => web.Blob([bytes.toJS].toJS);
+int? blobByteLength(Object? value) => _blobFromStoredValue(value)?.size.toInt();
+
+Object createBlob(Uint8List bytes) =>
+    IdbNativeValue(web.Blob([bytes.toJS].toJS));
 
 Future<Uint8List?> readBlob(Object? value) async {
-  if (!isBlob(value)) return null;
-  final buffer = await (value as web.Blob).arrayBuffer().toDart;
+  final blob = _blobFromStoredValue(value);
+  if (blob == null) return null;
+  final buffer = await blob.arrayBuffer().toDart;
   return Uint8List.view(buffer.toDart);
 }
