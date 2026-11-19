@@ -342,22 +342,13 @@ class WebFileStore {
     for (final key in keys) {
       final txn = db.transaction('files', idbModeReadWrite);
       final store = txn.objectStore('files');
-      final value = await store.getObject(key);
-      if (value != null && !blob_store.isBlob(value)) {
-        final bytes = _toUint8List(value, key);
-        if (bytes == null) {
-          await _abortTransaction(txn);
-          throw StateError('Cannot migrate attachment storage value: $key');
-        }
-        final blob = blob_store.createBlob(bytes);
-        if (blob_store.blobByteLength(blob) != bytes.length) {
-          await _abortTransaction(txn);
-          throw StateError('Attachment migration size check failed: $key');
-        }
-        await store.put(blob, key);
-        convertedAny = true;
+      try {
+        convertedAny |= await blob_store.migrateStoredValueToBlob(store, key);
+        await txn.completed;
+      } catch (_) {
+        await _abortTransaction(txn);
+        rethrow;
       }
-      await txn.completed;
     }
 
     final markerTxn = db.transaction('files', idbModeReadWrite);

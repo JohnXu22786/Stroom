@@ -12,7 +12,8 @@ void main() {
     () async {
       const attachmentKey = 'attachments/blob-read-regression';
       const markerKey = '__web_file_store_format__';
-      final payload = Uint8List(1024 * 1024);
+      const maxAttachmentBytes = 10 * 1024 * 1024;
+      final payload = Uint8List(maxAttachmentBytes + 1);
       for (var i = 0; i < payload.length; i++) {
         payload[i] = i % 251;
       }
@@ -33,7 +34,10 @@ void main() {
       try {
         expect(await WebFileStore.migrateAttachmentValuesToBlobs(), isTrue);
         await expectLater(
-          WebFileStore.read(attachmentKey, maxBytes: 32),
+          WebFileStore.read(
+            attachmentKey,
+            maxBytes: maxAttachmentBytes,
+          ),
           throwsA(isA<WebFileStoreReadLimitExceededException>()),
         );
         expect(
