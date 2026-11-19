@@ -44,7 +44,8 @@ class _ThemeDisplaySettingsPageState
           ),
         )
         .where((language) => language.searchText.contains(normalizedQuery))
-        .toList();
+        .toList()
+      ..sort((left, right) => left.id.compareTo(right.id));
 
     return Scaffold(
       appBar: AppBar(
