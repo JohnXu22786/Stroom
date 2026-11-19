@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
@@ -337,6 +340,54 @@ void main() {
         ]);
       },
     );
+
+    test('actual oversized cached document is skipped despite stale metadata',
+        () async {
+      final pdf = Attachment(
+        fileName: 'large.pdf',
+        mimeType: 'application/pdf',
+        fileType: 'document',
+        hash: 'large-pdf',
+        storagePath: '/unused',
+        fileSize: 0,
+      )..base64Data = base64Encode(Uint8List(maxAttachmentBytes + 1));
+
+      final request = await ResponsesProtocol().buildRequest(
+        history: [
+          ChatMessage(role: 'user', content: '', attachments: [pdf]),
+        ],
+      );
+
+      expect(request.messages.single['content'], [
+        {'type': 'input_text', 'text': '[文件过大已跳过: large.pdf]'},
+      ]);
+    });
+
+    test('stale oversized document metadata uses the small cached payload',
+        () async {
+      final pdf = Attachment(
+        fileName: 'small.pdf',
+        mimeType: 'application/pdf',
+        fileType: 'document',
+        hash: 'small-pdf',
+        storagePath: '/unused',
+        fileSize: maxAttachmentBytes + 1,
+      )..base64Data = 'AQID';
+
+      final request = await ResponsesProtocol().buildRequest(
+        history: [
+          ChatMessage(role: 'user', content: '', attachments: [pdf]),
+        ],
+      );
+
+      expect(request.messages.single['content'], [
+        {
+          'type': 'input_file',
+          'filename': 'small.pdf',
+          'file_data': 'data:application/pdf;base64,AQID',
+        },
+      ]);
+    });
 
     test('makes unsupported audio input formats explicit', () async {
       final audio = Attachment(

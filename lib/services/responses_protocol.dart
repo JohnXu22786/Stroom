@@ -127,14 +127,18 @@ class ResponsesProtocol implements ChatProtocol {
                 : '以下为文件 ${att.fileName} 的内容:\n$text',
           });
         } else {
-          if (att.fileSize > maxAttachmentBytes) {
+          final outcome = await readRawAttachmentBytesBounded(
+            att,
+            maxBytes: maxAttachmentBytes,
+          );
+          if (outcome.status == AttachmentReadStatus.tooLarge) {
             parts.add({
               'type': 'input_text',
               'text': '[文件过大已跳过: ${att.fileName}]',
             });
             continue;
           }
-          final bytes = await readRawAttachmentBytes(att);
+          final bytes = outcome.bytes;
           if (bytes == null || bytes.isEmpty) {
             parts.add({
               'type': 'input_text',
