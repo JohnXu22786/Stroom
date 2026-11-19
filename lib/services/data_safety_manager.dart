@@ -510,9 +510,48 @@ class DataSafetyManager {
           followLinks: false,
         );
         if (directoryType != FileSystemEntityType.directory) continue;
+
+        final journaledBackupNames = <String>{};
+        var hasUnreadableDeleteJournal = false;
+        await for (final entry in dir.list(followLinks: false)) {
+          if (entry is! File ||
+              !p.basename(entry.path).startsWith('.manifest-delete-journal-')) {
+            continue;
+          }
+          try {
+            final decoded = jsonDecode(await entry.readAsString());
+            if (decoded is! Map || decoded['files'] is! Map) {
+              throw const FormatException('Invalid media deletion journal');
+            }
+            for (final backupName in (decoded['files'] as Map).values) {
+              if (backupName is! String ||
+                  p.basename(backupName) != backupName ||
+                  !backupName.startsWith('.manifest-delete-backup-')) {
+                throw const FormatException(
+                  'Invalid media deletion backup name',
+                );
+              }
+              journaledBackupNames.add(backupName);
+            }
+          } catch (e) {
+            // Preserve possible recovery data when a journal cannot be read.
+            hasUnreadableDeleteJournal = true;
+            debugPrint(
+              '[DataSafetyManager] 读取媒体删除日志失败，保留备份文件: $e',
+            );
+          }
+        }
+
         final entries = await dir.list(followLinks: false).toList();
         for (final entry in entries) {
           if (entry is! File) continue;
+          final name = p.basename(entry.path);
+          if (name.startsWith('.manifest-delete-journal-')) continue;
+          if (name.startsWith('.manifest-delete-backup-') &&
+              (hasUnreadableDeleteJournal ||
+                  journaledBackupNames.contains(name))) {
+            continue;
+          }
           await deleteIfOrphaned(entry);
         }
       }

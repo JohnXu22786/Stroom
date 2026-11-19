@@ -1,6 +1,7 @@
 import '../utils/atomic_file.dart';
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -29,6 +30,9 @@ import 'manifest_database.dart';
 /// Each record type creates a singleton [ManifestOperations] instance
 /// and forwards its static API to it (see [FileManifest] and [ImageManifest]).
 class ManifestOperations<T extends FileRecord> {
+  static final Set<String> _activeNonAudioDeleteJournalKeys = {};
+  static final Map<String, Future<bool>> _recoveringNonAudioDeleteJournals = {};
+
   final String manifestKey;
   final String storageDirName;
   final bool useAppSupportDir; // false = app documents dir
@@ -69,7 +73,6 @@ class ManifestOperations<T extends FileRecord> {
   bool _dirty = false;
   Set<String> _folderCache = {};
   int _recordMutationRevision = 0;
-  int _nextNonAudioBackupId = 0;
   final Map<String, Future<void>> _recordMutationTails = {};
 
   /// Pauses a forced refresh between reading records and reading folders.
@@ -94,6 +97,20 @@ class ManifestOperations<T extends FileRecord> {
 
   @visibleForTesting
   Future<void> Function(String name)? beforeNonAudioFileDeleteForTesting;
+
+  @visibleForTesting
+  Future<void> Function(String name)? beforeNonAudioBackupDeleteForTesting;
+
+  /// Pauses recovery before a backup is read in manifest operation tests.
+  @visibleForTesting
+  Future<void> Function(String name)?
+      beforeNonAudioRecoveryBackupReadForTesting;
+
+  @visibleForTesting
+  Future<void> Function(String name)? afterNonAudioBackupWriteForTesting;
+
+  @visibleForTesting
+  Future<void> Function(String name)? beforeNonAudioBackupWriteForTesting;
 
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
@@ -370,7 +387,27 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<Map<String, String>> _snapshotNonAudioFiles(
+  Future<void> _writeAtomicallyStoredFile(String name, Uint8List bytes) async {
+    if (_useWebFileStore) {
+      await WebFileStore.write(_webKey(name), bytes);
+    } else {
+      final dir = await _storageDir;
+      await AtomicFile.writeBytes(
+        File(await _storedFilePath(dir, name)),
+        bytes,
+      );
+    }
+  }
+
+  bool _storedBytesEqual(Uint8List first, Uint8List second) {
+    if (first.length != second.length) return false;
+    for (var i = 0; i < first.length; i++) {
+      if (first[i] != second[i]) return false;
+    }
+    return true;
+  }
+
+  Future<_NonAudioFileSnapshot> _snapshotNonAudioFiles(
     Iterable<T> records,
     Map<String, int> storageCount,
     Map<String, int> hashCount,
@@ -393,26 +430,52 @@ class ManifestOperations<T extends FileRecord> {
       }
     }
     final backups = <String, String>{};
+    final journalName = '.manifest-delete-journal-${const Uuid().v4()}.json';
+    final journalKey = _webKey(journalName);
+    _activeNonAudioDeleteJournalKeys.add(journalKey);
+    var journalWriteStarted = false;
     try {
       for (final name in names) {
         final bytes = await _readStoredFile(name);
         if (bytes != null) {
-          final backupName =
-              '.manifest-delete-backup-${DateTime.now().microsecondsSinceEpoch}-${_nextNonAudioBackupId++}';
-          await _writeStoredFile(backupName, bytes);
+          final backupName = '.manifest-delete-backup-${const Uuid().v4()}';
           backups[name] = backupName;
+          final journalBytes = Uint8List.fromList(
+            utf8.encode(jsonEncode({'files': backups})),
+          );
+          journalWriteStarted = true;
+          if (_useWebFileStore) {
+            await WebFileStore.write(_webKey(journalName), journalBytes);
+          } else {
+            final directory = await _storageDir;
+            await AtomicFile.writeBytes(
+              File(await _storedFilePath(directory, journalName)),
+              journalBytes,
+            );
+          }
+          await beforeNonAudioBackupWriteForTesting?.call(backupName);
+          await _writeAtomicallyStoredFile(backupName, bytes);
+          await afterNonAudioBackupWriteForTesting?.call(backupName);
         }
       }
     } catch (_) {
-      await _discardNonAudioBackups(backups.values);
+      // A failed journal write can still have committed before reporting an
+      // I/O error. Keep backups until any visible journal has been recovered.
+      _activeNonAudioDeleteJournalKeys.remove(journalKey);
+      if (!journalWriteStarted) await _discardNonAudioBackups(backups.values);
       rethrow;
     }
-    return backups;
+    if (backups.isEmpty) _activeNonAudioDeleteJournalKeys.remove(journalKey);
+    return _NonAudioFileSnapshot(
+      backups: backups,
+      journalName: backups.isEmpty ? null : journalName,
+    );
   }
 
-  Future<void> _restoreNonAudioFiles(Map<String, String> backups) async {
+  Future<void> _restoreNonAudioFiles(_NonAudioFileSnapshot snapshot) async {
     final recoveredBackups = <String>[];
-    for (final entry in backups.entries) {
+    var recoveryComplete = true;
+    for (final entry in snapshot.backups.entries) {
       try {
         if (await _storedFileExists(entry.key)) {
           recoveredBackups.add(entry.value);
@@ -424,6 +487,7 @@ class ManifestOperations<T extends FileRecord> {
           }
         }
       } catch (error, stackTrace) {
+        recoveryComplete = false;
         await AppLogService.error(
           'ManifestOperations($manifestKey)',
           'failed to restore file after cleanup failure',
@@ -432,12 +496,174 @@ class ManifestOperations<T extends FileRecord> {
         );
       }
     }
-    await _discardNonAudioBackups(recoveredBackups);
+    if (recoveryComplete) {
+      await _finishNonAudioFileSnapshot(snapshot, recoveredBackups);
+    } else if (snapshot.journalName != null) {
+      _activeNonAudioDeleteJournalKeys.remove(
+        _webKey(snapshot.journalName!),
+      );
+    }
   }
 
-  Future<void> _discardNonAudioBackups(Iterable<String> names) async {
+  Future<void> _finishNonAudioFileSnapshot(
+    _NonAudioFileSnapshot snapshot, [
+    Iterable<String>? backupNames,
+  ]) async {
+    try {
+      if (!await _discardNonAudioBackups(
+        backupNames ?? snapshot.backups.values,
+      )) {
+        return;
+      }
+      if (snapshot.journalName != null) {
+        await _deleteStoredFile(snapshot.journalName!);
+      }
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'failed to remove media deletion recovery journal',
+        error,
+        stackTrace,
+      );
+    } finally {
+      if (snapshot.journalName != null) {
+        _activeNonAudioDeleteJournalKeys.remove(
+          _webKey(snapshot.journalName!),
+        );
+      }
+    }
+  }
+
+  Future<void> _recoverNonAudioDeleteJournals() async {
+    final journalFiles = <String>[];
+    if (_useWebFileStore) {
+      final prefix = '$storageDirName/.manifest-delete-journal-';
+      for (final key in await WebFileStore.keysWithPrefix(prefix)) {
+        journalFiles.add(key.substring(storageDirName.length + 1));
+      }
+    } else {
+      final directory = Directory(await _storageDirPath);
+      if (!await directory.exists()) return;
+      await for (final entry in directory.list(followLinks: false)) {
+        if (entry is File &&
+            p.basename(entry.path).startsWith('.manifest-delete-journal-')) {
+          journalFiles.add(p.basename(entry.path));
+        }
+      }
+    }
+
+    for (final journalName in journalFiles) {
+      final journalKey = _webKey(journalName);
+      if (_activeNonAudioDeleteJournalKeys.contains(journalKey)) {
+        continue;
+      }
+      Completer<bool>? recoveryFinished;
+      Future<bool>? recoveryFuture;
+      var recoveryCompletedByAnotherCall = false;
+      while (recoveryFinished == null) {
+        final existingRecovery = _recoveringNonAudioDeleteJournals[journalKey];
+        if (existingRecovery == null) {
+          recoveryFinished = Completer<bool>();
+          recoveryFuture = recoveryFinished.future;
+          _recoveringNonAudioDeleteJournals[journalKey] = recoveryFuture;
+        } else if (await existingRecovery) {
+          recoveryCompletedByAnotherCall = true;
+          break;
+        }
+      }
+      if (recoveryCompletedByAnotherCall) continue;
+
+      var recoverySucceeded = false;
+      try {
+        try {
+          final bytes = await _readStoredFile(journalName);
+          if (bytes == null) {
+            recoverySucceeded = true;
+            continue;
+          }
+          final decoded = jsonDecode(utf8.decode(bytes));
+          if (decoded is! Map || decoded['files'] is! Map) {
+            throw const FormatException('Invalid media deletion journal');
+          }
+          final backups = <String, String>{};
+          for (final entry in (decoded['files'] as Map).entries) {
+            if (entry.key is! String || entry.value is! String) {
+              throw const FormatException(
+                'Invalid media deletion journal entry',
+              );
+            }
+            final originalName = _validatedFileName(entry.key as String);
+            final backupName = _validatedFileName(entry.value as String);
+            if (!backupName.startsWith('.manifest-delete-backup-')) {
+              throw const FormatException(
+                'Invalid media deletion backup name',
+              );
+            }
+            backups[originalName] = backupName;
+          }
+          final snapshot = _NonAudioFileSnapshot(
+            backups: backups,
+            journalName: journalName,
+          );
+          final liveRecords = (await _dbGetAllRecords()).map(fromMap).toList();
+          final referencedNames = <String>{};
+          for (final record in liveRecords) {
+            referencedNames
+              ..add(storageNameOf(record))
+              ..add(_thumbFileNameOf(record));
+            if (_isImageTable) {
+              referencedNames.add('${hashOf(record)}_thumb.png');
+            }
+          }
+          final recovered = <String>[];
+          for (final entry in backups.entries) {
+            if (referencedNames.contains(entry.key)) {
+              final existing = await _readStoredFile(entry.key);
+              final backup = await _readStoredFile(entry.value);
+              if (backup == null) {
+                if (existing == null) {
+                  throw StateError(
+                    'Missing media deletion backup ${entry.value}',
+                  );
+                }
+              } else if (existing == null ||
+                  !_storedBytesEqual(existing, backup)) {
+                await beforeNonAudioRecoveryBackupReadForTesting?.call(
+                  entry.value,
+                );
+                await _writeAtomicallyStoredFile(entry.key, backup);
+              }
+            }
+            recovered.add(entry.value);
+          }
+          await _finishNonAudioFileSnapshot(snapshot, recovered);
+          recoverySucceeded = true;
+        } catch (error, stackTrace) {
+          await AppLogService.error(
+            'ManifestOperations($manifestKey)',
+            'failed to recover interrupted media deletion',
+            error,
+            stackTrace,
+          );
+          rethrow;
+        }
+      } finally {
+        if (identical(
+          _recoveringNonAudioDeleteJournals[journalKey],
+          recoveryFuture,
+        )) {
+          _recoveringNonAudioDeleteJournals.remove(journalKey);
+        }
+        recoveryFinished!.complete(recoverySucceeded);
+      }
+    }
+  }
+
+  Future<bool> _discardNonAudioBackups(Iterable<String> names) async {
+    var complete = true;
     for (final name in names) {
       try {
+        await beforeNonAudioBackupDeleteForTesting?.call(name);
         if (_useWebFileStore) {
           await WebFileStore.delete(_webKey(name));
         } else {
@@ -452,8 +678,10 @@ class ManifestOperations<T extends FileRecord> {
           error,
           stackTrace,
         );
+        complete = false;
       }
     }
+    return complete;
   }
 
   Future<Map<String, Uint8List>> _snapshotAudioSidecars(
@@ -830,6 +1058,7 @@ class ManifestOperations<T extends FileRecord> {
 
     final revision = _recordMutationRevision;
     try {
+      if (!_isAudioTable) await _recoverNonAudioDeleteJournals();
       final rows = await _dbGetAllRecords();
       final records = rows.map((m) => fromMap(m)).toList();
       try {
@@ -1011,7 +1240,7 @@ class ManifestOperations<T extends FileRecord> {
         return;
       }
       final files = _isAudioTable
-          ? <String, String>{}
+          ? const _NonAudioFileSnapshot.empty()
           : await _snapshotNonAudioFiles(
               [record],
               {storageNameOf(record): storageRefCount},
@@ -1028,7 +1257,7 @@ class ManifestOperations<T extends FileRecord> {
         if (!_isAudioTable) await _restoreNonAudioFiles(files);
         Error.throwWithStackTrace(error, stackTrace);
       }
-      if (!_isAudioTable) await _discardNonAudioBackups(files.values);
+      if (!_isAudioTable) await _finishNonAudioFileSnapshot(files);
       _cache!.removeWhere((item) => item.id == id);
       _recordMutationRevision++;
     } catch (e, st) {
@@ -1149,7 +1378,7 @@ class ManifestOperations<T extends FileRecord> {
         await _restoreNonAudioFiles(files);
         Error.throwWithStackTrace(error, stackTrace);
       }
-      await _discardNonAudioBackups(files.values);
+      await _finishNonAudioFileSnapshot(files);
       _cache!.removeWhere((record) => idSet.contains(record.id));
       _recordMutationRevision++;
     } catch (e, st) {
@@ -1534,7 +1763,7 @@ class ManifestOperations<T extends FileRecord> {
               storageNameCount,
               hashCount,
             )
-          : <String, String>{};
+          : const _NonAudioFileSnapshot.empty();
 
       // Decrement per record being deleted; only delete file when count reaches 0
       try {
@@ -1596,7 +1825,7 @@ class ManifestOperations<T extends FileRecord> {
           _recordMutationRevision++;
         }
         if (!deletesAudioRecords) {
-          await _discardNonAudioBackups(nonAudioFiles.values);
+          await _finishNonAudioFileSnapshot(nonAudioFiles);
         }
         if (deletesAudioRecords) {
           _cache!.removeWhere((r) => idsToDelete.contains(r.id));
@@ -1770,4 +1999,18 @@ class ManifestOperations<T extends FileRecord> {
     _dirty = true;
     _cache = null;
   }
+}
+
+class _NonAudioFileSnapshot {
+  const _NonAudioFileSnapshot({
+    required this.backups,
+    required this.journalName,
+  });
+
+  const _NonAudioFileSnapshot.empty()
+      : backups = const {},
+        journalName = null;
+
+  final Map<String, String> backups;
+  final String? journalName;
 }
