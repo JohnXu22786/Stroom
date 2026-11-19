@@ -101,7 +101,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           if (decoded is! List) {
             // 现有 provider_entries 整体损坏（非数组）：先备份原始
             // 数据再覆盖 —— 否则这里的写入会永久销毁损坏现场。
-            await _backupCorruptProviderEntries(prefs, existingJson);
+            if (!await _backupCorruptProviderEntries(prefs, existingJson)) {
+              return;
+            }
             existingEntries = [];
           } else {
             // 兜底：使用 whereType 安全过滤非 Map 条目
@@ -111,9 +113,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           }
         } catch (_) {
           // 现有数据损坏，忽略并用空列表重新开始
-          try {
-            await _backupCorruptProviderEntries(prefs, existingJson);
-          } catch (_) {}
+          if (!await _backupCorruptProviderEntries(prefs, existingJson)) {
+            return;
+          }
           existingEntries = [];
         }
       }
