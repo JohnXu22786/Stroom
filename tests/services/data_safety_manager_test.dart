@@ -419,6 +419,32 @@ void main() {
           reason: 'one cache failure must not stop cleanup of other caches');
     });
 
+    test('cleanupOrphans does not follow a compressed cache root symlink',
+        () async {
+      if (Platform.isWindows) return;
+
+      final attachmentsDir = Directory(p.join(appDir, 'attachments'));
+      await attachmentsDir.create(recursive: true);
+      final cacheTarget = Directory(p.join(appDir, 'cache-target'));
+      final targetConversation = Directory(
+        p.join(cacheTarget.path, 'conversation-1'),
+      );
+      await targetConversation.create(recursive: true);
+      final agedCache = File(p.join(targetConversation.path, 'orphan.jpg'));
+      await agedCache.writeAsString('cache outside the managed namespace');
+      await agedCache.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      await Link(p.join(attachmentsDir.path, 'temp_compressed'))
+          .create(cacheTarget.path);
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedCache.exists(), isTrue,
+          reason: 'a symlink target outside the cache namespace is untouched');
+    });
+
     test(
       'cleanupOrphans preserves legacy audio after migration write failure',
       () async {

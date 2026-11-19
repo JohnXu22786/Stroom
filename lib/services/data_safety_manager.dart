@@ -514,11 +514,21 @@ class DataSafetyManager {
       // below attachments: temp_compressed/<conversationId>/<cache-file>.
       // Restrict this scan to that namespace and one level so user folders
       // under attachments are never recursively traversed.
+      final attachmentsRoot = Directory(p.join(appDir, 'attachments'));
       final compressedCacheRoot = Directory(
         p.join(appDir, 'attachments', 'temp_compressed'),
       );
       try {
-        if (await compressedCacheRoot.exists()) {
+        final attachmentsType = await FileSystemEntity.type(
+          attachmentsRoot.path,
+          followLinks: false,
+        );
+        final cacheRootType = await FileSystemEntity.type(
+          compressedCacheRoot.path,
+          followLinks: false,
+        );
+        if (attachmentsType == FileSystemEntityType.directory &&
+            cacheRootType == FileSystemEntityType.directory) {
           final conversations =
               await compressedCacheRoot.list(followLinks: false).toList();
           for (final entry in conversations) {
