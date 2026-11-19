@@ -521,6 +521,40 @@ void main() {
     });
 
     test(
+      'cleanupOrphans preserves journaled backups and removes old unjournaled backups',
+      () async {
+        final picturesDir = Directory(p.join(appDir, 'pictures'));
+        await picturesDir.create(recursive: true);
+        const journaledBackupName = '.manifest-delete-backup-journaled';
+        const unjournaledBackupName = '.manifest-delete-backup-legacy';
+        final journaledBackup =
+            File(p.join(picturesDir.path, journaledBackupName));
+        final unjournaledBackup =
+            File(p.join(picturesDir.path, unjournaledBackupName));
+        final journal = File(
+          p.join(picturesDir.path, '.manifest-delete-journal-test.json'),
+        );
+        await journaledBackup.writeAsString('journaled');
+        await unjournaledBackup.writeAsString('legacy');
+        await journal.writeAsString(
+          '{"files":{"original.jpg":"$journaledBackupName"}}',
+        );
+        final oldTimestamp = DateTime.now().subtract(
+          const Duration(days: 10),
+        );
+        await journaledBackup.setLastModified(oldTimestamp);
+        await unjournaledBackup.setLastModified(oldTimestamp);
+        await journal.setLastModified(oldTimestamp);
+
+        await DataSafetyManager.cleanupOrphans();
+
+        expect(await journal.exists(), isTrue);
+        expect(await journaledBackup.exists(), isTrue);
+        expect(await unjournaledBackup.exists(), isFalse);
+      },
+    );
+
+    test(
       'cleanupOrphans preserves legacy audio after migration write failure',
       () async {
         const hash = 'legacy_audio_hash';

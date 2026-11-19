@@ -3108,6 +3108,139 @@ void main() {
   // ====================================================================
   // non-audio deletion cleanup errors
   group('interrupted non-audio deletion recovery', () {
+    test('interrupted backup write keeps the intact original', () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_missing_backup',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_missing_backup',
+        name: 'intact original',
+        hash: 'delete_missing_backup_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([3, 4]));
+      await operations.addRecord(record);
+
+      operations.beforeNonAudioBackupWriteForTesting = (_) async {
+        throw StateError('simulated interruption before backup commit');
+      };
+      await expectLater(
+        operations.deleteRecord(record.id),
+        throwsA(isA<StateError>()),
+      );
+      final journalKeys = await WebFileStore.keysWithPrefix(
+        'pictures/.manifest-delete-journal-',
+      );
+      expect(journalKeys, hasLength(1));
+      expect(
+        await WebFileStore.keysWithPrefix('pictures/.manifest-delete-backup-'),
+        isEmpty,
+      );
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_missing_backup',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(
+          (await restarted.loadRecords()).map((item) => item.id), [record.id]);
+      expect(await restarted.readFile(record.storagePath), [3, 4]);
+      expect(
+        await restarted.fileExists(
+          journalKeys.single.substring('pictures/'.length),
+        ),
+        isFalse,
+      );
+    });
+
+    test('concurrent journal recovery retries after a failed attempt',
+        () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_concurrent_recovery',
+        name: 'concurrent recovery',
+        hash: 'delete_concurrent_recovery_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      final originalBytes = Uint8List.fromList([8, 9]);
+      await operations.writeFile(record.storagePath, originalBytes);
+      await operations.addRecord(record);
+
+      const backupName = '.manifest-delete-backup-concurrent';
+      const journalName = '.manifest-delete-journal-concurrent.json';
+      await operations.writeFile(backupName, originalBytes);
+      await operations.deleteFile(record.storagePath);
+      await operations.writeFile(
+        journalName,
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({
+              'files': {record.storagePath: backupName},
+            }),
+          ),
+        ),
+      );
+
+      final firstReload = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final secondReload = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final backupRead = Completer<void>();
+      final finishRecovery = Completer<void>();
+      firstReload.beforeNonAudioRecoveryBackupReadForTesting = (_) async {
+        backupRead.complete();
+        await finishRecovery.future;
+        throw StateError('injected backup read failure');
+      };
+
+      final firstLoad = firstReload.loadRecords();
+      await backupRead.future;
+      var secondLoadCompleted = false;
+      final secondLoad = secondReload.loadRecords().then((records) {
+        secondLoadCompleted = true;
+        return records;
+      });
+      await Future<void>.delayed(Duration.zero);
+      try {
+        expect(secondLoadCompleted, isFalse);
+      } finally {
+        finishRecovery.complete();
+      }
+
+      expect(await firstLoad, isEmpty);
+      expect((await secondLoad).map((item) => item.id), [record.id]);
+      expect(await secondReload.readFile(record.storagePath), [8, 9]);
+      expect(await secondReload.fileExists(journalName), isFalse);
+      expect(await secondReload.fileExists(backupName), isFalse);
+    });
+
     test('concurrent reload does not finalize an active delete journal',
         () async {
       final originalPathProvider = PathProviderPlatform.instance;
@@ -3345,6 +3478,14 @@ void main() {
               await operations.writeFile(backupName, originalBytes);
               backups[originalName] = backupName;
               await operations.deleteFile(originalName);
+              if (i == 0) {
+                // Simulate a partial destination left by an interrupted
+                // restore. Recovery must verify contents, not just existence.
+                await operations.writeFile(
+                  originalName,
+                  Uint8List.fromList([0]),
+                );
+              }
             }
             final journalName = '.manifest-delete-journal-recovery-$count.json';
             await operations.writeFile(

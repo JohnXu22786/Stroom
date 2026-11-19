@@ -510,15 +510,91 @@ class DataSafetyManager {
           followLinks: false,
         );
         if (directoryType != FileSystemEntityType.directory) continue;
+
+        final journaledBackupNames = <String>{};
+        var hasUnreadableDeleteJournal = false;
+        await for (final entry in dir.list(followLinks: false)) {
+          if (entry is! File ||
+              !p.basename(entry.path).startsWith('.manifest-delete-journal-')) {
+            continue;
+          }
+          try {
+            final decoded = jsonDecode(await entry.readAsString());
+            if (decoded is! Map || decoded['files'] is! Map) {
+              throw const FormatException('Invalid media deletion journal');
+            }
+            for (final backupName in (decoded['files'] as Map).values) {
+              if (backupName is! String ||
+                  p.basename(backupName) != backupName ||
+                  !backupName.startsWith('.manifest-delete-backup-')) {
+                throw const FormatException(
+                  'Invalid media deletion backup name',
+                );
+              }
+              journaledBackupNames.add(backupName);
+            }
+          } catch (e) {
+            // Preserve possible recovery data when a journal cannot be read.
+            hasUnreadableDeleteJournal = true;
+            debugPrint(
+              '[DataSafetyManager] 读取媒体删除日志失败，保留备份文件: $e',
+            );
+          }
+        }
+
         final entries = await dir.list(followLinks: false).toList();
         for (final entry in entries) {
           if (entry is! File) continue;
           final name = p.basename(entry.path);
-          // Manifest deletion backups and journals may be the only durable
-          // copy of media after an interrupted delete. ManifestOperations
-          // owns recovery and cleanup of these reserved files.
-          if (name.startsWith('.manifest-delete-')) continue;
+          if (name.startsWith('.manifest-delete-journal-')) continue;
+          if (name.startsWith('.manifest-delete-backup-') &&
+              (hasUnreadableDeleteJournal ||
+                  journaledBackupNames.contains(name))) {
+            continue;
+          }
           await deleteIfOrphaned(entry);
+        }
+      }
+
+      // Compressed attachment caches are disposable but live one directory
+      // below attachments: temp_compressed/<conversationId>/<cache-file>.
+      // Restrict this scan to that namespace and one level so user folders
+      // under attachments are never recursively traversed.
+      final attachmentsRoot = Directory(p.join(appDir, 'attachments'));
+      final compressedCacheRoot = Directory(
+        p.join(appDir, 'attachments', 'temp_compressed'),
+      );
+      try {
+        final attachmentsType = await FileSystemEntity.type(
+          attachmentsRoot.path,
+          followLinks: false,
+        );
+        final cacheRootType = await FileSystemEntity.type(
+          compressedCacheRoot.path,
+          followLinks: false,
+        );
+        if (attachmentsType == FileSystemEntityType.directory &&
+            cacheRootType == FileSystemEntityType.directory) {
+          final conversations =
+              await compressedCacheRoot.list(followLinks: false).toList();
+          for (final entry in conversations) {
+            if (entry is! Directory) continue;
+            try {
+              final cacheFiles =
+                  await Directory(entry.path).list(followLinks: false).toList();
+              for (final cacheFile in cacheFiles) {
+                if (cacheFile is File) {
+                  await deleteIfOrphaned(
+                    File(cacheFile.path),
+                    checkReferences: false,
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint(
+                '[DataSafetyManager] 读取压缩缓存目录失败 ${entry.path}: $e',
+              );
+            }
           }
         }
       } catch (e) {

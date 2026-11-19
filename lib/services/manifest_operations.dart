@@ -31,6 +31,7 @@ import 'manifest_database.dart';
 /// and forwards its static API to it (see [FileManifest] and [ImageManifest]).
 class ManifestOperations<T extends FileRecord> {
   static final Set<String> _activeNonAudioDeleteJournalKeys = {};
+  static final Map<String, Future<bool>> _recoveringNonAudioDeleteJournals = {};
 
   final String manifestKey;
   final String storageDirName;
@@ -100,8 +101,16 @@ class ManifestOperations<T extends FileRecord> {
   @visibleForTesting
   Future<void> Function(String name)? beforeNonAudioBackupDeleteForTesting;
 
+  /// Pauses recovery before a backup is read in manifest operation tests.
+  @visibleForTesting
+  Future<void> Function(String name)?
+      beforeNonAudioRecoveryBackupReadForTesting;
+
   @visibleForTesting
   Future<void> Function(String name)? afterNonAudioBackupWriteForTesting;
+
+  @visibleForTesting
+  Future<void> Function(String name)? beforeNonAudioBackupWriteForTesting;
 
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
@@ -378,6 +387,26 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
+  Future<void> _writeAtomicallyStoredFile(String name, Uint8List bytes) async {
+    if (_useWebFileStore) {
+      await WebFileStore.write(_webKey(name), bytes);
+    } else {
+      final dir = await _storageDir;
+      await AtomicFile.writeBytes(
+        File(await _storedFilePath(dir, name)),
+        bytes,
+      );
+    }
+  }
+
+  bool _storedBytesEqual(Uint8List first, Uint8List second) {
+    if (first.length != second.length) return false;
+    for (var i = 0; i < first.length; i++) {
+      if (first[i] != second[i]) return false;
+    }
+    return true;
+  }
+
   Future<_NonAudioFileSnapshot> _snapshotNonAudioFiles(
     Iterable<T> records,
     Map<String, int> storageCount,
@@ -424,7 +453,8 @@ class ManifestOperations<T extends FileRecord> {
               journalBytes,
             );
           }
-          await _writeStoredFile(backupName, bytes);
+          await beforeNonAudioBackupWriteForTesting?.call(backupName);
+          await _writeAtomicallyStoredFile(backupName, bytes);
           await afterNonAudioBackupWriteForTesting?.call(backupName);
         }
       }
@@ -523,61 +553,108 @@ class ManifestOperations<T extends FileRecord> {
     }
 
     for (final journalName in journalFiles) {
-      if (_activeNonAudioDeleteJournalKeys.contains(_webKey(journalName))) {
+      final journalKey = _webKey(journalName);
+      if (_activeNonAudioDeleteJournalKeys.contains(journalKey)) {
         continue;
       }
+      Completer<bool>? recoveryFinished;
+      Future<bool>? recoveryFuture;
+      var recoveryCompletedByAnotherCall = false;
+      while (recoveryFinished == null) {
+        final existingRecovery = _recoveringNonAudioDeleteJournals[journalKey];
+        if (existingRecovery == null) {
+          recoveryFinished = Completer<bool>();
+          recoveryFuture = recoveryFinished.future;
+          _recoveringNonAudioDeleteJournals[journalKey] = recoveryFuture;
+        } else if (await existingRecovery) {
+          recoveryCompletedByAnotherCall = true;
+          break;
+        }
+      }
+      if (recoveryCompletedByAnotherCall) continue;
+
+      var recoverySucceeded = false;
       try {
-        final bytes = await _readStoredFile(journalName);
-        if (bytes == null) continue;
-        final decoded = jsonDecode(utf8.decode(bytes));
-        if (decoded is! Map || decoded['files'] is! Map) {
-          throw const FormatException('Invalid media deletion journal');
-        }
-        final backups = <String, String>{};
-        for (final entry in (decoded['files'] as Map).entries) {
-          if (entry.key is! String || entry.value is! String) {
-            throw const FormatException('Invalid media deletion journal entry');
+        try {
+          final bytes = await _readStoredFile(journalName);
+          if (bytes == null) {
+            recoverySucceeded = true;
+            continue;
           }
-          final originalName = _validatedFileName(entry.key as String);
-          final backupName = _validatedFileName(entry.value as String);
-          if (!backupName.startsWith('.manifest-delete-backup-')) {
-            throw const FormatException('Invalid media deletion backup name');
+          final decoded = jsonDecode(utf8.decode(bytes));
+          if (decoded is! Map || decoded['files'] is! Map) {
+            throw const FormatException('Invalid media deletion journal');
           }
-          backups[originalName] = backupName;
-        }
-        final snapshot = _NonAudioFileSnapshot(
-          backups: backups,
-          journalName: journalName,
-        );
-        final liveRecords = (await _dbGetAllRecords()).map(fromMap).toList();
-        final referencedNames = <String>{};
-        for (final record in liveRecords) {
-          referencedNames
-            ..add(storageNameOf(record))
-            ..add(_thumbFileNameOf(record));
-          if (_isImageTable) referencedNames.add('${hashOf(record)}_thumb.png');
-        }
-        final recovered = <String>[];
-        for (final entry in backups.entries) {
-          if (referencedNames.contains(entry.key) &&
-              !await _storedFileExists(entry.key)) {
-            final backup = await _readStoredFile(entry.value);
-            if (backup == null) {
-              throw StateError('Missing media deletion backup ${entry.value}');
+          final backups = <String, String>{};
+          for (final entry in (decoded['files'] as Map).entries) {
+            if (entry.key is! String || entry.value is! String) {
+              throw const FormatException(
+                'Invalid media deletion journal entry',
+              );
             }
-            await _writeStoredFile(entry.key, backup);
+            final originalName = _validatedFileName(entry.key as String);
+            final backupName = _validatedFileName(entry.value as String);
+            if (!backupName.startsWith('.manifest-delete-backup-')) {
+              throw const FormatException(
+                'Invalid media deletion backup name',
+              );
+            }
+            backups[originalName] = backupName;
           }
-          recovered.add(entry.value);
+          final snapshot = _NonAudioFileSnapshot(
+            backups: backups,
+            journalName: journalName,
+          );
+          final liveRecords = (await _dbGetAllRecords()).map(fromMap).toList();
+          final referencedNames = <String>{};
+          for (final record in liveRecords) {
+            referencedNames
+              ..add(storageNameOf(record))
+              ..add(_thumbFileNameOf(record));
+            if (_isImageTable) {
+              referencedNames.add('${hashOf(record)}_thumb.png');
+            }
+          }
+          final recovered = <String>[];
+          for (final entry in backups.entries) {
+            if (referencedNames.contains(entry.key)) {
+              final existing = await _readStoredFile(entry.key);
+              final backup = await _readStoredFile(entry.value);
+              if (backup == null) {
+                if (existing == null) {
+                  throw StateError(
+                    'Missing media deletion backup ${entry.value}',
+                  );
+                }
+              } else if (existing == null ||
+                  !_storedBytesEqual(existing, backup)) {
+                await beforeNonAudioRecoveryBackupReadForTesting?.call(
+                  entry.value,
+                );
+                await _writeAtomicallyStoredFile(entry.key, backup);
+              }
+            }
+            recovered.add(entry.value);
+          }
+          await _finishNonAudioFileSnapshot(snapshot, recovered);
+          recoverySucceeded = true;
+        } catch (error, stackTrace) {
+          await AppLogService.error(
+            'ManifestOperations($manifestKey)',
+            'failed to recover interrupted media deletion',
+            error,
+            stackTrace,
+          );
+          rethrow;
         }
-        await _finishNonAudioFileSnapshot(snapshot, recovered);
-      } catch (error, stackTrace) {
-        await AppLogService.error(
-          'ManifestOperations($manifestKey)',
-          'failed to recover interrupted media deletion',
-          error,
-          stackTrace,
-        );
-        rethrow;
+      } finally {
+        if (identical(
+          _recoveringNonAudioDeleteJournals[journalKey],
+          recoveryFuture,
+        )) {
+          _recoveringNonAudioDeleteJournals.remove(journalKey);
+        }
+        recoveryFinished!.complete(recoverySucceeded);
       }
     }
   }
