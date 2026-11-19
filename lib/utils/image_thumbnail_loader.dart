@@ -71,6 +71,9 @@ class ImageThumbnailLoader {
   @visibleForTesting
   static Future<void> Function(String hash)? beforeThumbnailPersistForTesting;
 
+  @visibleForTesting
+  static Future<void> Function()? afterExistingThumbnailReadForTesting;
+
   /// 加载 [record] 的缩略图字节：
   /// 内存缓存 → 磁盘 `_thumb_v2.png` → 缺失时读原图生成并持久化。
   ///
@@ -113,6 +116,8 @@ class ImageThumbnailLoader {
     } catch (e) {
       debugPrint('ImageThumbnailLoader read thumb failed: $e');
     }
+    await afterExistingThumbnailReadForTesting?.call();
+    if (!isCurrent()) return null;
     if (existing != null && existing.isNotEmpty) {
       _cache.put(record.hash, existing);
       return existing;
