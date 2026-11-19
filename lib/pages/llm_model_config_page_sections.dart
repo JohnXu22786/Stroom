@@ -216,6 +216,14 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      DropdownMenuItem(
+                        value: 'responses',
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.endpointResponsesApi,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                     onChanged: (v) {
                       if (v != null) setState(() => _endpointType = v);

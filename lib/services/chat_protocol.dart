@@ -16,9 +16,11 @@ import 'context_manager.dart'
         kToolOutputTruncatedSuffix,
         truncateByChars;
 import 'openai_protocol.dart';
+import 'responses_protocol.dart';
 
 export 'anthropic_protocol.dart' show AnthropicProtocol;
 export 'openai_protocol.dart' show OpenAIProtocol;
+export 'responses_protocol.dart' show ResponsesProtocol;
 
 // ============================================================================
 // ChatProtocol — 聊天协议抽象层
@@ -247,7 +249,9 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
       final diskBytes = await AttachmentStorage.readFile(att.storagePath);
       if (diskBytes == null || diskBytes.isEmpty) {
         return const AttachmentReadOutcome(
-            AttachmentReadStatus.unreadable, null);
+          AttachmentReadStatus.unreadable,
+          null,
+        );
       }
       bytes = diskBytes;
     } catch (e) {
@@ -284,10 +288,7 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
       mimeTypeOverride = _detectImagePayloadMimeType(bytes);
       att.compressedCachePersisted = true;
     } else {
-      final compression = await compressImageForSend(
-        bytes,
-        maxBytes: maxBytes,
-      );
+      final compression = await compressImageForSend(bytes, maxBytes: maxBytes);
       if (compression.decodable && compression.compressed != null) {
         bytes = compression.compressed!.bytes;
         mimeTypeOverride = compression.compressed!.mimeType;
@@ -350,8 +351,11 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
   final b64 = base64Encode(bytes);
   // 缓存（压缩后的）base64 供后续复用
   att.base64Data = b64;
-  return AttachmentReadOutcome(AttachmentReadStatus.ok, b64,
-      mimeType: mimeTypeOverride);
+  return AttachmentReadOutcome(
+    AttachmentReadStatus.ok,
+    b64,
+    mimeType: mimeTypeOverride,
+  );
 }
 
 /// 按魔数检测图片载荷的真实格式（PNG/JPEG）。
@@ -536,7 +540,7 @@ String rebuildToolResultText(ToolCallData tc, {int? maxChars}) {
 // ============================================================================
 
 abstract class ChatProtocol {
-  /// 协议名称：'openai' | 'anthropic'
+  /// 协议名称：'openai' | 'anthropic' | 'responses'
   String get name;
 
   /// 将中立历史构建为 API 请求消息。
@@ -583,16 +587,20 @@ abstract class ChatProtocol {
 
 /// 根据端点类型创建协议实例。
 ///
-/// [endpointType] 取值 'anthropic' 或 'openai'（默认）。
+/// [endpointType] 取值 'anthropic'、'responses' 或 'openai'（默认）。
 ChatProtocol createChatProtocol(String endpointType) {
-  return endpointType == 'anthropic' ? AnthropicProtocol() : OpenAIProtocol();
+  if (endpointType == 'anthropic') return const AnthropicProtocol();
+  if (endpointType == 'responses') return const ResponsesProtocol();
+  return const OpenAIProtocol();
 }
 
 /// 计算有效端点类型：模型覆盖 > 供应商 > 'openai'。
 ///
 /// 旧配置（没有 endpointType 字段）天然落到 'openai'，即数据迁移的默认路径。
 String effectiveEndpointType(
-    String? modelEndpointType, String? providerEndpointType) {
+  String? modelEndpointType,
+  String? providerEndpointType,
+) {
   if (modelEndpointType != null && modelEndpointType.isNotEmpty) {
     return modelEndpointType;
   }

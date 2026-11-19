@@ -11700,6 +11700,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       '범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      '이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다.';
 }
 
 /// The translations for Korean, as used in Republic of Korea (`ko_KR`).
@@ -23397,4 +23404,11 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   @override
   String get ocrSamplingSliderRepairRequired =>
       '범위를 벗어난 샘플링 슬라이더를 조정하거나 저장하기 전에 해당 옵션을 끄세요.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      '이 공급자에 설정된 Responses URL(예: /v1/responses)을 사용합니다. Stroom은 URL을 설정된 그대로 전송합니다.';
 }

@@ -12219,6 +12219,13 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Usa la URL de Responses configurada para este proveedor, por ejemplo, /v1/responses. Stroom la envía tal como está configurada.';
 }
 
 /// The translations for Spanish Castilian, as used in Spain (`es_ES`).
@@ -24436,4 +24443,11 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Ajusta cada control deslizante de muestreo fuera de rango o desactívalo antes de guardar.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Usa la URL de Responses configurada para este proveedor, por ejemplo, /v1/responses. Stroom la envía tal como está configurada.';
 }

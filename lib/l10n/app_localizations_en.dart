@@ -12022,6 +12022,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Adjust each out-of-range sampling slider or turn it off before saving.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -24041,4 +24048,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Adjust each out-of-range sampling slider or turn it off before saving.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.';
 }

@@ -12135,6 +12135,13 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو.';
 }
 
 /// The translations for Arabic, as used in Saudi Arabia (`ar_SA`).
@@ -24267,4 +24274,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'اضبط كل شريط تمرير لقيمة أخذ عينات خارج النطاق أو عطّل الخيار قبل الحفظ.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'استخدم عنوان Responses المُعدّ لهذا المزوّد، مثل /v1/responses. يرسل Stroom العنوان كما هو.';
 }

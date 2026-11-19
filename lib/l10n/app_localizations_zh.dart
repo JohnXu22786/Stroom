@@ -11385,6 +11385,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      '请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -22767,4 +22774,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      '请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。';
 }

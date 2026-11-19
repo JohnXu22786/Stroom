@@ -3,6 +3,11 @@ class AIStreamEvent {
   final bool isReasoning;
   final List<Map<String, dynamic>>? toolCalls;
 
+  /// Images returned as outputs by providers such as Responses image
+  /// generation. Payloads travel as events and are written to attachment
+  /// storage by the conversation stream manager, never into message JSON.
+  final List<AIStreamImage>? images;
+
   /// Anthropic extended thinking 的签名（signature_delta 累计结果）。
   /// 仅 Anthropic 协议产出；用于下一轮链重建时续接 thinking 块。
   final String? thinkingSignature;
@@ -23,10 +28,18 @@ class AIStreamEvent {
     this.text, {
     this.isReasoning = false,
     this.toolCalls,
+    this.images,
     this.thinkingSignature,
     this.usage,
     this.usageCostIncrement,
   });
 
   bool get isToolCallEvent => toolCalls != null && toolCalls!.isNotEmpty;
+}
+
+class AIStreamImage {
+  final String base64Data;
+  final String mimeType;
+
+  const AIStreamImage({required this.base64Data, required this.mimeType});
 }

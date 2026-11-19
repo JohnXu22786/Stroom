@@ -12189,6 +12189,13 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Verwende die für diesen Anbieter konfigurierte Responses-URL, zum Beispiel /v1/responses. Stroom sendet die URL unverändert.';
 }
 
 /// The translations for German, as used in Germany (`de_DE`).
@@ -24375,4 +24382,11 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Passe jeden Regler für einen ungültigen Stichprobenwert an oder deaktiviere die Option vor dem Speichern.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Verwende die für diesen Anbieter konfigurierte Responses-URL, zum Beispiel /v1/responses. Stroom sendet die URL unverändert.';
 }

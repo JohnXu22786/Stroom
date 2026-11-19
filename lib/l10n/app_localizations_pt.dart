@@ -12185,6 +12185,13 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Use a URL de Responses configurada para este provedor, como /v1/responses. O Stroom a envia sem alterações.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -24368,4 +24375,11 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   @override
   String get ocrSamplingSliderRepairRequired =>
       'Ajuste cada controle de amostragem fora do intervalo ou desative a opção antes de salvar.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Use a URL de Responses configurada para este provedor, como /v1/responses. O Stroom a envia sem alterações.';
 }

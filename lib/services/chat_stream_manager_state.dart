@@ -94,6 +94,7 @@ class _ConversationStreamState {
   Future<bool> Function(ChatMessage continuation)? onContinuation;
   final List<ChatMessage> pendingContinuations = [];
   final Set<ChatMessage> deliveringContinuations = {};
+  final List<GeneratedImageEvent> generatedImages = [];
   // The text sections are the canonical live representation. Completed
   // sections are immutable strings, and only the current section remains a
   // mutable buffer. This lets throttled snapshots reuse sealed sections
@@ -246,10 +247,7 @@ class _ConversationStreamState {
       final text = _completedTextChunks[chunkIndex];
       if (text.length <= maxLength) return [text];
       final halfLength = maxLength ~/ 2;
-      return [
-        _previewPrefix(text, halfLength),
-        _previewTail(text, halfLength),
-      ];
+      return [_previewPrefix(text, halfLength), _previewTail(text, halfLength)];
     }
     if (chunkIndex != _completedTextChunks.length) return null;
     if (_publishedTextPreviewLength <= maxLength) {
@@ -465,8 +463,9 @@ class _ConversationStreamState {
     final historyMessages = _checkpointBasePending
         ? const <Map<String, dynamic>>[]
         : history
-            .where((message) =>
-                !_checkpointedHistoryMessageIds.contains(message.id))
+            .where(
+              (message) => !_checkpointedHistoryMessageIds.contains(message.id),
+            )
             .map((message) => message.toMap())
             .toList();
     return {
@@ -497,9 +496,7 @@ class _ConversationStreamState {
     final savedHistory = checkpoint['historyMessages'];
     final baseMessageIds = checkpoint['baseMessageIds'];
     if (baseMessageIds is List) {
-      _checkpointedHistoryMessageIds.addAll(
-        baseMessageIds.whereType<String>(),
-      );
+      _checkpointedHistoryMessageIds.addAll(baseMessageIds.whereType<String>());
     }
     for (final raw in savedHistory is List ? savedHistory : const <dynamic>[]) {
       if (raw is Map && raw['id'] is String) {
@@ -653,9 +650,7 @@ class _ConversationStreamState {
   static final RegExp _markdownMath = RegExp(
     r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})',
   );
-  static final RegExp _markdownUrl = RegExp(
-    r'(?<!\w)(https?://|www\.)\S+',
-  );
+  static final RegExp _markdownUrl = RegExp(r'(?<!\w)(https?://|www\.)\S+');
   static final RegExp _markdownHtmlEntity = RegExp(
     r'&(?:[A-Za-z][A-Za-z0-9]+|#\d+);',
   );

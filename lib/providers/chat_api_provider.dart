@@ -1,17 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:dio/dio.dart';
+
 import '../l10n/app_localizations.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 import 'anthropic_chat_provider.dart';
 import 'chat_api_shared.dart';
+import 'responses_stream_parser.dart';
 import 'locale_provider.dart';
 export 'chat_api_shared.dart';
 
 part 'chat_api_provider_ext.dart';
+
+typedef OpenAICompatibleSseStream = Stream<String> Function(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+  Locale? locale,
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+});
+
+class _NonStreamingChatResult {
+  final String text;
+  final List<AIStreamEvent> events;
+
+  const _NonStreamingChatResult(this.text, this.events);
+}
 
 // ============================================================================
 // OpenAI Compatible 实现
@@ -25,7 +44,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   final String _apiKey;
   final String _baseUrl;
   final String _name;
+  final String _endpointType;
   final Dio _dio;
+  final OpenAICompatibleSseStream? _sseStreamOverride;
   final Locale? Function()? _localeOverride;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
@@ -34,28 +55,69 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
   Map<String, dynamic>? _lastUsage;
+  List<AIStreamEvent>? _lastNonStreamingEvents;
+
+  @visibleForTesting
+  String get endpointType => _endpointType;
+
+  /// Parsed Responses output items from the latest non-streaming request.
+  /// This preserves image and tool items that the legacy `Future<String>`
+  /// method cannot return directly.
+  List<AIStreamEvent>? get lastNonStreamingEvents => _lastNonStreamingEvents;
+
+  @override
+  Future<List<AIStreamEvent>> chatWithEvents(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
+    String? system,
+  }) async {
+    final result = await _chatWithEventsRequest(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+      cancelToken: cancelToken,
+      extraParams: extraParams,
+      system: system,
+    );
+    return List.unmodifiable(result.events);
+  }
 
   OpenAICompatibleChatProvider({
     required String baseUrl,
     required String apiKey,
     String name = 'OpenAI Compatible',
+    String endpointType = 'openai',
     Locale? Function()? localeOverride,
     Dio? dio,
+    @visibleForTesting OpenAICompatibleSseStream? sseStreamOverride,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
+        _endpointType = endpointType,
+        _sseStreamOverride = sseStreamOverride,
         _localeOverride = localeOverride,
         _dio = dio ??
-            Dio(BaseOptions(
-              baseUrl: '',
-              headers: {
-                'Content-Type': 'application/json',
-                if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-                ...openRouterAppHeaders,
-              },
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 60),
-            ));
+            Dio(
+              BaseOptions(
+                baseUrl: '',
+                headers: {
+                  'Content-Type': 'application/json',
+                  if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+                  ...openRouterAppHeaders,
+                },
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 60),
+              ),
+            );
 
   @override
   String get name => _name;
@@ -94,10 +156,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   @visibleForTesting
   static Map<String, dynamic>? normalizeUsage(dynamic usage) {
     if (usage is! Map) return null;
-    final inputD =
-        usageNumberToDouble(usage['prompt_tokens'] ?? usage['input_tokens']);
+    final inputD = usageNumberToDouble(
+      usage['prompt_tokens'] ?? usage['input_tokens'],
+    );
     final outputD = usageNumberToDouble(
-        usage['completion_tokens'] ?? usage['output_tokens']);
+      usage['completion_tokens'] ?? usage['output_tokens'],
+    );
     // API 返回的计费（美元）；OpenRouter 为 usage.total_cost，
     // 部分兼容端点用 usage.cost；total_cost 存在但不可解析时回退 cost
     final costD = usageNumberToDouble(usage['total_cost']) ??
@@ -143,14 +207,22 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     bool stream = false,
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
+    String? system,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
   }) {
-    return _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: stream,
-        tools: tools,
-        extraParams: extraParams);
+    return _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: stream,
+      tools: tools,
+      extraParams: extraParams,
+      system: system,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+    );
   }
 
   /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
@@ -265,6 +337,36 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? system,
   }) async {
+    final result = await _chatWithEventsRequest(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+      cancelToken: cancelToken,
+      extraParams: extraParams,
+      system: system,
+    );
+    if (result.events.any((event) => event.isToolCallEvent)) {
+      throw Exception(
+        'Responses returned function calls; use chatWithEvents or the streaming conversation path to consume them.',
+      );
+    }
+    return result.text;
+  }
+
+  Future<_NonStreamingChatResult> _chatWithEventsRequest(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
+    String? system,
+  }) async {
     if (_apiKey.isEmpty) {
       throw Exception(
         appLocalizationsForLocale(_localeOverride?.call())
@@ -272,14 +374,20 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       );
     }
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      extraParams: extraParams,
+      system: system,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+    );
 
     debugPrint(
-        'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
+      'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     try {
       _lastRequestBody = body;
@@ -293,41 +401,65 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastResponseData = null;
       _lastResponseHeaders = null;
       _lastUsage = null;
+      _lastNonStreamingEvents = null;
       final response = await _dio.post(
         _baseUrl,
         cancelToken: cancelToken,
         data: body,
       );
 
-      _lastResponseData = response.data is Map
+      final responseMap = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
+      _lastResponseData = _endpointType == 'responses'
+          ? sanitizeResponsesDiagnosticData(responseMap)
+          : responseMap;
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
-      _lastUsage = normalizeUsage(
-          response.data is Map ? (response.data as Map)['usage'] : null);
+      final responseUsage =
+          response.data is Map ? (response.data as Map)['usage'] : null;
+      _lastUsage = _endpointType == 'responses'
+          ? normalizeResponsesUsage(responseUsage)
+          : normalizeUsage(responseUsage);
 
-      final choices = response.data['choices'] as List?;
-      if (choices == null || choices.isEmpty) {
-        throw Exception(
-          appLocalizationsForLocale(_localeOverride?.call()).chatChoicesMissing,
-        );
+      if (_endpointType == 'responses') {
+        final responseData = responseMap;
+        final content = responsesText(responseData);
+        final parsedEvents = parseResponsesOutput(responseData);
+        final events = [
+          if (content.isNotEmpty) AIStreamEvent(content),
+          ...parsedEvents,
+        ];
+        _lastNonStreamingEvents = List<AIStreamEvent>.unmodifiable(events);
+        if (content.isEmpty &&
+            !parsedEvents.any(
+              (event) =>
+                  event.text.isNotEmpty ||
+                  event.images?.isNotEmpty == true ||
+                  event.isToolCallEvent,
+            )) {
+          throw Exception(
+            appLocalizationsForLocale(_localeOverride?.call())
+                .chatResponseContentEmpty,
+          );
+        }
+        return _NonStreamingChatResult(content, events);
       }
-      final content = choices[0]['message']?['content'] as String?;
+      final content = _chatCompletionsText(response.data);
       if (content == null) {
         throw Exception(
           appLocalizationsForLocale(_localeOverride?.call())
               .chatResponseContentEmpty,
         );
       }
-      return content;
+      final events = [AIStreamEvent(content)];
+      return _NonStreamingChatResult(content, events);
     } on DioException catch (e) {
       throw _handleChatDioError(e);
     } catch (e) {
       throw Exception(
-        appLocalizationsForLocale(_localeOverride?.call()).chatRequestFailed(
-          '$e',
-        ),
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatRequestFailed('$e'),
       );
     }
   }
@@ -354,13 +486,18 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       );
     }
 
-    final body = _buildBody(messages,
-        model: model,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        stream: true,
-        tools: tools,
-        extraParams: extraParams);
+    final body = _buildBody(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      stream: true,
+      tools: tools,
+      extraParams: extraParams,
+      system: system,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+    );
 
     _lastRequestBody = body;
     _lastRequestUrl = _baseUrl;
@@ -376,10 +513,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     _lastUsage = null;
 
     debugPrint(
-        'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
+      'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}',
+    );
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
     final Map<int, StringBuffer> toolCallArgumentBuffers = {};
+    final responseAccumulator = ResponsesStreamAccumulator();
     // 本次请求的 usage（局部收集，per-request 隔离——
     // 共享 provider 实例的 _lastUsage 槽会被并发对话覆盖）
     Map<String, dynamic>? localUsage;
@@ -389,7 +528,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     try {
       // Mark as successfully connected once we start receiving events
       _lastResponseStatusCode = 200;
-      await for (final event in sseStream(
+      await for (final event in (_sseStreamOverride ?? sseStream)(
         _baseUrl,
         {
           'Content-Type': 'application/json',
@@ -408,7 +547,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         // but be defensive in case a future implementation forgets the prefix.
         if (!event.startsWith('data: ')) {
           debugPrint(
-              'chat_api_provider: skipping unexpected SSE event (no data: prefix)');
+            'chat_api_provider: skipping unexpected SSE event (no data: prefix)',
+          );
           continue;
         }
         final dataStr = event.substring('data: '.length).trim();
@@ -416,15 +556,34 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
         try {
           final data = jsonDecode(dataStr) as Map<String, dynamic>;
-          _lastResponseData = data;
+          _lastResponseData = _endpointType == 'responses'
+              ? sanitizeResponsesDiagnosticData(data)
+              : data;
+
+          if (_endpointType == 'responses') {
+            for (final parsed in processResponsesStreamData(
+              data,
+              responseAccumulator,
+            )) {
+              if (parsed.usage != null) {
+                localUsage ??= {};
+                localUsage.addAll(parsed.usage!);
+                _lastUsage = Map<String, dynamic>.from(localUsage);
+                usageEmitted = true;
+                yield AIStreamEvent('', usage: parsed.usage!);
+              } else {
+                yield parsed;
+              }
+            }
+            continue;
+          }
 
           // 流中的 API 错误 chunk（choices 空 + error 字段）必须上抛，
           // 否则会被当成正常截断回复（对齐 Anthropic 行为）
           throwIfApiError(
             data,
-            localizations: () => appLocalizationsForLocale(
-              _localeOverride?.call(),
-            ),
+            localizations: () =>
+                appLocalizationsForLocale(_localeOverride?.call()),
           );
 
           // 收集实际 token 计量（OpenAI 规范：usage 只在末 chunk；
@@ -462,13 +621,17 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           }
 
           _accumulateToolCallDeltas(
-              data, toolCallAccumulators, toolCallArgumentBuffers);
+            data,
+            toolCallAccumulators,
+            toolCallArgumentBuffers,
+          );
         } catch (e) {
           // API 错误 chunk（Exception）必须上抛；仅解析/形状错误
           // （FormatException/TypeError，如代理式多余行）跳过继续。
           if (e is! FormatException && e is! TypeError) rethrow;
           debugPrint(
-              'OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
+            'OpenAICompatibleChatProvider: failed to parse SSE chunk: $e',
+          );
         }
       }
     } catch (e) {
@@ -497,11 +660,23 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     if (localUsage != null) _lastUsage = localUsage;
 
     // After stream ends, yield tool calls if any were accumulated
-    final toolEvent =
-        _buildToolCallEvent(toolCallAccumulators, toolCallArgumentBuffers);
+    final toolEvent = _endpointType == 'responses'
+        ? buildResponsesToolCallEvent(responseAccumulator)
+        : _buildToolCallEvent(toolCallAccumulators, toolCallArgumentBuffers);
     if (toolEvent != null) {
       yield toolEvent;
     }
+  }
+
+  String? _chatCompletionsText(dynamic responseData) {
+    final choices =
+        responseData is Map ? responseData['choices'] as List? : null;
+    if (choices == null || choices.isEmpty) {
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call()).chatChoicesMissing,
+      );
+    }
+    return choices[0]['message']?['content'] as String?;
   }
 }
 
@@ -515,8 +690,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 /// [baseUrl] API 基础 URL
 /// [apiKey] API 密钥
 /// [model] 可选，默认模型 ID
-/// [endpointType] 端点类型：'openai'（默认，OpenAI 兼容）| 'anthropic'
-///   （官方 Anthropic Messages API）。模型级覆盖 > 供应商级 > 'openai'。
+/// [endpointType] 端点类型：'openai'（默认，Chat Completions）|
+///   'responses'（OpenAI Responses）| 'anthropic'（Anthropic Messages）。
+///   模型级覆盖 > 供应商级 > 'openai'。
 BaseChatProvider createChatProviderFromConfig({
   required String providerName,
   required String baseUrl,
@@ -533,11 +709,12 @@ BaseChatProvider createChatProviderFromConfig({
       localeOverride: localeOverride,
     );
   }
-  // OpenAI-compatible（默认）
+  // Keep the default 'openai' route on Chat Completions for saved configs.
   return OpenAICompatibleChatProvider(
     baseUrl: baseUrl,
     apiKey: apiKey,
     name: providerName,
+    endpointType: endpointType,
     localeOverride: localeOverride,
   );
 }
