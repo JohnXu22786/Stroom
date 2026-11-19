@@ -111,11 +111,18 @@ class NotificationService {
   // ========================================================================
 
   /// Check if notifications are enabled (user setting).
-  Future<bool> get isEnabled async {
-    if (kIsWeb) return false;
-    await _notificationSettingQueue;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_notificationsEnabledKey) ?? false;
+  Future<bool> get isEnabled {
+    if (kIsWeb) return Future.value(false);
+    final completer = Completer<bool>();
+    _notificationSettingQueue = _notificationSettingQueue.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        completer.complete(prefs.getBool(_notificationsEnabledKey) ?? false);
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 
   /// Set whether notifications are enabled.
