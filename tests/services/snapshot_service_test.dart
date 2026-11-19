@@ -74,7 +74,6 @@ void main() {
       };
       final failed = await SnapshotService.createSnapshot(force: true);
       expect(failed, isNull);
-      SnapshotService.debugBeforeIndexWrite = null;
 
       final archives = (await snapDir.list().toList())
           .whereType<File>()
@@ -83,6 +82,12 @@ void main() {
       expect(archives, hasLength(2),
           reason: 'a completed archive remains available for recovery');
 
+      final recoveredDuringWriteFailure = await SnapshotService.readIndex();
+      expect(recoveredDuringWriteFailure.map((entry) => entry.file).toSet(),
+          archives.map((file) => p.basename(file.path)).toSet(),
+          reason: 'index persistence failure does not hide recovered archives');
+
+      SnapshotService.debugBeforeIndexWrite = null;
       final index = await SnapshotService.readIndex();
       expect(index.map((entry) => entry.file).toSet(),
           archives.map((file) => p.basename(file.path)).toSet(),

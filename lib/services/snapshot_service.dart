@@ -248,7 +248,11 @@ class SnapshotService {
           debugPrint('[SnapshotService] 重建索引跳过文件 $name: $e');
         }
       }
-      await _writeIndex(entries);
+      try {
+        await _writeIndex(entries);
+      } catch (e) {
+        debugPrint('[SnapshotService] 重建索引写入失败，返回扫描结果: $e');
+      }
       return entries;
     } catch (e) {
       debugPrint('[SnapshotService] 重建索引失败: $e');
