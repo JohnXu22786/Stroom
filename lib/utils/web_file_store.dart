@@ -8,8 +8,7 @@ import 'package:idb_shim/idb_shim.dart'
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
 
 import 'web_file_store_blob_stub.dart'
-    if (dart.library.js_interop) 'web_file_store_blob_web.dart'
-    as blob_store;
+    if (dart.library.js_interop) 'web_file_store_blob_web.dart' as blob_store;
 
 class WebFileStoreReadLimitExceededException implements Exception {
   const WebFileStoreReadLimitExceededException(this.maxBytes);
@@ -56,7 +55,8 @@ class WebFileStore {
   static Future<Object?> waitForRequestAndTransactionCompletionForTesting(
     Future<Object?> request,
     Future<void> completed,
-  ) => _waitForRequestAndTransactionCompletion(request, completed);
+  ) =>
+      _waitForRequestAndTransactionCompletion(request, completed);
 
   static Future<Object?> _waitForRequestAndTransactionCompletion(
     Future<Object?> request,
@@ -323,9 +323,8 @@ class WebFileStore {
     if (_testMode) return false;
     final db = await _database;
     final checkTxn = db.transaction('files', idbModeReadOnly);
-    final marker = await checkTxn
-        .objectStore('files')
-        .getObject(_formatMarkerKey);
+    final marker =
+        await checkTxn.objectStore('files').getObject(_formatMarkerKey);
     await checkTxn.completed;
     if (marker == _currentFormatVersion) return false;
 
@@ -339,6 +338,7 @@ class WebFileStore {
     }
     await keyTxn.completed;
 
+    var convertedAny = false;
     for (final key in keys) {
       final txn = db.transaction('files', idbModeReadWrite);
       final store = txn.objectStore('files');
@@ -355,6 +355,7 @@ class WebFileStore {
           throw StateError('Attachment migration size check failed: $key');
         }
         await store.put(blob, key);
+        convertedAny = true;
       }
       await txn.completed;
     }
@@ -364,7 +365,7 @@ class WebFileStore {
         .objectStore('files')
         .put(_currentFormatVersion, _formatMarkerKey);
     await markerTxn.completed;
-    return true;
+    return convertedAny;
   }
 
   static Future<void> _abortTransaction(Transaction transaction) async {
