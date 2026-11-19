@@ -241,12 +241,14 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
   }
 
   if (bytes == null) {
-    // 非图片超限：按 fileSize 提前拦截，避免加载超大文件
-    if (att.fileSize > maxAttachmentBytes && att.fileType != 'image') {
-      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
-    }
     try {
-      final diskBytes = await AttachmentStorage.readFile(att.storagePath);
+      // Non-image payloads cannot be compressed, so bound the disk read by
+      // their actual bytes. Images still need the complete source for the
+      // compression path below; fileSize is only a hint and can be stale.
+      final diskBytes = await AttachmentStorage.readFile(
+        att.storagePath,
+        maxBytes: att.fileType == 'image' ? null : maxAttachmentBytes,
+      );
       if (diskBytes == null || diskBytes.isEmpty) {
         return const AttachmentReadOutcome(
           AttachmentReadStatus.unreadable,
@@ -254,6 +256,8 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
         );
       }
       bytes = diskBytes;
+    } on AttachmentTooLargeException {
+      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
     } catch (e) {
       // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
       // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
@@ -452,9 +456,6 @@ Future<String?> readTextAttachmentContent(
   String storagePath,
   int fileSize,
 ) async {
-  if (fileSize > maxAttachmentBytes) {
-    return '[文件过大已跳过: $fileName]';
-  }
   try {
     final bytes = await AttachmentStorage.readFile(
       storagePath,

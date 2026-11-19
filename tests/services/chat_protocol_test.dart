@@ -818,6 +818,70 @@ void main() {
   // ═════════════════════════════════════════════════════════════════════
   // readAttachmentBase64 —— 超限图片自动压缩（用户已选择就必须发送）
   // ═════════════════════════════════════════════════════════════════════
+  group('readAttachmentBase64 bounded non-image reads', () {
+    test('stale oversized metadata allows a small persisted document',
+        () async {
+      final tmpRoot = Directory.systemTemp.createTempSync(
+        'stroom_openai_stale_attachment_',
+      );
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+      try {
+        final bytes = Uint8List.fromList([1, 2, 3]);
+        final storagePath = await AttachmentStorage.saveFile(
+          'stale.pdf',
+          bytes,
+        );
+        final att = Attachment(
+          fileName: 'stale.pdf',
+          mimeType: 'application/pdf',
+          fileType: 'document',
+          hash: 'stale-hash',
+          storagePath: storagePath,
+          fileSize: maxAttachmentBytes + 1,
+        );
+
+        final outcome = await readAttachmentBase64(att);
+
+        expect(outcome.status, AttachmentReadStatus.ok);
+        expect(base64Decode(outcome.base64!), bytes);
+      } finally {
+        PathProviderPlatform.instance = previousPathProvider;
+        tmpRoot.deleteSync(recursive: true);
+      }
+    });
+
+    test('actual oversized persisted bytes use the bounded read result',
+        () async {
+      int? requestedMaxBytes;
+      AttachmentStorage.readFileBoundedOverrideForTesting = (
+        storagePath, {
+        required maxBytes,
+      }) async {
+        requestedMaxBytes = maxBytes;
+        throw AttachmentTooLargeException(maxBytes!);
+      };
+      try {
+        final att = Attachment(
+          fileName: 'oversized.mp4',
+          mimeType: 'video/mp4',
+          fileType: 'video',
+          hash: 'oversized-hash',
+          storagePath: 'attachments/oversized.mp4',
+          fileSize: 0,
+        );
+
+        final outcome = await readAttachmentBase64(att);
+
+        expect(requestedMaxBytes, maxAttachmentBytes);
+        expect(outcome.status, AttachmentReadStatus.tooLarge);
+        expect(outcome.base64, isNull);
+      } finally {
+        AttachmentStorage.readFileBoundedOverrideForTesting = null;
+      }
+    });
+  });
+
   group('readAttachmentBase64 图片超限自动压缩', () {
     /// 照片风格大 PNG 夹具（约 3.6MB），全组共享只生成一次。
     late Uint8List bigPng;
@@ -1526,16 +1590,15 @@ void main() {
       expect(result, '[文件过大已跳过: huge.txt]');
     });
 
-    test('fileSize 超限时在读取前拦截（不加载超大文件进内存）', () async {
-      // 与 readAttachmentBase64 一致：附件元数据 fileSize 超硬顶时
-      // 直接返回占位，绝不把超大文件整包读入内存再丢弃。
+    test('stale oversized metadata allows small text stored under the limit',
+        () async {
       final bytes = Uint8List.fromList(utf8.encode('小文件'));
       final path = await AttachmentStorage.saveFile('tiny.txt', bytes);
 
       final result = await readTextAttachmentContent(
           'tiny.txt', path, maxAttachmentBytes + 1);
 
-      expect(result, '[文件过大已跳过: tiny.txt]');
+      expect(result, '小文件');
     });
 
     test('fileSize 元数据滞后（旧草稿为 0）时按实际字节硬顶拦截', () async {
