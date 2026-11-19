@@ -176,6 +176,7 @@ Widget _buildFileManagerApp({
   GlobalKey<NavigatorState>? navigatorKey,
   bool wrapInHomeStylePopScope = false,
   Locale locale = const Locale('zh', 'CN'),
+  ThemeData? theme,
 }) {
   final navKey = navigatorKey ?? GlobalKey<NavigatorState>();
 
@@ -214,6 +215,7 @@ Widget _buildFileManagerApp({
     child: MaterialApp(
       builder: _disableTestAnimations,
       locale: locale,
+      theme: theme,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Navigator(
         key: navKey,
@@ -3533,5 +3535,120 @@ void main() {
         expect(find.byKey(const Key('fm_folder_breadcrumb_btn')), findsNothing);
       },
     );
+  });
+
+  group('FileManagerView localized narrow-layout audit', () {
+    for (final locale in [const Locale('de'), const Locale('pt', 'BR')]) {
+      for (final theme in [ThemeData.light(), ThemeData.dark()]) {
+        for (final grid in [false, true]) {
+          for (final scale in [1.0, 1.6]) {
+            testWidgets(
+                '${locale.toLanguageTag()} ${theme.brightness.name} '
+                '${grid ? 'grid' : 'list'} at scale $scale', (tester) async {
+              final narrow = scale > 1;
+              await tester.binding.setSurfaceSize(
+                narrow ? const Size(320, 640) : const Size(800, 640),
+              );
+              addTearDown(() => tester.binding.setSurfaceSize(null));
+              tester.platformDispatcher.textScaleFactorTestValue = scale;
+              addTearDown(
+                tester.platformDispatcher.clearTextScaleFactorTestValue,
+              );
+
+              final config = FileManagerConfig<_TestFileRecord>(
+                title: 'Files',
+                showThumbnailToggle: true,
+                initialGridView: grid,
+                fileThumbnailBuilder: (_) => const ColoredBox(
+                  color: Colors.amber,
+                  child: SizedBox.expand(),
+                ),
+                fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
+                onFileTap: (_) {},
+              );
+              const alternateFolder =
+                  'alternate-folder-path-with-a-long-label-for-audit';
+              await tester.pumpWidget(
+                _buildFileManagerApp(
+                  config: config,
+                  folders: const {
+                    'very long folder title that exercises wrapping',
+                    alternateFolder,
+                  },
+                  manifestBridge: testManifestBridge,
+                  records: [
+                    _TestFileRecord(
+                      id: 'audit_file',
+                      name:
+                          'very long file title for constrained display labels',
+                      format: 'mmd',
+                      folder: '',
+                      size: 123456789,
+                      createdAt: DateTime.now(),
+                    ),
+                  ],
+                  locale: locale,
+                  theme: theme,
+                ),
+              );
+              await tester.pumpAndSettle();
+              expect(
+                tester.takeException(),
+                isNull,
+                reason:
+                    'locale=$locale theme=${theme.brightness} grid=$grid scale=$scale',
+              );
+              if (scale == 1.6) {
+                await tester.tap(
+                  find.byKey(
+                    Key(
+                      grid
+                          ? 'fm_grid_file_popup_audit_file'
+                          : 'fm_file_popup_audit_file',
+                    ),
+                  ),
+                );
+                await tester.pumpAndSettle();
+                expect(
+                  tester.takeException(),
+                  isNull,
+                  reason: 'file menu locale=$locale grid=$grid',
+                );
+                await tester.tapAt(const Offset(5, 400));
+                await tester.pumpAndSettle();
+
+                const folderName =
+                    'very long folder title that exercises wrapping';
+                await tester.tap(
+                  find.byKey(
+                    Key(
+                      grid
+                          ? 'fm_grid_folder_popup_$folderName'
+                          : 'fm_folder_popup_$folderName',
+                    ),
+                  ),
+                );
+                await tester.pumpAndSettle();
+                expect(
+                  tester.takeException(),
+                  isNull,
+                  reason: 'folder menu locale=$locale grid=$grid',
+                );
+                await tester.tapAt(const Offset(5, 400));
+                await tester.pumpAndSettle();
+
+                await tester.tap(find.byKey(const Key('fm_sort_btn')));
+                await tester.pumpAndSettle();
+                expect(
+                  tester.takeException(),
+                  isNull,
+                  reason: 'sort menu locale=$locale grid=$grid',
+                );
+              }
+            });
+          }
+        }
+      }
+    }
   });
 }
