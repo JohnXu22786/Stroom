@@ -47,6 +47,7 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   SynthesisConfigNotifier() : super(const SynthesisConfig());
 
   Future<void> _loading = Future<void>.value();
+  Future<void> _saveQueue = Future<void>.value();
   Future<void> get ready => _loading;
 
   /// 已知的 voice ID 白名单（非语音名称）
@@ -69,7 +70,8 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
         final configMap = Map<String, dynamic>.from(
           (jsonDecode(configJson) as Map).cast<String, dynamic>(),
         );
-        var config = SynthesisConfig.fromMap(configMap);
+        final persistedConfig = SynthesisConfig.fromMap(configMap);
+        var config = persistedConfig;
         // 统一强制为 wav 格式，忽略旧数据中的 mp3
         config = config.copyWith(format: 'wav');
 
@@ -81,7 +83,20 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
                 !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(voice))) {
           config = config.copyWith(voice: 'female');
           // 覆写持久化值
-          await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
+          late final bool persisted;
+          try {
+            persisted = await prefs.setString(
+              'synthesis_config',
+              jsonEncode(config.toMap()),
+            );
+          } catch (_) {
+            state = persistedConfig;
+            rethrow;
+          }
+          if (!persisted) {
+            state = persistedConfig;
+            return;
+          }
         }
 
         state = config;
@@ -92,29 +107,43 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   }
 
   Future<void> saveConfig(SynthesisConfig config) async {
-    try {
-      state = config;
+    await _enqueueConfigSave((_) => config);
+  }
+
+  Future<void> _enqueueConfigSave(
+    SynthesisConfig Function(SynthesisConfig current) buildConfig,
+  ) {
+    final save = _saveQueue.catchError((Object _) {}).then((_) async {
+      await _loading;
+      final config = buildConfig(state);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
-    } catch (e) {
-      debugPrint('Failed to save synthesis config: $e');
-    }
+      final persisted = await prefs.setString(
+        'synthesis_config',
+        jsonEncode(config.toMap()),
+      );
+      if (!persisted) {
+        throw StateError('Failed to persist synthesis config');
+      }
+      state = config;
+    });
+    _saveQueue = save;
+    return save;
   }
 
   Future<void> updateVoice(String voice) async {
-    await saveConfig(state.copyWith(voice: voice));
+    await _enqueueConfigSave((current) => current.copyWith(voice: voice));
   }
 
   Future<void> updateSpeed(double speed) async {
-    await saveConfig(state.copyWith(speed: speed));
+    await _enqueueConfigSave((current) => current.copyWith(speed: speed));
   }
 
   Future<void> updateVolume(double volume) async {
-    await saveConfig(state.copyWith(volume: volume));
+    await _enqueueConfigSave((current) => current.copyWith(volume: volume));
   }
 
   Future<void> updateFormat(String format) async {
-    await saveConfig(state.copyWith(format: format));
+    await _enqueueConfigSave((current) => current.copyWith(format: format));
   }
 
   Future<void> resetToDefaults() async {

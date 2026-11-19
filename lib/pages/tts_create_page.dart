@@ -83,6 +83,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   /// 表单校验错误（显示在底部错误横幅中，样式与 OCR/ASR 页面一致）
   String? _errorMessage;
+  bool _isSubmitting = false;
 
   /// "请输入要转换的文本" 错误横幅是否正在显示。用标志位而不是
   /// 字符串比较，避免文案改动后自动收起逻辑静默失效。
@@ -305,7 +306,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return _modelConfig != null;
   }
 
-  void _generateSpeech() {
+  Future<void> _generateSpeech() async {
+    if (_isSubmitting) return;
+
     if (!_isTTSConfigured() ||
         _availableModels.isEmpty ||
         _selectedModelIndex == null ||
@@ -328,40 +331,54 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     _focusNode.unfocus();
 
-    // 保存当前配置
-    final synthNotifier = ref.read(synthesisConfigProvider.notifier);
-    if (_modelConfig!.voices.isNotEmpty) {
-      // 异步保存，不等待
-      synthNotifier.updateVoice(_selectedVoice);
-    }
-    synthNotifier.updateSpeed(_speed);
-    synthNotifier.updateVolume(_volume);
-
-    // 查找裁切预设
-    Map<String, dynamic>? trimPreset;
-    if (_modelConfig!.selectedTrimPresetId != null) {
-      final customPresets = ref.read(customTrimPresetsProvider);
-      trimPreset = getTrimPresetById(
-        _modelConfig!.selectedTrimPresetId!,
-        customPresets,
-      );
-    }
-
-    // 获取选中的供应商配置
     final modelOption = _availableModels[_selectedModelIndex!];
-
-    // 收集自定义参数值
+    final selectedVoice = _selectedVoice;
+    final speed = _speed;
+    final volume = _volume;
+    final trimPresetId = modelOption.config.selectedTrimPresetId;
+    final customTrimPresets =
+        trimPresetId == null ? null : ref.read(customTrimPresetsProvider);
     final customParams = <String, String>{};
     for (final entry in _customParamControllers.entries) {
       customParams[entry.key] = entry.value.text;
     }
-    // instruction 参数
     final instruction = _instructionController.text.trim();
     if (instruction.isNotEmpty) {
       customParams['instructions'] = instruction;
     }
-
     final title = _titleController.text.trim();
+    final folder = _saveFolder;
+
+    // 保存当前配置
+    final synthNotifier = ref.read(synthesisConfigProvider.notifier);
+    setState(() {
+      _isSubmitting = true;
+    });
+    try {
+      await Future.wait([
+        if (modelOption.config.voices.isNotEmpty)
+          synthNotifier.updateVoice(selectedVoice),
+        synthNotifier.updateSpeed(speed),
+        synthNotifier.updateVolume(volume),
+      ]);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = error.toString();
+      });
+      return;
+    }
+    if (!mounted) return;
+
+    // 查找裁切预设
+    Map<String, dynamic>? trimPreset;
+    if (trimPresetId != null) {
+      trimPreset = getTrimPresetById(
+        trimPresetId,
+        customTrimPresets!,
+      );
+    }
 
     // 添加到任务列表，在后台执行合成
     ref.read(taskListProvider.notifier).addTask(
@@ -373,7 +390,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           modelConfig: modelOption.config,
           customParams: customParams,
           trimPreset: trimPreset,
-          folder: _saveFolder,
+          folder: folder,
           replaceRecordId:
               widget.replaceRecordId ?? widget.retryTask?.replaceRecordId,
         );
@@ -1300,7 +1317,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _generateSpeech,
+                onPressed: _isSubmitting ? null : _generateSpeech,
                 icon: const Icon(Icons.audio_file, size: 20),
                 label: ConstrainedText(
                   l10n.ttsGenerateRecording,

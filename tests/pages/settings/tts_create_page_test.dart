@@ -1,13 +1,33 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/pages/tts_create_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
+
+class _GatedSynthesisConfigStore extends InMemorySharedPreferencesStore {
+  _GatedSynthesisConfigStore() : super.empty();
+
+  final writeStarted = Completer<void>();
+  final releaseWrite = Completer<void>();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.synthesis_config' && !writeStarted.isCompleted) {
+      writeStarted.complete();
+      await releaseWrite.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
 
 // ============================================================================
 // Helper: Build test app with optional provider overrides
@@ -439,6 +459,86 @@ void main() {
       await tester.pump();
 
       expect(find.text('请输入要转换的文本'), findsNothing);
+    });
+  });
+
+  group('TTSCreatePage - submission snapshot', () {
+    testWidgets('uses the selected model from when settings save begins', (
+      tester,
+    ) async {
+      final store = _GatedSynthesisConfigStore();
+      SharedPreferencesStorePlatform.instance = store;
+      final entry = ProviderEntry(
+        id: 'test_tts',
+        type: 'tts',
+        name: 'TTS供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'OpenAI',
+            host: 'https://api.openai.com/v1',
+            key: 'test-key',
+            models: [
+              ModelConfig(
+                name: 'TTS-1',
+                modelId: 'tts-1',
+                voices: [VoiceEntry(name: 'Alloy', id: 'alloy')],
+              ),
+              ModelConfig(
+                name: 'TTS-2',
+                modelId: 'tts-2',
+                voices: [VoiceEntry(name: 'Nova', id: 'nova')],
+              ),
+            ],
+          ),
+        ],
+      );
+      final entriesNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(entries: [entry]);
+      final container = ProviderContainer(
+        overrides: [
+          taskListProvider.overrideWith((ref) {
+            final notifier = TaskListNotifier(ref);
+            // ignore: invalid_use_of_visible_for_testing_member
+            notifier.debugSynthesize = (_, _, _) async => Uint8List(0);
+            return notifier;
+          }),
+          providerEntriesProvider.overrideWith((ref) => entriesNotifier),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const TTSCreatePage(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1), '你好世界');
+      await tester.pump();
+
+      await tester.tap(find.text('生成录音'));
+      await tester.pump();
+      await store.writeStarted.future;
+
+      await tester.tap(find.text('TTS-1 | OpenAI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('TTS-2 | OpenAI').last);
+      await tester.pump();
+
+      store.releaseWrite.complete();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump();
+      }
+
+      expect(container.read(taskListProvider), hasLength(1));
+      expect(
+          container.read(taskListProvider).single.modelConfig.modelId, 'tts-1');
     });
   });
 
