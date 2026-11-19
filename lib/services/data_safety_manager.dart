@@ -486,9 +486,12 @@ class DataSafetyManager {
       final cutoff = DateTime.now().subtract(orphanGracePeriod);
       var deleted = 0;
 
-      Future<void> deleteIfOrphaned(File file) async {
+      Future<void> deleteIfOrphaned(
+        File file, {
+        bool checkReferences = true,
+      }) async {
         final name = p.basename(file.path);
-        if (referenced.contains(name)) return;
+        if (checkReferences && referenced.contains(name)) return;
         try {
           final stat = await file.stat();
           if (stat.modified.isAfter(cutoff)) return;
@@ -538,7 +541,10 @@ class DataSafetyManager {
                   await Directory(entry.path).list(followLinks: false).toList();
               for (final cacheFile in cacheFiles) {
                 if (cacheFile is File) {
-                  await deleteIfOrphaned(File(cacheFile.path));
+                  await deleteIfOrphaned(
+                    File(cacheFile.path),
+                    checkReferences: false,
+                  );
                 }
               }
             } catch (e) {
