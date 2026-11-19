@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_player_temp_file.dart';
 
@@ -117,6 +118,36 @@ void main() {
       expect(directory.listSync(), isEmpty);
     },
   );
+
+  test('logs cleanup failures when disposal happens during the write',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final previousDebugPrint = debugPrint;
+    final logMessages = <String>[];
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logMessages.add(message);
+    };
+    addTearDown(() => debugPrint = previousDebugPrint);
+    var disposed = false;
+
+    await expectLater(
+      writeAudioPlayerTempFile(
+        getTempDirectory: () async => directory,
+        bytes: [1, 2, 3],
+        extension: 'wav',
+        isDisposed: () => disposed,
+        writeBytes: (file, _) async {
+          await Directory(file.path).create();
+          disposed = true;
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(logMessages, hasLength(1));
+    expect(logMessages.single, contains('Failed to remove disposed audio'));
+  });
 
   test('waits for player disposal before deleting its temp file', () async {
     final directory = await Directory.systemTemp.createTemp('audio_player_');

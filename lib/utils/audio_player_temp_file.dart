@@ -41,7 +41,14 @@ Future<File?> writeAudioPlayerTempFile({
   }
 
   if (isDisposed()) {
-    await deleteAudioPlayerTempFile(file);
+    try {
+      await deleteAudioPlayerTempFile(file);
+    } catch (cleanupError) {
+      debugPrint(
+        'Failed to remove disposed audio temp file ${file.path}: $cleanupError',
+      );
+      rethrow;
+    }
     return null;
   }
   return file;
