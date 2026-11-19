@@ -50,6 +50,7 @@ class NotificationService {
   /// Serializes ID reservations so overlapping notifications cannot store
   /// the same value in shared preferences.
   Future<void> _notificationIdReservationQueue = Future.value();
+  Future<void> _notificationSettingQueue = Future.value();
 
   /// Callback for in-app notification display.
   /// Set by the app shell to show an in-app banner.
@@ -110,16 +111,49 @@ class NotificationService {
   // ========================================================================
 
   /// Check if notifications are enabled (user setting).
-  Future<bool> get isEnabled async {
-    if (kIsWeb) return false;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_notificationsEnabledKey) ?? false;
+  Future<bool> get isEnabled {
+    if (kIsWeb) return Future.value(false);
+    final completer = Completer<bool>();
+    _notificationSettingQueue = _notificationSettingQueue.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        completer.complete(prefs.getBool(_notificationsEnabledKey) ?? false);
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 
   /// Set whether notifications are enabled.
-  Future<void> setEnabled(bool value) async {
+  Future<void> setEnabled(bool value) {
+    final completer = Completer<void>();
+    _notificationSettingQueue = _notificationSettingQueue.then((_) async {
+      try {
+        await _writeEnabled(value);
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _writeEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_notificationsEnabledKey, value);
+    final previousValue = prefs.getBool(_notificationsEnabledKey);
+    try {
+      if (!await prefs.setBool(_notificationsEnabledKey, value)) {
+        throw StateError('Failed to save notification setting.');
+      }
+    } catch (_) {
+      if (previousValue == null) {
+        await prefs.remove(_notificationsEnabledKey);
+      } else {
+        await prefs.setBool(_notificationsEnabledKey, previousValue);
+      }
+      rethrow;
+    }
   }
 
   /// Check if permission has been requested before.

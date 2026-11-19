@@ -149,10 +149,29 @@ class _NotificationSettingsPageState
     await _checkPermission();
     if (!mounted) return;
 
-    await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
+    try {
+      await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
+    } catch (_) {
+      _showNotificationSaveError();
+      return;
+    }
     setState(() {
       _notificationsEnabled = granted;
     });
+  }
+
+  void _showNotificationSaveError() {
+    if (!mounted) return;
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isChinese
+              ? '通知设置保存失败，请重试。'
+              : 'Could not save notification settings. Please try again.',
+        ),
+      ),
+    );
   }
 
   Future<void> _openSystemSettings() async {
@@ -418,13 +437,17 @@ class _NotificationSettingsPageState
                     activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
-                            await ref
-                                .read(notificationSettingsProvider.notifier)
-                                .setEnabled(value);
-                            if (mounted) {
-                              setState(() {
-                                _notificationsEnabled = value;
-                              });
+                            try {
+                              await ref
+                                  .read(notificationSettingsProvider.notifier)
+                                  .setEnabled(value);
+                              if (mounted) {
+                                setState(() {
+                                  _notificationsEnabled = value;
+                                });
+                              }
+                            } catch (_) {
+                              _showNotificationSaveError();
                             }
                           }
                         : null,
