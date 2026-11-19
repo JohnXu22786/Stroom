@@ -90,4 +90,38 @@ void main() {
       expect(directory.listSync(), isEmpty);
     },
   );
+
+  test('waits for player disposal before deleting its temp file', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/playing.wav');
+    await file.writeAsBytes([1, 2, 3]);
+    final disposalStarted = Completer<void>();
+    final finishDisposal = Completer<void>();
+
+    final cleanup = disposeAudioPlayerTempFile(
+      tempFilePath: file.path,
+      disposePlayer: () async {
+        disposalStarted.complete();
+        await finishDisposal.future;
+      },
+    );
+
+    await disposalStarted.future;
+    expect(await file.exists(), isTrue);
+    finishDisposal.complete();
+    await cleanup;
+
+    expect(await file.exists(), isFalse);
+  });
+
+  test('surfaces temp-file deletion failures', () async {
+    final directory = await Directory.systemTemp.createTemp('audio_player_');
+    addTearDown(() => directory.delete(recursive: true));
+
+    await expectLater(
+      deleteAudioPlayerTempFile(File(directory.path)),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
 }

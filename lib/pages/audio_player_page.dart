@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -43,6 +42,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   AudioPlayerAdapter? _player;
   bool _isInitialized = false;
+  bool _isRetrying = false;
   bool _hasError = false;
   String _errorMessage = '';
   String _diagnosticInfo = '';
@@ -98,16 +98,23 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration?>? _durSub;
   StreamSubscription<void>? _stateSub;
+  Future<void>? _playerDisposal;
 
   /// 清理播放器资源（取消订阅 + dispose），避免重试时泄漏
-  void _disposePlayer() {
-    _posSub?.cancel();
+  Future<void> _disposePlayer() {
+    return _playerDisposal ??= _disposePlayerResources().whenComplete(() {
+      _playerDisposal = null;
+    });
+  }
+
+  Future<void> _disposePlayerResources() async {
+    await _posSub?.cancel();
     _posSub = null;
-    _durSub?.cancel();
+    await _durSub?.cancel();
     _durSub = null;
-    _stateSub?.cancel();
+    await _stateSub?.cancel();
     _stateSub = null;
-    _player?.dispose();
+    await _player?.dispose();
     _player = null;
     _isInitialized = false;
     _position = Duration.zero;
@@ -417,7 +424,12 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       }
     } catch (e) {
       if (mounted) {
-        _disposePlayer();
+        try {
+          await _disposePlayer();
+        } catch (disposeError) {
+          debugPrint('AudioPlayerPage 清理失败: $disposeError');
+        }
+        if (!mounted) return;
         final ext =
             path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
         final diag = '文件: ${path.basename(widget.filePath)} | '
@@ -644,13 +656,27 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       return AudioPlayerErrorView(
         errorMessage: _errorMessage,
         diagnosticInfo: _diagnosticInfo,
-        onRetry: () {
-          if (_tempFilePath != null) {
-            unawaited(deleteAudioPlayerTempFile(File(_tempFilePath!)));
-            _tempFilePath = null;
+        onRetry: () async {
+          if (_isRetrying) return;
+          _isRetrying = true;
+          final tempFilePath = _tempFilePath;
+          try {
+            await disposeAudioPlayerTempFile(
+              disposePlayer: _disposePlayer,
+              tempFilePath: tempFilePath,
+            );
+          } catch (e) {
+            if (!mounted) return;
+            setState(() {
+              _isRetrying = false;
+              _errorMessage = e.toString();
+            });
+            return;
           }
-          _disposePlayer();
+          if (!mounted) return;
+          _tempFilePath = null;
           setState(() {
+            _isRetrying = false;
             _hasError = false;
             _errorMessage = '';
             _diagnosticInfo = '';
@@ -1164,10 +1190,16 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   @override
   void dispose() {
-    if (_tempFilePath != null) {
-      unawaited(deleteAudioPlayerTempFile(File(_tempFilePath!)));
-    }
-    _disposePlayer();
+    final tempFilePath = _tempFilePath;
+    _tempFilePath = null;
+    unawaited(
+      disposeAudioPlayerTempFile(
+        disposePlayer: _disposePlayer,
+        tempFilePath: tempFilePath,
+      ).catchError((Object error, StackTrace stackTrace) {
+        debugPrint('AudioPlayerPage 清理播放器失败: $error');
+      }),
+    );
     _textController.dispose();
     super.dispose();
   }

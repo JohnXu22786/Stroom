@@ -42,7 +42,20 @@ Future<File?> writeAudioPlayerTempFile({
 Future<void> deleteAudioPlayerTempFile(File file) async {
   try {
     await file.delete();
-  } on FileSystemException {
+  } on FileSystemException catch (error) {
     // The file may already have been removed by dispose or a failed write.
+    final errorCode = error.osError?.errorCode;
+    if (errorCode == 2 || errorCode == 3) return;
+    rethrow;
+  }
+}
+
+Future<void> disposeAudioPlayerTempFile({
+  required Future<void> Function() disposePlayer,
+  required String? tempFilePath,
+}) async {
+  await disposePlayer();
+  if (tempFilePath != null) {
+    await deleteAudioPlayerTempFile(File(tempFilePath));
   }
 }
