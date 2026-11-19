@@ -3160,6 +3160,7 @@ void main() {
         ),
         isFalse,
       );
+      await restarted.deleteRecord(record.id);
     });
 
     test('concurrent journal recovery retries after a failed attempt',
@@ -3239,6 +3240,7 @@ void main() {
       expect(await secondReload.readFile(record.storagePath), [8, 9]);
       expect(await secondReload.fileExists(journalName), isFalse);
       expect(await secondReload.fileExists(backupName), isFalse);
+      await secondReload.deleteRecord(record.id);
     });
 
     test('concurrent reload does not finalize an active delete journal',
@@ -3380,6 +3382,7 @@ void main() {
       expect(await restarted.readFile(record.storagePath), [4, 5]);
       expect(await restarted.fileExists(journalNames.single), isFalse);
       expect(await restarted.fileExists(backupName!), isFalse);
+      await restarted.deleteRecord(record.id);
     });
 
     test('backup cleanup failure leaves journal for restart cleanup', () async {
@@ -3515,6 +3518,9 @@ void main() {
             for (final backupName in backups.values) {
               expect(await restarted.fileExists(backupName), isFalse);
             }
+            await restarted.deleteRecords(
+              records.map((record) => record.id).toList(),
+            );
           }
         } finally {
           PathProviderPlatform.instance = originalPathProvider;
