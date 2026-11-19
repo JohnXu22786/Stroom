@@ -20,6 +20,7 @@ Uint8List _pendingTemporaryArtifactBackup({
   String cleanupStatus = 'pending',
   String successorOutcome = 'succeeded',
   bool includeTemporaryFile = false,
+  bool includeTaskListLastRead = false,
 }) {
   const executionId = 'execution';
   final reference = 'stroom-app-data:/task_flow_temporary/'
@@ -107,8 +108,21 @@ Uint8List _pendingTemporaryArtifactBackup({
       ],
     },
   ]);
+  if (includeTaskListLastRead) {
+    addJson('task_state/task_list_last_read.json', {
+      'lastRead': DateTime(2026).toIso8601String(),
+    });
+  }
 
   return Uint8List.fromList(ZipEncoder().encode(archive));
+}
+
+Uint8List _archiveFileBytes(Uint8List bytes, String fileName) {
+  final archive = ZipDecoder().decodeBytes(bytes);
+  final file = archive.files.singleWhere(
+    (entry) => entry.isFile && entry.name == fileName,
+  );
+  return Uint8List.fromList(file.content as List<int>);
 }
 
 const _taskOnlyBackupSelection = BackupSelection(
@@ -132,6 +146,161 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
+  });
+
+  group('Web restore rollback journal', () {
+    setUp(() {
+      WebFileStore.enableTestMode();
+      BackupService.beforeRestoreBinaryPublishForTesting = null;
+      BackupService.skipRestoreRollbackForTesting = false;
+    });
+
+    tearDown(() {
+      BackupService.beforeRestoreBinaryPublishForTesting = null;
+      BackupService.skipRestoreRollbackForTesting = false;
+      WebFileStore.disableTestMode();
+    });
+
+    testWidgets(
+      'publication failure restores selected files and keeps other categories',
+      (WidgetTester t) async {
+        await WebFileStore.write(
+          'task_flows/executions.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'task_state/task_list_last_read.json',
+          Uint8List.fromList(
+            utf8.encode('{"lastRead":"2025-01-01T00:00:00.000"}'),
+          ),
+        );
+        await WebFileStore.write(
+          'pictures/keep.jpg',
+          Uint8List.fromList([7, 8, 9]),
+        );
+        final backupBytes = _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'execution',
+          includeTaskListLastRead: true,
+        );
+        var reachedPublicationFailure = false;
+        BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+          if (index == 5) {
+            reachedPublicationFailure = true;
+            throw StateError('injected publication failure');
+          }
+        };
+
+        await expectLater(
+          BackupService.restoreFromBytesForTest(
+            backupBytes,
+            selection: _taskOnlyBackupSelection,
+          ),
+          throwsStateError,
+        );
+        expect(reachedPublicationFailure, isTrue);
+
+        expect(
+          await WebFileStore.read('task_flows/executions.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('synthesis/tasks.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('task_state/task_list_last_read.json'),
+          utf8.encode('{"lastRead":"2025-01-01T00:00:00.000"}'),
+        );
+        expect(await WebFileStore.read('pictures/keep.jpg'), [7, 8, 9]);
+        expect(
+          await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets(
+      'startup replays an interrupted journal repeatedly and preserves unselected files',
+      (WidgetTester t) async {
+        await WebFileStore.write(
+          'task_flows/executions.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('[]')),
+        );
+        await WebFileStore.write(
+          'task_state/task_list_last_read.json',
+          Uint8List.fromList(
+            utf8.encode('{"lastRead":"2025-01-01T00:00:00.000"}'),
+          ),
+        );
+        await WebFileStore.write(
+          'pictures/keep.jpg',
+          Uint8List.fromList([7, 8, 9]),
+        );
+        final backupBytes = _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'execution',
+          includeTaskListLastRead: true,
+        );
+        final archivedExecutions = _archiveFileBytes(
+          backupBytes,
+          'task_flows/executions.json',
+        );
+        var reachedPublicationFailure = false;
+        BackupService.skipRestoreRollbackForTesting = true;
+        BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+          if (index == 5) {
+            reachedPublicationFailure = true;
+            throw StateError('simulated process interruption');
+          }
+        };
+
+        await expectLater(
+          BackupService.restoreFromBytesForTest(
+            backupBytes,
+            selection: _taskOnlyBackupSelection,
+          ),
+          throwsStateError,
+        );
+        expect(reachedPublicationFailure, isTrue);
+        expect(
+          await WebFileStore.read('task_flows/executions.json'),
+          archivedExecutions,
+        );
+        expect(
+          await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
+          isNotEmpty,
+        );
+
+        BackupService.skipRestoreRollbackForTesting = false;
+        await BackupService.recoverInterruptedRestores();
+        await BackupService.recoverInterruptedRestores();
+
+        expect(
+          await WebFileStore.read('task_flows/executions.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('synthesis/tasks.json'),
+          utf8.encode('[]'),
+        );
+        expect(
+          await WebFileStore.read('task_state/task_list_last_read.json'),
+          utf8.encode('{"lastRead":"2025-01-01T00:00:00.000"}'),
+        );
+        expect(await WebFileStore.read('pictures/keep.jpg'), [7, 8, 9]);
+        expect(
+          await WebFileStore.keysWithPrefix('.stroom-restore-rollback-web-'),
+          isEmpty,
+        );
+      },
+    );
   });
 
   testWidgets(
