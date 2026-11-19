@@ -362,8 +362,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 12,
+                  runSpacing: 4,
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
@@ -373,7 +375,6 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 12),
                     FilledButton(
                       onPressed: () {
                         if (_validate()) {
