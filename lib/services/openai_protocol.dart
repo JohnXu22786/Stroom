@@ -160,7 +160,10 @@ class OpenAIProtocol implements ChatProtocol {
                   'text': '[文件过大已跳过: ${att.fileName}]',
                 });
               } else {
-                final bytes = await readRawAttachmentBytes(att);
+                final bytes = await readRawAttachmentBytes(
+                  att,
+                  maxBytes: maxAttachmentBytes,
+                );
                 if (bytes != null && bytes.isNotEmpty) {
                   final b64 = base64Encode(bytes);
                   final dataUri = 'data:${att.mimeType};base64,$b64';

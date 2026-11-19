@@ -67,6 +67,83 @@ void main() {
       );
       expect(req.messages, hasLength(1));
     });
+
+    test('文档附件实际存储内容超限时跳过（即使元数据仍在限制内）', () async {
+      final tmpRoot = Directory.systemTemp.createTempSync(
+        'stroom_openai_raw_attachment_',
+      );
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+      final oversizedBytes = Uint8List(maxAttachmentBytes + 1);
+      try {
+        final storagePath = await AttachmentStorage.saveFile(
+          'document.pdf',
+          oversizedBytes,
+        );
+        final attachment = Attachment(
+          fileName: 'document.pdf',
+          mimeType: 'application/pdf',
+          fileType: 'file',
+          hash: 'oversized',
+          storagePath: storagePath,
+          fileSize: 1,
+        );
+        final req = await OpenAIProtocol().buildRequest(
+          history: [
+            ChatMessage(role: 'user', content: '', attachments: [attachment]),
+          ],
+        );
+        final parts = req.messages.single['content'] as List;
+        expect(parts.where((part) => (part as Map)['type'] == 'file'), isEmpty);
+        expect(parts.cast<Map>().single['text'], contains('document.pdf'));
+      } finally {
+        PathProviderPlatform.instance = previousPathProvider;
+        tmpRoot.deleteSync(recursive: true);
+      }
+    });
+
+    test('文档附件内联 base64 实际内容超限时不生成文件块', () async {
+      final oversizedBytes = Uint8List(maxAttachmentBytes + 1);
+      final attachment = Attachment(
+        fileName: 'inline.pdf',
+        mimeType: 'application/pdf',
+        fileType: 'file',
+        hash: 'oversized-inline',
+        storagePath: '/nonexistent',
+        fileSize: 1,
+      )..base64Data = base64Encode(oversizedBytes);
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(role: 'user', content: '', attachments: [attachment]),
+        ],
+      );
+      final parts = req.messages.single['content'] as List;
+      expect(parts.where((part) => (part as Map)['type'] == 'file'), isEmpty);
+      expect(parts.cast<Map>().single['text'], contains('inline.pdf'));
+    });
+
+    test('文档附件实际内容在限制内时仍作为文件块发送', () async {
+      final attachment = Attachment(
+        fileName: 'small.pdf',
+        mimeType: 'application/pdf',
+        fileType: 'file',
+        hash: 'small',
+        storagePath: '/nonexistent',
+        fileSize: 1,
+        base64Data: base64Encode(utf8.encode('pdf bytes')),
+      );
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(role: 'user', content: '', attachments: [attachment]),
+        ],
+      );
+      final parts = req.messages.single['content'] as List;
+      expect(parts.cast<Map>().single['type'], 'file');
+      expect(
+        (parts.cast<Map>().single['file'] as Map)['file_data'],
+        'data:application/pdf;base64,${base64Encode(utf8.encode('pdf bytes'))}',
+      );
+    });
   });
 
   group('AnthropicProtocol.buildRequest', () {

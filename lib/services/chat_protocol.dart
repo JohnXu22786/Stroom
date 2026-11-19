@@ -475,16 +475,32 @@ bool isTextAttachment(Attachment att) {
 
 /// 读取非文本附件的原始字节（用于 PDF 等文档）。
 /// 返回 null 表示无法读取。
-Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
+Future<Uint8List?> readRawAttachmentBytes(
+  Attachment att, {
+  int? maxBytes,
+}) async {
   if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+    // Reject obviously oversized inline caches before base64Decode allocates
+    // the decoded copy. A valid base64 string for maxBytes or fewer bytes
+    // cannot exceed this encoded length.
+    final maxEncodedLength =
+        maxBytes == null ? null : 4 * ((maxBytes + 2) ~/ 3);
+    if (maxEncodedLength != null && att.base64Data!.length > maxEncodedLength) {
+      return null;
+    }
     try {
-      return base64Decode(att.base64Data!);
+      final bytes = base64Decode(att.base64Data!);
+      if (maxBytes != null && bytes.length > maxBytes) return null;
+      return bytes;
     } catch (_) {
       // 缓存损坏，回退到磁盘读取
     }
   }
   try {
-    return await AttachmentStorage.readFile(att.storagePath);
+    return await AttachmentStorage.readFile(
+      att.storagePath,
+      maxBytes: maxBytes,
+    );
   } catch (e) {
     // 瞬时 IO 异常（权限、磁盘满等）：返回 null 走占位降级，
     // 不让整次发送失败。
