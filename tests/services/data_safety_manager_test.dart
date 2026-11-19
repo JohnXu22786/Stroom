@@ -489,6 +489,37 @@ void main() {
           reason: 'a symlink target outside the cache namespace is untouched');
     });
 
+    test('cleanupOrphans does not follow a managed media root symlink',
+        () async {
+      final externalTarget = Directory(
+        p.join(isolatedAppDir.path, 'external-pictures'),
+      );
+      await externalTarget.create(recursive: true);
+      final agedOrphan = File(p.join(externalTarget.path, 'orphan.jpg'));
+      await agedOrphan.writeAsString('outside the managed app directory');
+      await agedOrphan.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      try {
+        await Link(p.join(appDir, 'pictures')).create(externalTarget.path);
+      } on FileSystemException catch (error) {
+        final errorCode = error.osError?.errorCode;
+        final permissionDenied = Platform.isWindows
+            ? errorCode == 1314
+            : errorCode == 1 || errorCode == 13;
+        if (permissionDenied) {
+          markTestSkipped('symlink creation requires unavailable privileges');
+        }
+        rethrow;
+      }
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedOrphan.exists(), isTrue,
+          reason: 'managed media root symlinks must not expose external files');
+    });
+
     test(
       'cleanupOrphans preserves legacy audio after migration write failure',
       () async {
