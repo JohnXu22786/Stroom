@@ -214,8 +214,7 @@ void main() {
 
     testWidgets(
         'an existing-thumbnail read cannot repopulate the cache after '
-        'invalidation and deletion',
-        (tester) async {
+        'invalidation and deletion', (tester) async {
       final record = _makeRecord(hash: 'delete_during_thumbnail_read');
       final thumb = Uint8List.fromList([4, 3, 2, 1]);
       await tester.runAsync(() async {
@@ -254,7 +253,8 @@ void main() {
       });
 
       expect(result, isNull,
-          reason: 'invalidation must discard a thumbnail read already in flight');
+          reason:
+              'invalidation must discard a thumbnail read already in flight');
       expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
           reason: 'stale bytes must not be restored to the memory cache');
     });
