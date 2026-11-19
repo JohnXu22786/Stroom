@@ -66,6 +66,44 @@ void main() {
       }
     });
 
+    test('rejects a symlinked collection.media root before syncing', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_symlink_root_test_',
+      );
+      final outsideDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_symlink_target_test_',
+      );
+      final sentinel = File('${outsideDir.path}/keep.txt');
+      await sentinel.writeAsString('outside media directory');
+      final mediaPath = '${workDir.path}/collection.media';
+      await Link(mediaPath).create(outsideDir.path);
+      final fake = _QueueHttpClient();
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'symlinked-media-root-test-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(client, documentsPath: workDir.path),
+          throwsA(
+            isA<AnkiSyncException>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              AnkiSyncFailureCode.localFileFailure,
+            ),
+          ),
+        );
+        expect(fake.paths, isEmpty);
+        expect(await sentinel.readAsString(), 'outside media directory');
+      } finally {
+        client.close();
+        await Link(mediaPath).delete();
+        await workDir.delete(recursive: true);
+        await outsideDir.delete(recursive: true);
+      }
+    });
+
     test('localizes media index filesystem open failures', () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_index_open_error_test_',
