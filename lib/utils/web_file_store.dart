@@ -237,15 +237,6 @@ class WebFileStore {
     }
   }
 
-  @visibleForTesting
-  static Future<Uint8List?> readStoredValueForTesting(
-    Object value, {
-    int? maxBytes,
-  }) async {
-    _checkReadLimit(value, maxBytes);
-    return await blob_store.readBlob(value) ?? _toUint8List(value, 'test');
-  }
-
   /// 读取文件
   static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
