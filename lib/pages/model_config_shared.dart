@@ -147,9 +147,16 @@ class TrimSection extends ConsumerWidget {
               children: [
                 const Icon(Icons.content_cut, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  AppLocalizations.of(context)!.modelAudioTrimTitle,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                Flexible(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.modelAudioTrimTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
                 if (selectedPresetId != null &&
