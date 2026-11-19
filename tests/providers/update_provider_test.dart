@@ -436,6 +436,53 @@ void main() {
       expect(await installedFile.readAsString(), 'installed app');
     });
 
+    test('Windows replacement cleans extracted files only after xcopy succeeds',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_update_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final updateDir = '${tempDir.path}/extracted';
+      final scriptPath =
+          await UpdateNotifier().createWindowsUpdateScriptForTesting(
+        tempDir.path,
+        updateDir,
+        '$updateDir/stroom.exe',
+      );
+      final script = await File(scriptPath).readAsString();
+      final copyIndex = script.indexOf('xcopy /E /Y');
+      final failureGuardIndex = script.indexOf('if errorlevel 1 exit /b');
+      final cleanupIndex = script.indexOf('rmdir /S /Q "$updateDir"');
+
+      expect(copyIndex, greaterThanOrEqualTo(0));
+      expect(failureGuardIndex, greaterThan(copyIndex));
+      expect(cleanupIndex, greaterThan(failureGuardIndex));
+      expect(script.indexOf('start ""'), greaterThan(cleanupIndex));
+      expect(script.indexOf('del "%~f0"'), greaterThan(cleanupIndex));
+    });
+
+    test('Unix replacement cleans extracted files only after cp succeeds',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_update_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final updateDir = '${tempDir.path}/extracted';
+      final scriptPath =
+          await UpdateNotifier().createUnixUpdateScriptForTesting(
+        tempDir.path,
+        updateDir,
+        '$updateDir/stroom',
+      );
+      final script = await File(scriptPath).readAsString();
+      final copyIndex =
+          script.indexOf('cp -R "$updateDir/"* "${tempDir.path}/"');
+      final failureGuardIndex = script.indexOf(r'|| exit $?');
+      final cleanupIndex = script.indexOf('rm -rf -- "$updateDir"');
+
+      expect(copyIndex, greaterThanOrEqualTo(0));
+      expect(failureGuardIndex, greaterThan(copyIndex));
+      expect(cleanupIndex, greaterThan(failureGuardIndex));
+      expect(script.indexOf('chmod +x'), greaterThan(cleanupIndex));
+      expect(script.indexOf(r'rm -- "$0"'), greaterThan(cleanupIndex));
+    });
+
     test('rejects archive entries that escape the extraction directory',
         () async {
       final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
