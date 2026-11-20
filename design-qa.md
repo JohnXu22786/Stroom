@@ -27,6 +27,11 @@ Endpoint and locale verification captures: [after tail endpoint](docs/images/ass
 ## Anki deck statistics — bounded chips
 
 - **Fixture:** the production `AnkiDroidPage` rendered in Flutter Web with a provider override for one deck named “A very long deck name for a narrow screen”; statistics are 123456 new, 987654 learning, and 456789 review cards. The Spanish locale supplies the longer “Aprendiendo” statistic label. The temporary capture entrypoint was removed after recording.
-- **Viewport:** 320 × 640 CSS px at 1× device scale. The deck card remains tappable, its statistic row fits without a render overflow, and each count and translated label stays intact through the shared measured reveal. The test suite also exercises the same narrow viewport at 1.8× text scale and study title/navigation at 1.25×.
+- **Viewport and scale:** 320 × 640 CSS px, DPR 1, and normal 1× Flutter text scaling for both browser artifacts. No browser text zoom or app text-scale override was applied. The deck card remains tappable, its statistic row fits without a render overflow, and each count and translated label stays intact through the shared measured reveal. The separate widget tests exercise the narrow layout at 1.8× text scale and study title/navigation at 1.25×.
 - **Interaction:** the playable preview shows the statistic labels revealing their clipped content and the deck card opening the study page; the whiteboard toolbar action remains visible. No browser page errors occurred.
-- **Artifacts:** [320 × 640 deck-card capture](images/anki-bounded-stats-320x640.png) and [playable Flutter Web preview](videos/anki-bounded-stats-preview.webm).
+- **Artifacts:** [320 × 640 deck-card capture](docs/images/anki-bounded-stats-320x640.png) and [playable Flutter Web preview](docs/videos/anki-bounded-stats-preview.webm).
+
+## Anki study empty-state — high text-scale overflow follow-up
+
+- **Reproduction:** start with an Anki deck whose next-card query returns no card. Set the app locale to Spanish, viewport to 320 × 640 CSS px, DPR to 1, and Flutter text scale to 1.8×. Open the deck from `AnkiDroidPage` so `AnkiStudyPage` enters its no-cards state.
+- **Observed result:** Flutter reports `A RenderFlex overflowed by 142 pixels on the bottom` while `_buildDone` lays out the celebration icon, wrapped empty-state copy, and Back button. This was observed in the widget test while checking the scaled study title. The empty-state layout needs its own fix and a regression test.
