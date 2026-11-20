@@ -52,9 +52,33 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
   Future<void> setMode(AnkiSyncMode mode) async {
     if (!state.isLoaded) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyMode, mode.name);
+    final previousMode = prefs.getString(_keyMode);
+    final previousEnabled = prefs.getBool(_keyEnabled);
+    if (!await prefs.setString(_keyMode, mode.name)) {
+      if (previousMode == null) {
+        await prefs.remove(_keyMode);
+      } else {
+        await prefs.setString(_keyMode, previousMode);
+      }
+      throw StateError('Failed to persist the Anki sync mode');
+    }
     // Keep the former flag in sync for older app builds that may still read it.
-    await prefs.setBool(_keyEnabled, mode == AnkiSyncMode.selfHosted);
+    try {
+      if (!await prefs.setBool(_keyEnabled, mode == AnkiSyncMode.selfHosted)) {
+        throw StateError('Failed to persist the legacy Anki sync mode');
+      }
+    } catch (_) {
+      final restoredEnabled = previousEnabled == null
+          ? await prefs.remove(_keyEnabled)
+          : await prefs.setBool(_keyEnabled, previousEnabled);
+      final restoredMode = previousMode == null
+          ? await prefs.remove(_keyMode)
+          : await prefs.setString(_keyMode, previousMode);
+      if (!restoredEnabled || !restoredMode) {
+        throw StateError('Failed to roll back the Anki sync mode preferences');
+      }
+      rethrow;
+    }
     state = state.copyWith(mode: mode);
   }
 
