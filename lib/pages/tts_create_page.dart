@@ -840,11 +840,15 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                           color: Colors.red,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          l10n.ttsTextLimitWarning(limit),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.red,
+                        Flexible(
+                          child: ConstrainedText(
+                            l10n.ttsTextLimitWarning(limit),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                            ),
                           ),
                         ),
                       ],
