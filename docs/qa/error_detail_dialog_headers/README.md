@@ -1,13 +1,13 @@
 # OCR and ASR error details header QA
 
-The screenshot and motion preview render the production `ErrorDetailDialogHeader` used by both OCR and ASR error detail dialogs. The body in the temporary Flutter Web capture harness is placeholder copy; the production request and response content remains in each dialog's existing scrollable list.
+## Primary acceptance capture
 
-- Chromium, Flutter Web, German locale, 320 × 640 CSS viewport, device scale factor 1, 2× text scale.
-- The title is longer than the space left between the error icon and close control. It keeps the current 15 px/600 styling and moves only inside its bounded slot. The close control remains visible and clickable.
-- The preview is an 18.8 second recording of the rendered header motion, including its initial pause and bidirectional reveal.
+![ASR error details header at 320 × 640 and default text scale](asr-error-details-320x640-de-1x.png)
 
-![ASR error details header at 320 × 640](asr-error-details-320x640-de-2x.png)
+This Chromium capture shows the production `ErrorDetailDialogHeader` used by both OCR and ASR error-detail dialogs in German at a 320 × 640 CSS viewport, device scale factor 1, and the default 1× text scale. The red title, error icon, and close action are the actual shared production component. The body text is placeholder copy in the temporary capture harness; the real dialogs retain their existing scrollable request/response content.
 
-[Play the header motion preview](asr-error-details-motion-preview.webm)
+## Large-text supplemental capture
 
-`tests/pages/content/ocr_error_details_header_test.dart` checks both localized labels, the 320 × 640/2× rendering, the fixed error icon and close action, and dialog dismissal. It passed with `flutter test --no-pub tests/pages/content/ocr_error_details_header_test.dart --reporter expanded`.
+[The 2× text scale screenshot](asr-error-details-320x640-de-2x.png) shows the title moving only inside its bounded slot while the icon and close action stay in place. [Play the 18.8 second motion preview](asr-error-details-motion-preview.webm) for the rendered header's bidirectional reveal.
+
+`tests/pages/content/ocr_error_details_header_test.dart` checks both localized labels, their full semantics labels, the 320 × 640/2× rendering, the fixed error icon and close action, and dialog dismissal.
