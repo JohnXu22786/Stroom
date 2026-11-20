@@ -215,6 +215,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     String fileName,
     Uint8List bytes, {
     _PendingAttachmentOrigin? origin,
+    bool scheduleDraftSave = true,
   }) async {
     final attachmentOrigin = origin ?? _capturePendingAttachmentOrigin();
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
@@ -284,7 +285,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       );
     }
     // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
-    _scheduleDraftSave();
+    if (scheduleDraftSave) _scheduleDraftSave();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

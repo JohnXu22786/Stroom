@@ -142,7 +142,14 @@ Future<ProviderContainer> _buildPersistedContainer({
     ],
   );
   await container.read(conversationsProvider.notifier).ready;
-  if (preferencesStore != null) configureStore!(preferencesStore);
+  if (preferencesStore != null) {
+    // Drain startup writes before installing the gate so it observes the
+    // persistence operation under test, not a background initialization.
+    await container
+        .read(conversationsProvider.notifier)
+        .persistSnapshotForAttachmentCleanup();
+    configureStore!(preferencesStore);
+  }
   return container;
 }
 
@@ -965,7 +972,9 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(() => store.writeStarted!.future);
+      await tester.runAsync(
+        () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
+      );
       // Install the second write gate before the second removal can enqueue
       // and begin its save; otherwise its setValue may pass before the test
       // observes the signal.
@@ -980,7 +989,9 @@ void main() {
       );
       await tester.pump();
       firstWriteGate.complete();
-      await tester.runAsync(() => secondWriteStarted.future);
+      await tester.runAsync(
+        () => secondWriteStarted.future.timeout(const Duration(seconds: 15)),
+      );
 
       // The first write must persist the snapshot that still includes the
       // second attachment before deleting only the first file.

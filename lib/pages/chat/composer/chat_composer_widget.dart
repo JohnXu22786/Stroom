@@ -152,9 +152,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @visibleForTesting
   Future<void> addPendingAttachmentForTesting(
     String fileName,
-    Uint8List bytes,
-  ) =>
-      _addPendingAttachment(fileName, bytes);
+    Uint8List bytes, {
+    bool scheduleDraftSave = true,
+  }) =>
+      _addPendingAttachment(
+        fileName,
+        bytes,
+        scheduleDraftSave: scheduleDraftSave,
+      );
 
   @visibleForTesting
   Future<void> removePendingAttachmentForTesting(int index) =>
@@ -167,6 +172,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @visibleForTesting
   void setPreCompressFutureForTesting(String hash, Future<void> future) {
     _preCompressFutures[hash] = future;
+  }
+
+  @visibleForTesting
+  Future<void> waitForPendingPreCompressionForTesting() async {
+    await Future.wait(_preCompressFutures.values.toList());
   }
 
   @visibleForTesting

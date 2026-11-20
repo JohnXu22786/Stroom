@@ -32,6 +32,9 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 
 Future<T> _runInTestZone<T>(Future<T> Function() callback) => callback();
 
+Future<T> _waitForTestSignal<T>(Future<T> future) =>
+    future.timeout(const Duration(seconds: 15));
+
 void main() {
   late Directory root;
   late PathProviderPlatform previousPathProvider;
@@ -155,11 +158,16 @@ void main() {
     final bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
     );
-    await _runInTestZone(
-      () => composerKey.currentState!.addPendingAttachmentForTesting(
-        '$id.png',
-        bytes,
-      ),
+    await tester.runAsync(
+      () async {
+        await composerKey.currentState!.addPendingAttachmentForTesting(
+          '$id.png',
+          bytes,
+          scheduleDraftSave: false,
+        );
+        await composerKey.currentState!
+            .waitForPendingPreCompressionForTesting();
+      },
     );
     await tester.pump();
     return composerKey.currentState!.pendingAttachmentsForTesting.singleWhere(
@@ -195,7 +203,7 @@ void main() {
       await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-        await cleanupStarted.future;
+        await _waitForTestSignal(cleanupStarted.future);
       });
       await tester.tap(
         find.descendant(
@@ -243,7 +251,7 @@ void main() {
       await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-        await cleanupStarted.future;
+        await _waitForTestSignal(cleanupStarted.future);
       });
       composerKey.currentState!.reorderPendingAttachmentsForTesting(0, 1);
       await tester.pump();
