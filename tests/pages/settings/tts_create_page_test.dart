@@ -12,6 +12,7 @@ import 'package:stroom/pages/tts_create_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _GatedSynthesisConfigStore extends InMemorySharedPreferencesStore {
   _GatedSynthesisConfigStore() : super.empty();
@@ -33,7 +34,13 @@ class _GatedSynthesisConfigStore extends InMemorySharedPreferencesStore {
 // Helper: Build test app with optional provider overrides
 // ============================================================================
 
-Widget _buildTestApp({List<ProviderEntry>? entries, SynthesisTask? retry}) {
+Widget _buildTestApp({
+  List<ProviderEntry>? entries,
+  SynthesisTask? retry,
+  Locale locale = const Locale('zh', 'CN'),
+  ThemeData? theme,
+  TextScaler? textScaler,
+}) {
   // ignore: prefer_const_constructors
   final overrides = [
     taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
@@ -44,14 +51,24 @@ Widget _buildTestApp({List<ProviderEntry>? entries, SynthesisTask? retry}) {
     overrides.add(providerEntriesProvider.overrideWith((ref) => notifier));
   }
 
+  final home = retry != null
+      ? TTSCreatePage(retryTask: retry)
+      : const TTSCreatePage();
+
   return ProviderScope(
     overrides: overrides,
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      theme: theme,
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: retry != null
-          ? TTSCreatePage(retryTask: retry)
-          : const TTSCreatePage(),
+      home: textScaler == null
+          ? home
+          : Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                child: home,
+              ),
+            ),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
@@ -61,7 +78,10 @@ Widget _buildTestApp({List<ProviderEntry>? entries, SynthesisTask? retry}) {
 // Helper: Create a sample TTS provider entry with models
 // ============================================================================
 
-ProviderEntry _createTtsEntry({bool withModels = true}) {
+ProviderEntry _createTtsEntry({
+  bool withModels = true,
+  int maxWordsPerRequest = 0,
+}) {
   return ProviderEntry(
     id: 'test_tts',
     type: 'tts',
@@ -73,7 +93,11 @@ ProviderEntry _createTtsEntry({bool withModels = true}) {
         key: 'test-key',
         models: withModels
             ? [
-                ModelConfig(name: 'TTS-1', modelId: 'tts-1'),
+                ModelConfig(
+                  name: 'TTS-1',
+                  modelId: 'tts-1',
+                  maxWordsPerRequest: maxWordsPerRequest,
+                ),
                 ModelConfig(name: 'TTS-2', modelId: 'tts-2'),
               ]
             : [],
@@ -105,6 +129,102 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+  });
+
+  group('TTSCreatePage - text limit warning', () {
+    testWidgets(
+      'long localized warning stays within the count row while editing',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createTtsEntry(maxWordsPerRequest: 1)],
+            locale: const Locale('de', 'DE'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        while (tester.takeException() != null) {}
+
+        final textField = find.byType(TextField).at(1);
+        await tester.enterText(textField, 'a');
+        await tester.pump();
+        expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+        expect(find.text('1/1'), findsOneWidget);
+
+        await tester.enterText(textField, 'ab');
+        await tester.pump();
+
+        final warning = find.text(
+          'Text überschreitet das Limit (höchstens 1 Zeichen)',
+        );
+        expect(warning, findsOneWidget);
+        final boundedWarning = find.ancestor(
+          of: warning,
+          matching: find.byType(ConstrainedText),
+        );
+        expect(boundedWarning, findsOneWidget);
+        final warningSlot = find.ancestor(
+          of: boundedWarning,
+          matching: find.byType(Row),
+        ).first;
+        expect(
+          tester.getSize(boundedWarning).width,
+          lessThanOrEqualTo(tester.getSize(warningSlot).width),
+        );
+        while (tester.takeException() != null) {}
+
+        await tester.enterText(textField, '');
+        await tester.pump();
+
+        expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'warning slot stays bounded in dark theme at large text scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createTtsEntry(maxWordsPerRequest: 1)],
+            locale: const Locale('de', 'DE'),
+            theme: ThemeData.dark(),
+            textScaler: TextScaler.linear(1.6),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).at(1), 'ab');
+        await tester.pump();
+
+        final warning = find.text(
+          'Text überschreitet das Limit (höchstens 1 Zeichen)',
+        );
+        expect(warning, findsOneWidget);
+        final boundedWarning = find.ancestor(
+          of: warning,
+          matching: find.byType(ConstrainedText),
+        );
+        expect(boundedWarning, findsOneWidget);
+        final warningSlot = find.ancestor(
+          of: boundedWarning,
+          matching: find.byType(Row),
+        ).first;
+        expect(
+          tester.getSize(boundedWarning).width,
+          lessThanOrEqualTo(tester.getSize(warningSlot).width),
+        );
+        while (tester.takeException() != null) {}
+      },
+    );
   });
 
   group('TTSCreatePage - model selector (OCR/ASR style)', () {
