@@ -138,7 +138,14 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   labelText: localizations.connectivityTestJsonLabel,
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
-                  helperText: localizations.connectivityTestJsonHelp,
+                  helper: Text(
+                    localizations.connectivityTestJsonHelp,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    softWrap: true,
+                  ),
                 ),
                 onChanged: (_) => setState(() {
                   _isSaved = false;
