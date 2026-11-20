@@ -25,22 +25,23 @@ class NoteDao {
     return rows.map(Note.fromMap).toList();
   }
 
-  Future<int> insert(Note note) async {
-    await _refreshDerivedFields(note);
+  Future<int> insert(Note note, {DatabaseExecutor? executor}) async {
+    final db = executor ?? _db;
+    await _refreshDerivedFields(note, db);
     note
       ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
       ..usn = -1;
-    await _db.insert(
+    await db.insert(
       'notes',
       note.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    await _touchCollection();
+    await _touchCollection(db);
     return note.id;
   }
 
   Future<void> update(Note note) async {
-    await _refreshDerivedFields(note);
+    await _refreshDerivedFields(note, _db);
     note
       ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
       ..usn = -1;
@@ -106,8 +107,8 @@ class NoteDao {
     return updated;
   }
 
-  Future<void> _refreshDerivedFields(Note note) async {
-    final rows = await _db.query('col', columns: ['models'], where: 'id = 1');
+  Future<void> _refreshDerivedFields(Note note, DatabaseExecutor db) async {
+    final rows = await db.query('col', columns: ['models'], where: 'id = 1');
     if (rows.isEmpty || rows.first['models'] is! String) {
       throw StateError('The collection note types are unavailable.');
     }
@@ -161,7 +162,8 @@ class NoteDao {
     });
   }
 
-  Future<void> _touchCollection() => _db.rawUpdate(
+  Future<void> _touchCollection([DatabaseExecutor? executor]) =>
+      (executor ?? _db).rawUpdate(
         'UPDATE col SET mod = ? WHERE id = 1',
         [DateTime.now().millisecondsSinceEpoch ~/ 1000],
       );
