@@ -152,12 +152,10 @@ void main() {
       );
       return ancestors.first;
     }).toList();
-    final chipWidths = chipContainers
-        .map((chip) => tester.getSize(chip).width)
-        .toList();
-    final countLefts = counts
-        .map((count) => tester.getTopLeft(find.text(count)).dx)
-        .toList();
+    final chipWidths =
+        chipContainers.map((chip) => tester.getSize(chip).width).toList();
+    final countLefts =
+        counts.map((count) => tester.getTopLeft(find.text(count)).dx).toList();
 
     expect(chipWidths, everyElement(lessThan(150)));
     expect(countLefts, orderedEquals([...countLefts]..sort()));
