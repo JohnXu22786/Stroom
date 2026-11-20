@@ -16,7 +16,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _nameController,
             decoration: InputDecoration(
-              labelText: AppLocalizations.of(context)!.providerNameLabel,
+              label: _buildProviderInputLabel(
+                AppLocalizations.of(context)!.providerNameLabel,
+              ),
               hintText: AppLocalizations.of(context)!.providerNameHint,
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.label, color: Colors.teal),
@@ -26,7 +28,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _hostController,
             decoration: InputDecoration(
-              labelText: AppLocalizations.of(context)!.providerApiUrlLabel,
+              label: _buildProviderInputLabel(
+                AppLocalizations.of(context)!.providerApiUrlLabel,
+              ),
               hintText: AppLocalizations.of(context)!.providerApiUrlHint,
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.link, color: Colors.orange),
@@ -36,7 +40,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _keyController,
             decoration: InputDecoration(
-              labelText: AppLocalizations.of(context)!.mcpApiKey,
+              label: _buildProviderInputLabel(
+                AppLocalizations.of(context)!.mcpApiKey,
+              ),
               hintText: AppLocalizations.of(context)!.providerApiKeyInputHint,
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.key, color: Colors.amber),
@@ -59,8 +65,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               isExpanded: true,
               initialValue: _endpointType,
               decoration: InputDecoration(
-                labelText:
-                    AppLocalizations.of(context)!.providerEndpointTypeLabel,
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.providerEndpointTypeLabel,
+                ),
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
@@ -126,8 +133,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText:
-                    AppLocalizations.of(context)!.providerRequestJsonDefault,
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.providerRequestJsonDefault,
+                ),
                 hintText: AppLocalizations.of(context)!.providerUseAppDefault,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),

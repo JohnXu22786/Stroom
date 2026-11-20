@@ -52,6 +52,12 @@ Widget _buildAsrSelectedDropdownText(
   );
 }
 
+Widget _buildProviderInputLabel(String label) => ConstrainedText(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
 Widget _buildResponsiveSettingsRow(
   BuildContext context, {
   required String label,
