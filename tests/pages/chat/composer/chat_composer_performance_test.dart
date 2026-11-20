@@ -209,6 +209,9 @@ void main() {
         activate: false,
       );
       await tester.pump();
+      // Creating an empty conversation mounts flutter_chat_ui's empty list,
+      // which owns a 50 ms timer. Let it finish before testing page disposal.
+      await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
       await tester.enterText(find.byType(TextField), 'draft before navigation');

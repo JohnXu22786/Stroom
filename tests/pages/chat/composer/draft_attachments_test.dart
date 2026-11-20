@@ -935,12 +935,12 @@ void main() {
       final deletedPaths = <String>[];
       final draftPathsAtDelete = <String, List<String>>{};
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        final saved =
-            (jsonDecode((await store.getAll())['conversations']! as String)
-                    as List)
-                .cast<Map<String, dynamic>>()
-                .map(Conversation.fromMap)
-                .single;
+        final storedConversations =
+            (await store.getAll())['flutter.conversations']! as String;
+        final saved = (jsonDecode(storedConversations) as List)
+            .cast<Map<String, dynamic>>()
+            .map(Conversation.fromMap)
+            .single;
         draftPathsAtDelete[path] =
             saved.draftAttachments.map((att) => att.storagePath).toList();
         deletedPaths.add(path);
