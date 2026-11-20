@@ -49,14 +49,78 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
     );
   }
 
-  Future<void> setMode(AnkiSyncMode mode) async {
-    if (!state.isLoaded) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyMode, mode.name);
-    // Keep the former flag in sync for older app builds that may still read it.
-    await prefs.setBool(_keyEnabled, mode == AnkiSyncMode.selfHosted);
-    state = state.copyWith(mode: mode);
-  }
+  Future<void> setMode(AnkiSyncMode mode) => _enqueueSettingsWrite(() async {
+        if (!state.isLoaded) return;
+        final prefs = await SharedPreferences.getInstance();
+        final previousMode = prefs.getString(_keyMode);
+        final previousEnabled = prefs.getBool(_keyEnabled);
+        Future<bool> restoreMode() => previousMode == null
+            ? prefs.remove(_keyMode)
+            : prefs.setString(_keyMode, previousMode);
+        Future<bool> restoreEnabled() => previousEnabled == null
+            ? prefs.remove(_keyEnabled)
+            : prefs.setBool(_keyEnabled, previousEnabled);
+
+        Future<void> rollback({
+          bool restoreEnabledValue = true,
+          bool requireEnabledRestore = false,
+          bool requireModeRestore = true,
+        }) async {
+          Object? rollbackError;
+          if (restoreEnabledValue) {
+            try {
+              final restored = await restoreEnabled();
+              if (requireEnabledRestore && !restored) {
+                rollbackError = StateError(
+                  'Legacy mode rollback was not persisted',
+                );
+              }
+            } catch (error) {
+              rollbackError = error;
+            }
+          }
+          try {
+            final restored = await restoreMode();
+            if (requireModeRestore && !restored) {
+              rollbackError ??= StateError('Mode rollback was not persisted');
+            }
+          } catch (error) {
+            rollbackError ??= error;
+          }
+          if (rollbackError != null) {
+            throw StateError(
+                'Failed to roll back the Anki sync mode preferences');
+          }
+        }
+
+        bool modeSaved;
+        try {
+          modeSaved = await prefs.setString(_keyMode, mode.name);
+        } catch (_) {
+          await rollback(restoreEnabledValue: false, requireModeRestore: true);
+          rethrow;
+        }
+        if (!modeSaved) {
+          await rollback(restoreEnabledValue: false, requireModeRestore: false);
+          throw StateError('Failed to persist the Anki sync mode');
+        }
+        // Keep the former flag in sync for older app builds that may still read it.
+        bool enabledSaved;
+        try {
+          enabledSaved = await prefs.setBool(
+            _keyEnabled,
+            mode == AnkiSyncMode.selfHosted,
+          );
+        } catch (_) {
+          await rollback(requireEnabledRestore: true);
+          rethrow;
+        }
+        if (!enabledSaved) {
+          await rollback(requireEnabledRestore: false);
+          throw StateError('Failed to persist the legacy Anki sync mode');
+        }
+        state = state.copyWith(mode: mode);
+      });
 
   Future<void> _enqueueSettingsWrite(Future<void> Function() write) {
     final operation = _settingsWriteQueue.then((_) => write());
