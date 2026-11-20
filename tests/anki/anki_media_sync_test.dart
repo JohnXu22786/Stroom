@@ -104,7 +104,8 @@ void main() {
       }
     });
 
-    test('does not delete indexed remote media replaced by a symlink', () async {
+    test('does not delete indexed remote media replaced by a symlink',
+        () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_symlink_tombstone_test_',
       );
