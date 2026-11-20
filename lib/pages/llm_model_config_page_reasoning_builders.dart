@@ -7,6 +7,14 @@ part of 'llm_model_config_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ReasoningBuildersExt on _LlmModelConfigPageState {
+  /// Keeps localized field labels inside the input's finite label slot while
+  /// leaving editable text and its native caret behavior untouched.
+  Widget _reasoningFieldLabel(String text) => ConstrainedText(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+
   /// 判断 [param] 的当前参数名是否与「本模型其他已填写参数」或
   /// 自定义参数重名（除自身外）。
   bool _isReasoningParamNameDuplicate(ReasoningParam param) {
@@ -164,8 +172,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             TextFormField(
               initialValue: toggle.paramName,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!
-                    .reasoningParameterNameSource(_paramSourceLabel(toggle)),
+                label: _reasoningFieldLabel(
+                  AppLocalizations.of(context)!
+                      .reasoningParameterNameSource(_paramSourceLabel(toggle)),
+                ),
                 hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
@@ -198,8 +208,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     child: TextFormField(
                       initialValue: toggle.onValue ?? '',
                       decoration: InputDecoration(
-                        labelText:
-                            AppLocalizations.of(context)!.reasoningOnValue,
+                        label: _reasoningFieldLabel(
+                          AppLocalizations.of(context)!.reasoningOnValue,
+                        ),
                         hintText:
                             AppLocalizations.of(context)!.reasoningOnExample,
                         border: const OutlineInputBorder(),
@@ -216,8 +227,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     child: TextFormField(
                       initialValue: toggle.offValue ?? '',
                       decoration: InputDecoration(
-                        labelText:
-                            AppLocalizations.of(context)!.reasoningOffValue,
+                        label: _reasoningFieldLabel(
+                          AppLocalizations.of(context)!.reasoningOffValue,
+                        ),
                         hintText:
                             AppLocalizations.of(context)!.reasoningOffExample,
                         border: const OutlineInputBorder(),
@@ -334,8 +346,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               initialValue: effort.paramName,
               readOnly: false,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!
-                    .reasoningParameterNameSource(_paramSourceLabel(effort)),
+                label: _reasoningFieldLabel(
+                  AppLocalizations.of(context)!
+                      .reasoningParameterNameSource(_paramSourceLabel(effort)),
+                ),
                 hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
@@ -370,7 +384,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.reasoningJsonValue,
+                  label: _reasoningFieldLabel(
+                    AppLocalizations.of(context)!.reasoningJsonValue,
+                  ),
                   hintText: AppLocalizations.of(context)!
                       .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
@@ -496,11 +512,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   child: TextFormField(
                     initialValue: param.paramName,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(
-                        context,
-                      )!
-                          .reasoningParameterNameSource(
-                              _paramSourceLabel(param)),
+                      label: _reasoningFieldLabel(
+                        AppLocalizations.of(context)!
+                            .reasoningParameterNameSource(
+                          _paramSourceLabel(param),
+                        ),
+                      ),
                       border: const OutlineInputBorder(),
                       isDense: true,
                       hintText:
@@ -548,7 +565,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     param.options.isNotEmpty ? param.options.first : '',
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.reasoningJsonValue,
+                  label: _reasoningFieldLabel(
+                    AppLocalizations.of(context)!.reasoningJsonValue,
+                  ),
                   hintText: AppLocalizations.of(context)!
                       .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
