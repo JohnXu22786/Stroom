@@ -97,7 +97,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     _lastSavedDraft = textToSave;
     _lastSavedDraftAttSignature = attachmentSignature;
 
-    Future<void>(() {
+    scheduleMicrotask(() {
       try {
         _conversationsNotifier.saveDraft(
           convId,

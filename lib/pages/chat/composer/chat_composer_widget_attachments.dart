@@ -481,6 +481,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     List<Attachment>? originalAttachments, {
     required String? conversationId,
   }) {
+    var cacheDeleteQueued = false;
     for (final att in _pendingAttachments) {
       final originalFileStillReferenced = originalAttachments?.any(
             (original) => original.storagePath == att.storagePath,
@@ -507,8 +508,17 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
             hash: att.hash,
             waitFor: _waitForPreCompress(att.hash),
           );
+          cacheDeleteQueued = true;
         }
       }
+    }
+    if (cacheDeleteQueued) {
+      // This method also runs from didUpdateWidget and dispose, where a
+      // synchronous provider update is unsafe. Persist after teardown/build so
+      // the notifier can flush queued cache deletes against the saved snapshot.
+      scheduleMicrotask(() {
+        unawaited(_conversationsNotifier.persistSnapshotForAttachmentCleanup());
+      });
     }
   }
 

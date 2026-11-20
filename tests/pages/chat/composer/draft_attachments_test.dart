@@ -922,13 +922,14 @@ void main() {
         conversationId: 'conv-1',
       );
       late _RetryableWritePreferencesStore store;
+      final firstWriteGate = Completer<void>();
       final container = await _buildPersistedContainer(
         draftAttachments: [first, second],
         configureStore: (preferencesStore) {
           store = preferencesStore
             ..allowWrites = true
             ..writeStarted = Completer<void>()
-            ..writeGate = Completer<void>();
+            ..writeGate = firstWriteGate;
         },
       );
       final deletedPaths = <String>[];
@@ -970,7 +971,7 @@ void main() {
         ),
       );
       await tester.pump();
-      store.writeGate!.complete();
+      firstWriteGate.complete();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
       );
@@ -1133,13 +1134,14 @@ void main() {
         conversationId: 'conv-1',
       );
       late _RetryableWritePreferencesStore store;
+      final removalWriteGate = Completer<void>();
       final container = await _buildPersistedContainer(
         draftAttachments: [attachment],
         configureStore: (preferencesStore) {
           store = preferencesStore
             ..allowWrites = true
             ..writeStarted = Completer<void>()
-            ..writeGate = Completer<void>();
+            ..writeGate = removalWriteGate;
         },
       );
       final key = GlobalKey<ChatComposerWidgetState>();
@@ -1179,7 +1181,7 @@ void main() {
       );
       expect(deletedCaches, isEmpty);
 
-      store.writeGate!.complete();
+      removalWriteGate.complete();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
