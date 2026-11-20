@@ -103,7 +103,6 @@ Future<_RecordingTasks> _pumpList(WidgetTester tester,
   return notifier;
 }
 
-
 Future<void> _pumpTaskCard(
   WidgetTester tester,
   SynthesisTask task, {
