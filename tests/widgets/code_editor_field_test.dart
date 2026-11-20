@@ -282,18 +282,19 @@ void main() {
     Widget home, {
     Locale locale = const Locale('de'),
     ThemeData? theme,
-  }) => MaterialApp(
-    locale: locale,
-    theme: theme,
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    home: home,
-  );
+  }) =>
+      MaterialApp(
+        locale: locale,
+        theme: theme,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: home,
+      );
 
   testWidgets('JSON editor title stays bounded beside dialog controls', (
     tester,
