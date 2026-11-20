@@ -37,6 +37,7 @@ class _GatedSynthesisConfigStore extends InMemorySharedPreferencesStore {
 Widget _buildTestApp({
   List<ProviderEntry>? entries,
   SynthesisTask? retry,
+  String? originalTitle,
   Locale locale = const Locale('zh', 'CN'),
   ThemeData? theme,
   TextScaler? textScaler,
@@ -51,8 +52,9 @@ Widget _buildTestApp({
     overrides.add(providerEntriesProvider.overrideWith((ref) => notifier));
   }
 
-  final home =
-      retry != null ? TTSCreatePage(retryTask: retry) : const TTSCreatePage();
+  final home = retry != null
+      ? TTSCreatePage(retryTask: retry)
+      : TTSCreatePage(originalTitle: originalTitle);
 
   return ProviderScope(
     overrides: overrides,
@@ -228,6 +230,97 @@ void main() {
         while (tester.takeException() != null) {}
       },
     );
+  });
+
+  group('TTSCreatePage - narrow localized form rows', () {
+    testWidgets('German labels and model selector stay bounded and operable', (
+      tester,
+    ) async {
+      final entry = _createTtsEntry();
+      entry.configs.first.providerName = 'A very long provider display name';
+      entry.configs.first.models[0].name =
+          'A very long synthesis model display name';
+      entry.configs.first.models[1].name =
+          'Another long synthesis model display name';
+
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [entry],
+          locale: const Locale('de', 'DE'),
+          originalTitle: 'Ein sehr langer ursprünglicher Titel für die Datei',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      expect(find.text('Ursprünglichen Titel verwenden'), findsOneWidget);
+      expect(find.text('Synthesemodell'), findsOneWidget);
+      expect(
+        find.text(
+            'A very long synthesis model display name | A very long provider display name'),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(
+          of: find.text(
+            'A very long synthesis model display name | A very long provider display name',
+          ),
+          matching: find.byType(ConstrainedText),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byType(DropdownButton<int>));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text(
+            'Another long synthesis model display name | A very long provider display name'),
+        findsWidgets,
+      );
+      final secondModelOption = find.byType(DropdownMenuItem<int>).last;
+      expect(tester.getRect(secondModelOption).right, lessThanOrEqualTo(320));
+      await tester.tap(secondModelOption);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        find.text(
+            'Another long synthesis model display name | A very long provider display name'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('large text in dark theme keeps form rows inside the viewport',
+        (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createTtsEntry()],
+          locale: const Locale('de', 'DE'),
+          theme: ThemeData.dark(),
+          textScaler: TextScaler.linear(1.6),
+          originalTitle: 'Ein sehr langer ursprünglicher Titel für die Datei',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Aufnahmetitel'), findsOneWidget);
+      expect(find.text('Umzuwandelnder Text'), findsOneWidget);
+      expect(find.byType(ConstrainedText), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('TTSCreatePage - model selector (OCR/ASR style)', () {
