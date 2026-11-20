@@ -1169,16 +1169,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              l10n.ttsSpeed,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsSpeed,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            Text(
-              '${_speed.toStringAsFixed(1)}x',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+            Expanded(
+              child: ConstrainedText(
+                '${_speed.toStringAsFixed(1)}x',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
             ),
           ],
@@ -1200,9 +1209,29 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('${model.speedMin}x'),
-            Text(l10n.ttsNormal),
-            Text('${model.speedMax}x'),
+            Expanded(
+              child: ConstrainedText(
+                '${model.speedMin}x',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsNormal,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                '${model.speedMax}x',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
           ],
         ),
       ],
@@ -1217,16 +1246,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              l10n.ttsVolume,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsVolume,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            Text(
-              _volume.toStringAsFixed(1),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+            Expanded(
+              child: ConstrainedText(
+                _volume.toStringAsFixed(1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
             ),
           ],
@@ -1248,9 +1286,29 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(model.volumeMin.toStringAsFixed(1)),
-            Text(l10n.ttsNormal),
-            Text(model.volumeMax.toStringAsFixed(1)),
+            Expanded(
+              child: ConstrainedText(
+                model.volumeMin.toStringAsFixed(1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsNormal,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                model.volumeMax.toStringAsFixed(1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
           ],
         ),
       ],
