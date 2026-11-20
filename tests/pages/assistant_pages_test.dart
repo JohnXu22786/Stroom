@@ -1254,6 +1254,102 @@ void main() {
       },
     );
 
+    testWidgets(
+      'assistant defaults preview heading stays within its icon row',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        for (final (locale, textScale, expectsMotion) in [
+          (const Locale('zh', 'CN'), 1.0, false),
+          (const Locale('pt', 'BR'), 1.0, true),
+          (const Locale('pt', 'BR'), 2.0, true),
+        ]) {
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                assistantProvider.overrideWith((ref) {
+                  final notifier = AssistantsNotifier();
+                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+                  return notifier;
+                }),
+              ],
+              child: MaterialApp(
+                locale: locale,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(textScale),
+                    disableAnimations: false,
+                  ),
+                  child: child!,
+                ),
+                home: const AssistantSelectionPage(),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final selectionL10n = AppLocalizations.of(
+            tester.element(find.byType(AssistantSelectionPage)),
+          )!;
+          await tester.tap(find.byIcon(Icons.more_vert).first);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(selectionL10n.actionEdit));
+          await tester.pumpAndSettle();
+          DefaultTabController.of(tester.element(find.byType(TabBar).first))
+              .animateTo(2);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+
+          final title = AppLocalizations.of(
+            tester.element(find.byType(AssistantDefaultsTab)),
+          )!.assistantNewConversationPreview;
+          final heading = find.byWidgetPredicate(
+            (widget) => widget is ConstrainedText && widget.data == title,
+          );
+          expect(heading, findsOneWidget);
+          await tester.ensureVisible(heading);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          final headingText = find.descendant(
+            of: heading,
+            matching: find.text(title),
+          );
+          expect(headingText, findsOneWidget);
+          expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+          expect(tester.takeException(), isNull);
+
+          final headingBox = tester.getRect(heading);
+          final iconBox = tester.getRect(
+            find.byIcon(Icons.visibility_outlined),
+          );
+          expect(headingBox.left, greaterThanOrEqualTo(iconBox.right));
+          expect(headingBox.right, lessThanOrEqualTo(304));
+          expect(
+            find.text(selectionL10n.assistantDefaultModelTitle),
+            findsOneWidget,
+          );
+          expect(
+            find.text(selectionL10n.assistantDefaultToolsTitle),
+            findsOneWidget,
+          );
+          await tester.pump(const Duration(seconds: 1));
+          await tester.pump(const Duration(milliseconds: 250));
+          if (expectsMotion) {
+            expect(
+              find.descendant(of: heading, matching: find.byType(ClipRect)),
+              findsOneWidget,
+            );
+            expect(tester.getRect(headingText).left, isNot(headingBox.left));
+          } else {
+            expect(tester.getRect(headingText).left, headingBox.left);
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+      },
+    );
+
     testWidgets('默认设置 tab shows default model selector and tool switches', (
       tester,
     ) async {
