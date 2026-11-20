@@ -358,6 +358,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         }
         return Semantics(
           label: widget.semanticsLabel ?? widget.data,
+          excludeSemantics: true,
           child: SizedBox(
             width: width,
             height: _textHeight,

@@ -21,14 +21,6 @@ class FilePreviewChip extends StatelessWidget {
     this.onTap,
   });
 
-  String _displayName() {
-    final name = attachment.fileName;
-    if (name.length > 16) {
-      return '${name.substring(0, 14)}…';
-    }
-    return name;
-  }
-
   IconData _fileIcon() {
     switch (attachment.fileType) {
       case 'image':
@@ -122,11 +114,14 @@ class FilePreviewChip extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 2),
-            ConstrainedText(
-              _displayName(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isImage ? 64 : 48),
+              child: ConstrainedText(
+                attachment.fileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+              ),
             ),
           ],
         ),

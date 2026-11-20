@@ -3135,7 +3135,8 @@ void main() {
       expect(removed, isTrue);
     });
 
-    testWidgets('truncates long file names', (tester) async {
+    testWidgets('passes complete long file name to bounded display',
+        (tester) async {
       final longName = 'a' * 30 + '.png';
       final att = Attachment(
         fileName: longName,
@@ -3153,7 +3154,11 @@ void main() {
 
       await tester.pump();
 
-      expect(find.text('aaaaaaaaaaaaaa…'), findsOneWidget);
+      final nameLabel = tester.widget<ConstrainedText>(
+        find.byType(ConstrainedText).first,
+      );
+      expect(nameLabel.data, longName);
+      expect(tester.getSize(find.byType(ConstrainedText).first).width, 64);
     });
 
     testWidgets('onTap is called when chip is tapped', (tester) async {
