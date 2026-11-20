@@ -78,4 +78,72 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'long German clear and restart titles stay inside their finite rows',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 640);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('de'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(1.7)),
+              child: child!,
+            ),
+            home: const BackupRestorePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final clearButton = find.widgetWithText(
+        OutlinedButton,
+        'Ausgewählte Daten löschen',
+      );
+      await tester.scrollUntilVisible(
+        clearButton,
+        200,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(clearButton);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Ausgewählte Daten löschen'),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('Einige Daten gelöscht'), findsOneWidget);
+      final layoutErrors = <String>[];
+      Object? error;
+      while ((error = tester.takeException()) != null) {
+        layoutErrors.add(error.toString());
+      }
+      expect(
+        layoutErrors.where(
+          (message) =>
+              message.contains('overflowed') && message.contains('right'),
+        ),
+        isEmpty,
+        reason: 'Icon/title rows must not overflow horizontally',
+      );
+    },
+  );
 }
