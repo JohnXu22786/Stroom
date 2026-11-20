@@ -31,6 +31,7 @@ void showAddCustomParameterDialog(
         final name = nameController.text.trim();
         final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
         return AlertDialog(
+          scrollable: true,
           title: ConstrainedText(
             AppLocalizations.of(context)!.assistantAddCustomParameter,
             maxLines: 1,
@@ -42,8 +43,11 @@ void showAddCustomParameterDialog(
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.assistantParameterName,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.assistantParameterName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   hintText:
                       AppLocalizations.of(context)!.assistantParameterNameHint,
                   border: const OutlineInputBorder(),
@@ -64,7 +68,11 @@ void showAddCustomParameterDialog(
                 isExpanded: true,
                 initialValue: type,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.chatInfoType,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.chatInfoType,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 items: [
@@ -133,7 +141,11 @@ void showAddCustomParameterDialog(
                           ? const [CodeSmartInputFormatter()]
                           : null,
                       decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context)!.assistantValue,
+                        label: ConstrainedText(
+                          AppLocalizations.of(context)!.assistantValue,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         hintText: type == 'boolean'
                             ? AppLocalizations.of(context)!
                                 .assistantTrueFalseHint
@@ -221,8 +233,6 @@ void showAddCustomParameterDialog(
                   }
                 }
                 onAdd(name, type, value);
-                nameController.dispose();
-                valueController.dispose();
                 Navigator.pop(ctx);
               },
               child: ConstrainedText(
@@ -235,5 +245,10 @@ void showAddCustomParameterDialog(
         );
       },
     ),
-  );
+  ).whenComplete(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      nameController.dispose();
+      valueController.dispose();
+    });
+  });
 }
