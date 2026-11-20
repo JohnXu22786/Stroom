@@ -317,6 +317,15 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     required String? conversationId,
   }) async {
     final convIdAtStart = conversationId;
+    final cacheConversationId = convIdAtStart ?? att.conversationId;
+    if (cacheConversationId != null) {
+      // A same-hash attachment may be re-added while its prior removal save
+      // is in flight. Its new compression must cancel that stale cleanup.
+      _conversationsNotifier.cancelDraftAttachmentCacheDelete(
+        conversationId: cacheConversationId,
+        hash: att.hash,
+      );
+    }
     final task = _preCompressImage(att, bytes, convIdAtStart);
     final prev = _preCompressFutures[att.hash];
     final chained = (prev ?? Future<void>.value()).then((_) => task);
@@ -399,11 +408,12 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
 
   Future<void> _removePendingAttachment(int index) async {
     final att = _pendingAttachments[index];
+    final cacheConversationId = att.conversationId ?? widget.conversationId;
     _pendingImageBytes.remove(att.id);
     _pendingAttachmentEditRequests.remove(att.id);
     // 磁盘压缩缓存清理时机：
-    // - 普通模式（非编辑）：待发附件已被移除、无人引用，立即清理。
-    // - 编辑模式 + 本次新加的附件：与普通发送一致，立即清理。
+    // - 普通模式：成功保存草稿并确认无人引用后清理。
+    // - 编辑模式 + 本次新加的附件：与普通发送一致，检查持久快照后清理。
     // - 编辑模式 + 原消息附件：**不立即清理**——用户可能取消编辑，
     //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
     //   再统一清理。
@@ -418,12 +428,18 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     final editCacheStillReferenced = isOriginalEditFile || originalEditUsesHash;
     if (editCacheStillReferenced) {
       _removedEditAttachments.add(att);
-    } else {
+    } else if (cacheConversationId == null) {
       unawaited(
         _deleteCompressedCacheAfterPreCompress(
           att,
-          conversationId: att.conversationId ?? widget.conversationId,
+          conversationId: null,
         ),
+      );
+    } else {
+      _conversationsNotifier.queueDraftAttachmentCacheDelete(
+        conversationId: cacheConversationId,
+        hash: att.hash,
+        waitFor: _waitForPreCompress(att.hash),
       );
     }
     setState(() {
@@ -435,8 +451,14 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (widget.editingMessageId == null) {
         await _queueDraftAttachmentFileDelete(att.storagePath);
         await _persistDraftSnapshotImmediately(widget);
+        if (widget.conversationId == null && cacheConversationId != null) {
+          await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
+        }
       } else {
         unawaited(_deletePendingAttachmentFile(att.storagePath));
+        if (!editCacheStillReferenced && cacheConversationId != null) {
+          await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
+        }
       }
     }
     // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
@@ -472,12 +494,20 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
           ) ??
           false;
       if (!originalCacheStillReferenced) {
-        unawaited(
-          _deleteCompressedCacheAfterPreCompress(
-            att,
+        if (conversationId == null) {
+          unawaited(
+            _deleteCompressedCacheAfterPreCompress(
+              att,
+              conversationId: null,
+            ),
+          );
+        } else {
+          _conversationsNotifier.queueDraftAttachmentCacheDelete(
             conversationId: conversationId,
-          ),
-        );
+            hash: att.hash,
+            waitFor: _waitForPreCompress(att.hash),
+          );
+        }
       }
     }
   }
@@ -680,10 +710,19 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
             _removedEditAttachments.add(replacedAtt);
           }
         } else if (replacedAtt.hash != updatedAtt.hash) {
-          await _deleteCompressedCacheAfterPreCompress(
-            replacedAtt,
-            conversationId: editConversationId,
-          );
+          if (editConversationId == null) {
+            await _deleteCompressedCacheAfterPreCompress(
+              replacedAtt,
+              conversationId: null,
+            );
+          } else {
+            _conversationsNotifier.queueDraftAttachmentCacheDelete(
+              conversationId: editConversationId,
+              hash: replacedAtt.hash,
+              waitFor: _waitForPreCompress(replacedAtt.hash),
+            );
+            await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
+          }
         }
       }
     } catch (e) {

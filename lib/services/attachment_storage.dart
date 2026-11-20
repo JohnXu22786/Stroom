@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
@@ -32,6 +33,8 @@ class AttachmentStorage {
   static const _storageDirName = 'attachments';
   static const _uuid = Uuid();
   static DateTime Function() _now = DateTime.now;
+  static final Map<({String conversationId, String hash}), Future<void>>
+      _compressedCacheOperations = {};
 
   @visibleForTesting
   static Future<String> Function(String, Uint8List)? saveFileOverrideForTesting;
@@ -48,6 +51,14 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   })? deleteCompressedImageOverrideForTesting;
+
+  @visibleForTesting
+  static Future<String?> Function({
+    required String conversationId,
+    required String hash,
+    required Uint8List bytes,
+    required String mimeType,
+  })? saveCompressedImageOverrideForTesting;
 
   @visibleForTesting
   static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
@@ -68,6 +79,7 @@ class AttachmentStorage {
     saveEditedFileOverrideForTesting = null;
     deleteFileOverrideForTesting = null;
     deleteCompressedImageOverrideForTesting = null;
+    saveCompressedImageOverrideForTesting = null;
     readFileOverrideForTesting = null;
     readFileBoundedOverrideForTesting = null;
     restoreFileOverrideForTesting = null;
@@ -411,6 +423,34 @@ class AttachmentStorage {
       !hash.contains('\\') &&
       !hash.contains('\u0000');
 
+  /// Serializes writes and deletes for one conversation/hash cache key.
+  /// A stale delete must finish before a later re-add writes its cache.
+  static Future<T> _runCompressedCacheOperation<T>(
+    String conversationId,
+    String hash,
+    Future<T> Function() operation,
+  ) async {
+    final key = (conversationId: conversationId, hash: hash);
+    final previous = _compressedCacheOperations[key] ?? Future<void>.value();
+    final result = Completer<T>();
+    late final Future<void> queued;
+    queued = previous.catchError((Object _) {}).then((_) async {
+      try {
+        result.complete(await operation());
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    });
+    _compressedCacheOperations[key] = queued;
+    try {
+      return await result.future;
+    } finally {
+      if (identical(_compressedCacheOperations[key], queued)) {
+        _compressedCacheOperations.remove(key);
+      }
+    }
+  }
+
   /// 图片压缩缓存目录：`<附件目录>/temp_compressed/<conversationId>/`
   static Future<Directory> _compressedCacheDir(String conversationId) async {
     final base = await _storageDir;
@@ -442,15 +482,30 @@ class AttachmentStorage {
     final storageName = '$hash.$ext';
     final storagePath =
         '$_compressedCacheDirName/$safeConversationId/$storageName';
-    await AppLogService.info(
-        'AttachmentStorage', '保存图片压缩缓存: $storagePath, ${bytes.length} 字节');
-    if (kIsWeb) {
-      await WebFileStore.write(storagePath, bytes);
-    } else {
-      final dir = await _compressedCacheDir(safeConversationId);
-      await File(p.join(dir.path, storageName)).writeAsBytes(bytes);
-    }
-    return storagePath;
+    return _runCompressedCacheOperation(
+      safeConversationId,
+      hash,
+      () async {
+        final override = saveCompressedImageOverrideForTesting;
+        if (override != null) {
+          return override(
+            conversationId: safeConversationId,
+            hash: hash,
+            bytes: bytes,
+            mimeType: mimeType,
+          );
+        }
+        await AppLogService.info(
+            'AttachmentStorage', '保存图片压缩缓存: $storagePath, ${bytes.length} 字节');
+        if (kIsWeb) {
+          await WebFileStore.write(storagePath, bytes);
+        } else {
+          final dir = await _compressedCacheDir(safeConversationId);
+          await File(p.join(dir.path, storageName)).writeAsBytes(bytes);
+        }
+        return storagePath;
+      },
+    );
   }
 
   /// 读取图片发送压缩缓存；不存在/损坏返回 null。
@@ -509,36 +564,42 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
-    final override = deleteCompressedImageOverrideForTesting;
-    if (override != null) {
-      return override(conversationId: conversationId, hash: hash);
-    }
     if (!_isSafeConversationId(conversationId) ||
         !_isSafeCompressedCacheHash(hash)) {
+      final override = deleteCompressedImageOverrideForTesting;
+      if (override != null) {
+        return override(conversationId: conversationId, hash: hash);
+      }
       return false;
     }
     final safeConversationId = conversationId!;
-    var deleted = false;
-    for (final ext in ['jpg', 'png']) {
-      final storagePath =
-          '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
-      if (kIsWeb) {
-        // 与原生端语义一致：仅当文件真实存在才算删除
-        if (await WebFileStore.exists(storagePath)) {
-          await WebFileStore.delete(storagePath);
-          deleted = true;
-        }
-      } else {
-        final base = await _storageDir;
-        final file = File(p.join(
-            base, _compressedCacheDirName, safeConversationId, '$hash.$ext'));
-        if (await file.exists()) {
-          await file.delete();
-          deleted = true;
+    return _runCompressedCacheOperation(safeConversationId, hash, () async {
+      final override = deleteCompressedImageOverrideForTesting;
+      if (override != null) {
+        return override(conversationId: safeConversationId, hash: hash);
+      }
+      var deleted = false;
+      for (final ext in ['jpg', 'png']) {
+        final storagePath =
+            '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
+        if (kIsWeb) {
+          // 与原生端语义一致：仅当文件真实存在才算删除
+          if (await WebFileStore.exists(storagePath)) {
+            await WebFileStore.delete(storagePath);
+            deleted = true;
+          }
+        } else {
+          final base = await _storageDir;
+          final file = File(p.join(
+              base, _compressedCacheDirName, safeConversationId, '$hash.$ext'));
+          if (await file.exists()) {
+            await file.delete();
+            deleted = true;
+          }
         }
       }
-    }
-    return deleted;
+      return deleted;
+    });
   }
 
   /// 删除整个对话的图片压缩缓存目录（删除对话时调用）。

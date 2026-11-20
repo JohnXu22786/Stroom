@@ -598,7 +598,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   /// Compressed caches to remove after a successful snapshot no longer refers
   /// to their hashes.
-  final Set<({String? conversationId, String hash})>
+  final Map<({String? conversationId, String hash}), Future<void>>
       _pendingDraftAttachmentCacheDeletes = {};
 
   /// A single queued periodic stream save may be updated until an explicit

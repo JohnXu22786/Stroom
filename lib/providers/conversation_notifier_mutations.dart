@@ -885,8 +885,28 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   void queueDraftAttachmentCacheDelete({
     required String? conversationId,
     required String hash,
+    Future<void>? waitFor,
   }) {
-    _pendingDraftAttachmentCacheDeletes.add(
+    final key = (conversationId: conversationId, hash: hash);
+    if (waitFor == null) {
+      _pendingDraftAttachmentCacheDeletes.putIfAbsent(
+        key,
+        Future<void>.value,
+      );
+      return;
+    }
+
+    final previous = _pendingDraftAttachmentCacheDeletes[key];
+    _pendingDraftAttachmentCacheDeletes[key] = previous == null
+        ? waitFor
+        : Future.wait([previous, waitFor]).then((_) {});
+  }
+
+  void cancelDraftAttachmentCacheDelete({
+    required String conversationId,
+    required String hash,
+  }) {
+    _pendingDraftAttachmentCacheDeletes.remove(
       (conversationId: conversationId, hash: hash),
     );
   }
@@ -910,6 +930,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _updateDraft(conversationId, draftText, draftAttachments);
     return _persistNowChecked();
   }
+
+  /// Persist a current snapshot so queued attachment cleanup can safely run
+  /// even when the composer has no draft to update (for example in edit mode).
+  Future<bool> persistSnapshotForAttachmentCleanup() => _persistNowChecked();
 
   void _updateDraft(
     String conversationId,

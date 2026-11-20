@@ -1041,6 +1041,167 @@ void main() {
       container.dispose();
     });
 
+    testWidgets('移除图片时保存失败会保留压缩缓存并重试引用检查', (tester) async {
+      final first = Attachment(
+        id: 'retry-image-first',
+        fileName: 'first.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'retry-shared-hash',
+        storagePath: 'attachments/retry-image-first.png',
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      final second = Attachment(
+        id: 'retry-image-second',
+        fileName: 'second.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: first.hash,
+        storagePath: 'attachments/retry-image-second.png',
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      late _RetryableWritePreferencesStore store;
+      final container = await _buildPersistedContainer(
+        draftAttachments: [first, second],
+        configureStore: (preferencesStore) {
+          store = preferencesStore..allowWrites = false;
+        },
+      );
+      final deletedCaches = <String>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
+        required conversationId,
+        required hash,
+      }) async {
+        deletedCaches.add('$conversationId:$hash');
+        return true;
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async => true;
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: [first, second],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_retry-image-first')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      expect(deletedCaches, isEmpty);
+
+      store.allowWrites = true;
+      final notifier = container.read(conversationsProvider.notifier);
+      final retainedSave = await tester.runAsync(
+        () => notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [second],
+        ),
+      );
+      expect(retainedSave, isTrue);
+      expect(deletedCaches, isEmpty);
+
+      final removedSave = await tester.runAsync(
+        () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
+      );
+      expect(removedSave, isTrue);
+      expect(deletedCaches, ['conv-1:${first.hash}']);
+      container.dispose();
+    });
+
+    testWidgets('移除保存期间重新添加同 hash 图片会取消旧缓存清理', (tester) async {
+      final imageBytes = Uint8List.fromList([1, 2, 3]);
+      final hash = AttachmentStorage.computeHash(imageBytes);
+      final attachment = Attachment(
+        id: 'readded-image',
+        fileName: 'readded.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: hash,
+        storagePath: 'attachments/readded.png',
+        fileSize: imageBytes.length,
+        conversationId: 'conv-1',
+      );
+      late _RetryableWritePreferencesStore store;
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore
+            ..allowWrites = true
+            ..writeStarted = Completer<void>()
+            ..writeGate = Completer<void>();
+        },
+      );
+      final key = GlobalKey<ChatComposerWidgetState>();
+      final deletedCaches = <String>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
+        required conversationId,
+        required hash,
+      }) async {
+        deletedCaches.add('$conversationId:$hash');
+        return true;
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async => true;
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_readded-image')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(() => store.writeStarted!.future);
+
+      await tester.runAsync(
+        () => key.currentState!.addPendingAttachmentForTesting(
+          'readded.png',
+          imageBytes,
+        ),
+      );
+      expect(deletedCaches, isEmpty);
+
+      store.writeGate!.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+
+      expect(deletedCaches, isEmpty);
+      expect(
+        container
+            .read(conversationsProvider)
+            .single
+            .draftAttachments
+            .single
+            .hash,
+        hash,
+      );
+      container.dispose();
+    });
+
     testWidgets('保存失败后下一次成功保存再清理旧压缩缓存', (tester) async {
       final attachment = Attachment(
         id: 'retry-image',
@@ -1089,6 +1250,26 @@ void main() {
       );
       expect(retainedSave, isTrue);
       expect(deletedCaches, isEmpty);
+
+      notifier.createConversation(id: 'conv-2', activate: false);
+      final otherConversationAttachment = Attachment(
+        id: 'other-conversation-image',
+        fileName: 'other.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: attachment.hash,
+        storagePath: 'attachments/other.png',
+        fileSize: 3,
+        conversationId: 'conv-2',
+      );
+      final otherConversationSave = await tester.runAsync(
+        () => notifier.saveDraftAndWait(
+          'conv-2',
+          '',
+          draftAttachments: [otherConversationAttachment],
+        ),
+      );
+      expect(otherConversationSave, isTrue);
 
       final successfulSave = await tester.runAsync(
         () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
