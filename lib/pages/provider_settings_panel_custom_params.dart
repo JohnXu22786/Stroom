@@ -238,16 +238,20 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         child: TextFormField(
                           initialValue: param.paramName,
                           decoration: InputDecoration(
-                            labelText: AppLocalizations.of(context)!
-                                .providerParamNameLabel,
+                            label: ConstrainedText(
+                              AppLocalizations.of(context)!
+                                  .providerParamNameLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            errorText: hasInvalidName
-                                ? AppLocalizations.of(context)!
-                                    .providerParamNameInvalid(name)
+                            error: hasInvalidName
+                                ? Text(AppLocalizations.of(context)!
+                                    .providerParamNameInvalid(name))
                                 : isDuplicate
-                                    ? AppLocalizations.of(context)!
-                                        .providerParamAlreadyExists(name)
+                                    ? Text(AppLocalizations.of(context)!
+                                        .providerParamAlreadyExists(name))
                                     : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
@@ -342,8 +346,12 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             ),
                             inputFormatters: const [CodeSmartInputFormatter()],
                             decoration: InputDecoration(
-                              labelText: AppLocalizations.of(context)!
-                                  .providerParamDefaultValueLabel,
+                              label: ConstrainedText(
+                                AppLocalizations.of(context)!
+                                    .providerParamDefaultValueLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               hintText: localizedParamTypeDefaultValueHint(
                                 AppLocalizations.of(context)!,
                                 param.paramType,
@@ -359,8 +367,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               focusedErrorBorder: OutlineInputBorder(
                                 borderSide: const BorderSide(color: Colors.red),
                               ),
-                              errorText: _jsonErrors[i],
-                              errorMaxLines: 3,
+                              error: _jsonErrors[i] == null
+                                  ? null
+                                  : Text(_jsonErrors[i]!),
                               alignLabelWithHint: true,
                             ),
                             onChanged: (v) {
