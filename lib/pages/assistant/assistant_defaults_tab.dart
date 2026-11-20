@@ -496,11 +496,13 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                           maxLines: 1,
                         ),
                         // 明确"字符"单位：避免用户按 token/字节理解。
-                        helperText: _lengthError == null
-                            ? AppLocalizations.of(context)!
-                                .assistantCharactersNotTokens
+                        helper: _lengthError == null
+                            ? Text(
+                                AppLocalizations.of(context)!
+                                    .assistantCharactersNotTokens,
+                                softWrap: true,
+                              )
                             : null,
-                        helperMaxLines: 2,
                         errorText: _lengthError,
                         hintText: AppLocalizations.of(context)!
                             .assistantDefaultCharacterCount(

@@ -1274,23 +1274,17 @@ void main() {
                 child: child!,
               ),
               home: Scaffold(
-                body: Center(
-                  child: SizedBox(
-                    width: 160,
-                    height: 600,
-                    child: AssistantDefaultsTab(
-                      defaultModelName: null,
-                      defaultModelId: null,
-                      defaultProviderName: null,
-                      defaultToolNames: null,
-                      maxToolOutputChars: 5000,
-                      enableMaxToolOutputChars: true,
-                      onDefaultModelChanged: (_) {},
-                      onDefaultToolsChanged: (_) {},
-                      onEnableMaxToolOutputCharsChanged: (_) {},
-                      onMaxToolOutputCharsChanged: (_) {},
-                    ),
-                  ),
+                body: AssistantDefaultsTab(
+                  defaultModelName: null,
+                  defaultModelId: null,
+                  defaultProviderName: null,
+                  defaultToolNames: null,
+                  maxToolOutputChars: 5000,
+                  enableMaxToolOutputChars: true,
+                  onDefaultModelChanged: (_) {},
+                  onDefaultToolsChanged: (_) {},
+                  onEnableMaxToolOutputCharsChanged: (_) {},
+                  onMaxToolOutputCharsChanged: (_) {},
                 ),
               ),
             ),
@@ -1313,7 +1307,6 @@ void main() {
         expect(label, findsOneWidget);
         final helper = find.text(l10n.assistantCharactersNotTokens);
         expect(helper, findsOneWidget);
-        expect(tester.getSize(helper).height, greaterThan(16));
         expect(tester.widget<TextField>(field).controller!.text, '5000');
         expect(tester.takeException(), isNull);
 
@@ -1329,8 +1322,11 @@ void main() {
           find.text(l10n.assistantCharacterRange('100', '100000')),
           findsOneWidget,
         );
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(helper, findsNothing);
         await tester.enterText(field, '1200');
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
         expect(
           find.text(l10n.assistantCharacterRange('100', '100000')),
           findsNothing,
@@ -1338,12 +1334,34 @@ void main() {
         expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
         expect(tester.takeException(), isNull);
 
-        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        tester.platformDispatcher.textScaleFactorTestValue = 3;
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
         await tester.pump();
         await tester.ensureVisible(field);
         await tester.pump();
-        expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
+        expect(helper, findsOneWidget);
+        final helperContext = tester.element(helper);
+        final helperWidget = tester.widget<Text>(helper);
+        expect(
+          helperWidget.maxLines,
+          isNull,
+          reason: 'The Material helper must not carry a fixed line limit.',
+        );
+        final helperPainter = TextPainter(
+          text: TextSpan(
+            text: l10n.assistantCharactersNotTokens,
+            style: DefaultTextStyle.of(helperContext).style.merge(
+                  helperWidget.style,
+                ),
+          ),
+          textDirection: Directionality.of(helperContext),
+          textScaler: MediaQuery.textScalerOf(helperContext),
+        )..layout(maxWidth: tester.getSize(helper).width);
+        expect(
+          helperPainter.computeLineMetrics().length,
+          greaterThan(2),
+          reason: 'The full localized helper must wrap beyond two lines.',
+        );
         expect(tester.takeException(), isNull);
       },
     );
