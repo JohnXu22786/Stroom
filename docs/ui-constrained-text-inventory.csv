@@ -21,7 +21,7 @@ lib/l10n/app_localizations_pt.dart,0,0,0,4,0,0,0,Finite-layout/text candidate on
 lib/l10n/app_localizations_zh.dart,0,0,0,4,0,0,0,Finite-layout/text candidate only; source scan does not prove clipping. Preserve natural wrapping unless runtime measurement shows a fixed clip.
 lib/main.dart,6,0,5,13,0,5,0,Finite-layout/text candidate only; source scan does not prove clipping. Preserve natural wrapping unless runtime measurement shows a fixed clip.
 lib/pages/anki_page.dart,42,2,35,46,44,35,21,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
-lib/pages/anki_sync_page.dart,37,1,24,37,31,24,15,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
+lib/pages/anki_sync_page.dart,37,1,24,37,31,24,15,Remote collection status heading uses ConstrainedText in a finite row slot; schema details and server messages remain naturally wrapping body text.
 lib/pages/asr_model_config_page.dart,32,1,24,36,29,24,14,ConstrainedText already appears in this file; retain the call-site overflow checks and verify current locale/viewport measurement. Candidate signals overlap.
 lib/pages/asr_page.dart,41,6,63,41,32,64,15,Updated: complete ASR transcript now replaces the 200-character excerpt and reveals clipped lines vertically within the 3-line slot.
 lib/pages/assistant/assistant_defaults_tab.dart,17,4,22,17,8,22,5,Updated: effect-preview labels now use bounded ConstrainedText within their shared rows; values remain right-aligned and wrap naturally.

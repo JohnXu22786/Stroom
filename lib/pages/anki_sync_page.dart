@@ -1101,13 +1101,17 @@ class _RemoteStatus extends StatelessWidget {
                 color: colors.primary,
               ),
               const SizedBox(width: 10),
-              Text(
-                meta.isEmpty
-                    ? AppLocalizations.of(context)!
-                        .ankiSyncServerCollectionEmpty
-                    : AppLocalizations.of(context)!
-                        .ankiSyncServerCollectionAvailable,
-                style: Theme.of(context).textTheme.titleSmall,
+              Expanded(
+                child: ConstrainedText(
+                  meta.isEmpty
+                      ? AppLocalizations.of(context)!
+                          .ankiSyncServerCollectionEmpty
+                      : AppLocalizations.of(context)!
+                          .ankiSyncServerCollectionAvailable,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
