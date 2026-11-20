@@ -17,6 +17,8 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
   static const _keyEnabled = 'custom_sync_server_enabled';
   static const _keyMode = 'anki_sync_mode';
 
+  Future<void> _settingsWriteQueue = Future<void>.value();
+
   @override
   AnkiSyncState build() {
     _load();
@@ -56,16 +58,42 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
     state = state.copyWith(mode: mode);
   }
 
-  Future<void> setSyncUrl(String url) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyUrl, url);
-    state = state.copyWith(selfHostedUrl: url);
+  Future<void> _enqueueSettingsWrite(Future<void> Function() write) {
+    final operation = _settingsWriteQueue.then((_) => write());
+    _settingsWriteQueue = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
   }
 
-  Future<void> setCertificate(String cert) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyCert, cert);
-    state = state.copyWith(certificate: cert);
+  Future<void> setSyncUrl(String url) {
+    return _enqueueSettingsWrite(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final previousUrl = prefs.getString(_keyUrl);
+      if (!await prefs.setString(_keyUrl, url)) {
+        if (previousUrl == null) {
+          await prefs.remove(_keyUrl);
+        } else {
+          await prefs.setString(_keyUrl, previousUrl);
+        }
+        throw StateError('Failed to persist the Anki sync URL');
+      }
+      state = state.copyWith(selfHostedUrl: url);
+    });
+  }
+
+  Future<void> setCertificate(String cert) {
+    return _enqueueSettingsWrite(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final previousCertificate = prefs.getString(_keyCert);
+      if (!await prefs.setString(_keyCert, cert)) {
+        if (previousCertificate == null) {
+          await prefs.remove(_keyCert);
+        } else {
+          await prefs.setString(_keyCert, previousCertificate);
+        }
+        throw StateError('Failed to persist the Anki sync certificate');
+      }
+      state = state.copyWith(certificate: cert);
+    });
   }
 
   /// Kept for compatibility with callers from earlier builds.
