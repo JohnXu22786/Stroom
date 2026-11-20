@@ -544,28 +544,63 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                   color: Colors.orange[700],
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isReasoningComplete
-                      ? AppLocalizations.of(context)!.chatThinkingComplete
-                      : AppLocalizations.of(context)!.chatThinking,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange[700],
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final title = isReasoningComplete
+                          ? AppLocalizations.of(context)!.chatThinkingComplete
+                          : AppLocalizations.of(context)!.chatThinking;
+                      final titleStyle = TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange[700],
+                      );
+                      final indexText = ' (${widget.sectionIndex + 1})';
+                      final indexStyle = TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.orange[500],
+                      );
+                      var indexWidth = 0.0;
+                      if (widget.sectionIndex > 0) {
+                        final painter = TextPainter(
+                          text: TextSpan(text: indexText, style: indexStyle),
+                          textDirection: Directionality.of(context),
+                          textScaler: MediaQuery.textScalerOf(context),
+                          locale: Localizations.maybeLocaleOf(context),
+                        );
+                        painter.layout();
+                        indexWidth = painter.width < constraints.maxWidth * 0.4
+                            ? painter.width
+                            : constraints.maxWidth * 0.4;
+                      }
+                      return Row(
+                        children: [
+                          Flexible(
+                            child: ConstrainedText(
+                              title,
+                              style: titleStyle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (widget.sectionIndex > 0) ...[
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              width: indexWidth,
+                              child: ConstrainedText(
+                                indexText,
+                                style: indexStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
-                if (widget.sectionIndex > 0) ...[
-                  const SizedBox(width: 4),
-                  Text(
-                    ' (${widget.sectionIndex + 1})',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: Colors.orange[500],
-                    ),
-                  ),
-                ],
-                const Spacer(),
                 // Corner status icon: the spinner while streaming, then on
                 // completion it fades out (0.5s) and a checkmark pops in
                 // with a jelly bounce (0.5s), holds 1s, then pops out with
