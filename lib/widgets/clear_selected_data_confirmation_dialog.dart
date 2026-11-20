@@ -146,7 +146,7 @@ class _ClearSelectedDataConfirmationDialogState
             _secondsRemaining == 0
                 ? AppLocalizations.of(context)!.backupRestoreClearSelected
                 : AppLocalizations.of(context)!
-                      .backupRestoreConfirmClearCountdown(_secondsRemaining),
+                    .backupRestoreConfirmClearCountdown(_secondsRemaining),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
