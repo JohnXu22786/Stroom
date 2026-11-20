@@ -184,6 +184,16 @@ Future<void> _awaitSignal(WidgetTester tester, Completer<void> signal) async {
   expect(signal.isCompleted, isTrue, reason: 'async operation did not finish');
 }
 
+Future<void> _awaitFinder(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 50 && finder.evaluate().isEmpty; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(finder, findsOneWidget, reason: 'expected UI feedback was not shown');
+}
+
 Future<void> _deleteBySelectionMode(
   WidgetTester tester, {
   int? selectCount,
@@ -416,7 +426,7 @@ void main() {
       expect(restoredPaths, ['second.txt']);
       expect(find.text('Delete test'), findsOneWidget);
       expect(find.text('Delete test shared'), findsOneWidget);
-      expect(find.textContaining('attachments/second.txt'), findsOneWidget);
+      await _awaitFinder(tester, find.textContaining('attachments/second.txt'));
       expect(find.textContaining('attachments/file.txt'), findsNothing);
       expect(
         container.read(conversationsProvider).map((conv) => conv.id).toSet(),
@@ -668,9 +678,11 @@ void main() {
       await _deleteBySelectionMode(tester, selectCount: 2);
       await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
+      await _awaitFinder(tester, find.textContaining('attachments/second.txt'));
 
       expect(find.text('Delete test'), findsOneWidget);
       expect(find.text('Delete test shared'), findsNWidgets(2));
+      expect(find.textContaining('attachments/file.txt'), findsNothing);
       expect(
         container.read(conversationsProvider).map((conv) => conv.id).toSet(),
         {'delete-test', 'delete-test-shared', 'delete-test-retained'},
