@@ -14,6 +14,7 @@ import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/utils/emojis.dart'
     show EmojiCategories, EmojiCategoryType;
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
@@ -1301,6 +1302,15 @@ void main() {
       expect(find.text('新建话题效果'), findsOneWidget);
       expect(find.text('暂不设置'), findsWidgets);
       expect(find.text('全部自动启用（未配置）'), findsOneWidget);
+      // Preview labels share a finite row with their right-aligned values.
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText &&
+              (widget.data == '模型' || widget.data == '工具'),
+        ),
+        findsNWidgets(2),
+      );
 
       // 头部右侧始终提供批量操作按钮；未配置时"全部启用"没有意义
       // （当前已自动启用全部），不显示；"取消配置"按钮已移除。
@@ -1411,7 +1421,7 @@ void main() {
         (w) => w is TextField && w.decoration?.labelText == '最大字符数',
       );
       await tester.enterText(lengthField, '8000');
-      await tester.pumpAndSettle();
+      await tester.pump();
       // 副标题即时反映新上限
       expect(find.text('超长结果将截断至 8000 个字符'), findsOneWidget);
 
@@ -1450,7 +1460,7 @@ void main() {
       // 超过最大有效范围（100000）：立即报错、不写入 vars
       // （短于 3 位的输入可能是合法值的中间态，如 "120"，不报错）
       await tester.enterText(lengthField, '5000000');
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(
         find.text('有效范围：100–100000 个字符'),
         findsOneWidget,

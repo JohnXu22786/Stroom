@@ -507,13 +507,17 @@ class _BackgroundOptimizationPageState
                         size: 24,
                       ),
                 const SizedBox(width: 12),
-                Text(
-                  _isCheckingService
-                      ? _strings.backgroundOptimizationDetecting
-                      : _optimizationStatus,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: _isServiceRunning ? Colors.green : Colors.orange,
+                Expanded(
+                  child: ConstrainedText(
+                    _isCheckingService
+                        ? _strings.backgroundOptimizationDetecting
+                        : _optimizationStatus,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: _isServiceRunning ? Colors.green : Colors.orange,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1039,10 +1043,7 @@ class _BackgroundOptimizationPageState
           ),
         ],
       ),
-      subtitle: Text(
-        detail.length > 60 ? '${detail.substring(0, 60)}…' : detail,
-        style: theme.textTheme.bodySmall,
-      ),
+      subtitle: Text(detail, style: theme.textTheme.bodySmall),
       value: value,
       onChanged: onChanged,
     );

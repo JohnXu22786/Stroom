@@ -70,7 +70,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -93,11 +93,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -2010,6 +2010,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloading update…'**
   String get updateDownloading;
+
+  /// No description provided for @updateCancelDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel download'**
+  String get updateCancelDownload;
+
+  /// No description provided for @updateDownloadInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Download in background'**
+  String get updateDownloadInBackground;
 
   /// No description provided for @updateCheckNetworkError.
   ///
@@ -17252,6 +17264,60 @@ abstract class AppLocalizations {
   /// **'Update app'**
   String get startupSafetyUpdateButton;
 
+  /// No description provided for @startupSafetyRollbackButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to previous version'**
+  String get startupSafetyRollbackButton;
+
+  /// No description provided for @startupSafetyRollbackNoCandidate.
+  ///
+  /// In en, this message translates to:
+  /// **'No direct installer was found for the recorded version. Export your data and install that version manually.'**
+  String get startupSafetyRollbackNoCandidate;
+
+  /// No description provided for @startupSafetyRollbackRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended version recorded before the failed update'**
+  String get startupSafetyRollbackRecommended;
+
+  /// No description provided for @startupSafetyRollbackReleaseNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Release notes'**
+  String get startupSafetyRollbackReleaseNotes;
+
+  /// No description provided for @startupSafetyRollbackNoReleaseNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'No release notes are available.'**
+  String get startupSafetyRollbackNoReleaseNotes;
+
+  /// No description provided for @startupSafetyRollbackConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm version recovery'**
+  String get startupSafetyRollbackConfirmTitle;
+
+  /// No description provided for @startupSafetyRollbackConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This will download and open version {version}. Export your data first. The operating system may refuse to install an older build. Stroom will not bypass installer restrictions.'**
+  String startupSafetyRollbackConfirmMessage(String version);
+
+  /// No description provided for @startupSafetyRollbackContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get startupSafetyRollbackContinue;
+
+  /// No description provided for @startupSafetyUpdateAttemptUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.'**
+  String get startupSafetyUpdateAttemptUnavailable;
+
   /// No description provided for @startupSafetyCheckingUpdates.
   ///
   /// In en, this message translates to:
@@ -19800,16 +19866,16 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'de',
-        'en',
-        'es',
-        'fr',
-        'ja',
-        'ko',
-        'pt',
-        'zh',
-      ].contains(locale.languageCode);
+    'ar',
+    'de',
+    'en',
+    'es',
+    'fr',
+    'ja',
+    'ko',
+    'pt',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;

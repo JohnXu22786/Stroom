@@ -315,6 +315,8 @@
   "updateLatestBadge": "最新",
   "updateSelectVersion": "バージョンの選択",
   "updateDownloading": "アップデートをダウンロード中…",
+  "updateCancelDownload": "ダウンロードをキャンセル",
+  "updateDownloadInBackground": "バックグラウンドでダウンロード",
   "updateCheckNetworkError": "ネットワークエラー: {details}",
   "updateCheckHttpFailed": "アップデートのチェックに失敗しました: HTTP {statusCode}",
   "updateCheckInvalidResponse": "更新のチェックに失敗しました: サーバーは認識できないデータを返しました",
@@ -2857,6 +2859,22 @@
   "startupSafetyExportButton": "データのエクスポート",
   "startupSafetyExitButton": "アプリを終了する",
   "startupSafetyUpdateButton": "アプリを更新する",
+  "startupSafetyRollbackButton": "以前のバージョンに戻す",
+  "startupSafetyRollbackNoCandidate": "記録されたバージョンの直接インストーラーが見つかりません。データをエクスポートしてから手動でインストールしてください。",
+  "startupSafetyRollbackRecommended": "更新失敗前に記録された推奨バージョン",
+  "startupSafetyRollbackReleaseNotes": "リリースノート",
+  "startupSafetyRollbackNoReleaseNotes": "リリースノートはありません。",
+  "startupSafetyRollbackConfirmTitle": "バージョン復旧の確認",
+  "startupSafetyRollbackConfirmMessage": "バージョン {version} をダウンロードして開きます。先にデータをエクスポートしてください。OS が古いビルドのインストールを拒否する場合があります。Stroom はインストーラーの制限を回避しません。",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "続行",
+  "startupSafetyUpdateAttemptUnavailable": "更新の試行を記録できなかったため、インストーラーを起動しませんでした。ストレージ権限を確認して再試行してください。",
   "startupSafetyCheckingUpdates": "アップデートをチェックしています...",
   "startupSafetyUpToDate": "最新情報を入手しました",
   "startupSafetyNewerDataVersion": "このデータは、新しいバージョンのアプリ ({version}) によって作成されました。\n\nこのアプリのバージョンではデータを安全に読み取ることができません。続行するには最新バージョンをインストールしてください。データは変更されていません。",

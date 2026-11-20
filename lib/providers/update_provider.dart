@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/startup_preferences.dart';
+import '../startup/startup_update_recovery.dart';
 import '../utils/app_version.dart';
 import 'locale_provider.dart';
 import 'update_provider_shared.dart';
@@ -39,6 +40,9 @@ class UpdateState {
   // Download fields
   final bool isDownloading;
   final double downloadProgress;
+  final int downloadReceivedBytes;
+  final int? downloadTotalBytes;
+  final bool downloadInBackground;
   final bool downloadComplete;
   final String? downloadError;
   final String? downloadedFilePath;
@@ -69,6 +73,9 @@ class UpdateState {
     this.updateAvailable = false,
     this.isDownloading = false,
     this.downloadProgress = 0.0,
+    this.downloadReceivedBytes = 0,
+    this.downloadTotalBytes,
+    this.downloadInBackground = false,
     this.downloadComplete = false,
     this.downloadError,
     this.downloadedFilePath,
@@ -87,8 +94,13 @@ class UpdateState {
     bool? updateAvailable,
     bool? isDownloading,
     double? downloadProgress,
+    int? downloadReceivedBytes,
+    int? downloadTotalBytes,
+    bool clearDownloadTotalBytes = false,
+    bool? downloadInBackground,
     bool? downloadComplete,
     String? downloadError,
+    bool clearDownloadError = false,
     String? downloadedFilePath,
     bool? isInstalling,
     bool? acceptPreRelease,
@@ -104,8 +116,15 @@ class UpdateState {
       updateAvailable: updateAvailable ?? this.updateAvailable,
       isDownloading: isDownloading ?? this.isDownloading,
       downloadProgress: downloadProgress ?? this.downloadProgress,
+      downloadReceivedBytes:
+          downloadReceivedBytes ?? this.downloadReceivedBytes,
+      downloadTotalBytes: clearDownloadTotalBytes
+          ? null
+          : downloadTotalBytes ?? this.downloadTotalBytes,
+      downloadInBackground: downloadInBackground ?? this.downloadInBackground,
       downloadComplete: downloadComplete ?? this.downloadComplete,
-      downloadError: downloadError ?? this.downloadError,
+      downloadError:
+          clearDownloadError ? null : downloadError ?? this.downloadError,
       downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
       isInstalling: isInstalling ?? this.isInstalling,
       acceptPreRelease: acceptPreRelease ?? this.acceptPreRelease,
@@ -178,6 +197,9 @@ void setPendingRestartInMemory(bool value) {
 class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
   final AppLocalizations Function() _localizations;
+  CancelToken? _downloadCancelToken;
+  String? _downloadTargetVersion;
+  bool _recordStartupAttempt = true;
 
   UpdateNotifier({Dio? dio, AppLocalizations Function()? localizations})
       : _dio = dio ??
@@ -234,22 +256,50 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   static String? getPlatformDownloadUrl(List<dynamic> assets) {
     if (kIsWeb) return null;
 
-    String platformKey;
+    final platformKey = currentPlatformKey;
+    return platformKey == null
+        ? null
+        : findAssetDownloadUrl(assets, platformKey);
+  }
+
+  static String? get currentPlatformKey {
+    if (kIsWeb) return null;
     if (defaultTargetPlatform == TargetPlatform.android) {
-      platformKey = 'android';
-    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-      platformKey = 'ios';
-    } else if (Platform.isWindows) {
-      platformKey = 'windows';
-    } else if (Platform.isMacOS) {
-      platformKey = 'macos';
-    } else if (Platform.isLinux) {
-      platformKey = 'linux';
-    } else {
+      return 'android';
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'ios';
+    if (Platform.isWindows) return 'windows';
+    if (Platform.isMacOS) return 'macos';
+    if (Platform.isLinux) return 'linux';
+    return null;
+  }
+
+  /// Finds the exact recorded source release without changing normal update
+  /// selection or its cached pending-update state.
+  Future<StartupRollbackCandidate?> findStartupRollbackCandidate(
+      String sourceVersion) async {
+    final platformKey = currentPlatformKey;
+    if (platformKey == null ||
+        // iOS requires an OS-managed app installation path; opening a local
+        // IPA through the generic file handler cannot safely install it.
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        !StartupUpdateAttempt.isExactVersion(sourceVersion)) {
       return null;
     }
-
-    return findAssetDownloadUrl(assets, platformKey);
+    try {
+      final response = await _dio.get(_kAllReleasesUrl);
+      final releases = response.data;
+      if (releases is! List) return null;
+      return StartupRollbackCandidate.fromReleases(
+        sourceVersion: sourceVersion,
+        platformKey: platformKey,
+        releases: releases,
+      );
+    } catch (error) {
+      debugPrint(
+          '[UpdateNotifier] Startup rollback release lookup failed: $error');
+      return null;
+    }
   }
 
   /// Attempts to load the persisted [acceptPreRelease] preference
@@ -712,16 +762,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = _resetState();
   }
 
-  /// Downloads the update file to a local temp directory, then
-  /// automatically installs it.
-  ///
-  /// Uses [dio.get] with [ResponseType.bytes] to download the file,
-  /// then writes the bytes to a local file. Tracks download progress
-  /// through [UpdateState.downloadProgress].
-  ///
-  /// After the file is saved, [installDownloadedFile] is called
-  /// automatically so the user does not need to click a separate
-  /// install button.
+  /// Downloads the update to an app-private staging file and atomically
+  /// publishes it when complete. Foreground downloads install automatically;
+  /// a download sent to the background remains ready for manual installation.
   ///
   /// On success, saves the file path to [UpdateState.downloadedFilePath]
   /// and sets [UpdateState.downloadComplete] to true.
@@ -729,8 +772,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   ///
   /// The [downloadDir] parameter is optional and used primarily for testing
   /// to avoid dependency on platform path providers.
-  Future<void> downloadUpdate({String? downloadDir}) async {
-    final url = state.downloadUrl;
+  Future<void> downloadUpdate({
+    String? downloadDir,
+    String? downloadUrlOverride,
+    String? targetVersion,
+    bool recordStartupAttempt = true,
+  }) async {
+    final url = downloadUrlOverride ?? state.downloadUrl;
     if (url == null || url.isEmpty) {
       state = state.copyWith(
         isDownloading: false,
@@ -741,11 +789,16 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     // 防止重复下载
     if (state.isDownloading) return;
+    _downloadTargetVersion = targetVersion ?? state.latestVersion;
+    _recordStartupAttempt = recordStartupAttempt;
 
     state = state.copyWith(
       isDownloading: true,
       downloadProgress: 0.0,
-      downloadError: null,
+      downloadReceivedBytes: 0,
+      clearDownloadTotalBytes: true,
+      downloadInBackground: false,
+      clearDownloadError: true,
       downloadComplete: false,
       downloadedFilePath: null,
       isInstalling: false,
@@ -762,6 +815,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
 
     try {
+      final cancelToken = CancelToken();
+      _downloadCancelToken = cancelToken;
       final tempDir = downloadDir ?? await _getDownloadDirectory();
       final uri = Uri.parse(url);
       final fileName =
@@ -780,66 +835,123 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         throw ArgumentError.value(fileName, 'fileName', 'Invalid filename');
       }
 
-      final response = await _dio.get(
-        url,
-        options: Options(
-          responseType: ResponseType.bytes,
-        ),
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            final progress = received / total;
-            state = state.copyWith(downloadProgress: progress);
-          }
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final bytes = response.data as List<int>;
-        final stagingDirectory =
-            await Directory(downloadDirectory).createTemp('.stroom-update-');
-        try {
-          final stagedFile = File(p.join(stagingDirectory.path, fileName));
-          await stagedFile.writeAsBytes(bytes);
-          await stagedFile.rename(filePath);
-        } finally {
-          await stagingDirectory.delete(recursive: true);
-        }
-
-        state = state.copyWith(
-          isDownloading: false,
-          downloadProgress: 1.0,
-          downloadComplete: true,
-          downloadedFilePath: filePath,
-          isInstalling: true,
+      final stagingDirectory =
+          await Directory(downloadDirectory).createTemp('.stroom-update-');
+      final stagedFile = File(p.join(stagingDirectory.path, fileName));
+      Response<dynamic>? response;
+      var published = false;
+      try {
+        response = await _dio.download(
+          url,
+          stagedFile.path,
+          cancelToken: cancelToken,
+          onReceiveProgress: (received, total) {
+            state = state.copyWith(
+              downloadReceivedBytes: received,
+              downloadTotalBytes: total > 0 ? total : null,
+              clearDownloadTotalBytes: total <= 0,
+              downloadProgress:
+                  total > 0 ? (received / total).clamp(0.0, 1.0) : 0.0,
+            );
+          },
         );
 
-        // 持久化文件路径，以便下次启动时清理残留安装包
-        await _saveDownloadedFilePath();
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
 
-        // 自动安装：下载完成后立即安装，无需用户点击安装按钮
-        try {
-          await installDownloadedFile();
-        } catch (e) {
-          // 捕获 installDownloadedFile 未处理到的异常
-          state = state.copyWith(
-            downloadError: _localizations().updateAutomaticInstallFailed(e),
-          );
-        } finally {
-          state = state.copyWith(isInstalling: false);
+        if (response.statusCode == 200) {
+          await stagedFile.rename(filePath);
+          published = true;
         }
-      } else {
+      } finally {
+        if (await stagingDirectory.exists()) {
+          await stagingDirectory.delete(recursive: true);
+        }
+      }
+
+      if (cancelToken.isCancelled) {
+        if (published) await File(filePath).delete();
+        throw cancelToken.cancelError!;
+      }
+
+      if (response!.statusCode != 200) {
+        _downloadCancelToken = null;
         state = state.copyWith(
           isDownloading: false,
           downloadError: _localizations().updateDownloadHttpFailed(
             response.statusCode.toString(),
           ),
         );
+        return;
       }
-    } catch (e) {
+
+      final downloadedBytes = await File(filePath).length();
+      if (cancelToken.isCancelled) {
+        if (published) await File(filePath).delete();
+        throw cancelToken.cancelError!;
+      }
+      _downloadCancelToken = null;
+      state = state.copyWith(
+        isDownloading: false,
+        downloadProgress: 1.0,
+        downloadReceivedBytes: downloadedBytes,
+        downloadTotalBytes: downloadedBytes,
+        downloadComplete: true,
+        downloadedFilePath: filePath,
+        isInstalling: !state.downloadInBackground,
+      );
+
+      // Persist the path for cleanup on the next app startup.
+      await _saveDownloadedFilePath();
+
+      try {
+        if (!state.downloadInBackground) await installDownloadedFile();
+      } catch (e) {
+        state = state.copyWith(
+          downloadError: _localizations().updateAutomaticInstallFailed(e),
+        );
+      } finally {
+        state = state.copyWith(isInstalling: false);
+      }
+    } on DioException catch (e) {
+      _downloadCancelToken = null;
+      if (CancelToken.isCancel(e)) {
+        state = state.copyWith(
+          isDownloading: false,
+          downloadProgress: 0.0,
+          downloadReceivedBytes: 0,
+          clearDownloadTotalBytes: true,
+          downloadComplete: false,
+          downloadedFilePath: null,
+          clearDownloadError: true,
+          isInstalling: false,
+          downloadInBackground: false,
+        );
+        return;
+      }
       state = state.copyWith(
         isDownloading: false,
         downloadError: _localizations().updateDownloadFailed(e),
       );
+    } catch (e) {
+      _downloadCancelToken = null;
+      state = state.copyWith(
+        isDownloading: false,
+        downloadError: _localizations().updateDownloadFailed(e),
+      );
+    }
+  }
+
+  /// Aborts the active request. The staging directory is removed by the
+  /// download's `finally` block before the state becomes retryable.
+  void cancelDownload() {
+    _downloadCancelToken?.cancel('Update download cancelled by user');
+  }
+
+  /// Keeps the current download alive after its dialog is dismissed and
+  /// leaves the completed package ready for an explicit install action.
+  void downloadInBackground() {
+    if (state.isDownloading) {
+      state = state.copyWith(downloadInBackground: true);
     }
   }
 
@@ -865,7 +977,20 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (kIsWeb) return;
 
     // Clear previous error before attempting installation
-    state = state.copyWith(downloadError: null);
+    state = state.copyWith(clearDownloadError: true);
+
+    final targetVersion = _downloadTargetVersion ?? state.latestVersion;
+    if (_recordStartupAttempt &&
+        (targetVersion == null ||
+            !await StartupUpdateAttempt.record(
+              sourceVersion: appVersion,
+              targetVersion: targetVersion,
+            ))) {
+      state = state.copyWith(
+        downloadError: _localizations().startupSafetyUpdateAttemptUnavailable,
+      );
+      return;
+    }
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {
@@ -1526,7 +1651,7 @@ rm -- "\$0"
   /// when auto-install fails or the user wants to re-open the installer —
   /// the file is already on disk and only needs to be re-triggered.
   Future<void> retryInstall() async {
-    state = state.copyWith(isInstalling: true, downloadError: null);
+    state = state.copyWith(isInstalling: true, clearDownloadError: true);
     try {
       await installDownloadedFile();
     } finally {

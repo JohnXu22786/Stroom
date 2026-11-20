@@ -1173,6 +1173,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get updateDownloading => 'Update wird heruntergeladen…';
 
   @override
+  String get updateCancelDownload => 'Download abbrechen';
+
+  @override
+  String get updateDownloadInBackground => 'Im Hintergrund herunterladen';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Netzwerkfehler: $details';
   }
@@ -1455,8 +1461,7 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -10522,6 +10527,41 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get startupSafetyUpdateButton => 'App aktualisieren';
+
+  @override
+  String get startupSafetyRollbackButton =>
+      'Zur vorherigen Version zurückkehren';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'Für die gespeicherte Version wurde kein direkter Installer gefunden. Exportiere deine Daten und installiere diese Version manuell.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Vor dem fehlgeschlagenen Update gespeicherte empfohlene Version';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Versionshinweise';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'Keine Versionshinweise verfügbar.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle =>
+      'Versionswiederherstellung bestätigen';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'Version $version wird heruntergeladen und geöffnet. Exportiere zuerst deine Daten. Das Betriebssystem kann eine ältere Version ablehnen; Stroom umgeht keine Installationsbeschränkungen.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Weiter';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'Der Updateversuch konnte nicht gespeichert werden. Das Installationsprogramm wurde daher nicht gestartet. Prüfe die Speicherberechtigungen und versuche es erneut.';
 
   @override
   String get startupSafetyCheckingUpdates => 'Suche nach Updates …';
@@ -13366,6 +13406,12 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   String get updateDownloading => 'Update wird heruntergeladen…';
 
   @override
+  String get updateCancelDownload => 'Download abbrechen';
+
+  @override
+  String get updateDownloadInBackground => 'Im Hintergrund herunterladen';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Netzwerkfehler: $details';
   }
@@ -13648,8 +13694,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -22715,6 +22760,41 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get startupSafetyUpdateButton => 'App aktualisieren';
+
+  @override
+  String get startupSafetyRollbackButton =>
+      'Zur vorherigen Version zurückkehren';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'Für die gespeicherte Version wurde kein direkter Installer gefunden. Exportiere deine Daten und installiere diese Version manuell.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Vor dem fehlgeschlagenen Update gespeicherte empfohlene Version';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Versionshinweise';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'Keine Versionshinweise verfügbar.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle =>
+      'Versionswiederherstellung bestätigen';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'Version $version wird heruntergeladen und geöffnet. Exportiere zuerst deine Daten. Das Betriebssystem kann eine ältere Version ablehnen; Stroom umgeht keine Installationsbeschränkungen.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Weiter';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'Der Updateversuch konnte nicht gespeichert werden. Das Installationsprogramm wurde daher nicht gestartet. Prüfe die Speicherberechtigungen und versuche es erneut.';
 
   @override
   String get startupSafetyCheckingUpdates => 'Suche nach Updates …';

@@ -3,7 +3,7 @@ import 'dart:io' show exit, Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show debugPrint, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 
@@ -13,10 +13,8 @@ import '../providers/locale_provider.dart';
 import 'app_restart.dart';
 import 'startup_sequence_controller.dart';
 import 'startup_page.dart';
+import 'startup_data_safety_block_page.dart';
 import '../application.dart';
-import '../providers/update_provider.dart';
-import '../services/backup_service.dart';
-import '../widgets/update_dialog.dart';
 
 import '../widgets/constrained_text.dart';
 
@@ -58,7 +56,7 @@ class _StartupAppState extends ConsumerState<StartupApp>
 
   /// 数据安全防线阻断原因（版本哨兵 / 检查不可用 / 冻结）。
   /// 非 null 时启动页显示阻断页（拒绝进入主应用），不再渐出。
-  String? _dataSafetyBlocked;
+  StartupBlock? _dataSafetyBlocked;
 
   /// Fade-out animation controller and opacity for smooth transition.
   late final AnimationController _fadeController;
@@ -99,7 +97,7 @@ class _StartupAppState extends ConsumerState<StartupApp>
         _isWorking = event.isWorking;
         _statusMessage = event.message;
         _progressDetail = event.detail;
-        _dataSafetyBlocked = event.blockedMessage;
+        _dataSafetyBlocked = event.block;
       });
     });
   }
@@ -286,8 +284,8 @@ class _StartupAppState extends ConsumerState<StartupApp>
                 colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               ),
               home: _dataSafetyBlocked != null
-                  ? _DataSafetyBlockPage(
-                      message: _dataSafetyBlocked!,
+                  ? StartupDataSafetyBlockPage(
+                      block: _dataSafetyBlocked!,
                       onExit: _exitApp,
                     )
                   : TickerMode(
@@ -465,192 +463,6 @@ class _ErrorCatcher extends StatefulWidget {
 
   @override
   State<_ErrorCatcher> createState() => _ErrorCatcherState();
-}
-
-/// 数据安全阻断页：版本哨兵（数据由更新版本创建）或冻结
-/// （迁移失败 / 无法自动修复）时全屏展示，拒绝进入主应用。
-///
-/// 只读页面：提供「导出数据」（全量导出到用户选择的位置，只读操作）
-/// 与「退出应用」，绝不提供任何写入入口，防止破坏被保护的数据。
-class _DataSafetyBlockPage extends ConsumerStatefulWidget {
-  final String message;
-  final VoidCallback? onExit;
-
-  const _DataSafetyBlockPage({required this.message, this.onExit});
-
-  @override
-  ConsumerState<_DataSafetyBlockPage> createState() =>
-      _DataSafetyBlockPageState();
-}
-
-class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
-  bool _exporting = false;
-
-  Future<void> _checkForUpdate() async {
-    final l10n = AppLocalizations.of(context)!;
-    final snackBar = ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(width: 12),
-            Text(l10n.startupSafetyCheckingUpdates),
-          ],
-        ),
-        duration: Duration(days: 1),
-      ),
-    );
-
-    await ref.read(updateProvider.notifier).checkForUpdate();
-    if (!mounted) return;
-    final state = ref.read(updateProvider);
-    snackBar.close();
-
-    if (state.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.error!),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } else if (state.updateAvailable) {
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        builder: (context) => const UpdateDialog(),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.startupSafetyUpToDate),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  Future<void> _exportData() async {
-    if (_exporting) return;
-    final l10n = AppLocalizations.of(context)!;
-    setState(() => _exporting = true);
-    try {
-      // 双平台统一路径：原生走 FilePicker 保存；Web 走内存构建 +
-      // 浏览器下载（exportBackup 内部处理）。
-      final exported = await BackupService.exportBackup(
-        context,
-        selection: BackupSelection.all,
-      );
-      if (!mounted || !exported) return;
-      // BackupService already shows a localized success message with the saved path.
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.backupServiceExportFailed(e.toString()))),
-      );
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return PopScope(
-      // 阻断页不允许返回键关闭（数据保护）
-      canPop: false,
-      child: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.shield_outlined,
-                  size: 72,
-                  color: Colors.red.shade400,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  l10n.startupSafetyTitle,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  widget.message,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: Colors.grey.shade600, height: 1.6),
-                ),
-                const SizedBox(height: 28),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    if (!kIsWeb) ...[_buildUpdateButton()],
-                    OutlinedButton.icon(
-                      onPressed: _exporting ? null : _exportData,
-                      icon: _exporting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.save_alt),
-                      label: ConstrainedText(
-                        l10n.startupSafetyExportButton,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: widget.onExit ?? () => SystemNavigator.pop(),
-                      icon: const Icon(Icons.exit_to_app),
-                      label: ConstrainedText(
-                        l10n.startupSafetyExitButton,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUpdateButton() {
-    final isChecking = ref.watch(updateProvider).isChecking;
-    final l10n = AppLocalizations.of(context)!;
-    return OutlinedButton.icon(
-      onPressed: isChecking ? null : _checkForUpdate,
-      icon: isChecking
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.update),
-      label: ConstrainedText(
-        l10n.startupSafetyUpdateButton,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
 }
 
 class _ErrorCatcherState extends State<_ErrorCatcher> {

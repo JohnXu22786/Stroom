@@ -16,6 +16,7 @@ import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
 
 class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
@@ -293,6 +294,36 @@ MockBackgroundServicePlatform registerMockPlatform() {
 }
 
 void main() {
+  testWidgets('long German desktop status stays bounded on a narrow screen', (
+    tester,
+  ) async {
+    registerMockPlatform();
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    try {
+      await tester.pumpWidget(_buildTestApp(locale: const Locale('de', 'DE')));
+      await tester.pumpAndSettle();
+
+      final status = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data.contains('Systemleiste auf dem Desktop'),
+      );
+      expect(status, findsOneWidget);
+      expect(tester.widget<ConstrainedText>(status).maxLines, 1);
+      expect(tester.takeException(), isNull);
+      expect(tester.getSemantics(status).label, contains('Beim Schließen'));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('background optimization title follows the selected locale', (
     tester,
   ) async {
@@ -1465,6 +1496,42 @@ void main() {
     );
   });
   group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
+    testWidgets('strategy subtitles retain their complete localized text', (
+      tester,
+    ) async {
+      registerMockPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        debugDefaultTargetPlatformOverride = null;
+      });
+
+      await tester.pumpWidget(_buildTestApp(locale: const Locale('de', 'DE')));
+      await tester.pumpAndSettle();
+
+      final strings = AppLocalizations.of(
+        tester.element(find.byType(BackgroundOptimizationPage)),
+      )!;
+      final watchdogTile = tester.widget<SwitchListTile>(
+        find.byType(SwitchListTile).first,
+      );
+      final coldStartTile = tester.widget<SwitchListTile>(
+        find.byType(SwitchListTile).at(1),
+      );
+      expect(
+        (watchdogTile.subtitle as Text).data,
+        strings.backgroundOptimizationWatchdogDetail,
+      );
+      expect(
+        (coldStartTile.subtitle as Text).data,
+        strings.backgroundOptimizationColdStartDetail,
+      );
+      debugDefaultTargetPlatformOverride = null;
+    });
+
     testWidgets('Android shows all three strategy toggles', (tester) async {
       registerMockPlatform();
       tester.view.physicalSize = const Size(1080, 5000);

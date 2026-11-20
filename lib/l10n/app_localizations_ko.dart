@@ -1122,6 +1122,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get updateDownloading => '업데이트 다운로드 중…';
 
   @override
+  String get updateCancelDownload => '다운로드 취소';
+
+  @override
+  String get updateDownloadInBackground => '백그라운드에서 다운로드';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return '네트워크 오류: $details';
   }
@@ -10098,6 +10104,37 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get startupSafetyUpdateButton => '앱 업데이트';
+
+  @override
+  String get startupSafetyRollbackButton => '이전 버전으로 복구';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '기록된 버전의 직접 설치 파일을 찾지 못했습니다. 데이터를 내보낸 뒤 해당 버전을 수동으로 설치하세요.';
+
+  @override
+  String get startupSafetyRollbackRecommended => '업데이트 실패 전에 기록된 권장 버전';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => '릴리스 노트';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => '릴리스 노트가 없습니다.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => '버전 복구 확인';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return '버전 $version을(를) 다운로드하고 엽니다. 먼저 데이터를 내보내세요. 운영체제가 이전 빌드 설치를 거부할 수 있으며 Stroom은 설치 제한을 우회하지 않습니다.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '계속';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '업데이트 시도를 기록할 수 없어 설치 프로그램을 시작하지 않았습니다. 저장소 권한을 확인하고 다시 시도하세요.';
 
   @override
   String get startupSafetyCheckingUpdates => '업데이트 확인 중...';
@@ -12826,6 +12863,12 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get updateDownloading => '업데이트 다운로드 중…';
 
   @override
+  String get updateCancelDownload => '다운로드 취소';
+
+  @override
+  String get updateDownloadInBackground => '백그라운드에서 다운로드';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return '네트워크 오류: $details';
   }
@@ -21802,6 +21845,37 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get startupSafetyUpdateButton => '앱 업데이트';
+
+  @override
+  String get startupSafetyRollbackButton => '이전 버전으로 복구';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '기록된 버전의 직접 설치 파일을 찾지 못했습니다. 데이터를 내보낸 뒤 해당 버전을 수동으로 설치하세요.';
+
+  @override
+  String get startupSafetyRollbackRecommended => '업데이트 실패 전에 기록된 권장 버전';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => '릴리스 노트';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => '릴리스 노트가 없습니다.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => '버전 복구 확인';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return '버전 $version을(를) 다운로드하고 엽니다. 먼저 데이터를 내보내세요. 운영체제가 이전 빌드 설치를 거부할 수 있으며 Stroom은 설치 제한을 우회하지 않습니다.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '계속';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '업데이트 시도를 기록할 수 없어 설치 프로그램을 시작하지 않았습니다. 저장소 권한을 확인하고 다시 시도하세요.';
 
   @override
   String get startupSafetyCheckingUpdates => '업데이트 확인 중...';

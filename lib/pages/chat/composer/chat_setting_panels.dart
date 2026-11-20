@@ -91,12 +91,16 @@ void showModelPanel({
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        AppLocalizations.of(context)!.chatSelectModel,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.chatSelectModel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
                         ),
                       ),
                     ],
@@ -268,12 +272,16 @@ void showToolsPanel({
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        AppLocalizations.of(context)!.chatAvailableTools,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.chatAvailableTools,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
                         ),
                       ),
                     ],
@@ -465,12 +473,16 @@ void showReasoningPanel({
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        AppLocalizations.of(context)!.chatReasoningSettings,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.chatReasoningSettings,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
                         ),
                       ),
                     ],
@@ -786,12 +798,16 @@ void showCustomReasoningParamsPanel({
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        AppLocalizations.of(context)!.chatCustomParameters,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.chatCustomParameters,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
                         ),
                       ),
                     ],

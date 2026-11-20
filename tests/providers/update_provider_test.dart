@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/startup/startup_update_recovery.dart';
 
 class _ApplicationCachePathProvider extends PathProviderPlatform {
   _ApplicationCachePathProvider(this.path);
@@ -1088,6 +1089,67 @@ void main() {
       expect(notifier.state.downloadUrl, isNot(contains('releases/tag')));
     });
 
+    test(
+        'startup rollback lookup isolates exact source release from update state',
+        () async {
+      final assets = _allPlatformAssets('v0.2.12-hotfix.1');
+      final dio = _createMockDio(_githubRelease(
+        'v0.2.12-hotfix.1',
+        body: 'Recorded source release',
+        assets: assets,
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      final originalState = notifier.state;
+
+      final candidate =
+          await notifier.findStartupRollbackCandidate('0.2.12-hotfix.1');
+
+      expect(candidate?.version, '0.2.12-hotfix.1');
+      expect(candidate?.releaseNotes, 'Recorded source release');
+      expect(candidate?.downloadUrl, contains('/releases/download/'));
+      expect(identical(notifier.state, originalState), isTrue);
+    });
+
+    test('startup rollback lookup never falls back to a release page',
+        () async {
+      final dio = _createMockDio(_githubRelease('v0.2.12'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      expect(
+        await notifier.findStartupRollbackCandidate('0.2.12'),
+        isNull,
+      );
+      expect(notifier.state.updateAvailable, isFalse);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test('startup rollback lookup excludes iOS installer-less candidates',
+        () async {
+      final originalPlatform =
+          debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final dio = _createMockDio(_githubRelease(
+          'v0.2.12',
+          assets: [
+            {
+              'name': 'stroom-ios-release-v0.2.12.ipa',
+              'browser_download_url':
+                  'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.12/stroom-ios-release-v0.2.12.ipa',
+            },
+          ],
+        ));
+        final notifier = UpdateNotifier(dio: dio);
+
+        expect(
+          await notifier.findStartupRollbackCandidate('0.2.12'),
+          isNull,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
     test('downloadUrl falls back to html_url when no assets provided',
         () async {
       SharedPreferences.setMockInitialValues({});
@@ -1352,7 +1414,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3], // minimal binary data
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1377,6 +1439,93 @@ void main() {
       // but that is acceptable - the key is download completed
     });
 
+    test('persists exact update attempt before installer flow starts',
+        () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        latestVersion: '0.2.14-rc.2+build.4',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14-rc.2/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      final attempt = await StartupUpdateAttempt.load();
+      expect(attempt?.targetVersion, '0.2.14-rc.2+build.4');
+      expect(attempt?.sourceVersion, isNotEmpty);
+    });
+
+    test('rollback installer attempt preserves the failed-update evidence',
+        () async {
+      await StartupUpdateAttempt.record(
+        sourceVersion: '0.2.12',
+        targetVersion: '0.2.13',
+      );
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.downloadUpdate(
+        downloadDir: tempDir,
+        downloadUrlOverride:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.12/update.zip',
+        targetVersion: '0.2.12',
+        recordStartupAttempt: false,
+      );
+
+      final attempt = await StartupUpdateAttempt.load();
+      expect(attempt?.sourceVersion, '0.2.12');
+      expect(attempt?.targetVersion, '0.2.13');
+    });
+
+    test('does not start installer when the exact attempt cannot be recorded',
+        () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        latestVersion: 'dev',
+        downloadUrl: 'https://example.com/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      expect(notifier.state.downloadComplete, isTrue);
+      expect(
+        notifier.state.downloadError,
+        'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.',
+      );
+    });
+
     test('downloadUpdate uses the app cache instead of shared temp storage',
         () async {
       final previousPathProvider = PathProviderPlatform.instance;
@@ -1388,7 +1537,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1417,7 +1566,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1448,7 +1597,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1507,7 +1656,7 @@ void main() {
       completer.complete(Response(
         requestOptions: RequestOptions(path: ''),
         statusCode: 200,
-        data: <int>[1, 2, 3],
+        data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
       ));
       await future;
 
@@ -1515,6 +1664,85 @@ void main() {
       expect(notifier.state.downloadComplete, true);
       // After auto-install completes, isInstalling should be false
       expect(notifier.state.isInstalling, false);
+    });
+
+    test('cancelDownload removes staging data and allows retry', () async {
+      final requestStarted = Completer<void>();
+      var requestCount = 0;
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestCount++;
+          if (requestCount == 1) {
+            requestStarted.complete();
+            // Leave the first request pending until its token is cancelled.
+          } else {
+            handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ));
+          }
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/update.zip',
+        downloadError: 'Download failed: previous attempt',
+      );
+
+      final download = notifier.downloadUpdate(downloadDir: tempDir);
+      await requestStarted.future;
+      expect(notifier.state.isDownloading, true);
+      expect(notifier.state.downloadError, isNull);
+      notifier.cancelDownload();
+      await download;
+
+      expect(notifier.state.isDownloading, false);
+      expect(notifier.state.downloadComplete, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(notifier.state.downloadedFilePath, isNull);
+      expect(Directory(tempDir).listSync(), isEmpty);
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+      expect(notifier.state.downloadComplete, true);
+      expect(requestCount, 2);
+    });
+
+    test('background download completes without starting installation',
+        () async {
+      final requestStarted = Completer<void>();
+      final response = Completer<Response<dynamic>>();
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestStarted.complete();
+          response.future.then(handler.resolve);
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/update.zip',
+      );
+
+      final download = notifier.downloadUpdate(downloadDir: tempDir);
+      await requestStarted.future;
+      notifier.downloadInBackground();
+      response.complete(Response(
+        requestOptions: RequestOptions(path: 'https://example.com/update.zip'),
+        statusCode: 200,
+        data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+      ));
+      await download;
+
+      expect(notifier.state.downloadComplete, true);
+      expect(notifier.state.downloadInBackground, true);
+      expect(notifier.state.isInstalling, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(await File(notifier.state.downloadedFilePath!).readAsBytes(),
+          <int>[1, 2, 3]);
     });
 
     test('downloadUpdate handles network error', () async {
@@ -1550,7 +1778,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 404,
-              data: 'Not Found',
+              data: ResponseBody.fromString('Not Found', 404),
             ),
           );
         },
@@ -1621,7 +1849,10 @@ void main() {
           dio: Dio(BaseOptions()),
           localizations: () =>
               appLocalizationsForLocale(const Locale('en', 'US')),
-        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
         await english.installDownloadedFile();
         expect(
           english.state.downloadError,
@@ -1632,7 +1863,10 @@ void main() {
           dio: Dio(BaseOptions()),
           localizations: () =>
               appLocalizationsForLocale(const Locale('zh', 'CN')),
-        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
         await chinese.installDownloadedFile();
         expect(chinese.state.downloadError, '安装失败，请手动打开 APK 安装');
       } finally {
@@ -1698,7 +1932,10 @@ void main() {
             final notifier = UpdateNotifier(
               dio: Dio(BaseOptions()),
               localizations: () => appLocalizationsForLocale(locale),
-            )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+            )..state = UpdateState(
+                latestVersion: '0.2.14',
+                downloadedFilePath: '$tempDir/update.apk',
+              );
 
             await notifier.installDownloadedFile();
 
@@ -2805,7 +3042,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },

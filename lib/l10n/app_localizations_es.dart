@@ -1176,6 +1176,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get updateDownloading => 'Descargando actualización…';
 
   @override
+  String get updateCancelDownload => 'Cancelar descarga';
+
+  @override
+  String get updateDownloadInBackground => 'Descargar en segundo plano';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Error de red: $details';
   }
@@ -10553,6 +10559,40 @@ class AppLocalizationsEs extends AppLocalizations {
   String get startupSafetyUpdateButton => 'Actualizar aplicación';
 
   @override
+  String get startupSafetyRollbackButton => 'Volver a la versión anterior';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'No se encontró un instalador directo para la versión registrada. Exporta tus datos e instala esa versión manualmente.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Versión recomendada registrada antes del fallo de actualización';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Notas de la versión';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'No hay notas de la versión disponibles.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle =>
+      'Confirmar recuperación de versión';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'Se descargará y abrirá la versión $version. Exporta primero tus datos. El sistema operativo puede rechazar una versión anterior; Stroom no omitirá las restricciones del instalador.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Continuar';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'No se pudo registrar este intento de actualización, así que no se inició el instalador. Comprueba los permisos de almacenamiento e inténtalo de nuevo.';
+
+  @override
   String get startupSafetyCheckingUpdates => 'Buscando actualizaciones...';
 
   @override
@@ -13397,6 +13437,12 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get updateDownloading => 'Descargando actualización…';
+
+  @override
+  String get updateCancelDownload => 'Cancelar descarga';
+
+  @override
+  String get updateDownloadInBackground => 'Descargar en segundo plano';
 
   @override
   String updateCheckNetworkError(Object details) {
@@ -22775,6 +22821,40 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get startupSafetyUpdateButton => 'Actualizar aplicación';
+
+  @override
+  String get startupSafetyRollbackButton => 'Volver a la versión anterior';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'No se encontró un instalador directo para la versión registrada. Exporta tus datos e instala esa versión manualmente.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Versión recomendada registrada antes del fallo de actualización';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Notas de la versión';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'No hay notas de la versión disponibles.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle =>
+      'Confirmar recuperación de versión';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'Se descargará y abrirá la versión $version. Exporta primero tus datos. El sistema operativo puede rechazar una versión anterior; Stroom no omitirá las restricciones del instalador.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Continuar';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'No se pudo registrar este intento de actualización, así que no se inició el instalador. Comprueba los permisos de almacenamiento e inténtalo de nuevo.';
 
   @override
   String get startupSafetyCheckingUpdates => 'Buscando actualizaciones...';
