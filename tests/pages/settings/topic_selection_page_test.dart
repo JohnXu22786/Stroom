@@ -270,9 +270,8 @@ void main() {
       final l10n = AppLocalizations.of(
         tester.element(find.byType(SearchPanel)),
       )!;
-      final chips = tester
-          .widgetList<FilterChip>(find.byType(FilterChip))
-          .toList();
+      final chips =
+          tester.widgetList<FilterChip>(find.byType(FilterChip)).toList();
       expect(chips, hasLength(2));
       final firstChip = find.byType(FilterChip).first;
       final initialFirstChipLeft = tester.getRect(firstChip).left;

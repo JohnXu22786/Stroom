@@ -135,9 +135,8 @@ class _SearchPanelState extends State<SearchPanel> {
                     final l10n = AppLocalizations.of(context)!;
                     final hasResults = _query.isNotEmpty;
                     const gap = 8.0;
-                    final resultSlotWidth = hasResults
-                        ? constraints.maxWidth / 3
-                        : 0.0;
+                    final resultSlotWidth =
+                        hasResults ? constraints.maxWidth / 3 : 0.0;
                     final chipGroupWidth = hasResults
                         ? constraints.maxWidth - resultSlotWidth - gap
                         : constraints.maxWidth;
@@ -224,9 +223,9 @@ class _SearchPanelState extends State<SearchPanel> {
                             Text(
                               _query.isEmpty
                                   ? AppLocalizations.of(context)!
-                                        .searchPanelPrompt
+                                      .searchPanelPrompt
                                   : AppLocalizations.of(context)!
-                                        .searchPanelNoResults,
+                                      .searchPanelNoResults,
                               style: TextStyle(color: cs.onSurfaceVariant),
                             ),
                           ],
