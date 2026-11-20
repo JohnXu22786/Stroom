@@ -56,8 +56,9 @@ void main() {
 
       final fields = find.byType(TextFormField);
       TextField textField(int index) => tester.widget<TextField>(
-        find.descendant(of: fields.at(index), matching: find.byType(TextField)),
-      );
+            find.descendant(
+                of: fields.at(index), matching: find.byType(TextField)),
+          );
       expect(fields, findsNWidgets(4));
       final durationLabels = ['Horas', 'Minutos', 'Artículos de segunda clase'];
       for (final label in durationLabels) {
