@@ -186,6 +186,9 @@ Future<void> _awaitSignal(WidgetTester tester, Completer<void> signal) async {
 
 Future<void> _awaitFinder(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 50 && finder.evaluate().isEmpty; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pump(const Duration(milliseconds: 100));
   }
   expect(finder, findsOneWidget, reason: 'expected UI feedback was not shown');
@@ -325,6 +328,54 @@ void main() {
     },
   );
 
+  testWidgets(
+    'conversations page reports the attachment path when cleanup fails',
+    (tester) async {
+      final root = Directory.systemTemp.createTempSync('stroom_delete_test_');
+      PathProviderPlatform.instance = _DocumentsPathProvider(root.path);
+      AppStorage.resetCache();
+      addTearDown(() => root.deleteSync(recursive: true));
+      final attemptedPaths = <String>[];
+      final restoredPaths = <String>[];
+      AttachmentStorage.readFileOverrideForTesting =
+          (_) async => Uint8List.fromList([1, 2, 3]);
+      AttachmentStorage.restoreFileOverrideForTesting = (path, _) async {
+        restoredPaths.add(path);
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        attemptedPaths.add(path);
+        if (path == 'attachments/second.txt') {
+          throw FileSystemException('failed');
+        }
+        return true;
+      };
+      await tester.pumpWidget(_app(home: const ConversationsPage()));
+      await _pumpUi(tester);
+      final rollback = _RollbackObserver(
+        ProviderScope.containerOf(
+          tester.element(find.byType(ConversationsPage)),
+          listen: false,
+        ),
+      );
+      addTearDown(rollback.close);
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await _pumpUi(tester);
+      await tester.tap(find.text('Delete').last);
+      await _pumpUi(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await _awaitSignal(tester, rollback.restored);
+      await _pumpUi(tester);
+      await _awaitFinder(tester, find.textContaining('attachments/second.txt'));
+
+      expect(
+          attemptedPaths, ['attachments/file.txt', 'attachments/second.txt']);
+      expect(restoredPaths.toSet(), {'file.txt', 'second.txt'});
+      expect(find.textContaining('attachments/file.txt'), findsNothing);
+      expect(find.text('Delete test'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   test(
     'notifier persists conversation recovery after disposal',
     () async {
@@ -432,8 +483,6 @@ void main() {
       expect(restoredPaths, ['second.txt']);
       expect(find.text('Delete test'), findsOneWidget);
       expect(find.text('Delete test shared'), findsOneWidget);
-      await _awaitFinder(tester, find.textContaining('attachments/second.txt'));
-      expect(find.textContaining('attachments/file.txt'), findsNothing);
       expect(
         container.read(conversationsProvider).map((conv) => conv.id).toSet(),
         {'delete-test', 'delete-test-retained'},
