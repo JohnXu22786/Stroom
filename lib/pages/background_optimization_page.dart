@@ -1039,10 +1039,7 @@ class _BackgroundOptimizationPageState
           ),
         ],
       ),
-      subtitle: Text(
-        detail.length > 60 ? '${detail.substring(0, 60)}…' : detail,
-        style: theme.textTheme.bodySmall,
-      ),
+      subtitle: Text(detail, style: theme.textTheme.bodySmall),
       value: value,
       onChanged: onChanged,
     );
