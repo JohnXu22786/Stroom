@@ -740,6 +740,15 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _pendingDraftAttachmentFileDeletes.add(storagePath);
   }
 
+  void queueDraftAttachmentCacheDelete({
+    required String? conversationId,
+    required String hash,
+  }) {
+    _pendingDraftAttachmentCacheDeletes.add(
+      (conversationId: conversationId, hash: hash),
+    );
+  }
+
   void saveDraft(
     String conversationId,
     String draftText, {

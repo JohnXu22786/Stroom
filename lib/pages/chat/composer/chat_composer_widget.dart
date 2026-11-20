@@ -161,6 +161,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       List.unmodifiable(_pendingAttachments);
 
   @visibleForTesting
+  void setPreCompressFutureForTesting(String hash, Future<void> future) {
+    _preCompressFutures[hash] = future;
+  }
+
+  @visibleForTesting
   Future<void> updatePendingAttachmentAfterEditForTesting(
     int index,
     Uint8List bytes,
@@ -550,10 +555,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         conversationId: _editSessionConversationId,
       );
     }
-    // Save draft before disposing. Use try-catch because ref may
-    // already be disposed during teardown, especially in tests.
+    // Defer the provider mutation until teardown has finished; Riverpod rejects
+    // synchronous state updates while Flutter is deactivating this subtree.
     try {
-      _saveDraftImmediately(widget);
+      _saveDraftAfterDispose(widget);
     } catch (e) {
       // Non-critical: draft is best-effort during disposal.
       // Log unexpected errors so they are visible during development

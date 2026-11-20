@@ -1596,6 +1596,34 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     return paths;
   }
 
+  Set<String> _attachmentHashesInSnapshot(List<Conversation> snapshot) {
+    final hashes = <String>{};
+    for (final conversation in snapshot) {
+      hashes.addAll(conversation.draftAttachments.map((a) => a.hash));
+      for (final message in conversation.messages) {
+        hashes.addAll(message.attachments.map((a) => a.hash));
+      }
+    }
+    void collectPreservedHashes(dynamic value) {
+      if (value is Map) {
+        final hash = value['hash'];
+        if (hash is String) hashes.add(hash);
+        for (final nestedValue in value.values) {
+          collectPreservedHashes(nestedValue);
+        }
+      } else if (value is Iterable) {
+        for (final nestedValue in value) {
+          collectPreservedHashes(nestedValue);
+        }
+      }
+    }
+
+    for (final record in _unparsedConversationRecords) {
+      collectPreservedHashes(record);
+    }
+    return hashes;
+  }
+
   Future<void> _flushPendingDraftAttachmentFileDeletes(
     Set<String> referencedPaths,
   ) async {
@@ -1607,6 +1635,23 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         _pendingDraftAttachmentFileDeletes.remove(storagePath);
       } catch (error) {
         debugPrint('Failed to clean removed draft attachment: $error');
+      }
+    }
+  }
+
+  Future<void> _flushPendingDraftAttachmentCacheDeletes(
+    Set<String> referencedHashes,
+  ) async {
+    for (final cache in _pendingDraftAttachmentCacheDeletes.toList()) {
+      if (referencedHashes.contains(cache.hash)) continue;
+      try {
+        await AttachmentStorage.deleteCompressedImage(
+          conversationId: cache.conversationId,
+          hash: cache.hash,
+        );
+        _pendingDraftAttachmentCacheDeletes.remove(cache);
+      } catch (error) {
+        debugPrint('Failed to clean removed draft attachment cache: $error');
       }
     }
   }
@@ -1659,6 +1704,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         ..._unparsedConversationRecords,
       ];
       final referencedPaths = _attachmentPathsInSnapshot(snapshot);
+      final referencedHashes = _attachmentHashesInSnapshot(snapshot);
       final json = jsonEncode(records);
       if (!await prefs.setString('conversations', json)) {
         throw StateError('conversation save returned false');
@@ -1668,6 +1714,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         await _clearPendingRestoredMessageMarker();
       }
       await _flushPendingDraftAttachmentFileDeletes(referencedPaths);
+      await _flushPendingDraftAttachmentCacheDeletes(referencedHashes);
       await AppLogService.debug(
         'ConversationsNotifier',
         '对话已持久化, 共 ${snapshot.length} 个',
@@ -1723,6 +1770,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         ..._unparsedConversationRecords,
       ];
       final referencedPaths = _attachmentPathsInSnapshot(stripped);
+      final referencedHashes = _attachmentHashesInSnapshot(stripped);
       final json = jsonEncode(records);
       if (!await prefs.setString('conversations', json)) {
         throw StateError('stripped conversation save returned false');
@@ -1732,6 +1780,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         await _clearPendingRestoredMessageMarker();
       }
       await _flushPendingDraftAttachmentFileDeletes(referencedPaths);
+      await _flushPendingDraftAttachmentCacheDeletes(referencedHashes);
       await AppLogService.warning(
         'ConversationsNotifier',
         '持久化对话成功 (剥离 rawRequest/rawResponse 后)',

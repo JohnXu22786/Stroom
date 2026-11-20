@@ -594,6 +594,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// Attachment paths to remove after a successful snapshot no longer refers to them.
   final Set<String> _pendingDraftAttachmentFileDeletes = <String>{};
 
+  /// Compressed caches to remove after a successful snapshot no longer refers
+  /// to their hashes.
+  final Set<({String? conversationId, String hash})>
+      _pendingDraftAttachmentCacheDeletes = {};
+
   /// A single queued periodic stream save may be updated until an explicit
   /// persistence operation establishes an ordering barrier.
   _CoalescedStreamPersist? _coalescedStreamPersist;

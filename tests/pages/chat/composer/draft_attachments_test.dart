@@ -779,8 +779,22 @@ void main() {
         draftAttachments: [attachment],
       );
       final key = GlobalKey<ChatComposerWidgetState>();
+      final preCompressGate = Completer<void>();
       var savedPathAtDelete = '';
       var oldFileExistedAtDelete = false;
+      var cacheDeletedBeforePreCompressFinished = false;
+      var cacheDeletedAfterPreCompressFinished = false;
+      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
+        required conversationId,
+        required hash,
+      }) async {
+        if (hash == attachment.hash && !preCompressGate.isCompleted) {
+          cacheDeletedBeforePreCompressFinished = true;
+        } else if (hash == attachment.hash) {
+          cacheDeletedAfterPreCompressFinished = true;
+        }
+        return true;
+      };
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         final prefs = await SharedPreferences.getInstance();
         final saved = (jsonDecode(prefs.getString('conversations')!) as List)
@@ -802,17 +816,29 @@ void main() {
         ),
       );
       await tester.pump();
+      key.currentState!.setPreCompressFutureForTesting(
+        attachment.hash,
+        preCompressGate.future,
+      );
       final editedBytes = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
       );
-      await tester.runAsync(
-        () => key.currentState!
-            .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
-      );
+      late Future<void> replaceFuture;
+      await tester.runAsync(() async {
+        replaceFuture = key.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      expect(savedPathAtDelete, isEmpty);
+      expect(file.existsSync(), isTrue);
+      preCompressGate.complete();
+      await tester.runAsync(() => replaceFuture);
       await tester.pump();
 
       expect(savedPathAtDelete, isNot(storagePath));
       expect(oldFileExistedAtDelete, isTrue);
+      expect(cacheDeletedBeforePreCompressFinished, isFalse);
+      expect(cacheDeletedAfterPreCompressFinished, isTrue);
       expect(file.existsSync(), isFalse);
       container.dispose();
     });
@@ -1012,6 +1038,63 @@ void main() {
 
       expect(saved, isTrue);
       expect(file.existsSync(), isFalse);
+      container.dispose();
+    });
+
+    testWidgets('保存失败后下一次成功保存再清理旧压缩缓存', (tester) async {
+      final attachment = Attachment(
+        id: 'retry-image',
+        fileName: 'retry.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'retry-image-hash',
+        storagePath: 'attachments/retry.png',
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      late _RetryableWritePreferencesStore store;
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore..allowWrites = false;
+        },
+      );
+      final deletedCaches = <String>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
+        required conversationId,
+        required hash,
+      }) async {
+        deletedCaches.add('$conversationId:$hash');
+        return true;
+      };
+
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier.queueDraftAttachmentCacheDelete(
+        conversationId: 'conv-1',
+        hash: attachment.hash,
+      );
+      final failedSave = await tester.runAsync(
+        () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
+      );
+      expect(failedSave, isFalse);
+      expect(deletedCaches, isEmpty);
+
+      store.allowWrites = true;
+      final retainedSave = await tester.runAsync(
+        () => notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [attachment],
+        ),
+      );
+      expect(retainedSave, isTrue);
+      expect(deletedCaches, isEmpty);
+
+      final successfulSave = await tester.runAsync(
+        () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
+      );
+      expect(successfulSave, isTrue);
+      expect(deletedCaches, ['conv-1:${attachment.hash}']);
       container.dispose();
     });
 

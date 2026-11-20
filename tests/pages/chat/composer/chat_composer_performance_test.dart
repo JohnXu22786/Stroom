@@ -215,11 +215,13 @@ void main() {
       await tester.pump();
       tester.takeException();
 
-      // Removing ChatPage disposes its composer. The composer saves its draft
-      // synchronously while the ancestor is deactivated, which must not make
-      // the page's provider listener read from the inactive widget tree.
+      // Removing ChatPage disposes its composer. The composer captures its
+      // draft during dispose and persists it after the widget lifecycle ends.
+      // This must not make the page's provider listener read from an inactive
+      // widget tree, and the write must still update the live provider.
       pageVisible.value = false;
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
       expect(tester.takeException(), isNull);
       expect(
         container.read(conversationsProvider).single.draftText,

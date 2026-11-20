@@ -367,7 +367,12 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     Attachment att, {
     required String? conversationId,
   }) async {
-    final inflight = _preCompressFutures[att.hash];
+    await _waitForPreCompress(att.hash);
+    await _deleteCompressedCache(att, conversationId: conversationId);
+  }
+
+  Future<void> _waitForPreCompress(String hash) async {
+    final inflight = _preCompressFutures[hash];
     if (inflight != null) {
       try {
         await inflight;
@@ -375,7 +380,6 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 预压缩失败也会完成（内部已兜底），这里仅需等待时序
       }
     }
-    await _deleteCompressedCache(att, conversationId: conversationId);
   }
 
   /// Best-effort 删除附件的磁盘压缩缓存（派生缓存，删除永远安全）。
@@ -631,15 +635,24 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // Keep the old path available for draft restore until the new path is
         // durable. A failed save leaves the old file in place.
         await _queueDraftAttachmentFileDelete(replacedAtt.storagePath);
-        if (!await _persistDraftSnapshotImmediately(widget)) return;
-        // 同 hash 的新附件继续使用这份缓存，不要在等待它的预压缩完成后
-        // 再将它删除。
         if (replacedAtt.hash != updatedAtt.hash) {
-          await _deleteCompressedCacheAfterPreCompress(
-            replacedAtt,
-            conversationId: editConversationId,
-          );
+          // A pre-compression task may already have passed its relevance
+          // check and be writing the old hash's cache. Let it finish before
+          // queueing cleanup so a durable save cannot race that final write.
+          await _waitForPreCompress(replacedAtt.hash);
+          if (widget.conversationId == null) {
+            await _deleteCompressedCacheAfterPreCompress(
+              replacedAtt,
+              conversationId: editConversationId,
+            );
+          } else {
+            _conversationsNotifier.queueDraftAttachmentCacheDelete(
+              conversationId: editConversationId,
+              hash: replacedAtt.hash,
+            );
+          }
         }
+        if (!await _persistDraftSnapshotImmediately(widget)) return;
       } else {
         final isOriginalEditFile = widget.editingMessageAttachments?.any(
               (a) =>

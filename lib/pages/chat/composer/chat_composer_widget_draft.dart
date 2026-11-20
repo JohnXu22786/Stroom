@@ -79,6 +79,37 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     _lastSavedDraftAttSignature = _draftAttSignature();
   }
 
+  /// Capture the draft while this State is still alive, then update Riverpod
+  /// after widget teardown has left the build/finalize lifecycle. Riverpod
+  /// rejects synchronous provider notifications from State.dispose().
+  void _saveDraftAfterDispose(ChatComposerWidget w) {
+    final convId = w.conversationId;
+    if (convId == null || w.editingMessageId != null) return;
+    if (_lastSavedDraft == _textController.text &&
+        _lastSavedDraftAttSignature.toString() ==
+            _draftAttSignature().toString()) {
+      return;
+    }
+
+    final textToSave = _textController.text;
+    final draftAttachments = _draftAttachmentSnapshot();
+    final attachmentSignature = _draftAttSignature(draftAttachments);
+    _lastSavedDraft = textToSave;
+    _lastSavedDraftAttSignature = attachmentSignature;
+
+    Future<void>(() {
+      try {
+        _conversationsNotifier.saveDraft(
+          convId,
+          textToSave,
+          draftAttachments: draftAttachments,
+        );
+      } catch (e) {
+        debugPrint('[ChatComposer] failed to save draft after dispose: $e');
+      }
+    });
+  }
+
   /// Persists the current draft snapshot and reports whether it reached
   /// storage. File cleanup must wait for this before deleting a referenced path.
   Future<bool> _persistDraftSnapshotImmediately(ChatComposerWidget w) async {
