@@ -1082,11 +1082,17 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             children: [
               Row(
                 children: [
-                  Text(
-                    AppLocalizations.of(context)!.ttsEditText,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.ttsEditText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(ctx),
