@@ -320,6 +320,8 @@
   "updateLatestBadge": "Latest",
   "updateSelectVersion": "Select version",
   "updateDownloading": "Downloading update…",
+  "updateCancelDownload": "Cancel download",
+  "updateDownloadInBackground": "Download in background",
   "updateCheckNetworkError": "Network error: {details}",
   "updateCheckHttpFailed": "Failed to check for updates: HTTP {statusCode}",
   "updateCheckInvalidResponse": "Failed to check for updates: the server returned unrecognized data",

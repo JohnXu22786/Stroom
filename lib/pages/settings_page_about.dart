@@ -69,8 +69,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                   : const Icon(Icons.update, color: Colors.blue),
               title: AppLocalizations.of(context)!.aboutCheckUpdates,
               subtitle: updateState.updateAvailable
-                  ? AppLocalizations.of(context)!
-                      .aboutNewVersionFound(updateState.latestVersion!)
+                  ? updateState.isDownloading
+                      ? _downloadProgressLabel(updateState)
+                      : updateState.downloadComplete
+                          ? AppLocalizations.of(context)!.updateDownloadComplete
+                          : updateState.downloadError ??
+                              AppLocalizations.of(context)!
+                                  .aboutNewVersionFound(updateState.latestVersion!)
                   : null,
               trailing: updateState.updateAvailable
                   ? Container(
@@ -88,7 +93,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                       ),
                     )
                   : const Icon(Icons.chevron_right),
-              onTap: updateState.isChecking ? () {} : () => _checkForUpdate(),
+              onTap: updateState.isChecking
+                  ? () {}
+                  : updateState.isDownloading ||
+                          updateState.downloadComplete ||
+                          updateState.downloadError != null
+                      ? _showUpdateDialog
+                      : () => _checkForUpdate(),
             ),
             _buildListTile(
               leading: Icon(
@@ -151,6 +162,27 @@ extension _SettingsPageAboutExt on _SettingsPageState {
         ]),
       ],
     );
+  }
+
+  int _downloadPercent(double progress) => (progress * 100).toInt();
+
+  String _downloadProgressLabel(UpdateState state) {
+    final strings = AppLocalizations.of(context)!;
+    final received = _formatBytes(state.downloadReceivedBytes);
+    final total = state.downloadTotalBytes;
+    if (total == null || total <= 0) {
+      return '${strings.updateDownloading} $received';
+    }
+    return '${strings.updateDownloading} $received / ${_formatBytes(total)} (${_downloadPercent(state.downloadProgress)}%)';
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Future<void> _checkForUpdate() async {

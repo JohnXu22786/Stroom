@@ -1173,6 +1173,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get updateDownloading => 'Update wird heruntergeladen…';
 
   @override
+  String get updateCancelDownload => 'Download abbrechen';
+
+  @override
+  String get updateDownloadInBackground => 'Im Hintergrund herunterladen';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Netzwerkfehler: $details';
   }
@@ -13364,6 +13370,12 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get updateDownloading => 'Update wird heruntergeladen…';
+
+  @override
+  String get updateCancelDownload => 'Download abbrechen';
+
+  @override
+  String get updateDownloadInBackground => 'Im Hintergrund herunterladen';
 
   @override
   String updateCheckNetworkError(Object details) {

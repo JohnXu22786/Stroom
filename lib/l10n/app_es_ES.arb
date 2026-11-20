@@ -315,6 +315,8 @@
   "updateLatestBadge": "El último",
   "updateSelectVersion": "Seleccionar versión",
   "updateDownloading": "Descargando actualización…",
+  "updateCancelDownload": "Cancelar descarga",
+  "updateDownloadInBackground": "Descargar en segundo plano",
   "updateCheckNetworkError": "Error de red: {details}",
   "updateCheckHttpFailed": "No se pudieron buscar actualizaciones: HTTP {statusCode}",
   "updateCheckInvalidResponse": "No se pudieron buscar actualizaciones: el servidor devolvió datos no reconocidos",

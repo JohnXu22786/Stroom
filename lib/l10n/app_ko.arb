@@ -323,6 +323,8 @@
   "updateLatestBadge": "최신",
   "updateSelectVersion": "버전 선택",
   "updateDownloading": "업데이트 다운로드 중…",
+  "updateCancelDownload": "다운로드 취소",
+  "updateDownloadInBackground": "백그라운드에서 다운로드",
   "updateCheckNetworkError": "네트워크 오류: {details}",
   "updateCheckHttpFailed": "업데이트 확인 실패: HTTP {statusCode}",
   "updateCheckInvalidResponse": "업데이트 확인 실패: 서버에서 인식할 수 없는 데이터를 반환했습니다",

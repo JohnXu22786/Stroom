@@ -1352,7 +1352,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3], // minimal binary data
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1388,7 +1388,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1417,7 +1417,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1448,7 +1448,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1507,7 +1507,7 @@ void main() {
       completer.complete(Response(
         requestOptions: RequestOptions(path: ''),
         statusCode: 200,
-        data: <int>[1, 2, 3],
+        data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
       ));
       await future;
 
@@ -1515,6 +1515,85 @@ void main() {
       expect(notifier.state.downloadComplete, true);
       // After auto-install completes, isInstalling should be false
       expect(notifier.state.isInstalling, false);
+    });
+
+    test('cancelDownload removes staging data and allows retry', () async {
+      final requestStarted = Completer<void>();
+      var requestCount = 0;
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestCount++;
+          if (requestCount == 1) {
+            requestStarted.complete();
+            // Leave the first request pending until its token is cancelled.
+          } else {
+            handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ));
+          }
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/update.zip',
+        downloadError: 'Download failed: previous attempt',
+      );
+
+      final download = notifier.downloadUpdate(downloadDir: tempDir);
+      await requestStarted.future;
+      expect(notifier.state.isDownloading, true);
+      expect(notifier.state.downloadError, isNull);
+      notifier.cancelDownload();
+      await download;
+
+      expect(notifier.state.isDownloading, false);
+      expect(notifier.state.downloadComplete, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(notifier.state.downloadedFilePath, isNull);
+      expect(Directory(tempDir).listSync(), isEmpty);
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+      expect(notifier.state.downloadComplete, true);
+      expect(requestCount, 2);
+    });
+
+    test('background download completes without starting installation',
+        () async {
+      final requestStarted = Completer<void>();
+      final response = Completer<Response<dynamic>>();
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestStarted.complete();
+          response.future.then(handler.resolve);
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/update.zip',
+      );
+
+      final download = notifier.downloadUpdate(downloadDir: tempDir);
+      await requestStarted.future;
+      notifier.downloadInBackground();
+      response.complete(Response(
+        requestOptions: RequestOptions(path: 'https://example.com/update.zip'),
+        statusCode: 200,
+        data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+      ));
+      await download;
+
+      expect(notifier.state.downloadComplete, true);
+      expect(notifier.state.downloadInBackground, true);
+      expect(notifier.state.isInstalling, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(await File(notifier.state.downloadedFilePath!).readAsBytes(),
+          <int>[1, 2, 3]);
     });
 
     test('downloadUpdate handles network error', () async {
@@ -1550,7 +1629,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 404,
-              data: 'Not Found',
+              data: ResponseBody.fromString('Not Found', 404),
             ),
           );
         },
@@ -2805,7 +2884,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },

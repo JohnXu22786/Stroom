@@ -1168,6 +1168,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get updateDownloading => 'Baixando atualização…';
 
   @override
+  String get updateCancelDownload => 'Cancelar download';
+
+  @override
+  String get updateDownloadInBackground => 'Baixar em segundo plano';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Erro de rede: $details';
   }
@@ -13355,6 +13361,12 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get updateDownloading => 'Baixando atualização…';
+
+  @override
+  String get updateCancelDownload => 'Cancelar download';
+
+  @override
+  String get updateDownloadInBackground => 'Baixar em segundo plano';
 
   @override
   String updateCheckNetworkError(Object details) {

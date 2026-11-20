@@ -1183,6 +1183,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get updateDownloading => 'جارٍ تنزيل التحديث…';
 
   @override
+  String get updateCancelDownload => 'إلغاء التنزيل';
+
+  @override
+  String get updateDownloadInBackground => 'التنزيل في الخلفية';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'خطأ في الشبكة: $details';
   }
@@ -13320,6 +13326,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get updateDownloading => 'جارٍ تنزيل التحديث…';
+
+  @override
+  String get updateCancelDownload => 'إلغاء التنزيل';
+
+  @override
+  String get updateDownloadInBackground => 'التنزيل في الخلفية';
 
   @override
   String updateCheckNetworkError(Object details) {
