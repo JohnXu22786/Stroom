@@ -1325,6 +1325,25 @@ void main() {
           final iconBox = tester.getRect(
             find.byIcon(Icons.visibility_outlined),
           );
+          final headingContext = tester.element(heading);
+          final headingStyle = DefaultTextStyle.of(
+            headingContext,
+          ).style.merge(tester.widget<ConstrainedText>(heading).style);
+          final headingMeasure = TextPainter(
+            text: TextSpan(text: title, style: headingStyle),
+            textDirection: Directionality.of(headingContext),
+            locale: Localizations.maybeLocaleOf(headingContext),
+            textScaler: MediaQuery.textScalerOf(headingContext),
+            maxLines: 1,
+          )..layout(maxWidth: headingBox.width);
+          expect(headingMeasure.didExceedMaxLines, expectsMotion);
+          if (!expectsMotion) {
+            expect(
+              headingBox.width - headingMeasure.width,
+              greaterThan(1),
+              reason: 'A fitting localized heading needs rasterization slack.',
+            );
+          }
           expect(headingBox.left, greaterThanOrEqualTo(iconBox.right));
           expect(headingBox.right, lessThanOrEqualTo(304));
           expect(

@@ -565,7 +565,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         color: cs.secondary,
                       ),
                       const SizedBox(width: 8),
-                      Flexible(
+                      Expanded(
                         child: ConstrainedText(
                           AppLocalizations.of(context)!
                               .assistantNewConversationPreview,
