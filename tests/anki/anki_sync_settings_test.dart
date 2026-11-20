@@ -28,6 +28,25 @@ class _RejectedSelectedWriteStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _SlowFirstEnabledWriteStore extends InMemorySharedPreferencesStore {
+  _SlowFirstEnabledWriteStore(super.data) : super.withData();
+
+  final firstEnabledWriteStarted = Completer<void>();
+  final rejectFirstEnabledWrite = Completer<void>();
+  var _enabledWriteCount = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.custom_sync_server_enabled' &&
+        _enabledWriteCount++ == 0) {
+      firstEnabledWriteStarted.complete();
+      await rejectFirstEnabledWrite.future;
+      return false;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 class _SlowFirstUrlWriteStore extends InMemorySharedPreferencesStore {
   _SlowFirstUrlWriteStore(super.data) : super.withData();
 
@@ -211,6 +230,49 @@ void main() {
     expect(prefs.getString('anki_sync_mode'), 'ankiWeb');
     expect(prefs.getBool('custom_sync_server_enabled'), false);
   });
+
+  test(
+    'a failed earlier mode save cannot undo a later successful save',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'anki_sync_mode': 'ankiWeb',
+        'custom_sync_server_enabled': false,
+      });
+      final store = _SlowFirstEnabledWriteStore({
+        'flutter.anki_sync_mode': 'ankiWeb',
+        'flutter.custom_sync_server_enabled': false,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final loaded = Completer<void>();
+      final subscription = container.listen<AnkiSyncState>(ankiSyncProvider, (
+        _,
+        next,
+      ) {
+        if (next.isLoaded && !loaded.isCompleted) loaded.complete();
+      }, fireImmediately: true);
+      addTearDown(subscription.close);
+      await loaded.future.timeout(const Duration(seconds: 2));
+      final notifier = container.read(ankiSyncProvider.notifier);
+
+      final failedSave = notifier.setMode(AnkiSyncMode.selfHosted);
+      await store.firstEnabledWriteStarted.future.timeout(
+        const Duration(seconds: 2),
+      );
+      final successfulSave = notifier.setMode(AnkiSyncMode.selfHosted);
+      store.rejectFirstEnabledWrite.complete();
+
+      await expectLater(failedSave, throwsA(isA<StateError>()));
+      await successfulSave;
+
+      expect(container.read(ankiSyncProvider).mode, AnkiSyncMode.selfHosted);
+      expect(await store.getAll(), {
+        'flutter.anki_sync_mode': 'selfHosted',
+        'flutter.custom_sync_server_enabled': true,
+      });
+    },
+  );
 
   test('a rejected URL write leaves the in-memory URL unchanged', () async {
     const savedUrl = 'https://saved.example.invalid/sync/';

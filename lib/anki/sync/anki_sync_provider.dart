@@ -49,7 +49,7 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
     );
   }
 
-  Future<void> setMode(AnkiSyncMode mode) async {
+  Future<void> setMode(AnkiSyncMode mode) => _enqueueSettingsWrite(() async {
     if (!state.isLoaded) return;
     final prefs = await SharedPreferences.getInstance();
     final previousMode = prefs.getString(_keyMode);
@@ -71,8 +71,9 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
         try {
           final restored = await restoreEnabled();
           if (requireEnabledRestore && !restored) {
-            rollbackError =
-                StateError('Legacy mode rollback was not persisted');
+            rollbackError = StateError(
+              'Legacy mode rollback was not persisted',
+            );
           }
         } catch (error) {
           rollbackError = error;
@@ -95,17 +96,11 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
     try {
       modeSaved = await prefs.setString(_keyMode, mode.name);
     } catch (_) {
-      await rollback(
-        restoreEnabledValue: false,
-        requireModeRestore: true,
-      );
+      await rollback(restoreEnabledValue: false, requireModeRestore: true);
       rethrow;
     }
     if (!modeSaved) {
-      await rollback(
-        restoreEnabledValue: false,
-        requireModeRestore: false,
-      );
+      await rollback(restoreEnabledValue: false, requireModeRestore: false);
       throw StateError('Failed to persist the Anki sync mode');
     }
     // Keep the former flag in sync for older app builds that may still read it.
@@ -124,7 +119,7 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
       throw StateError('Failed to persist the legacy Anki sync mode');
     }
     state = state.copyWith(mode: mode);
-  }
+  });
 
   Future<void> _enqueueSettingsWrite(Future<void> Function() write) {
     final operation = _settingsWriteQueue.then((_) => write());
