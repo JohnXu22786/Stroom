@@ -243,6 +243,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/stroom_menu_style_test.dart",
         "widgets/transform_stretch_overscroll_test.dart",
         "widgets/update_dialog_test.dart",
+        "widgets/version_info_dialog_test.dart",
         "pages/application_quit_confirmation_test.dart",
         "pages/application_startup_update_test.dart",
         "pages/background_optimization_page_test.dart",

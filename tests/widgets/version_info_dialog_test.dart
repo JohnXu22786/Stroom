@@ -31,7 +31,8 @@ Future<void> _showVersionDialog(
                 builder: (_) => const VersionInfoDialog(
                   version: '0.5.4 (build 20261120, commit 123456789abcdef)',
                   releaseTime: '2026-11-20T14:35:22',
-                  releaseNotes: 'This release includes a long flowing release note that must wrap naturally instead of being clipped or moved like a label.',
+                  releaseNotes:
+                      'This release includes a long flowing release note that must wrap naturally instead of being clipped or moved like a label.',
                 ),
               ),
               child: const Text('open'),
