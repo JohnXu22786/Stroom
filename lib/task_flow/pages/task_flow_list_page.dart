@@ -222,15 +222,18 @@ class TaskFlowListPage extends ConsumerWidget {
                           color: cs.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          AppLocalizations.of(context)!
-                              .taskFlowBlockCount(flow.blocks.length),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant,
+                        Expanded(
+                          child: ConstrainedText(
+                            AppLocalizations.of(context)!
+                                .taskFlowBlockCount(flow.blocks.length),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Spacer(),
                         Text(
                           formatRelativeTime(
                             flow.updatedAt,

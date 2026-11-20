@@ -9,6 +9,7 @@ import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_templates.dart';
 import 'package:stroom/task_flow/pages/task_flow_list_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _TaskFlowNotifierWithState extends TaskFlowNotifier {
   _TaskFlowNotifierWithState(TaskFlowDefinition flow) {
@@ -122,5 +123,50 @@ void main() {
     );
 
     expect(find.text('OCR → Assistant Chat'), findsOneWidget);
+  });
+
+  testWidgets(
+      'block-count metadata remains bounded in narrow large-text Arabic',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final flow = TaskFlowDefinition(
+      name: 'Flow',
+      blocks: List.generate(30, (_) => TaskFlowBlock(typeKey: BlockType.ocr)),
+      updatedAt: DateTime.now().subtract(const Duration(hours: 5)),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          taskFlowListProvider.overrideWith(
+            (ref) => _TaskFlowNotifierWithState(flow),
+          ),
+        ],
+        child: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: MaterialApp(
+            locale: const Locale('ar'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const TaskFlowListPage(),
+          ),
+        ),
+      ),
+    );
+
+    final count = tester.widget<ConstrainedText>(find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data.contains('30'),
+    ));
+    expect(count.data, contains('30'));
+    expect(tester.takeException(), isNull);
   });
 }
