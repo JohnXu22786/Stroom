@@ -37,7 +37,13 @@ class VersionInfoDialog extends StatelessWidget {
         children: [
           Icon(Icons.auto_awesome, color: cs.primary),
           const SizedBox(width: 8),
-          Text(strings.versionInfoTitle),
+          Expanded(
+            child: ConstrainedText(
+              strings.versionInfoTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
       content: SingleChildScrollView(
@@ -87,15 +93,20 @@ class VersionInfoDialog extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: cs.onSurfaceVariant,
+        Flexible(
+          flex: 2,
+          child: ConstrainedText(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
+            ),
           ),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Text(value)),
+        Expanded(flex: 3, child: Text(value)),
       ],
     );
   }
