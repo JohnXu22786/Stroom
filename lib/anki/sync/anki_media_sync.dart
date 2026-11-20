@@ -618,7 +618,6 @@ class AnkiMediaSync {
   ) async {
     final seen = <String>{};
     await for (final entity in folder.list(followLinks: false)) {
-      if (entity is! File) continue;
       final filename = p.basename(entity.path);
       final lowercaseFilename = filename.toLowerCase();
       if (lowercaseFilename == '.nomedia' ||
@@ -626,6 +625,22 @@ class AnkiMediaSync {
           lowercaseFilename == 'thumbs.db') {
         continue;
       }
+      if (entity is Link) {
+        final existing = await _find(index, filename);
+        if (_int(existing?['sync_required']) == 1) {
+          throw AnkiSyncException.appGenerated(
+            '本地媒体符号链接无法同步，请先修复后重试',
+            failureCode: AnkiSyncFailureCode.mediaInvalidFilename,
+            diagnosticText: filename,
+          );
+        }
+        // A symlink with a known media filename is still present locally.
+        // Do not follow it; otherwise it falls through to the missing-file
+        // pass and can be uploaded as a remote deletion.
+        seen.add(filename);
+        continue;
+      }
+      if (entity is! File) continue;
       // A file may still exist locally even when its name cannot be sent to
       // the server unchanged. Keep it out of the missing-file pass below so
       // that an existing server entry is not accidentally tombstoned.

@@ -104,6 +104,148 @@ void main() {
       }
     });
 
+    test('does not delete indexed remote media replaced by a symlink',
+        () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_symlink_tombstone_test_',
+      );
+      final outsideDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_symlink_target_test_',
+      );
+      const identity = 'ankiweb:symlink-tombstone';
+      const filename = 'tracked.png';
+      const remoteBytes = [1, 2, 3];
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      final localFile = File('${mediaDir.path}/$filename');
+      await localFile.writeAsBytes(remoteBytes);
+      await _seedMediaIndex(
+        workDir,
+        identity,
+        lastSyncUsn: 1,
+        files: [
+          {
+            'fname': filename,
+            'sha1': sha1.convert(remoteBytes).toString(),
+            'usn': 1,
+            'sync_required': 0,
+          },
+        ],
+      );
+      await localFile.delete();
+      final target = File('${outsideDir.path}/target.png');
+      await target.writeAsBytes(remoteBytes);
+      final linkPath = '${mediaDir.path}/$filename';
+      await Link(linkPath).create(target.path);
+      final fake = _QueueHttpClient()
+        ..responseFor = (request, body) async {
+          switch (request.url.path) {
+            case '/msync/begin':
+              return _jsonResponse({
+                'data': {'usn': 1, 'sk': 'test-host-key'},
+                'err': '',
+              });
+            case '/msync/uploadChanges':
+              return _jsonResponse({
+                'data': [1, 2],
+                'err': '',
+              });
+            case '/msync/mediaSanity':
+              return _jsonResponse({'data': 'OK', 'err': ''});
+            default:
+              return _jsonResponse({'data': [], 'err': ''});
+          }
+        };
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        await AnkiMediaSync.sync(
+          client,
+          syncIdentity: identity,
+          documentsPath: workDir.path,
+        );
+
+        expect(fake.paths, isNot(contains('/msync/uploadChanges')));
+        expect(await target.readAsBytes(), remoteBytes);
+        expect(await FileSystemEntity.type(linkPath, followLinks: false),
+            FileSystemEntityType.link);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+        await outsideDir.delete(recursive: true);
+      }
+    },
+        skip: Platform.isWindows
+            ? 'Creating symlinks may require elevated privileges on Windows'
+            : false);
+
+    test('does not read a symlink for a pending media upload', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_symlink_upload_test_',
+      );
+      final outsideDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_symlink_upload_target_test_',
+      );
+      const identity = 'ankiweb:symlink-pending-upload';
+      const filename = 'tracked.png';
+      const remoteBytes = [1, 2, 3];
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      final localFile = File('${mediaDir.path}/$filename');
+      await localFile.writeAsBytes(remoteBytes);
+      await _seedMediaIndex(
+        workDir,
+        identity,
+        lastSyncUsn: 1,
+        files: [
+          {
+            'fname': filename,
+            'sha1': sha1.convert(remoteBytes).toString(),
+            'usn': 1,
+            'sync_required': 1,
+          },
+        ],
+      );
+      await localFile.delete();
+      final target = File('${outsideDir.path}/target.png');
+      await target.writeAsBytes(remoteBytes);
+      final linkPath = '${mediaDir.path}/$filename';
+      await Link(linkPath).create(target.path);
+      final fake = _QueueHttpClient();
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(fake.paths, isEmpty);
+        expect(await target.readAsBytes(), remoteBytes);
+        expect(await FileSystemEntity.type(linkPath, followLinks: false),
+            FileSystemEntityType.link);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+        await outsideDir.delete(recursive: true);
+      }
+    },
+        skip: Platform.isWindows
+            ? 'Creating symlinks may require elevated privileges on Windows'
+            : false);
+
     test('localizes media index filesystem open failures', () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_index_open_error_test_',
