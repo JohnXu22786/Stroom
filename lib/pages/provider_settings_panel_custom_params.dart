@@ -220,8 +220,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
         ...List.generate(_customParams.length, (i) {
           final param = _customParams[i];
           final name = param.paramName.trim();
-          final isDuplicate =
-              name.isNotEmpty &&
+          final isDuplicate = name.isNotEmpty &&
               (_customParams.indexWhere((p) => p.paramName.trim() == name) !=
                   i);
           final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
@@ -253,11 +252,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                                         .providerParamNameInvalid(name),
                                   )
                                 : isDuplicate
-                                ? Text(
-                                    AppLocalizations.of(context)!
-                                        .providerParamAlreadyExists(name),
-                                  )
-                                : null,
+                                    ? Text(
+                                        AppLocalizations.of(context)!
+                                            .providerParamAlreadyExists(name),
+                                      )
+                                    : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
                           onChanged: (v) {
@@ -387,8 +386,8 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.fullscreen, size: 20),
-                          tooltip: AppLocalizations.of(context)!
-                              .chatFullscreenEdit,
+                          tooltip:
+                              AppLocalizations.of(context)!.chatFullscreenEdit,
                           onPressed: () {
                             showJsonValueEditorDialog(
                               context,
