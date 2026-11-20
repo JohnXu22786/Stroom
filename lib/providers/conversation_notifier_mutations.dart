@@ -330,7 +330,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         ) &&
         _ref.read(activeConversationIdProvider) ==
             previousActiveConversationId) {
-      await _persistActiveId();
+      // The restored conversation is already durably checkpointed above.
+      // Persisting this secondary selection preference should not delay the
+      // caller's cleanup-failure feedback.
+      unawaited(_persistActiveId());
     }
   }
 
