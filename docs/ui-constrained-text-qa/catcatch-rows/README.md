@@ -8,7 +8,7 @@ The production `CatCatchPage` was rendered in Chromium at 320 × 640 CSS px, dev
 - [Long selected folder](catcatch-long-folder-de-320x640-scale1-light.png)
 - [Long folder reveal motion](catcatch-long-folder-motion.webm)
 
-The motion preview uses the shared `ConstrainedText` delayed, bidirectional reveal. The exact folder string remains the widget's complete label and semantic value.
+The 8-second motion preview was recorded from the production `CatCatchPage` in Chromium at 320 × 640, DPR 1, de-DE. The selected folder text advances between the 2-second and 7-second frames. It uses the shared `ConstrainedText` delayed, bidirectional reveal. The exact folder string remains the widget's complete label and semantic value.
 
 ## Verification
 
