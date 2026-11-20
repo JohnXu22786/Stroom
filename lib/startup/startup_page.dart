@@ -104,18 +104,20 @@ class _StartupPageState extends State<StartupPage>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  final enlargesHeroText = const [11.0, 15.0, 34.0].any(
+                    (fontSize) => textScaler.scale(fontSize) > fontSize + 0.01,
+                  );
                   final isCompact = constraints.maxHeight < 520;
 
                   // Keep display text at its intended size. A compact card uses
                   // less decorative spacing; enlarged text and very short
                   // layouts scroll the hero while keeping startup feedback visible.
-                  if (isCompact && textScale <= 1) {
+                  if (isCompact && !enlargesHeroText) {
                     final compactHero = Center(
                       child: _buildMintHero(compact: true),
                     );
-                    final hasStartupDetails =
-                        widget.statusMessage.isNotEmpty ||
+                    final hasStartupDetails = widget.statusMessage.isNotEmpty ||
                         (widget.progressDetail?.isNotEmpty ?? false);
                     return Column(
                       children: [
@@ -134,7 +136,7 @@ class _StartupPageState extends State<StartupPage>
                     );
                   }
 
-                  if (isCompact || textScale > 1) {
+                  if (isCompact || enlargesHeroText) {
                     return Column(
                       children: [
                         Expanded(
@@ -173,7 +175,7 @@ class _StartupPageState extends State<StartupPage>
       constraints: const BoxConstraints(maxWidth: 320),
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.all(compact ? 14 : 24),
+        padding: EdgeInsets.all(compact ? 13 : 24),
         decoration: BoxDecoration(
           color: _visualStyle.cardSurface.withValues(alpha: 0.24),
           border: Border.all(color: _visualStyle.cardBorder),
@@ -211,13 +213,13 @@ class _StartupPageState extends State<StartupPage>
                 ),
               ],
             ),
-            SizedBox(height: compact ? 12 : 22),
-            _buildAppIcon(size: compact ? 40 : 68),
-            SizedBox(height: compact ? 10 : 18),
+            SizedBox(height: compact ? 8 : 22),
+            _buildAppIcon(size: 68),
+            SizedBox(height: compact ? 8 : 18),
             _buildBrandName(fontSize: 34, letterSpacing: 1),
-            SizedBox(height: compact ? 4 : 7),
+            SizedBox(height: compact ? 2 : 7),
             _buildTagline(),
-            SizedBox(height: compact ? 12 : 22),
+            SizedBox(height: compact ? 6 : 22),
             _buildFlowRail(),
           ],
         ),

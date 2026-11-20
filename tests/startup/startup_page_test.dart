@@ -6,6 +6,16 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/startup/startup_page.dart';
 import 'package:stroom/startup/startup_visual_style.dart';
 
+class NonlinearStartupTextScaler extends TextScaler {
+  const NonlinearStartupTextScaler();
+
+  @override
+  double get textScaleFactor => 1;
+
+  @override
+  double scale(double fontSize) => fontSize <= 1 ? fontSize : fontSize * 2;
+}
+
 /// Helper to create a standalone StartupPage for focused widget testing.
 Widget wrapStartupPage({
   bool isWorking = true,
@@ -106,8 +116,7 @@ void main() {
     ) async {
       // 启动检查发现多个问题时状态文案会非常长（所有问题拼接），
       // 必须在受限高度内滚动而不是触发 RenderFlex overflow。
-      final longMessage =
-          '启动完成（注意: 发现 3 个数据问题:\n'
+      final longMessage = '启动完成（注意: 发现 3 个数据问题:\n'
           '  • provider_entries[0]: id 字段缺失或为空\n'
           '  • provider_entries[1]: type 字段缺失或为空\n'
           '  • conversations[2]: messages 字段缺失\n'
@@ -127,27 +136,48 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(wrapStartupPage());
-      await tester.pump();
+      for (final textScaler in [
+        TextScaler.noScaling,
+        const NonlinearStartupTextScaler(),
+      ]) {
+        await tester.pumpWidget(wrapStartupPage(textScaler: textScaler));
+        await tester.pump();
 
-      expect(
-        tester.getRect(find.text('Stroom')).height,
-        greaterThan(30),
-        reason:
-            'The hero may scroll, but its brand text must not be scaled down.',
-      );
-      expect(find.byType(FittedBox), findsNothing);
-      expect(
-        tester.getRect(find.byType(CircularProgressIndicator)).bottom,
-        lessThanOrEqualTo(320),
-        reason: 'Startup feedback should stay visible in compact landscape.',
-      );
-      expect(
-        tester.getRect(find.text('Stroom')).bottom,
-        lessThan(tester.getRect(find.byType(CircularProgressIndicator)).top),
-        reason: 'The compact hero should not overlap startup feedback.',
-      );
-      expect(tester.takeException(), isNull);
+        expect(
+          tester.getRect(find.text('Stroom')).height,
+          greaterThan(textScaler.scale(34) * 0.8),
+          reason:
+              'The hero may scroll, but its brand text must not be scaled down.',
+        );
+        expect(find.byType(FittedBox), findsNothing);
+        expect(
+          tester
+              .widget<Icon>(find.byIcon(StartupVisualStyle.mintGlass.icon))
+              .size,
+          34,
+          reason: 'The startup app icon keeps its original size.',
+        );
+        expect(
+          find.byType(SingleChildScrollView),
+          textScaler is NonlinearStartupTextScaler
+              ? findsOneWidget
+              : findsNothing,
+        );
+        expect(
+          tester.getRect(find.byType(CircularProgressIndicator)).bottom,
+          lessThanOrEqualTo(320),
+          reason: 'Startup feedback should stay visible in compact landscape.',
+        );
+        if (textScaler is! NonlinearStartupTextScaler) {
+          expect(
+            tester.getRect(find.text('Stroom')).bottom,
+            lessThan(
+                tester.getRect(find.byType(CircularProgressIndicator)).top),
+            reason: 'The compact hero should not overlap startup feedback.',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
     });
 
     testWidgets('Mint Glass keeps localized hero text legible at large scale', (
