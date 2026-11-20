@@ -81,28 +81,28 @@ Widget _buildApp({
   double textScaleFactor = 1,
   ThemeMode themeMode = ThemeMode.light,
   bool allowMotion = false,
-}) => ProviderScope(
-  child: MaterialApp(
-    locale: locale,
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    theme: ThemeData(colorSchemeSeed: Colors.blue),
-    darkTheme: ThemeData(
-      colorSchemeSeed: Colors.blue,
-      brightness: Brightness.dark,
-    ),
-    themeMode: themeMode,
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context)
-          .copyWith(
+}) =>
+    ProviderScope(
+      child: MaterialApp(
+        locale: locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        theme: ThemeData(colorSchemeSeed: Colors.blue),
+        darkTheme: ThemeData(
+          colorSchemeSeed: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        themeMode: themeMode,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
             disableAnimations: !allowMotion,
             textScaler: TextScaler.linear(textScaleFactor),
           ),
-      child: child!,
-    ),
-    home: const TextStoragePage(),
-  ),
-);
+          child: child!,
+        ),
+        home: const TextStoragePage(),
+      ),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
