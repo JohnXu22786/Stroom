@@ -68,10 +68,20 @@ void main() {
         ),
       );
 
-      for (final button in ['OCR', 'ASR']) {
-        await tester.tap(find.text(button));
+      final semantics = tester.ensureSemantics();
+      const expectedTitles = {
+        'OCR': 'Fehlerdetails',
+        'ASR': 'Fehlerdetails anzeigen',
+      };
+      for (final entry in expectedTitles.entries) {
+        await tester.tap(find.text(entry.key));
         await tester.pumpAndSettle();
         expect(find.byType(ConstrainedText), findsOneWidget);
+        expect(find.text(entry.value), findsOneWidget);
+        expect(
+          tester.getSemantics(find.byType(ConstrainedText)).label,
+          entry.value,
+        );
         expect(find.byIcon(Icons.error_outline), findsOneWidget);
         expect(find.byIcon(Icons.close), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -79,6 +89,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(Dialog), findsNothing);
       }
+      semantics.dispose();
     },
   );
 }
