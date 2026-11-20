@@ -16,8 +16,12 @@ import 'package:stroom/anki/sync/anki_sync_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 import 'package:stroom/pages/anki_sync_page.dart';
 
-Widget _localizedApp({required Widget home}) => MaterialApp(
-      locale: const Locale('zh', 'CN'),
+Widget _localizedApp({
+  required Widget home,
+  Locale locale = const Locale('zh', 'CN'),
+}) =>
+    MaterialApp(
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: home,
@@ -114,6 +118,25 @@ void main() {
     expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
     expect(find.text('检查服务器状态'), findsOneWidget);
     expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('available remote status heading fits narrow French layout', (
+    tester,
+  ) async {
+    await _showRemoteStatus(tester);
+    expect(
+      find.text('La collection du serveur est disponible'),
+      findsOneWidget,
+    );
+    _expectRemoteMessageWraps(tester);
+  });
+
+  testWidgets('empty remote status heading fits narrow French layout', (
+    tester,
+  ) async {
+    await _showRemoteStatus(tester, isEmpty: true);
+    expect(find.text('La collection du serveur est vide'), findsOneWidget);
+    _expectRemoteMessageWraps(tester);
   });
 
   testWidgets('offers sync after login and keeps the sync button available', (
@@ -640,6 +663,68 @@ void main() {
   });
 }
 
+Future<void> _showRemoteStatus(
+  WidgetTester tester, {
+  bool isEmpty = false,
+}) async {
+  tester.view.physicalSize = const Size(320, 640);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  SharedPreferences.setMockInitialValues({});
+  final requests = <Uri>[];
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ankiSyncSecureStorageProvider.overrideWith(
+          (_) => _StoredSecureStorage({}),
+        ),
+        ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+          (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+            client: _LoginAndMetaHttpClient(
+              requests,
+              isEmpty: isEmpty,
+              shouldContinue: false,
+              message:
+                  'Le serveur indique une information importante qui doit rester lisible sur plusieurs lignes.',
+            ),
+            hostKey: hostKey,
+          ),
+        ),
+      ],
+      child: _localizedApp(
+        home: const AnkiSyncSettingsPage(),
+        locale: const Locale('fr'),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(find.text('Se connecter à AnkiWeb'), 300);
+  await tester.tap(find.text('Se connecter à AnkiWeb'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
+  await tester.enterText(find.byType(TextFormField).at(1), 'password');
+  await tester.tap(find.text('Se connecter').last);
+  await tester.pumpAndSettle();
+  expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+}
+
+void _expectRemoteMessageWraps(WidgetTester tester) {
+  final schemaStatus = find.textContaining(
+    'Version du schéma 1600000000000 · USN 7',
+  );
+  expect(schemaStatus, findsOneWidget);
+  expect(tester.getSize(schemaStatus).height, greaterThan(20));
+
+  final message = find.text(
+    'Le serveur indique une information importante qui doit rester lisible sur plusieurs lignes.',
+  );
+  expect(message, findsNWidgets(2));
+  expect(tester.getSize(message.at(0)).height, greaterThan(20));
+  expect(tester.getSize(message.at(1)).height, greaterThan(20));
+  expect(tester.takeException(), isNull);
+}
+
 Future<List<Uri>> _loginUntilSyncPrompt(
   WidgetTester tester, {
   List<dynamic> additionalOverrides = const [],
@@ -842,9 +927,17 @@ class _RecordingHttpClient extends http.BaseClient {
 }
 
 class _LoginAndMetaHttpClient extends http.BaseClient {
-  _LoginAndMetaHttpClient(this.requests);
+  _LoginAndMetaHttpClient(
+    this.requests, {
+    this.isEmpty = false,
+    this.shouldContinue = true,
+    this.message = '',
+  });
 
   final List<Uri> requests;
+  final bool isEmpty;
+  final bool shouldContinue;
+  final String message;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -856,10 +949,10 @@ class _LoginAndMetaHttpClient extends http.BaseClient {
             'scm': 1600000000000,
             'usn': 7,
             'ts': 1700000000,
-            'msg': '',
-            'cont': true,
+            'msg': message,
+            'cont': shouldContinue,
             'hostNum': 1,
-            'empty': false,
+            'empty': isEmpty,
             'media_usn': 3,
           };
     return http.StreamedResponse(
