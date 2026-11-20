@@ -449,7 +449,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // snapshot still referenced. Preserve files used by the edited message.
     if (!isOriginalEditFile) {
       if (widget.editingMessageId == null) {
-        await _queueDraftAttachmentFileDelete(att.storagePath);
+        await _queueDraftAttachmentFileDelete(
+          att.storagePath,
+          attachmentConversationId: att.conversationId,
+        );
         await _persistDraftSnapshotImmediately(widget);
         if (widget.conversationId == null && cacheConversationId != null) {
           await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
@@ -674,7 +677,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (widget.editingMessageId == null) {
         // Keep the old path available for draft restore until the new path is
         // durable. A failed save leaves the old file in place.
-        await _queueDraftAttachmentFileDelete(replacedAtt.storagePath);
+        await _queueDraftAttachmentFileDelete(
+          replacedAtt.storagePath,
+          attachmentConversationId: replacedAtt.conversationId,
+        );
         if (replacedAtt.hash != updatedAtt.hash) {
           // A pre-compression task may already have passed its relevance
           // check and be writing the old hash's cache. Let it finish before
@@ -693,6 +699,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
           }
         }
         if (!await _persistDraftSnapshotImmediately(widget)) return;
+        if (widget.conversationId == null &&
+            replacedAtt.conversationId != null) {
+          await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
+        }
       } else {
         final isOriginalEditFile = widget.editingMessageAttachments?.any(
               (a) =>

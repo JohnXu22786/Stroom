@@ -473,6 +473,20 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final cs = Theme.of(context).colorScheme;
     final appBarActionWidth =
         (MediaQuery.sizeOf(context).width / 3).clamp(64.0, 120.0).toDouble();
+    final scrollableEmptyState = _selectedVideos.isEmpty &&
+        MediaQuery.textScalerOf(context).scale(1) > 1;
+    final bodyChildren = <Widget>[
+      _buildVideoSourceBar(cs),
+      if (_engineChecked && !_engineAvailable && !kIsWeb)
+        _buildEngineWarning(cs),
+      if (scrollableEmptyState)
+        _buildEmptyState(cs)
+      else
+        Expanded(child: _buildContent(cs)),
+      if (_hasError) _buildErrorBanner(cs),
+      if (_success) _buildSuccessBanner(cs),
+      _buildBottomBar(cs),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -498,28 +512,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Video source button
-          _buildVideoSourceBar(cs),
-
-          // FFmpeg status
-          if (_engineChecked && !_engineAvailable && !kIsWeb)
-            _buildEngineWarning(cs),
-
-          // Content area
-          Expanded(child: _buildContent(cs)),
-
-          // Error message
-          if (_hasError) _buildErrorBanner(cs),
-
-          // Success message
-          if (_success) _buildSuccessBanner(cs),
-
-          // Bottom action bar
-          _buildBottomBar(cs),
-        ],
-      ),
+      body: scrollableEmptyState
+          ? SingleChildScrollView(
+              child: Column(children: bodyChildren),
+            )
+          : Column(children: bodyChildren),
     );
   }
 

@@ -923,6 +923,9 @@ void main() {
       );
       late _RetryableWritePreferencesStore store;
       final firstWriteGate = Completer<void>();
+      final secondWriteGate = Completer<void>();
+      final secondWriteStarted = Completer<void>();
+      final secondDeleteFinished = Completer<void>();
       final container = await _buildPersistedContainer(
         draftAttachments: [first, second],
         configureStore: (preferencesStore) {
@@ -945,6 +948,7 @@ void main() {
             saved.draftAttachments.map((att) => att.storagePath).toList();
         deletedPaths.add(path);
         await File('${tmpRoot.path}/$path').delete();
+        if (path == secondPath) secondDeleteFinished.complete();
         return true;
       };
 
@@ -971,10 +975,20 @@ void main() {
         ),
       );
       await tester.pump();
+      store
+        ..writeStarted = secondWriteStarted
+        ..writeGate = secondWriteGate;
       firstWriteGate.complete();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
+      await tester.runAsync(() => secondWriteStarted.future);
+
+      // The first write must persist the snapshot that still includes the
+      // second attachment before deleting only the first file.
+      expect(firstFile.existsSync(), isFalse);
+      expect(secondFile.existsSync(), isTrue);
+      expect(draftPathsAtDelete[firstPath], [secondPath]);
+
+      secondWriteGate.complete();
+      await tester.runAsync(() => secondDeleteFinished.future);
 
       expect(firstFile.existsSync(), isFalse);
       expect(secondFile.existsSync(), isFalse);
@@ -1322,6 +1336,75 @@ void main() {
       );
 
       expect(file.existsSync(), isFalse);
+      container.dispose();
+    });
+
+    testWidgets('composer 没有 conversation ID 时保留其他已保存对话引用的文件', (
+      tester,
+    ) async {
+      final storagePath = 'attachments/owned-by-conversation.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final attachment = Attachment(
+        id: 'owned-document',
+        fileName: 'owned.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'owned-hash',
+        storagePath: storagePath,
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      late _RetryableWritePreferencesStore store;
+      final writeGate = Completer<void>();
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore
+            ..allowWrites = true
+            ..writeStarted = Completer<void>()
+            ..writeGate = writeGate;
+        },
+      );
+      var deleteCalled = false;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteCalled = true;
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          conversationId: null,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_owned-document')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(() => store.writeStarted!.future);
+      writeGate.complete();
+      final persisted = await tester.runAsync(
+        () => container
+            .read(conversationsProvider.notifier)
+            .persistSnapshotForAttachmentCleanup(),
+      );
+
+      expect(persisted, isTrue);
+      expect(file.existsSync(), isTrue);
+      expect(deleteCalled, isFalse);
+      final saved = container
+          .read(conversationsProvider)
+          .singleWhere((conversation) => conversation.id == 'conv-1');
+      expect(saved.draftAttachments.single.storagePath, storagePath);
       container.dispose();
     });
   });

@@ -500,22 +500,31 @@ class _DeckCard extends ConsumerWidget {
                       error: (_, __) => const SizedBox.shrink(),
                       data: (s) => Row(
                         children: [
-                          _StatChip(
-                            count: s.newCount,
-                            label: l10n.ankiStatNew,
-                            color: Colors.blue,
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: _StatChip(
+                              count: s.newCount,
+                              label: l10n.ankiStatNew,
+                              color: Colors.blue,
+                            ),
                           ),
                           const SizedBox(width: 6),
-                          _StatChip(
-                            count: s.learningCount,
-                            label: l10n.ankiStatLearning,
-                            color: Colors.orange,
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: _StatChip(
+                              count: s.learningCount,
+                              label: l10n.ankiStatLearning,
+                              color: Colors.orange,
+                            ),
                           ),
                           const SizedBox(width: 6),
-                          _StatChip(
-                            count: s.reviewCount,
-                            label: l10n.ankiStatReview,
-                            color: Colors.green,
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: _StatChip(
+                              count: s.reviewCount,
+                              label: l10n.ankiStatReview,
+                              color: Colors.green,
+                            ),
                           ),
                         ],
                       ),
@@ -588,18 +597,31 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
+          Flexible(
+            fit: FlexFit.loose,
+            child: ConstrainedText(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 2),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
+          Flexible(
+            fit: FlexFit.loose,
+            child: ConstrainedText(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: color.withValues(alpha: 0.8),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -678,9 +700,21 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
     return Scaffold(
       appBar: AppBar(
         title: deckAsync.when(
-          data: (d) => Text(d?.name ?? l10n.ankiStudy),
-          loading: () => Text(l10n.ankiStudy),
-          error: (_, __) => Text(l10n.ankiStudy),
+          data: (d) => ConstrainedText(
+            d?.name ?? l10n.ankiStudy,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          loading: () => ConstrainedText(
+            l10n.ankiStudy,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          error: (_, __) => ConstrainedText(
+            l10n.ankiStudy,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         centerTitle: true,
         actions: [
@@ -842,39 +876,46 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   }
 
   Widget _buildDone(BuildContext context, ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.celebration, size: 72, color: cs.primary),
-            const SizedBox(height: 16),
-            Text(
-              AppLocalizations.of(context)!.ankiNoCardsToStudy,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.celebration, size: 72, color: cs.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    AppLocalizations.of(context)!.ankiNoCardsToStudy,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    AppLocalizations.of(context)!.ankiNoCardsHint,
+                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.arrow_back),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.ankiBack,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              AppLocalizations.of(context)!.ankiNoCardsHint,
-              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              icon: const Icon(Icons.arrow_back),
-              label: ConstrainedText(
-                AppLocalizations.of(context)!.ankiBack,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+          ),
         ),
       ),
     );

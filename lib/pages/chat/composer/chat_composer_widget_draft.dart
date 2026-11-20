@@ -133,8 +133,11 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     return saved;
   }
 
-  Future<void> _queueDraftAttachmentFileDelete(String storagePath) async {
-    final convId = widget.conversationId;
+  Future<void> _queueDraftAttachmentFileDelete(
+    String storagePath, {
+    String? attachmentConversationId,
+  }) async {
+    final convId = attachmentConversationId ?? widget.conversationId;
     if (convId == null) {
       await _deletePendingAttachmentFile(storagePath);
       return;

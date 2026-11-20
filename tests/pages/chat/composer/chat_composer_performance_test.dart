@@ -216,6 +216,10 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'draft before navigation');
       await tester.pump();
+      // ChatPage's async conversation load can mount a fresh empty list after
+      // the conversation was created. Drain that list's upstream 50 ms timer
+      // after the final mount, before tearing the page down.
+      await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
       // Removing ChatPage disposes its composer. The composer captures its

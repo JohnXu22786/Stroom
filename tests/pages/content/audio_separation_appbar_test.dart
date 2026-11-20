@@ -117,9 +117,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      '3x text scale bounds AppBar action and exposes post-clear overflow',
-      (tester) async {
+  testWidgets('cleared page keeps the original 1x bottom action in view', (
+    tester,
+  ) async {
+    await pumpPage(
+      tester,
+      devicePixelRatio: 1,
+      locale: const Locale('de', 'DE'),
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Leeren'));
+    await tester.pumpAndSettle();
+
+    final action = find.widgetWithText(FilledButton, 'Audio extrahieren');
+    expect(action, findsOneWidget);
+    expect(tester.getRect(action).bottom, lessThanOrEqualTo(640));
+    expect(tester.getRect(action).top, greaterThanOrEqualTo(0));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('3x text scale keeps AppBar action and cleared page scrollable', (
+    tester,
+  ) async {
     await pumpPage(
       tester,
       devicePixelRatio: 1,
@@ -138,11 +157,16 @@ void main() {
 
     expect(find.text('sample-long-video.mp4'), findsNothing);
     expect(find.widgetWithText(TextButton, 'Leeren'), findsNothing);
-    final pageOverflow = tester.takeException();
-    debugPrint(pageOverflow.toString());
-    expect(
-      pageOverflow.toString(),
-      contains('RenderFlex overflowed by 322 pixels on the bottom.'),
+    expect(tester.takeException(), isNull);
+
+    final action = find.widgetWithText(FilledButton, 'Audio extrahieren');
+    await tester.scrollUntilVisible(
+      action,
+      100,
+      scrollable: find.byType(Scrollable).first,
     );
+    expect(action, findsOneWidget);
+    expect(tester.getRect(action).bottom, lessThanOrEqualTo(640));
+    expect(tester.takeException(), isNull);
   });
 }

@@ -1685,7 +1685,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
     final List<Conversation> snapshot;
     try {
-      snapshot = List<Conversation>.from(state);
+      // Conversation instances are mutable and several update methods mutate
+      // them in place. A shallow list copy lets a later update rewrite an
+      // earlier queued save's snapshot while that save waits in _persistQueue.
+      // Capture serialized copies so attachment cleanup is checked against
+      // the exact snapshot this write will persist.
+      snapshot = state
+          .map((conversation) => Conversation.fromMap(conversation.toMap()))
+          .toList();
     } catch (_) {
       // Notifier was already disposed before we could snapshot. Nothing we
       // can do — the previous good save is still on disk.
