@@ -186,11 +186,6 @@ Future<void> _awaitSignal(WidgetTester tester, Completer<void> signal) async {
 
 Future<void> _awaitFinder(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 50 && finder.evaluate().isEmpty; attempt++) {
-    // The UI callback follows async journal and preference writes. Pumping
-    // fake frames alone does not let those platform/IO futures finish.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)),
-    );
     await tester.pump(const Duration(milliseconds: 100));
   }
   expect(finder, findsOneWidget, reason: 'expected UI feedback was not shown');
