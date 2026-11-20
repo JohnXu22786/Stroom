@@ -362,7 +362,8 @@ run();
 
     await tester.tap(find.text('Open editor'));
     await tester.pumpAndSettle();
-    final fields = tester.widgetList<TextField>(find.byType(TextField)).toList();
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
     expect(fields, hasLength(2));
     expect(fields[0].decoration!.label, isA<ConstrainedText>());
     expect(fields[1].decoration!.label, isA<ConstrainedText>());
@@ -371,8 +372,10 @@ run();
     await tester.tap(find.byType(TextField).first);
     await tester.enterText(find.byType(TextField).first, 'Changed');
     expect(
-      tester.widget<EditableText>(find.byType(EditableText).first)
-          .focusNode.hasFocus,
+      tester
+          .widget<EditableText>(find.byType(EditableText).first)
+          .focusNode
+          .hasFocus,
       isTrue,
     );
     await tester.tap(find.byType(TextField).last);
@@ -381,8 +384,10 @@ run();
       'console.log("edited");',
     );
     expect(
-      tester.widget<EditableText>(find.byType(EditableText).last)
-          .focusNode.hasFocus,
+      tester
+          .widget<EditableText>(find.byType(EditableText).last)
+          .focusNode
+          .hasFocus,
       isTrue,
     );
     await tester.tap(find.text('Enregistrer'));
@@ -429,8 +434,10 @@ run();
     expect(urlField.keyboardType, TextInputType.url);
     await tester.enterText(find.byType(TextField), 'http://example.com/a.js');
     expect(
-      tester.widget<EditableText>(find.byType(EditableText).first)
-          .focusNode.hasFocus,
+      tester
+          .widget<EditableText>(find.byType(EditableText).first)
+          .focusNode
+          .hasFocus,
       isTrue,
     );
     await tester.tap(find.byIcon(Icons.download));
@@ -440,7 +447,8 @@ run();
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('import preview loads mocked content and saves it', (tester) async {
+  testWidgets('import preview loads mocked content and saves it',
+      (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

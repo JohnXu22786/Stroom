@@ -12,9 +12,8 @@ console.log("preview");
 ''';
   final query = Uri.base.queryParameters;
   final localeName = query['locale'] ?? 'de';
-  final locale = localeName == 'pt-br'
-      ? const Locale('pt', 'BR')
-      : Locale(localeName);
+  final locale =
+      localeName == 'pt-br' ? const Locale('pt', 'BR') : Locale(localeName);
   final textScale = double.tryParse(query['textScale'] ?? '1') ?? 1;
   final mode = query['mode'] ?? 'manual';
   var didAutoOpen = false;
