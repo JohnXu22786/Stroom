@@ -320,6 +320,8 @@
   "updateLatestBadge": "Latest",
   "updateSelectVersion": "Select version",
   "updateDownloading": "Downloading update…",
+  "updateCancelDownload": "Cancel download",
+  "updateDownloadInBackground": "Download in background",
   "updateCheckNetworkError": "Network error: {details}",
   "updateCheckHttpFailed": "Failed to check for updates: HTTP {statusCode}",
   "updateCheckInvalidResponse": "Failed to check for updates: the server returned unrecognized data",
@@ -5966,6 +5968,22 @@
   "startupSafetyExportButton": "Export data",
   "startupSafetyExitButton": "Exit app",
   "startupSafetyUpdateButton": "Update app",
+  "startupSafetyRollbackButton": "Return to previous version",
+  "startupSafetyRollbackNoCandidate": "No direct installer was found for the recorded version. Export your data and install that version manually.",
+  "startupSafetyRollbackRecommended": "Recommended version recorded before the failed update",
+  "startupSafetyRollbackReleaseNotes": "Release notes",
+  "startupSafetyRollbackNoReleaseNotes": "No release notes are available.",
+  "startupSafetyRollbackConfirmTitle": "Confirm version recovery",
+  "startupSafetyRollbackConfirmMessage": "This will download and open version {version}. Export your data first. The operating system may refuse to install an older build. Stroom will not bypass installer restrictions.",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "Continue",
+  "startupSafetyUpdateAttemptUnavailable": "The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.",
   "startupSafetyCheckingUpdates": "Checking for updates...",
   "startupSafetyUpToDate": "You're up to date",
   "startupSafetyNewerDataVersion": "This data was created by a newer version of the app ({version}).\n\nThis app version cannot safely read the data. Install the latest version to continue. Your data has not been changed.",

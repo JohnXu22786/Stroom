@@ -265,7 +265,9 @@ void main() {
         'version is released', () async {
       // 相同版本 → 冻结保持
       await DataSafetyManager.freezeForMigrationFailure(
-          targetFormatVersion: 5, description: 'v4→v5');
+          targetFormatVersion: 5,
+          description: 'v4→v5',
+          preMigrationDataSafe: true);
       var result = await DataSafetyManager.checkAndRepair();
       expect(result.skippedDueToFreeze, isTrue);
       expect(result.frozen, isTrue);

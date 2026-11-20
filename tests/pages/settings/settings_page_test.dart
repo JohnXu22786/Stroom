@@ -23,6 +23,7 @@ import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
@@ -268,6 +269,82 @@ void main() {
     expect(find.text('Platform Guide'), findsOneWidget);
   });
 
+  testWidgets('notification action labels stay readable in narrow slots', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+    var permissionCode = 0;
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return permissionCode;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+
+    Future<void> renderPage() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('de', 'DE'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.5),
+              ),
+              child: child!,
+            ),
+            home: const NotificationSettingsPage(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    final semantics = tester.ensureSemantics();
+    for (final code in [0, 4]) {
+      permissionCode = code;
+      await renderPage();
+      final strings = AppLocalizations.of(
+        tester.element(find.byType(NotificationSettingsPage)),
+      )!;
+      final label = code == 0
+          ? strings.notificationSettingsRequestPermission
+          : strings.notificationSettingsOpenSystemSettings;
+      for (final text in [strings.notificationSettingsCheckAgain, label]) {
+        final constrainedLabel = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == text,
+        );
+        expect(constrainedLabel, findsOneWidget);
+        await tester.ensureVisible(constrainedLabel);
+        await tester.pump();
+        final semanticLabel = tester.getSemantics(constrainedLabel).label;
+        expect(semanticLabel.replaceAll(RegExp(r'\s+'), ' '), contains(text));
+      }
+    }
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
   testWidgets('update check errors follow the selected locale', (tester) async {
     tester.view.physicalSize = const Size(1080, 4000);
     tester.view.devicePixelRatio = 1.0;
@@ -300,6 +377,79 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox.shrink());
     await verifyError(const Locale('zh', 'CN'), '网络错误：connection failed');
+  });
+
+  testWidgets('About update entry shows and reopens a background download', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = UpdateNotifier()
+      ..state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.5.5',
+        downloadUrl: 'https://example.com/latest.zip',
+        isDownloading: true,
+        downloadInBackground: true,
+        downloadProgress: 0.42,
+        downloadReceivedBytes: 1024,
+      );
+    await tester.pumpWidget(
+      _buildSettingsTestApp(
+        locale: const Locale('en', 'US'),
+        updateNotifier: notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollSettingsToEnd(tester);
+
+    expect(find.text('Downloading update… 1.0 KB'), findsOneWidget);
+    notifier.state = notifier.state.copyWith(downloadTotalBytes: 2048);
+    await tester.pump();
+    expect(
+        find.text('Downloading update… 1.0 KB / 2.0 KB (42%)'), findsOneWidget);
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Cancel download'), findsOneWidget);
+    expect(find.text('Download in background'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('About update entry reopens a failed download for retry', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = UpdateNotifier()
+      ..state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.5.5',
+        downloadUrl: 'https://example.com/latest.zip',
+        downloadError: 'Download failed: no network',
+      );
+    await tester.pumpWidget(
+      _buildSettingsTestApp(
+        locale: const Locale('en', 'US'),
+        updateNotifier: notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollSettingsToEnd(tester);
+
+    expect(find.text('Download failed: no network'), findsOneWidget);
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Retry download'), findsOneWidget);
   });
 
   // ─────────────────────────────────────────────────────────────────────

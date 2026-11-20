@@ -60,6 +60,9 @@ class AttachmentStorage {
       restoreFileOverrideForTesting;
 
   @visibleForTesting
+  static Set<String> Function(String)? deletionIdentitiesOverrideForTesting;
+
+  @visibleForTesting
   static void resetOverridesForTesting() {
     saveFileOverrideForTesting = null;
     saveEditedFileOverrideForTesting = null;
@@ -68,6 +71,7 @@ class AttachmentStorage {
     readFileOverrideForTesting = null;
     readFileBoundedOverrideForTesting = null;
     restoreFileOverrideForTesting = null;
+    deletionIdentitiesOverrideForTesting = null;
   }
 
   @visibleForTesting
@@ -93,6 +97,21 @@ class AttachmentStorage {
   }
 
   static String _webKey(String storagePath) => storagePath;
+
+  /// Returns the storage identities removed when [storagePath] is deleted.
+  /// Native storage resolves paths by basename; web edited files are aliased
+  /// with their original `attachments/` key.
+  static Set<String> deletionIdentities(String storagePath) {
+    final override = deletionIdentitiesOverrideForTesting;
+    if (override != null) return override(storagePath);
+    final name = p.basename(storagePath);
+    if (!kIsWeb) return {name};
+    final identities = <String>{storagePath};
+    if (storagePath.startsWith('temp_edited/')) {
+      identities.add('attachments/$name');
+    }
+    return identities;
+  }
 
   static Uint8List? _checkMaxBytes(Uint8List? bytes, int? maxBytes) {
     if (maxBytes != null && bytes != null && bytes.length > maxBytes) {
@@ -274,32 +293,53 @@ class AttachmentStorage {
   /// throws, bytes from files already deleted are restored at their original
   /// storage paths before the error is rethrown.
   static Future<void> deleteFilesWithRollback(
-      Iterable<String> storagePaths) async {
+    Iterable<String> storagePaths, {
+    bool Function(String storagePath)? shouldDelete,
+    void Function(String storagePath)? onCleanupFailure,
+  }) async {
     final paths = storagePaths.toList();
-    final originals = <String, Uint8List>{};
+    final originals = <String, Map<String, Uint8List>>{};
     for (final path in paths) {
-      final bytes = await readFile(path);
-      if (bytes != null) originals[path] = bytes;
+      final pathOriginals = <String, Uint8List>{};
+      for (final identity in deletionIdentities(path)) {
+        final bytes = await readFile(identity);
+        if (bytes != null) pathOriginals[identity] = bytes;
+      }
+      originals[path] = pathOriginals;
     }
 
     final deletedPaths = <String>[];
     try {
       for (final path in paths) {
+        if (shouldDelete != null && !shouldDelete(path)) continue;
         // A storage delete can partially remove a file before throwing (for
         // example, temp_edited files have two web keys). Include the current
         // path in rollback before attempting deletion for that case.
         deletedPaths.add(path);
-        await deleteFile(path);
+        try {
+          await deleteFile(path);
+        } catch (_) {
+          onCleanupFailure?.call(path);
+          rethrow;
+        }
+        if (shouldDelete != null && !shouldDelete(path)) {
+          try {
+            await _restoreDeletionIdentities(path, originals[path]!);
+          } catch (_) {
+            onCleanupFailure?.call(path);
+            rethrow;
+          }
+          deletedPaths.removeLast();
+        }
       }
     } catch (deleteError) {
       final rollbackErrors = <Object>[];
       for (final path in deletedPaths.reversed) {
-        final bytes = originals[path];
-        if (bytes == null) continue;
         try {
-          await _restoreFile(path, bytes);
+          await _restoreDeletionIdentities(path, originals[path]!);
         } catch (restoreError) {
           rollbackErrors.add(restoreError);
+          onCleanupFailure?.call(path);
           await AppLogService.error(
             'AttachmentStorage',
             '回滚附件删除失败: $path',
@@ -311,6 +351,16 @@ class AttachmentStorage {
         throw AttachmentDeleteRollbackException(deleteError, rollbackErrors);
       }
       rethrow;
+    }
+  }
+
+  static Future<void> _restoreDeletionIdentities(
+    String storagePath,
+    Map<String, Uint8List> originals,
+  ) async {
+    for (final identity in deletionIdentities(storagePath)) {
+      final bytes = originals[identity];
+      if (bytes != null) await _restoreFile(identity, bytes);
     }
   }
 

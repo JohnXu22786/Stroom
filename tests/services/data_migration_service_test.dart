@@ -917,6 +917,7 @@ void main() {
       final status = await DataSafetyManager.loadStatus();
       expect(status.state, DataSafetyState.frozen);
       expect(status.failedMigration, isNotNull);
+      expect(status.preMigrationDataSafe, isTrue);
 
       // 恢复的是迁移前快照：conversations 回到快照内容
       final prefs = await SharedPreferences.getInstance();

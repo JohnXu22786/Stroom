@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -975,33 +976,36 @@ class _LogContentPageState extends State<LogContentPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
+    final toolbarHeight = math.max(
+      kToolbarHeight,
+      MediaQuery.textScalerOf(context).scale(kToolbarHeight),
+    );
 
     return Scaffold(
       appBar: AppBar(
-        // FittedBox 防止大字体缩放下两行标题超出固定高度的工具栏。
-        title: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ConstrainedText(
-                widget.fileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        toolbarHeight: toolbarHeight,
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedText(
+              widget.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            ConstrainedText(
+              _hasActiveFilters
+                  ? l10n.appLogFilteredLineCount(
+                      _visibleLines.length,
+                      _lineCount,
+                    )
+                  : l10n.appLogLineCount(_lineCount),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              Text(
-                _hasActiveFilters
-                    ? l10n.appLogFilteredLineCount(
-                        _visibleLines.length,
-                        _lineCount,
-                      )
-                    : l10n.appLogLineCount(_lineCount),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
         centerTitle: true,
         actions: [

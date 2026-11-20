@@ -740,15 +740,15 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              file.format.toUpperCase(),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+          child: ConstrainedText(
+            file.format.toUpperCase(),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),

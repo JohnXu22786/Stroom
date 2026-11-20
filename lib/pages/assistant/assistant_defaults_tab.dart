@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -711,22 +713,48 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
+    final labelStyle = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelPainter = TextPainter(
+          text: TextSpan(text: label, style: labelStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout();
+        // Preserve the label's natural width while it fits. If localization
+        // or text scaling makes it too wide, leave room for the value.
+        final minValueWidth = math.min(80.0, constraints.maxWidth * 0.35);
+        final labelWidth = math.min(
+          labelPainter.width,
+          math.max(0.0, constraints.maxWidth - 12 - minValueWidth),
+        );
+        return Row(
+          children: [
+            SizedBox(
+              width: labelWidth,
+              child: ConstrainedText(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: labelStyle,
+              ),
             ),
-          ),
-        ),
-      ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

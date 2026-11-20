@@ -2,67 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/composer_shared.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
-  // ═══════════════════════════════════════════════════════════════
-  // Unit tests for truncateDisplayName (char-based: model 25, provider 10)
-  // ═══════════════════════════════════════════════════════════════
-  group('truncateDisplayName', () {
-    test('short text with separator: unchanged', () {
-      const full = 'GPT-4o | OpenAI';
-      final result = truncateDisplayName(full);
-      expect(result, full);
-    });
-
-    test('long model part: truncated with ... at 25 chars total', () {
-      // 28 chars: "abcdefghijklmnopqrstuvwxyzab"
-      // → substring(0, 22) + "..." = 25
-      const full = 'abcdefghijklmnopqrstuvwxyzab | OpenAI';
-      final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopqrstuv... | OpenAI');
-    });
-
-    test('long provider part: truncated with ... at 10 chars total', () {
-      // Provider "OpenAIVeryLongProviderName" (26 chars)
-      // → substring(0, 7) + "..." = 10
-      const full = 'GPT-4o | OpenAIVeryLongProviderName';
-      final result = truncateDisplayName(full);
-      expect(result, 'GPT-4o | OpenAIV...');
-    });
-
-    test('model part exactly at limit: unchanged', () {
-      // 25 chars exactly
-      const full = 'abcdefghijklmnopqrstuvwxy | OpenAI';
-      final result = truncateDisplayName(full);
-      expect(result, full);
-    });
-
-    test('provider part exactly at limit: unchanged', () {
-      // Provider exactly 10 chars
-      const full = 'GPT-4o | OpenAI2024';
-      final result = truncateDisplayName(full);
-      expect(result, full);
-    });
-
-    test('provider part one over limit: truncated to 10 chars total', () {
-      // 11 chars → substring(0, 7) + "..." = 10
-      const full = 'GPT-4o | OpenAI20245';
-      final result = truncateDisplayName(full);
-      expect(result, 'GPT-4o | OpenAI2...');
-    });
-
-    test('no separator: simple truncation to 25 chars', () {
-      // 28 chars → substring(0, 22) + "..." = 25
-      const full = 'abcdefghijklmnopqrstuvwxyzab';
-      final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopqrstuv...');
-    });
-
-    test('empty string: preserves empty', () {
-      expect(truncateDisplayName(''), '');
-    });
-  });
-
   // ═══════════════════════════════════════════════════════════════
   // Widget tests for SettingsChip with badge
   // ═══════════════════════════════════════════════════════════════
@@ -138,23 +80,49 @@ void main() {
   // Widget tests for ModelNameChip
   // ═══════════════════════════════════════════════════════════════
   group('ModelNameChip widget', () {
-    testWidgets('truncates long model name in narrow width', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ModelNameChip(
-              displayName: 'Very-Long-Model-Name-That-Should-Truncate | OpenAI',
-              color: Colors.teal,
-              onTap: () {},
+    testWidgets('preserves full label and scrolls when clipped at 320x640', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      const full =
+          'Very-Long-Model-Name-That-Should-Truncate | SomeExtremelyLongProviderName';
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: false),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 292,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: ModelNameChip(
+                    displayName: full,
+                    color: Colors.teal,
+                    onTap: () {},
+                  ),
+                ),
+              ),
             ),
           ),
         ),
-      ));
+      );
       await tester.pump();
-
-      // Model "Very-Long-Model-Name-That-Should-Truncate" (41 chars)
-      // → substring(0, 22) + "..." = 25 chars: "Very-Long-Model-Name-T..."
-      expect(find.textContaining('Very-Long-Model-Name-T...'), findsOneWidget);
+      expect(find.text(full), findsOneWidget);
+      expect(tester.getSemantics(find.byType(ConstrainedText)).label, full);
+      final text = find.text(full);
+      final start = tester.getTopLeft(text);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(tester.getTopLeft(text).dx, lessThan(start.dx));
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
     });
 
     for (final (locale, expectedLabel) in [
@@ -204,12 +172,14 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('truncates long provider name in model chip', (tester) async {
+    testWidgets('preserves a fitting label without moving it', (tester) async {
+      const full = 'GPT-4o | OpenAI';
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: Center(
+          body: Align(
+            alignment: AlignmentDirectional.centerStart,
             child: ModelNameChip(
-              displayName: 'GPT-4o | SomeVeryLongProviderName',
+              displayName: full,
               color: Colors.teal,
               onTap: () {},
             ),
@@ -218,34 +188,13 @@ void main() {
       ));
       await tester.pump();
 
-      // Provider "SomeVeryLongProviderName" (24 chars)
-      // → substring(0, 7) + "..." = 10 chars: "SomeVer..."
-      expect(find.textContaining('SomeVer...'), findsOneWidget);
+      final label = find.text(full);
+      final start = tester.getTopLeft(label);
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.getTopLeft(label), start);
     });
 
-    testWidgets('fits within constrained SizedBox width', (tester) async {
-      // With char-based truncation (25 chars max for model, 10 for provider),
-      // the truncated text is known and checked directly regardless of
-      // parent width.
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: ModelNameChip(
-              displayName:
-                  'Some-Long-Model-Name-That-Needs-Truncation | SomeVendor',
-              color: Colors.teal,
-              onTap: () {},
-            ),
-          ),
-        ),
-      ));
-
-      // Model "Some-Long-Model-Name-That-Needs-Truncation" (42 chars)
-      // → substring(0, 22) + "..." = "Some-Long-Model-Name-T..." (25 chars)
-      expect(find.textContaining('Some-Long-Model-Name-T...'), findsOneWidget);
-    });
-
-    testWidgets('truncates text inside a ConstrainedBox', (tester) async {
+    testWidgets('preserves full text inside a ConstrainedBox', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Center(
@@ -262,12 +211,15 @@ void main() {
         ),
       ));
 
-      // Model "Very-Long-Model-Name-That-Should-Truncate-Properly" (50 chars)
-      // → substring(0, 22) + "..." = "Very-Long-Model-Name-T..." (25 chars)
-      expect(find.textContaining('Very-Long-Model-Name-T...'), findsOneWidget);
+      expect(
+        find.text(
+          'Very-Long-Model-Name-That-Should-Truncate-Properly | OpenAI',
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('renders short text without truncation inside ConstrainedBox',
+    testWidgets('renders short text unchanged inside ConstrainedBox',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(

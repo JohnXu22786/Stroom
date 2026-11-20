@@ -1108,6 +1108,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get updateDownloading => 'アップデートをダウンロード中…';
 
   @override
+  String get updateCancelDownload => 'ダウンロードをキャンセル';
+
+  @override
+  String get updateDownloadInBackground => 'バックグラウンドでダウンロード';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'ネットワークエラー: $details';
   }
@@ -10111,6 +10117,37 @@ class AppLocalizationsJa extends AppLocalizations {
   String get startupSafetyUpdateButton => 'アプリを更新する';
 
   @override
+  String get startupSafetyRollbackButton => '以前のバージョンに戻す';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '記録されたバージョンの直接インストーラーが見つかりません。データをエクスポートしてから手動でインストールしてください。';
+
+  @override
+  String get startupSafetyRollbackRecommended => '更新失敗前に記録された推奨バージョン';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'リリースノート';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => 'リリースノートはありません。';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => 'バージョン復旧の確認';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'バージョン $version をダウンロードして開きます。先にデータをエクスポートしてください。OS が古いビルドのインストールを拒否する場合があります。Stroom はインストーラーの制限を回避しません。';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '続行';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '更新の試行を記録できなかったため、インストーラーを起動しませんでした。ストレージ権限を確認して再試行してください。';
+
+  @override
   String get startupSafetyCheckingUpdates => 'アップデートをチェックしています...';
 
   @override
@@ -12819,6 +12856,12 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get updateDownloading => 'アップデートをダウンロード中…';
+
+  @override
+  String get updateCancelDownload => 'ダウンロードをキャンセル';
+
+  @override
+  String get updateDownloadInBackground => 'バックグラウンドでダウンロード';
 
   @override
   String updateCheckNetworkError(Object details) {
@@ -21822,6 +21865,37 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get startupSafetyUpdateButton => 'アプリを更新する';
+
+  @override
+  String get startupSafetyRollbackButton => '以前のバージョンに戻す';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '記録されたバージョンの直接インストーラーが見つかりません。データをエクスポートしてから手動でインストールしてください。';
+
+  @override
+  String get startupSafetyRollbackRecommended => '更新失敗前に記録された推奨バージョン';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'リリースノート';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => 'リリースノートはありません。';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => 'バージョン復旧の確認';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'バージョン $version をダウンロードして開きます。先にデータをエクスポートしてください。OS が古いビルドのインストールを拒否する場合があります。Stroom はインストーラーの制限を回避しません。';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '続行';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '更新の試行を記録できなかったため、インストーラーを起動しませんでした。ストレージ権限を確認して再試行してください。';
 
   @override
   String get startupSafetyCheckingUpdates => 'アップデートをチェックしています...';

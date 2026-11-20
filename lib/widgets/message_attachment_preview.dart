@@ -39,14 +39,6 @@ class MessageAttachmentPreview extends StatelessWidget {
     }
   }
 
-  String _displayName() {
-    final name = attachment.fileName;
-    if (name.length > 16) {
-      return '${name.substring(0, 14)}…';
-    }
-    return name;
-  }
-
   @override
   Widget build(BuildContext context) {
     final isImage = attachment.fileType == 'image';
@@ -92,15 +84,18 @@ class MessageAttachmentPreview extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             // File name
-            ConstrainedText(
-              _displayName(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurface,
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isImage ? 160 : 80),
+              child: ConstrainedText(
+                attachment.fileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
               ),
             ),
             // File size
