@@ -17,6 +17,7 @@ import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/manifest_bridge.dart';
 import 'package:stroom/utils/sort_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/file_manager_view.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -3093,7 +3094,8 @@ void main() {
       expect(removed, isTrue);
     });
 
-    testWidgets('truncates long file names', (tester) async {
+    testWidgets('passes complete long file name to bounded display',
+        (tester) async {
       final longName = 'a' * 30 + '.png';
       final att = Attachment(
         fileName: longName,
@@ -3111,7 +3113,11 @@ void main() {
 
       await tester.pump();
 
-      expect(find.text('aaaaaaaaaaaaaa…'), findsOneWidget);
+      final nameLabel = tester.widget<ConstrainedText>(
+        find.byType(ConstrainedText).first,
+      );
+      expect(nameLabel.data, longName);
+      expect(tester.getSize(find.byType(ConstrainedText).first).width, 64);
     });
 
     testWidgets('onTap is called when chip is tapped', (tester) async {
