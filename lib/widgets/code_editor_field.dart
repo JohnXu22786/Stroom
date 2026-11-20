@@ -529,11 +529,15 @@ Future<void> showJsonValueEditorDialog(
                       color: type == 'json' ? Colors.amber.shade700 : null,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      AppLocalizations.of(ctx)!.codeEditorTitle,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: ConstrainedText(
+                        AppLocalizations.of(ctx)!.codeEditorTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     if (type == 'json') ...[
@@ -557,21 +561,23 @@ Future<void> showJsonValueEditorDialog(
                         ),
                       ),
                       const SizedBox(width: 8),
-                      TextButton.icon(
-                        icon: const Icon(Icons.format_align_left, size: 16),
-                        label: ConstrainedText(
-                          AppLocalizations.of(ctx)!.codeEditorFormat,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      Flexible(
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.format_align_left, size: 16),
+                          label: ConstrainedText(
+                            AppLocalizations.of(ctx)!.codeEditorFormat,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: (liveError == null &&
+                                  editingController.text.trim().isNotEmpty)
+                              ? () => setDlgState(formatPretty)
+                              : null,
                         ),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        onPressed: (liveError == null &&
-                                editingController.text.trim().isNotEmpty)
-                            ? () => setDlgState(formatPretty)
-                            : null,
                       ),
                     ],
                     const Spacer(),
