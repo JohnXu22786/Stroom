@@ -14,6 +14,7 @@ import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/utils/emojis.dart'
     show EmojiCategories, EmojiCategoryType;
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
@@ -1301,6 +1302,15 @@ void main() {
       expect(find.text('新建话题效果'), findsOneWidget);
       expect(find.text('暂不设置'), findsWidgets);
       expect(find.text('全部自动启用（未配置）'), findsOneWidget);
+      // Preview labels share a finite row with their right-aligned values.
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText &&
+              (widget.data == '模型' || widget.data == '工具'),
+        ),
+        findsNWidgets(2),
+      );
 
       // 头部右侧始终提供批量操作按钮；未配置时"全部启用"没有意义
       // （当前已自动启用全部），不显示；"取消配置"按钮已移除。
