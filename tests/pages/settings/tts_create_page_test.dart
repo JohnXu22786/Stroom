@@ -391,10 +391,12 @@ void main() {
         expect(find.text(strings.ttsNormal), findsNWidgets(2));
         expect(find.byType(ConstrainedText), findsWidgets);
         ConstrainedText label(String text) => tester.widget<ConstrainedText>(
-              find.byWidgetPredicate(
-                (widget) =>
-                    widget is ConstrainedText && widget.data == text,
-              ).first,
+              find
+                  .byWidgetPredicate(
+                    (widget) =>
+                        widget is ConstrainedText && widget.data == text,
+                  )
+                  .first,
             );
         expect(label('0.5x').textAlign, isNull);
         expect(label(strings.ttsNormal).textAlign, TextAlign.center);
