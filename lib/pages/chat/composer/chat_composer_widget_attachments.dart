@@ -393,7 +393,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     }
   }
 
-  void _removePendingAttachment(int index) {
+  Future<void> _removePendingAttachment(int index) async {
     final att = _pendingAttachments[index];
     _pendingImageBytes.remove(att.id);
     _pendingAttachmentEditRequests.remove(att.id);
@@ -412,11 +412,6 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         (widget.editingMessageAttachments?.any((a) => a.hash == att.hash) ??
             false);
     final editCacheStillReferenced = isOriginalEditFile || originalEditUsesHash;
-    // Files copied into the composer are unreferenced once removed. Preserve
-    // any path still referenced by the message being edited.
-    if (!isOriginalEditFile) {
-      unawaited(_deletePendingAttachmentFile(att.storagePath));
-    }
     if (editCacheStillReferenced) {
       _removedEditAttachments.add(att);
     } else {
@@ -430,16 +425,28 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     setState(() {
       _pendingAttachments.removeAt(index);
     });
+    // Persist the draft removal before deleting bytes that its previous saved
+    // snapshot still referenced. Preserve files used by the edited message.
+    if (!isOriginalEditFile) {
+      if (widget.editingMessageId == null) {
+        await _queueDraftAttachmentFileDelete(att.storagePath);
+        await _persistDraftSnapshotImmediately(widget);
+      } else {
+        unawaited(_deletePendingAttachmentFile(att.storagePath));
+      }
+    }
     // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
     _scheduleDraftSave();
   }
 
   /// Delete an unreferenced composer attachment file from storage.
-  Future<void> _deletePendingAttachmentFile(String storagePath) async {
+  Future<bool> _deletePendingAttachmentFile(String storagePath) async {
     try {
       await AttachmentStorage.deleteFile(storagePath);
+      return true;
     } catch (_) {
-      // Non-critical cleanup
+      // Non-critical cleanup can be retried after the next successful save.
+      return false;
     }
   }
 
@@ -621,15 +628,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       // 清理旧文件：普通模式的附件不再被消息引用；编辑模式只保留原
       // 消息仍引用的源路径。按 hash 共享的压缩缓存则等确定重发后再清。
       if (widget.editingMessageId == null) {
-        if (replacedAtt.storagePath.startsWith('temp_edited/')) {
-          await _deletePendingAttachmentFile(replacedAtt.storagePath);
-        } else {
-          try {
-            await AttachmentStorage.deleteFile(replacedAtt.storagePath);
-          } catch (_) {
-            // Non-fatal cleanup
-          }
-        }
+        // Keep the old path available for draft restore until the new path is
+        // durable. A failed save leaves the old file in place.
+        await _queueDraftAttachmentFileDelete(replacedAtt.storagePath);
+        if (!await _persistDraftSnapshotImmediately(widget)) return;
         // 同 hash 的新附件继续使用这份缓存，不要在等待它的预压缩完成后
         // 再将它删除。
         if (replacedAtt.hash != updatedAtt.hash) {

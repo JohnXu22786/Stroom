@@ -591,6 +591,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// or message save. The later deletion must be the last value on disk.
   Future<void> _persistQueue = Future<void>.value();
 
+  /// Attachment paths to remove after a successful snapshot no longer refers to them.
+  final Set<String> _pendingDraftAttachmentFileDeletes = <String>{};
+
   /// A single queued periodic stream save may be updated until an explicit
   /// persistence operation establishes an ordering barrier.
   _CoalescedStreamPersist? _coalescedStreamPersist;

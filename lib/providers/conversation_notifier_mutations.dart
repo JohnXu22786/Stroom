@@ -736,11 +736,35 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Drafts are per-conversation and persisted along with the conversation
   /// data. When [draftText] is empty and [draftAttachments] is empty, the
   /// draft is cleared.
+  void queueDraftAttachmentFileDelete(String storagePath) {
+    _pendingDraftAttachmentFileDeletes.add(storagePath);
+  }
+
   void saveDraft(
     String conversationId,
     String draftText, {
     List<Attachment>? draftAttachments,
   }) {
+    _updateDraft(conversationId, draftText, draftAttachments);
+    _persist();
+  }
+
+  /// Saves a draft and waits for the updated conversation snapshot to reach
+  /// storage before callers clean up files removed from the draft.
+  Future<bool> saveDraftAndWait(
+    String conversationId,
+    String draftText, {
+    List<Attachment>? draftAttachments,
+  }) {
+    _updateDraft(conversationId, draftText, draftAttachments);
+    return _persistNowChecked();
+  }
+
+  void _updateDraft(
+    String conversationId,
+    String draftText,
+    List<Attachment>? draftAttachments,
+  ) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.draftText = draftText;
@@ -751,7 +775,6 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       }
       return c;
     }).toList();
-    _persist();
   }
 
   /// Updates the enabled MCP/built-in tool names for a conversation.

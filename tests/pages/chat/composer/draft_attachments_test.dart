@@ -12,6 +12,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/providers/conversation_provider.dart';
@@ -31,6 +32,26 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 
   @override
   Future<String> getTemporaryPath() async => root;
+}
+
+class _RetryableWritePreferencesStore extends InMemorySharedPreferencesStore {
+  _RetryableWritePreferencesStore(super.data) : super.withData();
+
+  bool allowWrites = false;
+  Completer<void>? writeStarted;
+  Completer<void>? writeGate;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (!allowWrites) return false;
+    final gate = writeGate;
+    if (gate != null) {
+      writeGate = null;
+      writeStarted?.complete();
+      await gate.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
 }
 
 class _AttachmentSaveGate {
@@ -91,6 +112,28 @@ ProviderContainer _buildContainer() {
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
   );
+}
+
+Future<ProviderContainer> _buildPersistedContainer({
+  List<Attachment> draftAttachments = const [],
+}) async {
+  final conversation = Conversation(
+    id: 'conv-1',
+    title: '对话A',
+    messages: [],
+    draftAttachments: draftAttachments,
+  );
+  SharedPreferences.setMockInitialValues({
+    'conversations': jsonEncode([conversation.toMap()]),
+  });
+  final container = ProviderContainer(
+    overrides: [
+      activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
+      providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
+    ],
+  );
+  await container.read(conversationsProvider.notifier).ready;
+  return container;
 }
 
 Widget _composer({
@@ -645,6 +688,363 @@ void main() {
         reason: '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
             '否则对话 JSON 会被撑爆（持久化静默失败）',
       );
+    });
+
+    testWidgets('移除非图片草稿附件时先保存引用移除再删除文件', (tester) async {
+      final storagePath = 'attachments/persist-before-delete.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final attachment = Attachment(
+        id: 'draft-document',
+        fileName: 'draft.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'draft-document-hash',
+        storagePath: storagePath,
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+      );
+      var draftWasClearAtDelete = false;
+      var fileExistedAtDelete = false;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        final prefs = await SharedPreferences.getInstance();
+        final saved = (jsonDecode(prefs.getString('conversations')!) as List)
+            .cast<Map<String, dynamic>>()
+            .map(Conversation.fromMap)
+            .single;
+        draftWasClearAtDelete = saved.draftAttachments.isEmpty;
+        fileExistedAtDelete = file.existsSync();
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_draft-document')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+
+      expect(draftWasClearAtDelete, isTrue);
+      expect(fileExistedAtDelete, isTrue);
+      expect(file.existsSync(), isFalse);
+      container.dispose();
+    });
+
+    testWidgets('替换草稿图片时先保存新路径再删除旧文件', (tester) async {
+      final storagePath = 'attachments/persist-before-replace.png';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+          ),
+        );
+      final attachment = Attachment(
+        id: 'draft-image',
+        fileName: 'draft.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'draft-image-hash',
+        storagePath: storagePath,
+        fileSize: file.lengthSync(),
+        conversationId: 'conv-1',
+      );
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+      );
+      final key = GlobalKey<ChatComposerWidgetState>();
+      var savedPathAtDelete = '';
+      var oldFileExistedAtDelete = false;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        final prefs = await SharedPreferences.getInstance();
+        final saved = (jsonDecode(prefs.getString('conversations')!) as List)
+            .cast<Map<String, dynamic>>()
+            .map(Conversation.fromMap)
+            .single;
+        savedPathAtDelete = saved.draftAttachments.single.storagePath;
+        oldFileExistedAtDelete = file.existsSync();
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      final editedBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAP//wMAAAgBAQDJ/pLvAAAAAElFTkSuQmCC',
+      );
+      await tester.runAsync(
+        () => key.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes),
+      );
+      await tester.pump();
+
+      expect(savedPathAtDelete, isNot(storagePath));
+      expect(oldFileExistedAtDelete, isTrue);
+      expect(file.existsSync(), isFalse);
+      container.dispose();
+    });
+
+    testWidgets('保留的未解析记录引用附件时不清理其文件', (tester) async {
+      final storagePath = 'attachments/preserved-record.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final conversation = Conversation(
+        id: 'conv-1',
+        title: '对话A',
+        messages: [],
+      );
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          conversation.toMap(),
+          [
+            {'storagePath': storagePath},
+          ],
+        ]),
+      });
+      final container = ProviderContainer(
+        overrides: [
+          activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
+          providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
+        ],
+      );
+      await container.read(conversationsProvider.notifier).ready;
+      var deleteCalled = false;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteCalled = true;
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier.queueDraftAttachmentFileDelete(storagePath);
+      final saved = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+
+      expect(saved, isTrue);
+      expect(deleteCalled, isFalse);
+      expect(file.existsSync(), isTrue);
+      container.dispose();
+    });
+
+    testWidgets('重叠移除只在保存对应快照后清理各自文件', (tester) async {
+      final firstPath = 'attachments/overlap-first.txt';
+      final secondPath = 'attachments/overlap-second.txt';
+      final firstFile = File('${tmpRoot.path}/$firstPath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1]);
+      final secondFile = File('${tmpRoot.path}/$secondPath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([2]);
+      final first = Attachment(
+        id: 'overlap-first',
+        fileName: 'first.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'overlap-first-hash',
+        storagePath: firstPath,
+        fileSize: 1,
+        conversationId: 'conv-1',
+      );
+      final second = Attachment(
+        id: 'overlap-second',
+        fileName: 'second.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'overlap-second-hash',
+        storagePath: secondPath,
+        fileSize: 1,
+        conversationId: 'conv-1',
+      );
+      final container = await _buildPersistedContainer(
+        draftAttachments: [first, second],
+      );
+      final store = _RetryableWritePreferencesStore(
+        await SharedPreferencesStorePlatform.instance.getAll(),
+      )
+        ..allowWrites = true
+        ..writeStarted = Completer<void>()
+        ..writeGate = Completer<void>();
+      SharedPreferencesStorePlatform.instance = store;
+      final deletedPaths = <String>[];
+      final draftPathsAtDelete = <String, List<String>>{};
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        final saved = (jsonDecode((await store.getAll())['conversations']! as String)
+                as List)
+            .cast<Map<String, dynamic>>()
+            .map(Conversation.fromMap)
+            .single;
+        draftPathsAtDelete[path] =
+            saved.draftAttachments.map((att) => att.storagePath).toList();
+        deletedPaths.add(path);
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: [first, second],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_overlap-first')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(() => store.writeStarted!.future);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_overlap-second')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      store.writeGate!.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+
+      expect(firstFile.existsSync(), isFalse);
+      expect(secondFile.existsSync(), isFalse);
+      expect(draftPathsAtDelete[firstPath], [secondPath]);
+      expect(draftPathsAtDelete[secondPath], isEmpty);
+      expect(deletedPaths, [firstPath, secondPath]);
+      container.dispose();
+    });
+
+    testWidgets('保存失败后下一次成功保存再清理已移除附件文件', (tester) async {
+      final storagePath = 'attachments/retry-delete.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final attachment = Attachment(
+        id: 'retry-document',
+        fileName: 'retry.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'retry-document-hash',
+        storagePath: storagePath,
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+      );
+      final store = _RetryableWritePreferencesStore(
+        await SharedPreferencesStorePlatform.instance.getAll(),
+      );
+      SharedPreferencesStorePlatform.instance = store;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_retry-document')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      expect(file.existsSync(), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.allowWrites = true;
+      final saved = await container
+          .read(conversationsProvider.notifier)
+          .saveDraftAndWait('conv-1', '', draftAttachments: const []);
+
+      expect(saved, isTrue);
+      expect(file.existsSync(), isFalse);
+      container.dispose();
+    });
+
+    testWidgets('无 conversation ID 的移除附件仍清理无主文件', (tester) async {
+      final storagePath = 'attachments/no-conversation.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final attachment = Attachment(
+        id: 'unowned-document',
+        fileName: 'orphan.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'unowned-hash',
+        storagePath: storagePath,
+        fileSize: 3,
+      );
+      final container = _buildContainer();
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          conversationId: null,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('pending_att_unowned-document')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+
+      expect(file.existsSync(), isFalse);
+      container.dispose();
     });
   });
 }

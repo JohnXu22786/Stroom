@@ -19,11 +19,12 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 当前 pending 附件的草稿快照签名：文字未变但附件变了时也要保存。
   /// 含 base64Data 长度——预压缩完成（base64 从原始大字节变为压缩
   /// 产物）也会触发一次保存，把可零等待的载荷落进草稿。
-  List<String> _draftAttSignature() => _pendingAttachments
-      .map(
-        (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
-      )
-      .toList();
+  List<String> _draftAttSignature([List<Attachment>? attachments]) =>
+      (attachments ?? _pendingAttachments)
+          .map(
+            (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
+          )
+          .toList();
 
   /// 生成待保存的附件草稿快照（深拷贝，与 pending 列表无引用共享）。
   ///
@@ -75,6 +76,42 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
         );
     _lastSavedDraft = textToSave;
     _lastSavedDraftAttSignature = _draftAttSignature();
+  }
+
+  /// Persists the current draft snapshot and reports whether it reached
+  /// storage. File cleanup must wait for this before deleting a referenced path.
+  Future<bool> _persistDraftSnapshotImmediately(ChatComposerWidget w) async {
+    final convId = w.conversationId;
+    if (w.editingMessageId != null) return false;
+    // Attachments in a composer without a conversation cannot be referenced by
+    // a persisted draft, so their files are safe to clean up immediately.
+    if (convId == null) return true;
+    final textToSave = _textController.text;
+    final draftAttachments = _draftAttachmentSnapshot();
+    final attachmentSignature = _draftAttSignature(draftAttachments);
+    final saved = await ref
+        .read(conversationsProvider.notifier)
+        .saveDraftAndWait(
+          convId,
+          textToSave,
+          draftAttachments: draftAttachments,
+        );
+    if (saved) {
+      _lastSavedDraft = textToSave;
+      _lastSavedDraftAttSignature = attachmentSignature;
+    }
+    return saved;
+  }
+
+  Future<void> _queueDraftAttachmentFileDelete(String storagePath) async {
+    final convId = widget.conversationId;
+    if (convId == null) {
+      await _deletePendingAttachmentFile(storagePath);
+      return;
+    }
+    ref
+        .read(conversationsProvider.notifier)
+        .queueDraftAttachmentFileDelete(storagePath);
   }
 
   /// 附件变化（添加/移除/编辑）后调度一次草稿保存（防抖，与文字
