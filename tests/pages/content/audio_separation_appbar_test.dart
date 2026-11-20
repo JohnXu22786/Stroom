@@ -116,4 +116,33 @@ void main() {
     expect(find.widgetWithText(TextButton, 'Leeren'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      '3x text scale bounds AppBar action and exposes post-clear overflow',
+      (tester) async {
+    await pumpPage(
+      tester,
+      devicePixelRatio: 1,
+      locale: const Locale('de', 'DE'),
+      textScale: 3,
+    );
+
+    final clearButton = find.widgetWithText(TextButton, 'Leeren');
+    expect(clearButton, findsOneWidget);
+    expect(tester.getRect(clearButton).width, lessThanOrEqualTo(120));
+    expect(tester.getRect(clearButton).right, lessThanOrEqualTo(320));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(clearButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('sample-long-video.mp4'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Leeren'), findsNothing);
+    final pageOverflow = tester.takeException();
+    debugPrint(pageOverflow.toString());
+    expect(
+      pageOverflow.toString(),
+      contains('RenderFlex overflowed by 322 pixels on the bottom.'),
+    );
+  });
 }

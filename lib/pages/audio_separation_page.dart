@@ -471,9 +471,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final appBarActionWidth = (MediaQuery.sizeOf(context).width / 3)
-        .clamp(64.0, 120.0)
-        .toDouble();
+    final appBarActionWidth =
+        (MediaQuery.sizeOf(context).width / 3).clamp(64.0, 120.0).toDouble();
 
     return Scaffold(
       appBar: AppBar(
