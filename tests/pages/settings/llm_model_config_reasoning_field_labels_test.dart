@@ -54,6 +54,17 @@ void main() {
         final l10n = AppLocalizations.of(
           tester.element(find.byType(Scaffold)),
         )!;
+        final toggleHeading = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText && widget.data == l10n.reasoningToggle,
+        );
+        await tester.scrollUntilVisible(
+          toggleHeading,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(tester.getSize(toggleHeading).height, lessThan(40));
+
         final onLabel = find.text(l10n.reasoningOnValue);
         await tester.scrollUntilVisible(
           onLabel,

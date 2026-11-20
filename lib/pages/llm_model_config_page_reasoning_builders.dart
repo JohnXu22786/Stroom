@@ -135,13 +135,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 Icon(Icons.toggle_on_outlined, size: 18, color: cs.primary),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.reasoningToggle,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: cs.primary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 // 参数值类型选择
@@ -309,13 +311,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 Icon(Icons.tune, size: 18, color: cs.primary),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     AppLocalizations.of(context)!.chatReasoningEffort,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: cs.primary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 _buildTypeDropdown(effort, cs),
