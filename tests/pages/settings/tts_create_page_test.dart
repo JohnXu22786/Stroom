@@ -51,9 +51,8 @@ Widget _buildTestApp({
     overrides.add(providerEntriesProvider.overrideWith((ref) => notifier));
   }
 
-  final home = retry != null
-      ? TTSCreatePage(retryTask: retry)
-      : const TTSCreatePage();
+  final home =
+      retry != null ? TTSCreatePage(retryTask: retry) : const TTSCreatePage();
 
   return ProviderScope(
     overrides: overrides,
@@ -167,10 +166,12 @@ void main() {
           matching: find.byType(ConstrainedText),
         );
         expect(boundedWarning, findsOneWidget);
-        final warningSlot = find.ancestor(
-          of: boundedWarning,
-          matching: find.byType(Row),
-        ).first;
+        final warningSlot = find
+            .ancestor(
+              of: boundedWarning,
+              matching: find.byType(Row),
+            )
+            .first;
         expect(
           tester.getSize(boundedWarning).width,
           lessThanOrEqualTo(tester.getSize(warningSlot).width),
@@ -214,10 +215,12 @@ void main() {
           matching: find.byType(ConstrainedText),
         );
         expect(boundedWarning, findsOneWidget);
-        final warningSlot = find.ancestor(
-          of: boundedWarning,
-          matching: find.byType(Row),
-        ).first;
+        final warningSlot = find
+            .ancestor(
+              of: boundedWarning,
+              matching: find.byType(Row),
+            )
+            .first;
         expect(
           tester.getSize(boundedWarning).width,
           lessThanOrEqualTo(tester.getSize(warningSlot).width),
