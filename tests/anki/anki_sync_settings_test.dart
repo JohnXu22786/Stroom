@@ -28,6 +28,33 @@ class _RejectedSelectedWriteStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _ThrowingSelectedWriteStore extends InMemorySharedPreferencesStore {
+  _ThrowingSelectedWriteStore(super.data, this.thrownKey) : super.withData();
+
+  final String thrownKey;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == thrownKey) throw StateError('write failed for $key');
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _RejectedEnabledWriteStore extends InMemorySharedPreferencesStore {
+  _RejectedEnabledWriteStore(super.data) : super.withData();
+
+  var enabledWriteAttempts = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.custom_sync_server_enabled') {
+      enabledWriteAttempts++;
+      return false;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 class _SlowFirstEnabledWriteStore extends InMemorySharedPreferencesStore {
   _SlowFirstEnabledWriteStore(super.data) : super.withData();
 
@@ -229,6 +256,77 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('anki_sync_mode'), 'ankiWeb');
     expect(prefs.getBool('custom_sync_server_enabled'), false);
+  });
+
+  test('a thrown second mode write rolls back the first stored key', () async {
+    SharedPreferences.setMockInitialValues({
+      'anki_sync_mode': 'ankiWeb',
+      'custom_sync_server_enabled': false,
+    });
+    final store = _ThrowingSelectedWriteStore({
+      'flutter.anki_sync_mode': 'ankiWeb',
+      'flutter.custom_sync_server_enabled': false,
+    }, 'flutter.custom_sync_server_enabled');
+    SharedPreferencesStorePlatform.instance = store;
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final loaded = Completer<void>();
+    final subscription = container.listen<AnkiSyncState>(ankiSyncProvider, (
+      _,
+      next,
+    ) {
+      if (next.isLoaded && !loaded.isCompleted) loaded.complete();
+    }, fireImmediately: true);
+    addTearDown(subscription.close);
+    await loaded.future.timeout(const Duration(seconds: 2));
+
+    await expectLater(
+      container
+          .read(ankiSyncProvider.notifier)
+          .setMode(AnkiSyncMode.selfHosted),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(await store.getAll(), {
+      'flutter.anki_sync_mode': 'ankiWeb',
+      'flutter.custom_sync_server_enabled': false,
+    });
+    expect(container.read(ankiSyncProvider).mode, AnkiSyncMode.ankiWeb);
+  });
+
+  test('mode rollback continues if restoring the legacy flag fails', () async {
+    SharedPreferences.setMockInitialValues({
+      'anki_sync_mode': 'ankiWeb',
+      'custom_sync_server_enabled': false,
+    });
+    final store = _RejectedEnabledWriteStore({
+      'flutter.anki_sync_mode': 'ankiWeb',
+      'flutter.custom_sync_server_enabled': false,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final loaded = Completer<void>();
+    final subscription = container.listen<AnkiSyncState>(ankiSyncProvider, (
+      _,
+      next,
+    ) {
+      if (next.isLoaded && !loaded.isCompleted) loaded.complete();
+    }, fireImmediately: true);
+    addTearDown(subscription.close);
+    await loaded.future.timeout(const Duration(seconds: 2));
+
+    await expectLater(
+      container
+          .read(ankiSyncProvider.notifier)
+          .setMode(AnkiSyncMode.selfHosted),
+      throwsA(isA<StateError>()),
+    );
+
+    // The failed legacy-key rollback must not prevent restoring the mode key.
+    expect(store.enabledWriteAttempts, 2);
+    expect((await store.getAll())['flutter.anki_sync_mode'], 'ankiWeb');
+    expect(container.read(ankiSyncProvider).mode, AnkiSyncMode.ankiWeb);
   });
 
   test(
