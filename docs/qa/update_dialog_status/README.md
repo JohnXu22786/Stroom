@@ -1,7 +1,11 @@
 # Update dialog status labels
 
-The completed-download and installing status rows use flexible one-line `ConstrainedText` slots. Labels that fit keep their existing size and alignment; clipped translations reveal the complete value without changing the status icon, update actions, or update operations.
+Both the completed-download and installing status rows use flexible one-line `ConstrainedText` slots. Labels that fit keep their existing position; clipped values reveal the remaining text. The status icon, dialog actions and update operations are unchanged.
 
-The widget tests measure the German labels at a 320 × 640 viewport and 1.8× text scale in light and dark themes, confirming each label exceeds its finite slot and causes no layout exception. The screenshot shows the real completed-download dialog at 320 × 640, device scale 1, German locale, light theme and 1.8× text scale. It captures the trailing reveal endpoint, where the final localized characters are visible. No update request is made; the capture uses a local `UpdateState` fixture.
+All captures show the production `UpdateDialog` with a local completed-update `UpdateState`; no update request is made. Each image is 320 × 640 pixels at device-pixel ratio 1. The text multiplier is stated separately below:
 
-- [Rendered status at the trailing reveal endpoint, 320 × 640, 1×](german-complete-320x640-1x.png)
+- [Completed status, system text scale 1.0](german-complete-320x640-dpr1-text1_0.png): the German label fits and remains stationary. Captured in the Flutter widget test renderer with Roboto and Material Icons loaded.
+- [Completed status, system text scale 1.8](german-complete-320x640-dpr1-text1_8.png): Flutter Web capture at the trailing reveal endpoint, where the label's final characters are visible.
+- [Playable overflow reveal, system text scale 1.8](german-status-overflow-dpr1-text1_8.webm): a 4.5-second, 10 fps recording of the real dialog as the German label moves across its clipped slot. Frames are 320 × 640 at device-pixel ratio 1.
+
+Widget tests also measure both completed and installing labels at 320 × 640 and text scale 1.8 in light and dark themes, confirming that each label exceeds its finite slot without a layout exception.
