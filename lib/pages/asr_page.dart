@@ -34,6 +34,7 @@ import 'ocr/ocr_shared.dart';
 import 'provider_config_page.dart';
 
 import '../widgets/constrained_text.dart';
+import '../widgets/error_detail_dialog_header.dart';
 import '../widgets/save_to_folder_selector.dart';
 
 // ============================================================================
@@ -1755,38 +1756,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
-                    const SizedBox(width: 8),
-                    Text(
-                      AppLocalizations.of(ctx)!.asrErrorDetails,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red[700],
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
+              ErrorDetailDialogHeader(
+                title: AppLocalizations.of(ctx)!.asrErrorDetails,
+                onClose: () => Navigator.pop(ctx),
               ),
               // Body with scrollable content
               Flexible(
