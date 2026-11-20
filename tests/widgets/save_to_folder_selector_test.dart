@@ -169,7 +169,8 @@ void main() {
           find.text(
             AppLocalizations.of(
               tester.element(find.byType(SaveToFolderSelector)),
-            )!.ocrSaveTo,
+            )!
+                .ocrSaveTo,
           ),
           findsOneWidget,
         );
