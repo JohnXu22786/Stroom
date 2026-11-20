@@ -274,7 +274,8 @@ void main() {
           ];
           if (streaming) {
             overrides.addAll([
-              activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+              activeConversationIdProvider
+                  .overrideWith((ref) => 'test-conv-id'),
               isStreamingProvider('test-conv-id').overrideWith((ref) => true),
               streamingHasFirstTokenProvider('test-conv-id')
                   .overrideWith((ref) => false),
