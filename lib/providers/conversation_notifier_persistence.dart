@@ -16,6 +16,8 @@ const String _streamJournalFileName = 'conversation_stream_checkpoints.jsonl';
 const String _streamJournalWebPrefix = 'conversation_stream_checkpoints/';
 const String _pendingRestoredConversationKey =
     'conversation_stream_pending_restores';
+const String _pendingRestoredConversationSnapshotKey =
+    'conversation_stream_pending_restore_snapshots';
 const String _pendingRestoredMessageKey =
     'conversation_stream_pending_message_restores';
 const String _webStreamJournalTimestampKey =
@@ -276,12 +278,50 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final removed = await prefs.remove(_pendingRestoredConversationKey);
-      if (removed) _pendingRestoredConversations.clear();
-      return removed;
+      final snapshotsRemoved =
+          await prefs.remove(_pendingRestoredConversationSnapshotKey);
+      if (removed && snapshotsRemoved) {
+        _pendingRestoredConversations.clear();
+        _pendingRestoredConversationSnapshots.clear();
+      }
+      return removed && snapshotsRemoved;
     } catch (e) {
       debugPrint('Failed to clear restored conversation markers: $e');
       return false;
     }
+  }
+
+  Future<bool> _persistPendingRestoredConversationSnapshots() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_pendingRestoredConversationSnapshots.isEmpty) {
+        return await prefs.remove(_pendingRestoredConversationSnapshotKey);
+      }
+      return await prefs.setString(
+        _pendingRestoredConversationSnapshotKey,
+        jsonEncode(_pendingRestoredConversationSnapshots),
+      );
+    } catch (e) {
+      debugPrint('Failed to persist restored conversation snapshots: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _markSupersededRestorationSnapshots(
+    List<Conversation> persistedConversations,
+  ) async {
+    final persistedIds =
+        persistedConversations.map((conversation) => conversation.id).toSet();
+    var changed = false;
+    for (final entry in _pendingRestoredConversationSnapshots.entries) {
+      if (persistedIds.contains(entry.key) ||
+          entry.value['supersededAt'] != null) {
+        continue;
+      }
+      entry.value['supersededAt'] = DateTime.now().toIso8601String();
+      changed = true;
+    }
+    return !changed || await _persistPendingRestoredConversationSnapshots();
   }
 
   Future<bool> _persistPendingRestoredMessages() async {
@@ -509,6 +549,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     bool strict = false,
     Map<String, DateTime> pendingRestoredConversations =
         const <String, DateTime>{},
+    Map<String, Map<String, dynamic>> pendingRestoredConversationSnapshots =
+        const <String, Map<String, dynamic>>{},
     Map<String, Set<String>> pendingRestoredMessageIds =
         const <String, Set<String>>{},
   }) async {
@@ -532,6 +574,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final deletedConversationAt = <String, DateTime>{};
       final deletedMessages = <String, Set<String>>{};
       final recreatedConversations = <String, DateTime>{};
+      final restoredConversationSnapshots = <String, Conversation>{};
+      final restoredConversationIndexes = <String, int>{};
+      final restoredConversationTimes = <String, DateTime>{};
       await for (final line in _readStreamCheckpointRecords(
         webKeys: webKeys,
         nativePath: nativeJournalPath,
@@ -550,6 +595,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               for (final id in ids.whereType<String>()) {
                 deletedConversations.add(id);
                 recreatedConversations.remove(id);
+                restoredConversationSnapshots.remove(id);
+                restoredConversationIndexes.remove(id);
+                restoredConversationTimes.remove(id);
                 if (deletedAt != null) deletedConversationAt[id] = deletedAt;
               }
             }
@@ -560,6 +608,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (kind == 'conversationDeleted') {
             deletedConversations.add(conversationId);
             recreatedConversations.remove(conversationId);
+            restoredConversationSnapshots.remove(conversationId);
+            restoredConversationIndexes.remove(conversationId);
+            restoredConversationTimes.remove(conversationId);
             final deletedAt = DateTime.tryParse(
               decoded['deletedAt'] as String? ?? '',
             );
@@ -569,10 +620,33 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           } else if (kind == 'conversationRestored') {
             deletedConversations.remove(conversationId);
             deletedConversationAt.remove(conversationId);
+            final restoredRaw = decoded['conversation'];
+            if (restoredRaw is Map) {
+              try {
+                final restored = Conversation.fromMap(
+                  Map<String, dynamic>.from(restoredRaw),
+                );
+                if (restored.id == conversationId) {
+                  restoredConversationSnapshots[conversationId] = restored;
+                  restoredConversationTimes[conversationId] = DateTime.tryParse(
+                          decoded['restoredAt'] as String? ?? '') ??
+                      restored.updatedAt;
+                  final index = decoded['index'];
+                  if (index is int) {
+                    restoredConversationIndexes[conversationId] = index;
+                  }
+                }
+              } catch (_) {
+                // A malformed restoration snapshot does not block other records.
+              }
+            }
           } else if (kind == 'conversationCreated') {
             deletedConversations.remove(conversationId);
             deletedConversationAt.remove(conversationId);
             deletedMessages.remove(conversationId);
+            restoredConversationSnapshots.remove(conversationId);
+            restoredConversationIndexes.remove(conversationId);
+            restoredConversationTimes.remove(conversationId);
             final createdAt = DateTime.tryParse(
               decoded['createdAt'] as String? ?? '',
             );
@@ -618,13 +692,58 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       }
       for (final entry in pendingRestoredConversations.entries) {
         final deletedAt = deletedConversationAt[entry.key];
-        if (deletedAt == null || !deletedAt.isAfter(entry.value)) {
+        if (deletedAt == null || deletedAt.isBefore(entry.value)) {
           deletedConversations.remove(entry.key);
           deletedConversationAt.remove(entry.key);
         }
       }
+      for (final entry in pendingRestoredConversationSnapshots.entries) {
+        final raw = entry.value['conversation'];
+        if (raw is! Map) continue;
+        try {
+          final restored = Conversation.fromMap(Map<String, dynamic>.from(raw));
+          final restoredAt = DateTime.tryParse(
+            entry.value['restoredAt'] as String? ?? '',
+          );
+          final deletedAt = deletedConversationAt[entry.key];
+          final journalRestoredAt = restoredConversationTimes[entry.key];
+          if (restored.id != entry.key ||
+              entry.value['supersededAt'] is String ||
+              (journalRestoredAt != null &&
+                  restoredAt != null &&
+                  journalRestoredAt.isAfter(restoredAt)) ||
+              recreatedConversations[entry.key]?.isAfter(restored.createdAt) ==
+                  true ||
+              (deletedAt != null &&
+                  restoredAt != null &&
+                  !deletedAt.isBefore(restoredAt))) {
+            continue;
+          }
+          deletedConversations.remove(entry.key);
+          deletedConversationAt.remove(entry.key);
+          restoredConversationSnapshots[entry.key] = restored;
+          restoredConversationTimes[entry.key] =
+              restoredAt ?? restored.updatedAt;
+          final index = entry.value['index'];
+          if (index is int) restoredConversationIndexes[entry.key] = index;
+        } catch (_) {
+          // A malformed fallback snapshot must not block other checkpoints.
+        }
+      }
       for (final entry in pendingRestoredMessageIds.entries) {
         deletedMessages[entry.key]?.removeAll(entry.value);
+      }
+      for (final entry in restoredConversationSnapshots.entries) {
+        if (conversations.any((conversation) => conversation.id == entry.key)) {
+          continue;
+        }
+        final index = restoredConversationIndexes[entry.key];
+        conversations.insert(
+          index == null
+              ? conversations.length
+              : index.clamp(0, conversations.length).toInt(),
+          entry.value,
+        );
       }
       conversations.removeWhere((conversation) {
         final deletedAt = deletedConversationAt[conversation.id];
@@ -1045,6 +1164,26 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           debugPrint('Failed to decode pending conversation restores: $e');
         }
       }
+      final pendingRestoreSnapshotsJson = prefs.getString(
+        _pendingRestoredConversationSnapshotKey,
+      );
+      if (pendingRestoreSnapshotsJson != null) {
+        try {
+          final decoded = jsonDecode(pendingRestoreSnapshotsJson);
+          if (decoded is Map) {
+            _pendingRestoredConversationSnapshots
+              ..clear()
+              ..addAll({
+                for (final entry in decoded.entries)
+                  if (entry.key is String && entry.value is Map)
+                    entry.key as String:
+                        Map<String, dynamic>.from(entry.value as Map),
+              });
+          }
+        } catch (e) {
+          debugPrint('Failed to decode pending conversation snapshots: $e');
+        }
+      }
       final pendingMessageRestoresJson = prefs.getString(
         _pendingRestoredMessageKey,
       );
@@ -1213,6 +1352,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           pendingRestoredConversations: _pendingRestoredConversationsFor(
             loadedConversations ?? state,
           ),
+          pendingRestoredConversationSnapshots:
+              _pendingRestoredConversationSnapshots,
           pendingRestoredMessageIds: _pendingMessageRestorationIds,
         );
         if (_resolveUnindexedMessageDeletions()) {
@@ -1594,6 +1735,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           pendingRestoredConversations: _pendingRestoredConversationsFor(
             snapshot,
           ),
+          pendingRestoredConversationSnapshots:
+              _pendingRestoredConversationSnapshots,
           pendingRestoredMessageIds: _pendingMessageRestorationIds,
         );
       } catch (e) {
@@ -1614,7 +1757,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (!await prefs.setString('conversations', json)) {
         throw StateError('conversation save returned false');
       }
-      if (await _clearStreamCheckpoints()) {
+      if (await _markSupersededRestorationSnapshots(snapshot) &&
+          await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
         await _clearPendingRestoredMessageMarker();
       }
@@ -1676,7 +1820,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (!await prefs.setString('conversations', json)) {
         throw StateError('stripped conversation save returned false');
       }
-      if (await _clearStreamCheckpoints()) {
+      if (await _markSupersededRestorationSnapshots(stripped) &&
+          await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
         await _clearPendingRestoredMessageMarker();
       }

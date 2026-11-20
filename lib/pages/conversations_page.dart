@@ -93,30 +93,65 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     });
   }
 
-  Future<void> _cleanupConversationFiles(Conversation conversation) async {
-    for (final msg in conversation.messages) {
-      for (final att in msg.attachments) {
-        try {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        } catch (_) {
-          // Journaled deletion is complete; keep cleaning the remaining files.
-        }
+  Future<List<String>> _cleanupConversationFiles(
+    List<Conversation> conversations, {
+    required ConversationsNotifier notifier,
+    required List<Conversation> fallbackCurrentConversations,
+    Set<String> retainedPaths = const {},
+  }) async {
+    final attachmentPaths = conversations
+        .expand(_conversationAttachmentPaths)
+        .toSet()
+        .where(
+          (path) => !AttachmentStorage.deletionIdentities(path)
+              .any(retainedPaths.contains),
+        )
+        .toList();
+    final failedPaths = <String>{};
+    try {
+      await AttachmentStorage.deleteFilesWithRollback(
+        attachmentPaths,
+        onCleanupFailure: failedPaths.add,
+        shouldDelete: (path) {
+          final currentConversations = notifier.mounted
+              ? notifier.currentConversations
+              : fallbackCurrentConversations;
+          final currentRetainedPaths = currentConversations
+              .expand(_conversationAttachmentPaths)
+              .expand(AttachmentStorage.deletionIdentities)
+              .toSet();
+          return !AttachmentStorage.deletionIdentities(path)
+              .any(currentRetainedPaths.contains);
+        },
+      );
+    } catch (_) {
+      if (failedPaths.isEmpty) {
+        final currentConversations = notifier.mounted
+            ? notifier.currentConversations
+            : fallbackCurrentConversations;
+        final currentRetainedPaths = currentConversations
+            .expand(_conversationAttachmentPaths)
+            .expand(AttachmentStorage.deletionIdentities)
+            .toSet();
+        failedPaths.addAll(
+          attachmentPaths.where(
+            (path) => !AttachmentStorage.deletionIdentities(path)
+                .any(currentRetainedPaths.contains),
+          ),
+        );
       }
     }
-    for (final att in conversation.draftAttachments) {
+    if (failedPaths.isNotEmpty) return failedPaths.toList();
+    for (final conversation in conversations) {
       try {
-        await AttachmentStorage.deleteFile(att.storagePath);
+        await AttachmentStorage.deleteConversationCompressedImages(
+          conversation.id,
+        );
       } catch (_) {
         // 非关键清理
       }
     }
-    try {
-      await AttachmentStorage.deleteConversationCompressedImages(
-        conversation.id,
-      );
-    } catch (_) {
-      // 非关键清理
-    }
+    return failedPaths.toList();
   }
 
   Future<void> _batchDelete() async {
@@ -158,15 +193,46 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     );
     if (confirmed != true) return;
 
-    final convs = ref.read(conversationsProvider);
+    final notifier = ref.read(conversationsProvider.notifier);
+    final convs = notifier.currentConversations;
     final selectedIds = Set<String>.from(_selectedIds);
-    final deleted = await ref
-        .read(conversationsProvider.notifier)
-        .batchDelete(selectedIds.toList());
+    final fallbackCurrentConversations = convs
+        .where((conversation) => !selectedIds.contains(conversation.id))
+        .toList();
+    final activeConversationId = ref.read(activeConversationIdProvider);
+    final deleted = await notifier.batchDelete(selectedIds.toList());
     if (deleted) {
-      for (final conv in convs) {
-        if (!selectedIds.contains(conv.id)) continue;
-        await _cleanupConversationFiles(conv);
+      final deletedConversations =
+          convs.where((conv) => selectedIds.contains(conv.id)).toList();
+      final currentConversations = notifier.mounted
+          ? notifier.currentConversations
+          : fallbackCurrentConversations;
+      final retainedPaths = currentConversations
+          .expand(_conversationAttachmentPaths)
+          .expand(AttachmentStorage.deletionIdentities)
+          .toSet();
+      final failedPaths = await _cleanupConversationFiles(
+        deletedConversations,
+        notifier: notifier,
+        fallbackCurrentConversations: fallbackCurrentConversations,
+        retainedPaths: retainedPaths,
+      );
+      if (failedPaths.isNotEmpty) {
+        await notifier.restoreDeletedConversations(
+          deletedConversations,
+          originalOrder: convs,
+          previousActiveConversationId: activeConversationId,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerBatchDeleteFailed(failedPaths.join(', ')),
+              ),
+            ),
+          );
+        }
       }
     }
     if (mounted) {
@@ -178,9 +244,6 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   void _deleteConversation(String id) async {
-    final convs = ref.read(conversationsProvider);
-    final conv = convs.where((c) => c.id == id).firstOrNull;
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -215,12 +278,58 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     );
     if (confirmed != true) return;
 
-    final deleted =
-        await ref.read(conversationsProvider.notifier).deleteConversation(id);
-    if (deleted && conv != null) {
-      await _cleanupConversationFiles(conv);
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == id).firstOrNull;
+    if (conv == null) return;
+    final notifier = ref.read(conversationsProvider.notifier);
+    final fallbackCurrentConversations =
+        convs.where((conversation) => conversation.id != id).toList();
+    final activeConversationId = ref.read(activeConversationIdProvider);
+    final deleted = await notifier.deleteConversation(id);
+    if (deleted) {
+      final currentConversations = notifier.mounted
+          ? notifier.currentConversations
+          : fallbackCurrentConversations;
+      final retainedPaths = currentConversations
+          .expand(_conversationAttachmentPaths)
+          .expand(AttachmentStorage.deletionIdentities)
+          .toSet();
+      final failedPaths = await _cleanupConversationFiles(
+        [conv],
+        notifier: notifier,
+        fallbackCurrentConversations: fallbackCurrentConversations,
+        retainedPaths: retainedPaths,
+      );
+      if (failedPaths.isNotEmpty) {
+        await notifier.restoreDeletedConversations(
+          [conv],
+          originalOrder: convs,
+          previousActiveConversationId: activeConversationId,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!
+                    .fileManagerDeleteFailed(failedPaths.join(', ')),
+              ),
+            ),
+          );
+        }
+      }
     }
   }
+
+  Iterable<String> _conversationAttachmentPaths(Conversation conversation) => [
+        ...conversation.messages.expand(
+          (message) => message.attachments.map(
+            (attachment) => attachment.storagePath,
+          ),
+        ),
+        ...conversation.draftAttachments.map(
+          (attachment) => attachment.storagePath,
+        ),
+      ];
 
   void _renameConversation(String id, String currentTitle) {
     final controller = TextEditingController(text: currentTitle);
