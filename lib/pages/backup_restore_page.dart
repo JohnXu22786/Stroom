@@ -591,7 +591,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             children: [
               Icon(icon, color: iconColor, size: 24),
               const SizedBox(width: 8),
-              Text(title ?? _strings.backupRestoreRestoreSuccessTitle),
+              Flexible(
+                child: ConstrainedText(
+                  title ?? _strings.backupRestoreRestoreSuccessTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: Text(message ?? _strings.backupRestoreRestoredMessage),
@@ -882,12 +888,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                         size: 20,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _strings.backupRestoreClearSelected,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                          color: Colors.red.shade800,
+                      Flexible(
+                        child: ConstrainedText(
+                          _strings.backupRestoreClearSelected,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: Colors.red.shade800,
+                          ),
                         ),
                       ),
                     ],
