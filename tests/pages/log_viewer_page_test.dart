@@ -11,6 +11,7 @@ import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_location_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/web_file_store.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 Future<void> _pumpUntil(
   WidgetTester tester,
@@ -48,6 +49,59 @@ void main() {
       );
 
   group('LogViewerPage localization', () {
+    testWidgets('log content app bar keeps full labels at narrow widths', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const fileName = 'application_log_with_a_long_filename_2026-11-20-12.log';
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(brightness: brightness),
+            locale: const Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.8),
+              ),
+              child: child!,
+            ),
+            home: const LogContentPage(
+              fileName: fileName,
+              content: 'INFO: log entry',
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final constrainedLabels = tester.widgetList<ConstrainedText>(
+          find.byType(ConstrainedText),
+        );
+        expect(
+          constrainedLabels.map((label) => label.data),
+          contains(fileName),
+        );
+        expect(
+          constrainedLabels.map((label) => label.data),
+          contains('1 line'),
+        );
+        expect(find.byType(FittedBox), findsNothing);
+        expect(
+          tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight,
+          greaterThan(kToolbarHeight),
+        );
+        expect(find.byTooltip('Filter log entries'), findsOneWidget);
+        expect(find.byTooltip('Copy all'), findsOneWidget);
+        expect(find.byTooltip('Raw view'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    });
+
     testWidgets('localizes log viewer page chrome in English and Chinese', (
       tester,
     ) async {
