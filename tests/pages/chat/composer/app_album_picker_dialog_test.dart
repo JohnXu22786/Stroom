@@ -15,6 +15,7 @@ import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/providers/image_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _FailOnceImageRecordsNotifier extends ImageRecordsNotifier {
   bool _failNext = true;
@@ -741,5 +742,73 @@ void main() {
       expect(pickerResult!.single.value, isNot(same(originalChipBytes)),
           reason: 'the confirmed selection must hold the edited bytes');
     });
+  });
+  testWidgets(
+      'long album folder back row fits narrow RTL picker and navigates up',
+      (tester) async {
+    const parent = 'an-extremely-long-parent-folder-name-for-the-album';
+    const child = 'another-extremely-long-current-album-folder-name';
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final png = await tester.runAsync(_createEnginePng);
+    await tester.runAsync(() async {
+      await ImageManifest.writeFile('nested-album.png', png!);
+      await ImageManifest.addRecord(
+        ImageRecord(
+          name: 'nested-album',
+          hash: 'nested-album',
+          format: 'png',
+          createdAt: DateTime.now(),
+          size: png.length,
+          folder: '$parent/$child',
+        ),
+      );
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('ar'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showAppAlbumPickerDialog(context),
+              child: const Text('Open Album'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open Album'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(
+      find.ancestor(of: find.text(parent), matching: find.byType(Card)),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.ancestor(of: find.text(child), matching: find.byType(Card)),
+    );
+    await tester.pump();
+
+    final backRow = find.byKey(const Key('album_picker_back_item'));
+    expect(backRow, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    final rowRect = tester.getRect(backRow);
+    final currentLabelRect = tester.getRect(
+      find.ancestor(
+        of: find.text(child),
+        matching: find.byType(ConstrainedText),
+      ),
+    );
+    expect(currentLabelRect.left, closeTo(rowRect.left + 24, 2));
+
+    await tester.tap(
+      find.descendant(of: backRow, matching: find.byIcon(Icons.arrow_back)),
+    );
+    await tester.pump();
+    expect(find.text(child), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

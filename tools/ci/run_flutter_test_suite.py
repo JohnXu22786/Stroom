@@ -256,6 +256,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/navigation_main_pages_test.dart",
         "built_in_content_localization_test.dart",
         "pages/settings/settings_page_test.dart",
+        "pages/settings_page_about_constrained_labels_test.dart",
         "pages/theme_display_settings_page_test.dart",
     ),
 }

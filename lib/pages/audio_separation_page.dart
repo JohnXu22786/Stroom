@@ -471,6 +471,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final appBarActionWidth =
+        (MediaQuery.sizeOf(context).width / 3).clamp(64.0, 120.0).toDouble();
 
     return Scaffold(
       appBar: AppBar(
@@ -482,13 +484,16 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         centerTitle: true,
         actions: [
           if (_selectedVideos.isNotEmpty && !_isProcessing)
-            TextButton.icon(
-              onPressed: _clearAll,
-              icon: const Icon(Icons.clear_all, size: 18),
-              label: ConstrainedText(
-                _l10n.clear,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            SizedBox(
+              width: appBarActionWidth,
+              child: TextButton.icon(
+                onPressed: _clearAll,
+                icon: const Icon(Icons.clear_all, size: 18),
+                label: ConstrainedText(
+                  _l10n.clear,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
         ],
@@ -896,13 +901,17 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   children: [
                     Icon(Icons.videocam, size: 14, color: cs.onSurfaceVariant),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.audioSeparationSelectedVideoCount(
-                        _selectedVideos.length,
-                      ),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                    Flexible(
+                      child: ConstrainedText(
+                        _l10n.audioSeparationSelectedVideoCount(
+                          _selectedVideos.length,
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

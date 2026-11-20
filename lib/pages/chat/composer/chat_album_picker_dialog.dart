@@ -494,18 +494,30 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             children: [
               Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
-              Text(
-                parent.isEmpty
-                    ? AppLocalizations.of(context)!.appMediaRoot
-                    : AppLocalizations.of(context)!.appMediaParentFolder(
-                        FolderPathUtils.getFolderBaseName(parent),
-                      ),
-                style: TextStyle(fontSize: 15, color: cs.primary),
+              Expanded(
+                child: ConstrainedText(
+                  parent.isEmpty
+                      ? AppLocalizations.of(context)!.appMediaRoot
+                      : AppLocalizations.of(context)!.appMediaParentFolder(
+                          FolderPathUtils.getFolderBaseName(parent),
+                        ),
+                  style: TextStyle(fontSize: 15, color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              Text(
-                FolderPathUtils.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: ConstrainedText(
+                    FolderPathUtils.getFolderBaseName(_currentFolder),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ],
           ),
@@ -675,7 +687,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!
                   .appAlbumPickerSelectedImages(_selectionCount),
               style: TextStyle(
@@ -683,6 +695,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 color: cs.onSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(

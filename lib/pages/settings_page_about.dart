@@ -201,7 +201,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
               ),
             ),
             SizedBox(width: 12),
-            Text(AppLocalizations.of(context)!.aboutCheckingUpdates),
+            Flexible(
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.aboutCheckingUpdates,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         duration: Duration(days: 1), // Keep visible until dismissed
@@ -288,7 +294,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.aboutPrivacyPolicy),
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.aboutPrivacyPolicy,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: SingleChildScrollView(

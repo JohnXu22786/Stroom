@@ -478,6 +478,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final cs = Theme.of(context).colorScheme;
     final parentFolder = FolderPathUtils.getParentFolderPath(currentFolder);
     return Card(
+      key: const Key('file_picker_back_item'),
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: InkWell(
         onTap: () => _navigateUp(type),
@@ -487,18 +488,30 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             children: [
               Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
-              Text(
-                parentFolder.isEmpty
-                    ? AppLocalizations.of(context)!.appMediaRoot
-                    : AppLocalizations.of(context)!.appMediaParentFolder(
-                        FolderPathUtils.getFolderBaseName(parentFolder),
-                      ),
-                style: TextStyle(fontSize: 15, color: cs.primary),
+              Expanded(
+                child: ConstrainedText(
+                  parentFolder.isEmpty
+                      ? AppLocalizations.of(context)!.appMediaRoot
+                      : AppLocalizations.of(context)!.appMediaParentFolder(
+                          FolderPathUtils.getFolderBaseName(parentFolder),
+                        ),
+                  style: TextStyle(fontSize: 15, color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              Text(
-                FolderPathUtils.getFolderBaseName(currentFolder),
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: ConstrainedText(
+                    FolderPathUtils.getFolderBaseName(currentFolder),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ],
           ),
@@ -848,13 +861,15 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
