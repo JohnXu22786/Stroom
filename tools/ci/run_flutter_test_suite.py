@@ -83,6 +83,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "reasoning_section_animation_test.dart",
         "pages/assistant/assistant_*_test.dart",
         "pages/assistant_pages_test.dart",
+        "pages/assistant_custom_param_dialog_test.dart",
         "pages/chat/**",
         "pages/chat_page/**",
         "pages/settings/llm_*_test.dart",
