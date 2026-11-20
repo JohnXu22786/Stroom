@@ -3094,7 +3094,8 @@ void main() {
       expect(removed, isTrue);
     });
 
-    testWidgets('passes complete long file name to bounded display', (tester) async {
+    testWidgets('passes complete long file name to bounded display',
+        (tester) async {
       final longName = 'a' * 30 + '.png';
       final att = Attachment(
         fileName: longName,

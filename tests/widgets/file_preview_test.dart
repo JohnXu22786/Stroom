@@ -22,7 +22,8 @@ void main() {
       final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
       await (FontLoader(
         family,
-      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      )..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
     }
   });
 
@@ -153,10 +154,10 @@ void main() {
 }
 
 Attachment _attachment(String name) => Attachment(
-  fileName: name,
-  mimeType: 'text/plain',
-  fileType: 'document',
-  hash: 'hash',
-  storagePath: '/tmp/$name',
-  fileSize: 1024,
-);
+      fileName: name,
+      mimeType: 'text/plain',
+      fileType: 'document',
+      hash: 'hash',
+      storagePath: '/tmp/$name',
+      fileSize: 1024,
+    );
