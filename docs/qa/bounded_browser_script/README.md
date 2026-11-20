@@ -7,6 +7,7 @@ content.
 
 - ![German manual editor at 320 × 640, 1×](userscript-manual-de-320x640-1x.png)
 - ![German URL import preview at 320 × 640, 1×](userscript-preview-de-320x640-1x.png)
+- [Manual editor at normal 1× text scale](userscript-manual-de-static-320x640-1x.webm)
 - [Manual editor label reveal at 320 × 640, 1.5× text](userscript-manual-de-label-reveal-320x640-1_5x.webm)
 
 The screenshots and motion preview use the production dialogs through
@@ -14,8 +15,11 @@ The screenshots and motion preview use the production dialogs through
 Dart 3.13.7 and rendered in headless Chromium at a 320 × 640 CSS viewport and
 device pixel ratio 1. The fixture uses German labels and a local userscript
 sample; its fetch callback returns in-memory source and makes no external
-request. The motion preview uses 1.5× text scaling to show the clipped editor
-labels moving while the input fields remain editable.
+request. The normal-scale video shows the production manual editor at 1× text
+scale with its default field values, while idle; the localized labels fit
+without moving. The 1.5× video is supplementary and shows the longer labels
+moving inside their constrained slots while the native input fields remain
+editable.
 
 `tests/pages/browser_user_scripts_test.dart` covers the editor at 320 × 640 with
 French localization and 1.5× text scaling, focused text editing and save, local
