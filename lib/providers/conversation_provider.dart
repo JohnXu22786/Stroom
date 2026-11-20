@@ -585,6 +585,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   ConversationsNotifier(this._ref) : super([]);
 
+  List<Conversation> get currentConversations => state;
+
   Future<void> _initialLoad = Future<void>.value();
 
   /// Preserve write order when an immediate removal follows a pending create
@@ -609,6 +611,10 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// Persist their creation timestamps so replay can keep the matching
   /// restored records until the journal is successfully cleared.
   final Map<String, String> _pendingRestoredConversations = <String, String>{};
+  final Map<String, Map<String, dynamic>>
+      _pendingRestoredConversationSnapshots = <String, Map<String, dynamic>>{};
+  final Map<String, DateTime> _conversationDeletionTimestamps =
+      <String, DateTime>{};
 
   /// Resolves when saved conversations have been merged into memory. Producers
   /// using a deterministic ID must wait before replacing a prior attempt.

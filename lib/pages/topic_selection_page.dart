@@ -233,30 +233,46 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     });
   }
 
-  Future<void> _cleanupConversationFiles(Conversation conversation) async {
-    for (final msg in conversation.messages) {
-      for (final att in msg.attachments) {
-        try {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        } catch (_) {
-          // Journaled deletion is complete; keep cleaning the remaining files.
-        }
-      }
+  Future<List<String>> _cleanupConversationFiles(
+    List<Conversation> conversations, {
+    required ConversationsNotifier notifier,
+    Set<String> retainedPaths = const {},
+  }) async {
+    final attachmentPaths = conversations
+        .expand(_conversationAttachmentPaths)
+        .toSet()
+        .where(
+          (path) => !AttachmentStorage.deletionIdentities(path)
+              .any(retainedPaths.contains),
+        )
+        .toList();
+    final failedPaths = <String>[];
+    try {
+      await AttachmentStorage.deleteFilesWithRollback(
+        attachmentPaths,
+        shouldDelete: (path) {
+          final currentRetainedPaths = notifier.currentConversations
+              .expand(_conversationAttachmentPaths)
+              .expand(AttachmentStorage.deletionIdentities)
+              .toSet();
+          return !AttachmentStorage.deletionIdentities(path)
+              .any(currentRetainedPaths.contains);
+        },
+      );
+    } catch (_) {
+      failedPaths.addAll(attachmentPaths);
     }
-    for (final att in conversation.draftAttachments) {
+    if (failedPaths.isNotEmpty) return failedPaths;
+    for (final conversation in conversations) {
       try {
-        await AttachmentStorage.deleteFile(att.storagePath);
+        await AttachmentStorage.deleteConversationCompressedImages(
+          conversation.id,
+        );
       } catch (_) {
         // 非关键清理
       }
     }
-    try {
-      await AttachmentStorage.deleteConversationCompressedImages(
-        conversation.id,
-      );
-    } catch (_) {
-      // 非关键清理
-    }
+    return failedPaths;
   }
 
   Future<void> _batchDelete() async {
@@ -296,15 +312,38 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     );
     if (confirmed != true) return;
 
-    final convs = ref.read(conversationsProvider);
+    final notifier = ref.read(conversationsProvider.notifier);
+    final convs = notifier.currentConversations;
+    final activeConversationId = ref.read(activeConversationIdProvider);
     final selectedIds = Set<String>.from(_selectedIds);
-    final deleted = await ref
-        .read(conversationsProvider.notifier)
-        .batchDelete(selectedIds.toList());
+    final deleted = await notifier.batchDelete(selectedIds.toList());
     if (deleted) {
-      for (final conv in convs) {
-        if (!selectedIds.contains(conv.id)) continue;
-        await _cleanupConversationFiles(conv);
+      final deletedConversations =
+          convs.where((conv) => selectedIds.contains(conv.id)).toList();
+      final retainedPaths = notifier.currentConversations
+          .expand(_conversationAttachmentPaths)
+          .expand(AttachmentStorage.deletionIdentities)
+          .toSet();
+      final failedPaths = await _cleanupConversationFiles(
+        deletedConversations,
+        notifier: notifier,
+        retainedPaths: retainedPaths,
+      );
+      if (failedPaths.isNotEmpty) {
+        await notifier.restoreDeletedConversations(
+              deletedConversations,
+              originalOrder: convs,
+              previousActiveConversationId: activeConversationId,
+            );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                l10n.fileManagerBatchDeleteFailed(failedPaths.join(', ')),
+              ),
+            ),
+          );
+        }
       }
     }
     if (mounted) {
@@ -317,8 +356,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
   void _deleteTopic(Conversation topic) async {
     final l10n = AppLocalizations.of(context)!;
-    final convs = ref.read(conversationsProvider);
-    final conv = convs.where((c) => c.id == topic.id).firstOrNull;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -360,13 +397,51 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     );
     if (confirmed != true) return;
 
-    final deleted = await ref
-        .read(conversationsProvider.notifier)
-        .deleteConversation(topic.id);
-    if (deleted && conv != null) {
-      await _cleanupConversationFiles(conv);
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == topic.id).firstOrNull;
+    if (conv == null) return;
+    final notifier = ref.read(conversationsProvider.notifier);
+    final activeConversationId = ref.read(activeConversationIdProvider);
+    final deleted = await notifier.deleteConversation(topic.id);
+    if (deleted) {
+      final retainedPaths = notifier.currentConversations
+          .expand(_conversationAttachmentPaths)
+          .expand(AttachmentStorage.deletionIdentities)
+          .toSet();
+      final failedPaths = await _cleanupConversationFiles(
+        [conv],
+        notifier: notifier,
+        retainedPaths: retainedPaths,
+      );
+      if (failedPaths.isNotEmpty) {
+        await notifier.restoreDeletedConversations(
+              [conv],
+              originalOrder: convs,
+              previousActiveConversationId: activeConversationId,
+            );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                l10n.fileManagerDeleteFailed(failedPaths.join(', ')),
+              ),
+            ),
+          );
+        }
+      }
     }
   }
+
+  Iterable<String> _conversationAttachmentPaths(Conversation conversation) => [
+        ...conversation.messages.expand(
+          (message) => message.attachments.map(
+            (attachment) => attachment.storagePath,
+          ),
+        ),
+        ...conversation.draftAttachments.map(
+          (attachment) => attachment.storagePath,
+        ),
+      ];
 
   void _renameTopic(String id, String currentTitle) {
     final l10n = AppLocalizations.of(context)!;

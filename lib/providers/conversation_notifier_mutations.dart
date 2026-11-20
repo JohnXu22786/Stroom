@@ -15,6 +15,23 @@ void _markTemporaryConversationUpdated(
 }
 
 extension ConversationsNotifierMutationsExt on ConversationsNotifier {
+  DateTime _nextConversationCheckpointTime(Iterable<String> conversationIds) {
+    var timestamp = DateTime.now();
+    for (final id in conversationIds) {
+      final fallbackTime = DateTime.tryParse(
+        _pendingRestoredConversationSnapshots[id]?['restoredAt'] as String? ??
+            '',
+      );
+      final previous = _conversationDeletionTimestamps[id];
+      for (final candidate in [fallbackTime, previous]) {
+        if (candidate != null && !timestamp.isAfter(candidate)) {
+          timestamp = candidate.add(const Duration(microseconds: 1));
+        }
+      }
+    }
+    return timestamp;
+  }
+
   List<Conversation> _restoreDeletedConversationOrder(
     List<Conversation> original,
     List<Conversation> deleted,
@@ -180,12 +197,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final original = List<Conversation>.from(state);
     final deleted = state.where((c) => c.id == id).toList();
     if (deleted.isEmpty) return false;
+    final deletedAt = _nextConversationCheckpointTime([id]);
     state = state.where((c) => c.id != id).toList();
     try {
       await _appendJournalBarrier({
         'kind': 'conversationDeleted',
         'conversationId': id,
-        'deletedAt': DateTime.now().toIso8601String(),
+        'deletedAt': deletedAt.toIso8601String(),
       });
     } catch (error) {
       state = _restoreDeletedConversationOrder(original, deleted);
@@ -193,6 +211,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       debugPrint('Failed to record conversation deletion: $error');
       return false;
     }
+    _conversationDeletionTimestamps[id] = deletedAt;
     if (!mounted) return true;
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
@@ -201,6 +220,80 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     await _persist();
     await _persistActiveId();
     return true;
+  }
+
+  /// Restores conversations removed by a delete flow whose file cleanup failed.
+  /// The restoration checkpoint keeps their attachment paths reachable after
+  /// the deletion checkpoint has already been persisted.
+  Future<void> restoreDeletedConversations(
+    List<Conversation> conversations, {
+    required List<Conversation> originalOrder,
+    String? previousActiveConversationId,
+  }) async {
+    final missing = conversations
+        .where((conversation) =>
+            !state.any((current) => current.id == conversation.id))
+        .toList();
+    if (missing.isEmpty) return;
+
+    state = _restoreDeletedConversationOrder(originalOrder, missing);
+    _syncTemporaryTimer();
+    if (previousActiveConversationId != null &&
+        missing.any(
+          (conversation) => conversation.id == previousActiveConversationId,
+        ) &&
+        _ref.read(activeConversationIdProvider) == null) {
+      _ref.read(activeConversationIdProvider.notifier).state =
+          previousActiveConversationId;
+    }
+    for (final conversation in missing) {
+      final restoredAt =
+          _nextConversationCheckpointTime([conversation.id]);
+      try {
+        await _appendJournalBarrier({
+          'kind': 'conversationRestored',
+          'conversationId': conversation.id,
+          'conversation': conversation.toMap(),
+          'index': originalOrder.indexOf(conversation),
+          'restoredAt': restoredAt.toIso8601String(),
+        });
+      } catch (error) {
+        debugPrint('Failed to restore conversation checkpoint: $error');
+        _pendingRestoredConversations[conversation.id] =
+            '${conversation.createdAt.toIso8601String()}|${DateTime.now().toIso8601String()}';
+        _pendingRestoredConversationSnapshots[conversation.id] = {
+          'conversation': conversation.toMap(),
+          'index': originalOrder.indexOf(conversation),
+          'restoredAt': restoredAt.toIso8601String(),
+        };
+      }
+    }
+    if (_pendingRestoredConversations.isNotEmpty) {
+      final markerPersisted = await _persistPendingRestoredConversations();
+      final snapshotPersisted =
+          await _persistPendingRestoredConversationSnapshots();
+      if (!markerPersisted || !snapshotPersisted) {
+        debugPrint('Failed to persist restored conversation checkpoint');
+      }
+    }
+    try {
+      if (!await _persistNowChecked()) {
+        debugPrint(
+          'Failed to persist restored conversations after cleanup failure',
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        'Failed to persist restored conversations after cleanup failure: $error',
+      );
+    }
+    if (previousActiveConversationId != null &&
+        missing.any(
+          (conversation) => conversation.id == previousActiveConversationId,
+        ) &&
+        _ref.read(activeConversationIdProvider) == previousActiveConversationId) {
+      await _persistActiveId();
+    }
   }
 
   /// Replaces a flow-owned conversation from a prior attempt. Unlike the
@@ -458,19 +551,25 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final idSet = ids.toSet();
     final deleted = state.where((c) => idSet.contains(c.id)).toList();
     if (deleted.isEmpty) return false;
+    final deletedAt = _nextConversationCheckpointTime(
+      deleted.map((conversation) => conversation.id),
+    );
     state = state.where((c) => !idSet.contains(c.id)).toList();
     try {
       await _appendJournalBarrier({
         'kind': 'conversationsDeleted',
         'conversationIds':
             deleted.map((conversation) => conversation.id).toList(),
-        'deletedAt': DateTime.now().toIso8601String(),
+        'deletedAt': deletedAt.toIso8601String(),
       });
     } catch (error) {
       state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record batch conversation deletion: $error');
       return false;
+    }
+    for (final conversation in deleted) {
+      _conversationDeletionTimestamps[conversation.id] = deletedAt;
     }
     if (!mounted) return true;
     if (idSet.contains(_ref.read(activeConversationIdProvider))) {
