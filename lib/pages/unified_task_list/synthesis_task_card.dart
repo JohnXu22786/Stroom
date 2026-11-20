@@ -650,7 +650,13 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
               size: 20,
             ),
             SizedBox(width: 8),
-            Text(AppLocalizations.of(context)!.unifiedTaskSynthesisError),
+            Expanded(
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.unifiedTaskSynthesisError,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -662,7 +668,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.unifiedTaskClose),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.unifiedTaskClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
