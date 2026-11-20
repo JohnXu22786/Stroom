@@ -9,6 +9,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 import 'package:stroom/widgets/search_panel.dart';
 
@@ -193,6 +194,51 @@ void main() {
     expect(find.text('Search conversations'), findsOneWidget);
     expect(find.text('Enter a keyword...'), findsOneWidget);
   });
+
+  testWidgets('search panel heading handles long text at narrow width', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('de', 'DE'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(1.25),
+        ),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: SearchPanel(
+          conversations: const [],
+          onConversationSelected: (_) {},
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(SearchPanel)))!;
+    final title = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == l10n.searchPanelTitle,
+    );
+    expect(title, findsOneWidget);
+    final header = find.ancestor(of: title, matching: find.byType(Row)).first;
+    expect(
+      tester.getRect(title).right,
+      lessThanOrEqualTo(tester.getRect(header).right + 0.01),
+    );
+    expect(
+      tester.takeException()?.toString() ?? '',
+      isNot(contains('search_panel.dart:84')),
+    );
+  });
+
   testWidgets('temporary conversation shows countdown before its title',
       (tester) async {
     final temporaryTopic = Conversation(

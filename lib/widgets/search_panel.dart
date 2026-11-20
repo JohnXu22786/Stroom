@@ -85,15 +85,17 @@ class _SearchPanelState extends State<SearchPanel> {
                   children: [
                     Icon(Icons.search, size: 20, color: cs.onSurface),
                     const SizedBox(width: 8),
-                    Text(
-                      AppLocalizations.of(context)!.searchPanelTitle,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
+                    Expanded(
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.searchPanelTitle,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
                       ),
                     ),
-                    const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.of(context).pop(),
