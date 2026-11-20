@@ -90,26 +90,24 @@ class VersionInfoDialog extends StatelessWidget {
   }
 
   Widget _buildInfoRow(ColorScheme cs, String label, String value) {
-    return LayoutBuilder(
-      builder: (context, constraints) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
-            child: ConstrainedText(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: cs.onSurfaceVariant,
-              ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Flexible(
+          flex: 2,
+          child: ConstrainedText(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(value)),
-        ],
-      ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(flex: 3, child: Text(value)),
+      ],
     );
   }
 }
