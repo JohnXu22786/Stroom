@@ -395,7 +395,13 @@ class TaskCard extends ConsumerWidget {
           children: [
             Icon(Icons.error_outline, color: Colors.red, size: 20),
             SizedBox(width: 8),
-            Text(strings.taskListSynthesisErrorTitle),
+            Flexible(
+              child: ConstrainedText(
+                strings.taskListSynthesisErrorTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -427,7 +433,13 @@ class TaskCard extends ConsumerWidget {
           children: [
             Icon(Icons.code, color: Colors.orange, size: 20),
             SizedBox(width: 8),
-            Text(strings.taskListOriginalExchange),
+            Flexible(
+              child: ConstrainedText(
+                strings.taskListOriginalExchange,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SizedBox(
