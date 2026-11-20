@@ -529,30 +529,50 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                       color: colorScheme.primary,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.catCatchDurationPreview,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurfaceVariant,
+                    Expanded(
+                      flex: 3,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ConstrainedText(
+                              _l10n.catCatchDurationPreview,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            child: ConstrainedText(
+                              previewText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'monospace',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      previewText,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _l10n.catCatchDurationFormat,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.5,
+                    Expanded(
+                      flex: 2,
+                      child: ConstrainedText(
+                        _l10n.catCatchDurationFormat,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -630,11 +650,15 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                       color: colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.catCatchTaskCount(taskCount),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
+                    Expanded(
+                      child: ConstrainedText(
+                        _l10n.catCatchTaskCount(taskCount),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -727,22 +751,30 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             children: [
               Icon(icon, size: 16, color: colorScheme.primary),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurfaceVariant,
+              Flexible(
+                child: ConstrainedText(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 4),
-              Text(
-                currentFolder.isEmpty
-                    ? _l10n.catCatchRootFolder
-                    : currentFolder,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: ConstrainedText(
+                  currentFolder.isEmpty
+                      ? _l10n.catCatchRootFolder
+                      : currentFolder,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const Spacer(),
