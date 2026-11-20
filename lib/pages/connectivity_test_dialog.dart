@@ -140,7 +140,9 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   border: OutlineInputBorder(),
                   helper: Text(
                     localizations.connectivityTestJsonHelp,
-                    style: Theme.of(context).textTheme.bodySmall
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
                         ?.copyWith(color: colorScheme.onSurfaceVariant),
                     softWrap: true,
                   ),
