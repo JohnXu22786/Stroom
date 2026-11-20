@@ -876,39 +876,46 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   }
 
   Widget _buildDone(BuildContext context, ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.celebration, size: 72, color: cs.primary),
-            const SizedBox(height: 16),
-            Text(
-              AppLocalizations.of(context)!.ankiNoCardsToStudy,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.celebration, size: 72, color: cs.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    AppLocalizations.of(context)!.ankiNoCardsToStudy,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    AppLocalizations.of(context)!.ankiNoCardsHint,
+                    style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.arrow_back),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.ankiBack,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              AppLocalizations.of(context)!.ankiNoCardsHint,
-              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              icon: const Icon(Icons.arrow_back),
-              label: ConstrainedText(
-                AppLocalizations.of(context)!.ankiBack,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+          ),
         ),
       ),
     );
