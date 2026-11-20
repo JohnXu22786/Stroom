@@ -62,14 +62,13 @@ Widget _buildTestApp({
       theme: theme,
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: textScaler == null
-          ? home
-          : Builder(
-              builder: (context) => MediaQuery(
+      builder: textScaler == null
+          ? null
+          : (context, child) => MediaQuery(
                 data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-                child: home,
+                child: child ?? const SizedBox.shrink(),
               ),
-            ),
+      home: home,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
@@ -321,6 +320,97 @@ void main() {
       expect(find.byType(ConstrainedText), findsWidgets);
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('TTSCreatePage - fullscreen text editor', () {
+    testWidgets(
+      'long localized heading stays bounded and editing remains native',
+      (tester) async {
+        tester.view.physicalSize = const Size(700, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createTtsEntry()],
+            locale: const Locale('en'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final fittingPageField = find.byType(TextField).at(1);
+        await tester.ensureVisible(fittingPageField);
+        await tester.tap(find.byTooltip('Edit in full screen'));
+        await tester.pumpAndSettle();
+        final fittingTitle = find.text('Edit text');
+        final fittingTitleSlot = find.ancestor(
+          of: fittingTitle,
+          matching: find.byType(ConstrainedText),
+        );
+        final fittingHeader = find.ancestor(
+          of: fittingTitleSlot,
+          matching: find.byType(Row),
+        );
+        expect(fittingTitleSlot, findsOneWidget);
+        expect(
+          tester.getTopLeft(fittingTitleSlot).dx,
+          closeTo(tester.getTopLeft(fittingHeader).dx, 0.01),
+        );
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+
+        tester.view.physicalSize = const Size(320, 640);
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createTtsEntry()],
+            locale: const Locale('fr', 'FR'),
+            textScaler: TextScaler.linear(2.0),
+          ),
+        );
+        await tester.pumpAndSettle();
+        // The underlying form has separate large-scale row constraints; this
+        // test isolates the fullscreen dialog after the page has rendered.
+        while (tester.takeException() != null) {}
+
+        final pageTextField = find.byType(TextField).at(1);
+        await tester.ensureVisible(pageTextField);
+        await tester.tap(find.byTooltip('Modifier en plein écran'));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final heading = find.text('Modifier le texte');
+        final boundedHeading = find.ancestor(
+          of: heading,
+          matching: find.byType(ConstrainedText),
+        );
+        expect(boundedHeading, findsOneWidget);
+        expect(find.byTooltip('Fermer'), findsOneWidget);
+        final headerRow = find.ancestor(
+          of: boundedHeading,
+          matching: find.byType(Row),
+        );
+        expect(
+          tester.getSize(boundedHeading).width,
+          lessThanOrEqualTo(tester.getSize(headerRow).width),
+        );
+        expect(tester.takeException(), isNull);
+
+        final editor = find.byType(TextField).last;
+        await tester.enterText(editor, 'Texte saisi dans le grand éditeur');
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(editor).controller!.text,
+          'Texte saisi dans le grand éditeur',
+        );
+        await tester.tap(find.byTooltip('Fermer'));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(
+          tester.widget<TextField>(pageTextField).controller!.text,
+          'Texte saisi dans le grand éditeur',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('TTSCreatePage - bounded speed and volume sliders', () {
