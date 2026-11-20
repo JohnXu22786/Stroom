@@ -285,9 +285,9 @@ void main() {
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(permissionsChannel, (call) async {
-          if (call.method == 'checkPermissionStatus') return permissionCode;
-          return true;
-        });
+      if (call.method == 'checkPermissionStatus') return permissionCode;
+      return true;
+    });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(permissionsChannel, null);
