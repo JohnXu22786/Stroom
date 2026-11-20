@@ -920,6 +920,19 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _persist();
   }
 
+  /// Updates the in-memory draft without scheduling a storage write.
+  ///
+  /// The composer uses this as soon as an attachment enters its pending list
+  /// so an older persistence operation cannot clean up a file now owned by a
+  /// newer, not-yet-debounced draft.
+  void updateDraftInMemory(
+    String conversationId,
+    String draftText, {
+    List<Attachment>? draftAttachments,
+  }) {
+    _updateDraft(conversationId, draftText, draftAttachments);
+  }
+
   /// Saves a draft and waits for the updated conversation snapshot to reach
   /// storage before callers clean up files removed from the draft.
   Future<bool> saveDraftAndWait(

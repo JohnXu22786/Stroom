@@ -51,6 +51,14 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+Finder _customParamDefaultValueField() {
+  final field = find.ancestor(
+    of: find.text('默认参数值'),
+    matching: find.byType(TextFormField),
+  );
+  return find.descendant(of: field, matching: find.byType(TextField));
+}
+
 /// Enters text into the [index]-th TextField of the page (0 = 模型名称,
 /// 1 = 模型 ID, then max tokens / min pixels / max pixels).
 Future<void> _enterField(WidgetTester tester, int index, String text) async {
@@ -365,10 +373,7 @@ void main() {
         await tester.tap(find.text('添加参数'));
         await tester.pumpAndSettle();
 
-        final defaultField = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField && widget.decoration?.labelText == '默认参数值',
-        );
+        final defaultField = _customParamDefaultValueField();
         await _scrollTo(tester, defaultField);
         await tester.enterText(defaultField, 'edited default');
         await tester.pump();
@@ -516,10 +521,7 @@ void main() {
       await tester.tap(find.text('JSON').last);
       await tester.pumpAndSettle();
 
-      final valueField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == '默认参数值',
-      );
+      final valueField = _customParamDefaultValueField();
       expect(
         tester.widget<TextField>(valueField).controller!.text,
         '{"fallback":true}',
@@ -544,10 +546,7 @@ void main() {
         );
 
         await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-        final valueField = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField && widget.decoration?.labelText == '默认参数值',
-        );
+        final valueField = _customParamDefaultValueField();
         await _scrollTo(tester, valueField);
         expect(tester.widget<TextField>(valueField).controller!.text, '1.0');
 
@@ -572,10 +571,7 @@ void main() {
         expect(saved!.customParams.single.options, ['1.5', '2.0']);
 
         await _pumpConfigPage(tester, model: saved);
-        final reopenedValueField = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField && widget.decoration?.labelText == '默认参数值',
-        );
+        final reopenedValueField = _customParamDefaultValueField();
         await _scrollTo(tester, reopenedValueField);
         expect(
           tester.widget<TextField>(reopenedValueField).controller!.text,

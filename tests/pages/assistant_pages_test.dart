@@ -1255,6 +1255,118 @@ void main() {
     );
 
     testWidgets(
+      'tool output limit label and helper remain readable in a narrow panel',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        SharedPreferences.setMockInitialValues({});
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              locale: const Locale('pt', 'BR'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  disableAnimations: false,
+                ),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: AssistantDefaultsTab(
+                  defaultModelName: null,
+                  defaultModelId: null,
+                  defaultProviderName: null,
+                  defaultToolNames: null,
+                  maxToolOutputChars: 5000,
+                  enableMaxToolOutputChars: true,
+                  onDefaultModelChanged: (_) {},
+                  onDefaultToolsChanged: (_) {},
+                  onEnableMaxToolOutputCharsChanged: (_) {},
+                  onMaxToolOutputCharsChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(AssistantDefaultsTab)),
+        )!;
+        final field = find.byType(TextField);
+        await tester.ensureVisible(field);
+        await tester.pump();
+
+        final label = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText &&
+              widget.data == l10n.assistantMaxCharacters,
+        );
+        expect(label, findsOneWidget);
+        final helper = find.text(l10n.assistantCharactersNotTokens);
+        expect(helper, findsOneWidget);
+        expect(tester.widget<TextField>(field).controller!.text, '5000');
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(field);
+        await tester.pump();
+        expect(tester.testTextInput.isVisible, isTrue);
+        await tester.enterText(field, '');
+        await tester.pump();
+        expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
+        await tester.enterText(field, '999999');
+        await tester.pump();
+        expect(
+          find.text(l10n.assistantCharacterRange('100', '100000')),
+          findsOneWidget,
+        );
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(helper, findsNothing);
+        await tester.enterText(field, '1200');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(
+          find.text(l10n.assistantCharacterRange('100', '100000')),
+          findsNothing,
+        );
+        expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        tester.platformDispatcher.textScaleFactorTestValue = 3;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pump();
+        await tester.ensureVisible(field);
+        await tester.pump();
+        expect(helper, findsOneWidget);
+        final helperContext = tester.element(helper);
+        final helperWidget = tester.widget<Text>(helper);
+        expect(
+          helperWidget.maxLines,
+          isNull,
+          reason: 'The Material helper must not carry a fixed line limit.',
+        );
+        final helperPainter = TextPainter(
+          text: TextSpan(
+            text: l10n.assistantCharactersNotTokens,
+            style: DefaultTextStyle.of(helperContext).style.merge(
+                  helperWidget.style,
+                ),
+          ),
+          textDirection: Directionality.of(helperContext),
+          textScaler: MediaQuery.textScalerOf(helperContext),
+        )..layout(maxWidth: tester.getSize(helper).width);
+        expect(
+          helperPainter.computeLineMetrics().length,
+          greaterThan(2),
+          reason: 'The full localized helper must wrap beyond two lines.',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'assistant defaults preview heading stays within its icon row',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(320, 640));
@@ -1467,10 +1579,12 @@ void main() {
       final lengthField = find.byWidgetPredicate(
         (w) =>
             w is TextField &&
-            w.decoration?.labelText == '最大字符数' &&
-            w.decoration?.helperText == '单位：字符（不是 token）',
+            w.keyboardType == TextInputType.number &&
+            w.decoration?.label != null,
       );
       expect(lengthField, findsOneWidget, reason: '必须标明字符单位，避免被误认为 token');
+      expect(find.text('最大字符数'), findsOneWidget);
+      expect(find.text('单位：字符（不是 token）'), findsOneWidget);
       expect(tester.widget<TextField>(lengthField).controller?.text, '5000');
     });
 
@@ -1498,7 +1612,10 @@ void main() {
       expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
-          (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+          (w) =>
+              w is TextField &&
+              w.keyboardType == TextInputType.number &&
+              w.decoration?.label != null,
         ),
         findsNothing,
       );
@@ -1534,7 +1651,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final lengthField = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+        (w) =>
+            w is TextField &&
+            w.keyboardType == TextInputType.number &&
+            w.decoration?.label != null,
       );
       await tester.enterText(lengthField, '8000');
       await tester.pump();
@@ -1571,7 +1691,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final lengthField = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+        (w) =>
+            w is TextField &&
+            w.keyboardType == TextInputType.number &&
+            w.decoration?.label != null,
       );
       // 超过最大有效范围（100000）：立即报错、不写入 vars
       // （短于 3 位的输入可能是合法值的中间态，如 "120"，不报错）

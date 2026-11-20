@@ -157,6 +157,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _addPendingAttachment(fileName, bytes);
 
   @visibleForTesting
+  Future<void> removePendingAttachmentForTesting(int index) =>
+      _removePendingAttachment(index);
+
+  @visibleForTesting
   List<Attachment> get pendingAttachmentsForTesting =>
       List.unmodifiable(_pendingAttachments);
 

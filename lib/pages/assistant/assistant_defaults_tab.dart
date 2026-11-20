@@ -491,12 +491,17 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     child: TextField(
                       controller: _truncationLengthController,
                       decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context)!
-                            .assistantMaxCharacters,
+                        label: ConstrainedText(
+                          AppLocalizations.of(context)!.assistantMaxCharacters,
+                          maxLines: 1,
+                        ),
                         // 明确"字符"单位：避免用户按 token/字节理解。
-                        helperText: _lengthError == null
-                            ? AppLocalizations.of(context)!
-                                .assistantCharactersNotTokens
+                        helper: _lengthError == null
+                            ? Text(
+                                AppLocalizations.of(context)!
+                                    .assistantCharactersNotTokens,
+                                softWrap: true,
+                              )
                             : null,
                         errorText: _lengthError,
                         hintText: AppLocalizations.of(context)!

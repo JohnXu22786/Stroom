@@ -59,10 +59,12 @@ class _ReplaySectionDeltas {
 
   _ReplaySectionDeltas(List<String> initialSections)
       : sections = initialSections,
-        _chunksBySection =
-            initialSections.map((section) => <String>[section]).toList(),
-        _lengthsBySection =
-            initialSections.map((section) => section.length).toList();
+      _chunksBySection = initialSections
+          .map((section) => <String>[section])
+          .toList(),
+      _lengthsBySection = initialSections
+          .map((section) => section.length)
+          .toList();
 
   bool apply(dynamic rawDeltas) {
     if (rawDeltas is! List) return false;
@@ -140,10 +142,11 @@ void _finalizeReplayMessageSections(
     );
     final messageIndex = messageIndexes[sections.messageId];
     if (messageIndex == null) continue;
-    conversation.messages[messageIndex] =
-        conversation.messages[messageIndex].copyWith(
-      textSections:
-          sections.text.sections.isEmpty ? null : sections.text.materialize(),
+    conversation.messages[messageIndex] = conversation.messages[messageIndex]
+        .copyWith(
+          textSections: sections.text.sections.isEmpty
+              ? null
+              : sections.text.materialize(),
       reasoningSections: sections.reasoning.sections.isEmpty
           ? null
           : sections.reasoning.materialize(),
@@ -278,8 +281,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final removed = await prefs.remove(_pendingRestoredConversationKey);
-      final snapshotsRemoved =
-          await prefs.remove(_pendingRestoredConversationSnapshotKey);
+      final snapshotsRemoved = await prefs.remove(
+        _pendingRestoredConversationSnapshotKey,
+      );
       if (removed && snapshotsRemoved) {
         _pendingRestoredConversations.clear();
         _pendingRestoredConversationSnapshots.clear();
@@ -310,8 +314,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   Future<bool> _markSupersededRestorationSnapshots(
     List<Conversation> persistedConversations,
   ) async {
-    final persistedIds =
-        persistedConversations.map((conversation) => conversation.id).toSet();
+    final persistedIds = persistedConversations
+        .map((conversation) => conversation.id)
+        .toSet();
     var changed = false;
     for (final entry in _pendingRestoredConversationSnapshots.entries) {
       if (persistedIds.contains(entry.key) ||
@@ -423,7 +428,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       for (final entry in _pendingRestoredConversations.entries)
         if (createdAtById[entry.key] == entry.value.split('|').first &&
             entry.value.split('|').length > 1)
-          entry.key: DateTime.tryParse(entry.value.split('|').last) ??
+          entry.key:
+              DateTime.tryParse(entry.value.split('|').last) ??
               DateTime.fromMillisecondsSinceEpoch(0),
     };
   }
@@ -451,15 +457,17 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           persistedLastTimestamp > _lastWebJournalTimestamp
               ? persistedLastTimestamp
               : _lastWebJournalTimestamp;
-      _lastWebJournalTimestamp =
-          now > previousTimestamp ? now : previousTimestamp + 1;
+      _lastWebJournalTimestamp = now > previousTimestamp
+          ? now
+          : previousTimestamp + 1;
       if (!await prefs.setInt(
         _webStreamJournalTimestampKey,
         _lastWebJournalTimestamp,
       )) {
         throw StateError('Failed to persist web stream journal sequence');
       }
-      final key = '$_streamJournalWebPrefix'
+      final key =
+          '$_streamJournalWebPrefix'
           '${_lastWebJournalTimestamp.toString().padLeft(20, '0')}';
       final bytes = Uint8List.fromList(utf8.encode(jsonEncode(checkpoint)));
       await WebFileStore.write(key, bytes);
@@ -565,8 +573,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           ? await WebFileStore.keysWithPrefix(_streamJournalWebPrefix)
           : null;
       webKeys?.sort();
-      final nativeJournalPath =
-          !kIsWeb && _streamJournalPresent ? await _streamJournalPath() : null;
+      final nativeJournalPath = !kIsWeb && _streamJournalPresent
+          ? await _streamJournalPath()
+          : null;
       final nativeJournalEnd = nativeJournalPath == null
           ? null
           : await AppStorage.durableFileLength(nativeJournalPath);
@@ -628,8 +637,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 );
                 if (restored.id == conversationId) {
                   restoredConversationSnapshots[conversationId] = restored;
-                  restoredConversationTimes[conversationId] = DateTime.tryParse(
-                          decoded['restoredAt'] as String? ?? '') ??
+                  restoredConversationTimes[conversationId] =
+                      DateTime.tryParse(
+                        decoded['restoredAt'] as String? ?? '',
+                      ) ??
                       restored.updatedAt;
                   final index = decoded['index'];
                   if (index is int) {
@@ -820,7 +831,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             final checkpointUpdatedAt = DateTime.tryParse(
               record['updatedAt'] as String? ?? '',
             );
-            conversation = baseConversation ??
+            conversation =
+                baseConversation ??
                 Conversation(
                   id: conversationId,
                   title: '',
@@ -858,9 +870,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final checkpointUpdatedAt = DateTime.tryParse(
             record['updatedAt'] as String? ?? '',
           );
-          final checkpointMetadataIsCurrent = checkpointUpdatedAt != null &&
+          final checkpointMetadataIsCurrent =
+              checkpointUpdatedAt != null &&
               !checkpointUpdatedAt.isBefore(conversation.updatedAt);
-          final checkpointIsCurrent = checkpointUpdatedAt != null &&
+          final checkpointIsCurrent =
+              checkpointUpdatedAt != null &&
               (!checkpointMessageExists || checkpointMetadataIsCurrent);
           if (!checkpointIsCurrent) continue;
           if (needsToAddConversation) {
@@ -882,19 +896,22 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             unorderedMessageConversationIds.contains(conversationId),
           );
           final existingIndex = messageIndexes[messageId] ?? -1;
-          final existing =
-              existingIndex < 0 ? null : conversation.messages[existingIndex];
+          final existing = existingIndex < 0
+              ? null
+              : conversation.messages[existingIndex];
           final messageKey = _streamCheckpointKey(conversationId, messageId);
           final sections = replayedMessageSections.putIfAbsent(
             messageKey,
             () => _ReplayMessageSections(
               conversationId: conversationId,
               messageId: messageId,
-              textSections: existing?.textSections?.toList() ??
+              textSections:
+                  existing?.textSections?.toList() ??
                   (existing != null && existing.content.isNotEmpty
                       ? <String>[existing.content]
                       : <String>[]),
-              reasoningSections: existing?.reasoningSections?.toList() ??
+              reasoningSections:
+                  existing?.reasoningSections?.toList() ??
                   (existing?.reasoningContent == null
                       ? <String>[]
                       : <String>[existing!.reasoningContent!]),
@@ -913,8 +930,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (checkpointMetadataIsCurrent && record['isTemporary'] is bool) {
             final isTemporary = record['isTemporary'] as bool;
             final expiryRaw = record['temporaryExpiresAt'];
-            final expiry =
-                expiryRaw is String ? DateTime.tryParse(expiryRaw) : null;
+            final expiry = expiryRaw is String
+                ? DateTime.tryParse(expiryRaw)
+                : null;
             final expiryVersion = record['temporaryExpiryVersion'];
             final pausedRemaining =
                 record['temporaryPausedRemainingMilliseconds'];
@@ -944,7 +962,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               calls[call.id] = call;
             }
           }
-          final callsChanged = existing == null ||
+          final callsChanged =
+              existing == null ||
               jsonEncode(calls.values.map((call) => call.toMap()).toList()) !=
                   jsonEncode(
                     (existing.toolCalls ?? const <ToolCallData>[])
@@ -956,7 +975,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               roundStartsRaw is List && roundStartsRaw.isNotEmpty
                   ? roundStartsRaw.whereType<int>().toList()
                   : existing?.toolCallRoundStarts;
-          final roundStartsChanged = existing == null ||
+          final roundStartsChanged =
+              existing == null ||
               jsonEncode(roundStarts) !=
                   jsonEncode(existing.toolCallRoundStarts);
           final recordCreatedAt = DateTime.tryParse(
@@ -985,14 +1005,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             isError: existing?.isError ?? false,
             rawRequest: existing?.rawRequest,
             rawResponse: existing?.rawResponse,
-            textSections:
-                sections.text.sections.isEmpty ? null : sections.text.sections,
+            textSections: sections.text.sections.isEmpty
+                ? null
+                : sections.text.sections,
             reasoningSections: sections.reasoning.sections.isEmpty
                 ? null
                 : sections.reasoning.sections,
             toolCalls: calls.isEmpty ? null : calls.values.toList(),
-            toolCallRoundStarts:
-                roundStarts?.isEmpty ?? true ? null : roundStarts,
+            toolCallRoundStarts: roundStarts?.isEmpty ?? true
+                ? null
+                : roundStarts,
             contentFromTextSections: true,
           );
           if (existingIndex < 0) {
@@ -1176,8 +1198,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               ..addAll({
                 for (final entry in decoded.entries)
                   if (entry.key is String && entry.value is Map)
-                    entry.key as String:
-                        Map<String, dynamic>.from(entry.value as Map),
+                    entry.key as String: Map<String, dynamic>.from(
+                      entry.value as Map,
+                    ),
               });
           }
         } catch (e) {
@@ -1196,8 +1219,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               ..addAll({
                 for (final entry in decoded.entries)
                   if (entry.key is String && entry.value is List)
-                    entry.key as String:
-                        (entry.value as List).whereType<String>().toSet(),
+                    entry.key as String: (entry.value as List)
+                        .whereType<String>()
+                        .toSet(),
               });
           }
         } catch (e) {
@@ -1227,8 +1251,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                         .subtract(const Duration(hours: 23));
                     conversation.temporaryExpiryVersion =
                         kTemporaryConversationDurationVersion;
-                    item['temporaryExpiresAt'] =
-                        conversation.temporaryExpiresAt!.toIso8601String();
+                    item['temporaryExpiresAt'] = conversation
+                        .temporaryExpiresAt!
+                        .toIso8601String();
                     item['temporaryExpiryVersion'] =
                         kTemporaryConversationDurationVersion;
                     migratedTemporaryExpiries = true;
@@ -1280,8 +1305,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               final inMemory = state;
               if (inMemory.isNotEmpty) {
                 final diskIds = conversations.map((c) => c.id).toSet();
-                final extra =
-                    inMemory.where((c) => !diskIds.contains(c.id)).toList();
+                final extra = inMemory
+                    .where((c) => !diskIds.contains(c.id))
+                    .toList();
                 loadedConversations = pinnedFirstStable([
                   ...extra,
                   ...conversations,
@@ -1344,8 +1370,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         };
         final replayStartingMessageIds = {
           for (final conversation in state)
-            conversation.id:
-                conversation.messages.map((message) => message.id).toSet(),
+            conversation.id: conversation.messages
+                .map((message) => message.id)
+                .toSet(),
         };
         final restored = await _replayStreamCheckpoints(
           loadedConversations ?? state,
@@ -1389,8 +1416,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 )) {
               final startingMessageIds =
                   replayStartingMessageIds[current.id] ?? const <String>{};
-              final currentMessageIds =
-                  current.messages.map((message) => message.id).toSet();
+              final currentMessageIds = current.messages
+                  .map((message) => message.id)
+                  .toSet();
               final removedMessageIds = startingMessageIds.difference(
                 currentMessageIds,
               );
@@ -1419,7 +1447,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final orderedConversations = pinnedFirstStable(finalConversations);
           final activeId = prefs.getString('active_conversation_id');
           final currentActiveId = _ref.read(activeConversationIdProvider);
-          final hasCurrentActiveConversation = currentActiveId != null &&
+          final hasCurrentActiveConversation =
+              currentActiveId != null &&
               orderedConversations.any((c) => c.id == currentActiveId);
           if (!hasCurrentActiveConversation &&
               activeId != null &&
@@ -1539,7 +1568,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       );
 
       // Enforce the cap: keep only the N most recent backups.
-      final backupKeys = prefs
+      final backupKeys =
+          prefs
           .getKeys()
           .where((k) => k.startsWith('conversations.corrupt.'))
           .toList()
@@ -1715,8 +1745,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     final paths = <String>{};
     for (final conversation in snapshot) {
       paths.addAll(
-        conversation.draftAttachments
-            .map((attachment) => attachment.storagePath),
+        conversation.draftAttachments.map(
+          (attachment) => attachment.storagePath,
+        ),
       );
       for (final message in conversation.messages) {
         paths.addAll(
@@ -1796,10 +1827,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final conversationId = record is Map && record['id'] is String
           ? record['id'] as String
           : null;
-      collectPreservedCacheReferences(
-        record,
-        conversationId: conversationId,
-      );
+      collectPreservedCacheReferences(record, conversationId: conversationId);
     }
     return references;
   }
@@ -1808,8 +1836,19 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     Set<String> referencedPaths,
   ) async {
     if (_pendingDraftAttachmentFileDeletes.isEmpty) return;
+    // A newer in-memory draft can be queued while this snapshot is being
+    // persisted. Keep its files alive even though the older durable snapshot
+    // no longer references them; the newer snapshot will be written next.
+    referencedPaths.addAll(_attachmentPathsInSnapshot(state));
+    final referencedIdentities = <String>{};
+    for (final path in referencedPaths) {
+      referencedIdentities.addAll(AttachmentStorage.deletionIdentities(path));
+    }
     for (final storagePath in _pendingDraftAttachmentFileDeletes.toList()) {
-      if (referencedPaths.contains(storagePath)) continue;
+      if (AttachmentStorage.deletionIdentities(storagePath)
+          .any(referencedIdentities.contains)) {
+        continue;
+      }
       try {
         await AttachmentStorage.deleteFile(storagePath);
         _pendingDraftAttachmentFileDeletes.remove(storagePath);

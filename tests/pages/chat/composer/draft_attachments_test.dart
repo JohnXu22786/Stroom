@@ -38,11 +38,13 @@ class _RetryableWritePreferencesStore extends InMemorySharedPreferencesStore {
   _RetryableWritePreferencesStore(super.data) : super.withData();
 
   bool allowWrites = true;
+  int writeCount = 0;
   Completer<void>? writeStarted;
   Completer<void>? writeGate;
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) async {
+    writeCount++;
     if (!allowWrites) return false;
     final gate = writeGate;
     if (gate != null) {
@@ -374,10 +376,8 @@ void main() {
         AttachmentStorage.saveFileOverrideForTesting = storage.saveFile;
         AttachmentStorage.deleteFileOverrideForTesting = storage.deleteFile;
         final save = storage.blockNextSave();
-        final originalAttachment = readyImage(
-          id: 'edit-att',
-          hash: 'hash-edit',
-        )..conversationId = 'conv-1';
+        final originalAttachment = readyImage(id: 'edit-att', hash: 'hash-edit')
+          ..conversationId = 'conv-1';
 
         Widget editingComposer(String conversationId) => _composer(
               container: container,
@@ -409,7 +409,9 @@ void main() {
         await tester.pump();
 
         expect(
-            find.byKey(const ValueKey('pending_att_edit-att')), findsOneWidget);
+          find.byKey(const ValueKey('pending_att_edit-att')),
+          findsOneWidget,
+        );
         expect(find.text('late-edit.txt'), findsNothing);
         final attachmentFiles = Directory('${tmpRoot.path}/attachments');
         expect(
@@ -447,8 +449,8 @@ void main() {
       final selectedBytes = Completer<Uint8List>();
       late Future<void> pendingImport;
       await tester.runAsync(() async {
-        pendingImport =
-            key.currentState!.addPendingAttachmentAfterPickerForTesting(
+        pendingImport = key.currentState!
+            .addPendingAttachmentAfterPickerForTesting(
           'picked-in-conv-1.txt',
           selectedBytes.future,
         );
@@ -693,7 +695,8 @@ void main() {
       expect(
         stored.draftAttachments[0].base64Data,
         isNull,
-        reason: '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
+        reason:
+            '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
             '否则对话 JSON 会被撑爆（持久化静默失败）',
       );
     });
@@ -784,10 +787,8 @@ void main() {
       var oldFileExistedAtDelete = false;
       var cacheDeletedBeforePreCompressFinished = false;
       var cacheDeletedAfterPreCompressFinished = false;
-      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
-        required conversationId,
-        required hash,
-      }) async {
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
         if (hash == attachment.hash && !preCompressGate.isCompleted) {
           cacheDeletedBeforePreCompressFinished = true;
         } else if (hash == attachment.hash) {
@@ -864,8 +865,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
-          providerEntriesProvider
-              .overrideWith((ref) => ProviderEntriesNotifier()),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
         ],
       );
       await container.read(conversationsProvider.notifier).ready;
@@ -879,11 +881,8 @@ void main() {
       final notifier = container.read(conversationsProvider.notifier);
       notifier.queueDraftAttachmentFileDelete(storagePath);
       final saved = await tester.runAsync(
-        () => notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        ),
+        () =>
+            notifier.saveDraftAndWait('conv-1', '', draftAttachments: const []),
       );
 
       expect(saved, isTrue);
@@ -944,8 +943,9 @@ void main() {
             .cast<Map<String, dynamic>>()
             .map(Conversation.fromMap)
             .single;
-        draftPathsAtDelete[path] =
-            saved.draftAttachments.map((att) => att.storagePath).toList();
+        draftPathsAtDelete[path] = saved.draftAttachments
+            .map((att) => att.storagePath)
+            .toList();
         deletedPaths.add(path);
         await File('${tmpRoot.path}/$path').delete();
         if (path == secondPath) secondDeleteFinished.complete();
@@ -968,6 +968,12 @@ void main() {
       );
       await tester.pump();
       await tester.runAsync(() => store.writeStarted!.future);
+      // Install the second write gate before the second removal can enqueue
+      // and begin its save; otherwise its setValue may pass before the test
+      // observes the signal.
+      store
+        ..writeStarted = secondWriteStarted
+        ..writeGate = secondWriteGate;
       await tester.tap(
         find.descendant(
           of: find.byKey(const ValueKey('pending_att_overlap-second')),
@@ -975,9 +981,6 @@ void main() {
         ),
       );
       await tester.pump();
-      store
-        ..writeStarted = secondWriteStarted
-        ..writeGate = secondWriteGate;
       firstWriteGate.complete();
       await tester.runAsync(() => secondWriteStarted.future);
 
@@ -995,6 +998,144 @@ void main() {
       expect(draftPathsAtDelete[firstPath], [secondPath]);
       expect(draftPathsAtDelete[secondPath], isEmpty);
       expect(deletedPaths, [firstPath, secondPath]);
+      container.dispose();
+    });
+
+    testWidgets('移除保存期间重新加入的附件仍保留其文件', (tester) async {
+      final storagePath = 'attachments/readded-during-save.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([3, 4, 5]);
+      final attachment = Attachment(
+        id: 'readded-during-save',
+        fileName: 'readded.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'readded-during-save-hash',
+        storagePath: storagePath,
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      late _RetryableWritePreferencesStore store;
+      final firstWriteGate = Completer<void>();
+      final composerKey = GlobalKey<ChatComposerWidgetState>();
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore
+            ..allowWrites = true
+            ..writeStarted = Completer<void>()
+            ..writeGate = firstWriteGate;
+        },
+      );
+      var deleteCalled = false;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteCalled = true;
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+      AttachmentStorage.saveFileOverrideForTesting = (fileName, bytes) async {
+        await file.writeAsBytes(bytes);
+        return storagePath;
+      };
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: composerKey,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+
+      // Block the composer's real remove/save path, then re-import the same
+      // bytes/path without allowing its 800ms draft debounce to persist.
+      late Future<void> removal;
+      await tester.runAsync(() async {
+        removal = composerKey.currentState!.removePendingAttachmentForTesting(0);
+        await store.writeStarted!.future;
+      });
+      await tester.runAsync(
+        () => composerKey.currentState!.addPendingAttachmentForTesting(
+          'readded.txt',
+          Uint8List.fromList([3, 4, 5]),
+        ),
+      );
+      expect(
+        container
+            .read(conversationsProvider)
+            .single
+            .draftAttachments
+            .single
+            .storagePath,
+        storagePath,
+      );
+      expect(store.writeCount, 1, reason: 'the re-add is still debounced');
+      firstWriteGate.complete();
+      await tester.runAsync(() => removal);
+
+      expect(file.existsSync(), isTrue);
+      expect(deleteCalled, isFalse);
+      final saved = await tester.runAsync(
+        () => container
+            .read(conversationsProvider.notifier)
+            .persistSnapshotForAttachmentCleanup(),
+      );
+      expect(saved, isTrue);
+      final storedConversations = await tester.runAsync(
+        () async => (await store.getAll())['flutter.conversations']! as String,
+      );
+      final persisted = (jsonDecode(storedConversations!) as List)
+          .cast<Map<String, dynamic>>()
+          .map(Conversation.fromMap)
+          .single;
+      expect(persisted.draftAttachments.single.storagePath, storagePath);
+      expect(file.existsSync(), isTrue);
+      container.dispose();
+    });
+
+    testWidgets('清理编辑路径时保留其附件存储路径别名', (tester) async {
+      const attachmentPath = 'attachments/reused.png';
+      const editedPath = 'temp_edited/reused.png';
+      final file = File('${tmpRoot.path}/$attachmentPath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final attachment = Attachment(
+        id: 'reused-image',
+        fileName: 'reused.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'reused-image-hash',
+        storagePath: attachmentPath,
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+      );
+      var deleteCalled = false;
+      AttachmentStorage.deletionIdentitiesOverrideForTesting = (path) =>
+          path == editedPath ? {editedPath, attachmentPath} : {path};
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteCalled = true;
+        await File('${tmpRoot.path}/$path').delete();
+        return true;
+      };
+
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier.queueDraftAttachmentFileDelete(editedPath);
+      final saved = await tester.runAsync(
+        () => notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [attachment],
+        ),
+      );
+
+      expect(saved, isTrue);
+      expect(deleteCalled, isFalse);
+      expect(file.existsSync(), isTrue);
       container.dispose();
     });
 
@@ -1085,10 +1226,8 @@ void main() {
         },
       );
       final deletedCaches = <String>[];
-      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
-        required conversationId,
-        required hash,
-      }) async {
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
         deletedCaches.add('$conversationId:$hash');
         return true;
       };
@@ -1117,11 +1256,8 @@ void main() {
       store.allowWrites = true;
       final notifier = container.read(conversationsProvider.notifier);
       final retainedSave = await tester.runAsync(
-        () => notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [second],
-        ),
+        () =>
+            notifier.saveDraftAndWait('conv-1', '', draftAttachments: [second]),
       );
       expect(retainedSave, isTrue);
       expect(deletedCaches, isEmpty);
@@ -1160,10 +1296,8 @@ void main() {
       );
       final key = GlobalKey<ChatComposerWidgetState>();
       final deletedCaches = <String>[];
-      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
-        required conversationId,
-        required hash,
-      }) async {
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
         deletedCaches.add('$conversationId:$hash');
         return true;
       };
@@ -1237,10 +1371,8 @@ void main() {
         },
       );
       final deletedCaches = <String>[];
-      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
-        required conversationId,
-        required hash,
-      }) async {
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
         deletedCaches.add('$conversationId:$hash');
         return true;
       };
@@ -1339,9 +1471,7 @@ void main() {
       container.dispose();
     });
 
-    testWidgets('composer 没有 conversation ID 时保留其他已保存对话引用的文件', (
-      tester,
-    ) async {
+    testWidgets('composer 没有 conversation ID 时保留其他已保存对话引用的文件', (tester) async {
       final storagePath = 'attachments/owned-by-conversation.txt';
       final file = File('${tmpRoot.path}/$storagePath')
         ..createSync(recursive: true)

@@ -276,6 +276,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     setState(() {
       _pendingAttachments.add(att);
     });
+    if (widget.editingMessageId == null && widget.conversationId != null) {
+      _conversationsNotifier.updateDraftInMemory(
+        widget.conversationId!,
+        _textController.text,
+        draftAttachments: _draftAttachmentSnapshot(),
+      );
+    }
     // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
     _scheduleDraftSave();
     if (mounted) {
