@@ -36,6 +36,7 @@ class OptionChip extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          useNaturalWidthLayout: true,
           style: TextStyle(
             fontSize: 14,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
