@@ -405,7 +405,7 @@ void main() {
       await _pumpUi(tester);
 
       expect(attemptedPaths, ['attachments/second.txt']);
-      expect(restoredPaths, ['attachments/second.txt']);
+      expect(restoredPaths, ['second.txt']);
       expect(find.text('Delete test'), findsOneWidget);
       expect(find.text('Delete test shared'), findsOneWidget);
       expect(
@@ -667,7 +667,7 @@ void main() {
       );
       expect(container.read(activeConversationIdProvider), 'delete-test');
       expect(attemptedPaths, ['attachments/second.txt']);
-      expect(restoredPaths, ['attachments/second.txt']);
+      expect(restoredPaths, ['second.txt']);
     },
   );
 
