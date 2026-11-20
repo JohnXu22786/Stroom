@@ -312,18 +312,24 @@ class AnkiDroidPage extends ConsumerWidget {
     final bc = TextEditingController();
     final tc = TextEditingController();
     int selectedModelId = 1;
-    String hintText = AppLocalizations.of(context)!.ankiFrontQuestionHint;
 
     // Load models synchronously from the last known value.
     // If not ready, fall back to Basic model id 1.
     final models = ref.read(ankiModelListProvider).value ?? <Notetype>[];
     if (models.isNotEmpty) selectedModelId = models.first.id;
+    bool isCloze = models.any(
+      (model) => model.id == selectedModelId && model.name == 'Cloze',
+    );
+    String hintText = isCloze
+        ? l10n.ankiClozeTextHint('{{c1::答案}}')
+        : l10n.ankiFrontQuestionHint;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           return AlertDialog(
+            scrollable: true,
             title: ConstrainedText(
               AppLocalizations.of(ctx)!.ankiAddCardTitle,
               maxLines: 1,
@@ -339,7 +345,11 @@ class AnkiDroidPage extends ConsumerWidget {
                     isExpanded: true,
                     value: selectedModelId,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(ctx)!.ankiNoteTypeLabel,
+                      label: ConstrainedText(
+                        AppLocalizations.of(ctx)!.ankiNoteTypeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     items: models
@@ -359,9 +369,10 @@ class AnkiDroidPage extends ConsumerWidget {
                       setDialogState(() {
                         selectedModelId = v;
                         final m = models.firstWhere((x) => x.id == v);
-                        hintText = m.name == 'Cloze'
+                        isCloze = m.name == 'Cloze';
+                        hintText = isCloze
                             ? AppLocalizations.of(ctx)!
-                                .ankiClozeTextHint('{{c1::答案}}')
+                                  .ankiClozeTextHint('{{c1::答案}}')
                             : AppLocalizations.of(ctx)!.ankiFrontQuestionHint;
                       });
                     },
@@ -372,7 +383,13 @@ class AnkiDroidPage extends ConsumerWidget {
                   maxLines: 3,
                   autofocus: true,
                   decoration: InputDecoration(
-                    labelText: hintText,
+                    label: isCloze
+                        ? Text(hintText)
+                        : ConstrainedText(
+                            hintText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -381,7 +398,11 @@ class AnkiDroidPage extends ConsumerWidget {
                   controller: bc,
                   maxLines: 3,
                   decoration: InputDecoration(
-                    labelText: AppLocalizations.of(ctx)!.ankiBackExtraLabel,
+                    label: ConstrainedText(
+                      AppLocalizations.of(ctx)!.ankiBackExtraLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -389,7 +410,11 @@ class AnkiDroidPage extends ConsumerWidget {
                 TextField(
                   controller: tc,
                   decoration: InputDecoration(
-                    labelText: AppLocalizations.of(ctx)!.ankiTagsLabel,
+                    label: ConstrainedText(
+                      AppLocalizations.of(ctx)!.ankiTagsLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     border: OutlineInputBorder(),
                     hintText: AppLocalizations.of(ctx)!.ankiTagsHint,
                   ),
@@ -408,7 +433,9 @@ class AnkiDroidPage extends ConsumerWidget {
               FilledButton(
                 onPressed: () {
                   if (fc.text.trim().isNotEmpty && bc.text.trim().isNotEmpty) {
-                    ref.read(ankiActionsProvider).addCard(
+                    ref
+                        .read(ankiActionsProvider)
+                        .addCard(
                           did,
                           fc.text.trim(),
                           bc.text.trim(),
