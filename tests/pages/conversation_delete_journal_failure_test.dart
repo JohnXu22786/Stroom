@@ -186,9 +186,6 @@ Future<void> _awaitSignal(WidgetTester tester, Completer<void> signal) async {
 
 Future<void> _awaitFinder(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 50 && finder.evaluate().isEmpty; attempt++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 20)),
-    );
     await tester.pump(const Duration(milliseconds: 100));
   }
   expect(finder, findsOneWidget, reason: 'expected UI feedback was not shown');
@@ -391,21 +388,30 @@ void main() {
       };
       await tester.pumpWidget(_app(home: const ConversationsPage()));
       await _pumpUi(tester);
-      final rollback = _RollbackObserver(
-        ProviderScope.containerOf(
-          tester.element(find.byType(ConversationsPage)),
-          listen: false,
-        ),
-      );
-      addTearDown(rollback.close);
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await _pumpUi(tester);
-      await tester.tap(find.text('Delete').last);
-      await _pumpUi(tester);
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ConversationsPage)),
         listen: false,
       );
+      var sawConversationRemoval = false;
+      final conversationRestored = Completer<void>();
+      final restorationSubscription = container.listen(
+        conversationsProvider,
+        (_, conversations) {
+          final isPresent = conversations
+              .any((conversation) => conversation.id == 'delete-test');
+          if (!isPresent) {
+            sawConversationRemoval = true;
+          } else if (sawConversationRemoval &&
+              !conversationRestored.isCompleted) {
+            conversationRestored.complete();
+          }
+        },
+      );
+      addTearDown(restorationSubscription.close);
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await _pumpUi(tester);
+      await tester.tap(find.text('Delete').last);
+      await _pumpUi(tester);
       container.read(activeConversationIdProvider.notifier).state =
           'delete-test';
       await _pumpUi(tester);
@@ -419,7 +425,7 @@ void main() {
       ];
       allowRead.complete();
       await _awaitSignal(tester, cleanupComplete);
-      await _awaitSignal(tester, rollback.restored);
+      await _awaitSignal(tester, conversationRestored);
       await _pumpUi(tester);
 
       expect(attemptedPaths, ['attachments/second.txt']);
