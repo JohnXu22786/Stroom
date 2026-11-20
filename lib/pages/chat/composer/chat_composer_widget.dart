@@ -138,6 +138,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
 
 class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     with WidgetsBindingObserver {
+  late final ConversationsNotifier _conversationsNotifier;
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   final List<Attachment> _pendingAttachments = [];
@@ -270,6 +271,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @override
   void initState() {
     super.initState();
+    _conversationsNotifier = ref.read(conversationsProvider.notifier);
 
     if (widget.editingMessageId != null) {
       _editSessionConversationId = widget.conversationId ??

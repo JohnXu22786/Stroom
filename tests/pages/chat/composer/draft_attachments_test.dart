@@ -37,7 +37,7 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 class _RetryableWritePreferencesStore extends InMemorySharedPreferencesStore {
   _RetryableWritePreferencesStore(super.data) : super.withData();
 
-  bool allowWrites = false;
+  bool allowWrites = true;
   Completer<void>? writeStarted;
   Completer<void>? writeGate;
 
@@ -116,6 +116,7 @@ ProviderContainer _buildContainer() {
 
 Future<ProviderContainer> _buildPersistedContainer({
   List<Attachment> draftAttachments = const [],
+  void Function(_RetryableWritePreferencesStore store)? configureStore,
 }) async {
   final conversation = Conversation(
     id: 'conv-1',
@@ -123,9 +124,15 @@ Future<ProviderContainer> _buildPersistedContainer({
     messages: [],
     draftAttachments: draftAttachments,
   );
-  SharedPreferences.setMockInitialValues({
-    'conversations': jsonEncode([conversation.toMap()]),
-  });
+  final conversationJson = jsonEncode([conversation.toMap()]);
+  SharedPreferences.setMockInitialValues({'conversations': conversationJson});
+  _RetryableWritePreferencesStore? preferencesStore;
+  if (configureStore != null) {
+    preferencesStore = _RetryableWritePreferencesStore({
+      'flutter.conversations': conversationJson,
+    });
+    SharedPreferencesStorePlatform.instance = preferencesStore;
+  }
   final container = ProviderContainer(
     overrides: [
       activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
@@ -133,6 +140,7 @@ Future<ProviderContainer> _buildPersistedContainer({
     ],
   );
   await container.read(conversationsProvider.notifier).ready;
+  if (preferencesStore != null) configureStore!(preferencesStore);
   return container;
 }
 
@@ -795,7 +803,7 @@ void main() {
       );
       await tester.pump();
       final editedBytes = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAP//wMAAAgBAQDJ/pLvAAAAAElFTkSuQmCC',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
       );
       await tester.runAsync(
         () => key.currentState!
@@ -844,10 +852,12 @@ void main() {
 
       final notifier = container.read(conversationsProvider.notifier);
       notifier.queueDraftAttachmentFileDelete(storagePath);
-      final saved = await notifier.saveDraftAndWait(
-        'conv-1',
-        '',
-        draftAttachments: const [],
+      final saved = await tester.runAsync(
+        () => notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        ),
       );
 
       expect(saved, isTrue);
@@ -885,16 +895,16 @@ void main() {
         fileSize: 1,
         conversationId: 'conv-1',
       );
+      late _RetryableWritePreferencesStore store;
       final container = await _buildPersistedContainer(
         draftAttachments: [first, second],
+        configureStore: (preferencesStore) {
+          store = preferencesStore
+            ..allowWrites = true
+            ..writeStarted = Completer<void>()
+            ..writeGate = Completer<void>();
+        },
       );
-      final store = _RetryableWritePreferencesStore(
-        await SharedPreferencesStorePlatform.instance.getAll(),
-      )
-        ..allowWrites = true
-        ..writeStarted = Completer<void>()
-        ..writeGate = Completer<void>();
-      SharedPreferencesStorePlatform.instance = store;
       final deletedPaths = <String>[];
       final draftPathsAtDelete = <String, List<String>>{};
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
@@ -962,13 +972,13 @@ void main() {
         fileSize: 3,
         conversationId: 'conv-1',
       );
+      late _RetryableWritePreferencesStore store;
       final container = await _buildPersistedContainer(
         draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore..allowWrites = false;
+        },
       );
-      final store = _RetryableWritePreferencesStore(
-        await SharedPreferencesStorePlatform.instance.getAll(),
-      );
-      SharedPreferencesStorePlatform.instance = store;
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         await File('${tmpRoot.path}/$path').delete();
         return true;

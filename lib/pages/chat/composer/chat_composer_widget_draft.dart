@@ -70,11 +70,11 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       return;
     }
     final textToSave = _textController.text;
-    ref.read(conversationsProvider.notifier).saveDraft(
-          convId,
-          textToSave,
-          draftAttachments: _draftAttachmentSnapshot(),
-        );
+    _conversationsNotifier.saveDraft(
+      convId,
+      textToSave,
+      draftAttachments: _draftAttachmentSnapshot(),
+    );
     _lastSavedDraft = textToSave;
     _lastSavedDraftAttSignature = _draftAttSignature();
   }
@@ -90,12 +90,11 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     final textToSave = _textController.text;
     final draftAttachments = _draftAttachmentSnapshot();
     final attachmentSignature = _draftAttSignature(draftAttachments);
-    final saved =
-        await ref.read(conversationsProvider.notifier).saveDraftAndWait(
-              convId,
-              textToSave,
-              draftAttachments: draftAttachments,
-            );
+    final saved = await _conversationsNotifier.saveDraftAndWait(
+      convId,
+      textToSave,
+      draftAttachments: draftAttachments,
+    );
     if (saved) {
       _lastSavedDraft = textToSave;
       _lastSavedDraftAttSignature = attachmentSignature;
@@ -109,9 +108,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       await _deletePendingAttachmentFile(storagePath);
       return;
     }
-    ref
-        .read(conversationsProvider.notifier)
-        .queueDraftAttachmentFileDelete(storagePath);
+    _conversationsNotifier.queueDraftAttachmentFileDelete(storagePath);
   }
 
   /// 附件变化（添加/移除/编辑）后调度一次草稿保存（防抖，与文字

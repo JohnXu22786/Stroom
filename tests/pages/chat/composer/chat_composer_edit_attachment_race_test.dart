@@ -88,9 +88,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          conversationsProvider.overrideWith(
-            (ref) => ConversationsNotifier(ref),
-          ),
           activeConversationIdProvider.overrideWith((ref) => conversationId),
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(),
@@ -126,6 +123,10 @@ void main() {
       ),
     );
     await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(composerKey)),
+    );
+    await container.read(conversationsProvider.notifier).ready;
   }
 
   Future<void> mountComposer(
@@ -183,10 +184,9 @@ void main() {
       };
 
       late Future<void> edit;
-      await _runInTestZone(() async {
+      await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-        await tester.pump();
         await cleanupStarted.future;
       });
       await tester.tap(
@@ -197,7 +197,7 @@ void main() {
       );
       await tester.pump();
       finishCleanup.complete();
-      await _runInTestZone(() => edit);
+      await tester.runAsync(() => edit);
 
       expect(
         storageFiles.keys,
@@ -232,16 +232,15 @@ void main() {
       };
 
       late Future<void> edit;
-      await _runInTestZone(() async {
+      await tester.runAsync(() async {
         edit = composerKey.currentState!
             .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-        await tester.pump();
         await cleanupStarted.future;
       });
       composerKey.currentState!.reorderPendingAttachmentsForTesting(0, 1);
       await tester.pump();
       finishCleanup.complete();
-      await _runInTestZone(() => edit);
+      await tester.runAsync(() => edit);
 
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
