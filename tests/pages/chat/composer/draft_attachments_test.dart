@@ -275,7 +275,7 @@ void main() {
             'old-chat.txt',
             Uint8List.fromList([1, 2, 3]),
           );
-          await firstSave.started.future;
+          await firstSave.started.future.timeout(const Duration(seconds: 15));
         });
 
         await tester.pumpWidget(
@@ -326,7 +326,7 @@ void main() {
             'late-edit.txt',
             Uint8List.fromList([4, 5, 6]),
           );
-          await editSave.started.future;
+          await editSave.started.future.timeout(const Duration(seconds: 15));
         });
 
         final originalEditAttachment = readyImage(
@@ -404,7 +404,7 @@ void main() {
             'late-edit.txt',
             Uint8List.fromList([4, 5, 6]),
           );
-          await save.started.future;
+          await save.started.future.timeout(const Duration(seconds: 15));
         });
 
         await tester.pumpWidget(editingComposer('conv-2'));
@@ -476,7 +476,7 @@ void main() {
 
       await tester.runAsync(() async {
         selectedBytes.complete(Uint8List.fromList([7, 8, 9]));
-        await save.started.future;
+        await save.started.future.timeout(const Duration(seconds: 15));
       });
 
       save.release.complete();
@@ -1000,7 +1000,9 @@ void main() {
       expect(draftPathsAtDelete[firstPath], [secondPath]);
 
       secondWriteGate.complete();
-      await tester.runAsync(() => secondDeleteFinished.future);
+      await tester.runAsync(
+        () => secondDeleteFinished.future.timeout(const Duration(seconds: 15)),
+      );
 
       expect(firstFile.existsSync(), isFalse);
       expect(secondFile.existsSync(), isFalse);
@@ -1064,7 +1066,7 @@ void main() {
       await tester.runAsync(() async {
         removal =
             composerKey.currentState!.removePendingAttachmentForTesting(0);
-        await store.writeStarted!.future;
+        await store.writeStarted!.future.timeout(const Duration(seconds: 15));
       });
       await tester.runAsync(
         () => composerKey.currentState!.addPendingAttachmentForTesting(
@@ -1329,7 +1331,9 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(() => store.writeStarted!.future);
+      await tester.runAsync(
+        () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
+      );
 
       await tester.runAsync(
         () => key.currentState!.addPendingAttachmentForTesting(
@@ -1530,7 +1534,9 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(() => store.writeStarted!.future);
+      await tester.runAsync(
+        () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
+      );
       writeGate.complete();
       final persisted = await tester.runAsync(
         () => container
