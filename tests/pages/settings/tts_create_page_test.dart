@@ -65,9 +65,9 @@ Widget _buildTestApp({
       builder: textScaler == null
           ? null
           : (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-              child: child ?? const SizedBox.shrink(),
-            ),
+                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                child: child ?? const SizedBox.shrink(),
+              ),
       home: home,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
