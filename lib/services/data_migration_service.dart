@@ -428,9 +428,11 @@ class DataMigrationService {
             '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}');
         await AppLogService.error('DataMigrationService',
             '迁移后数据校验失败，恢复迁移前快照并冻结', check.corruptions.first.message);
+        var preMigrationDataSafe = false;
         try {
-          final restored = await DataSafetyManager.restoreLatestSnapshot();
-          if (!restored) {
+          preMigrationDataSafe =
+              await DataSafetyManager.restoreLatestSnapshot();
+          if (!preMigrationDataSafe) {
             await AppLogService.error(
                 'DataMigrationService', '恢复迁移前快照失败（无可用快照）');
           }
@@ -443,6 +445,7 @@ class DataMigrationService {
             return v > max ? v : max;
           }),
           description: detail,
+          preMigrationDataSafe: preMigrationDataSafe,
         );
         return const MigrationResult(needsMigration: false);
       }

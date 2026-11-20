@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/startup_preferences.dart';
+import '../startup/startup_update_recovery.dart';
 import '../utils/app_version.dart';
 import 'locale_provider.dart';
 import 'update_provider_shared.dart';
@@ -197,6 +198,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
   final AppLocalizations Function() _localizations;
   CancelToken? _downloadCancelToken;
+  String? _downloadTargetVersion;
+  bool _recordStartupAttempt = true;
 
   UpdateNotifier({Dio? dio, AppLocalizations Function()? localizations})
       : _dio = dio ??
@@ -253,22 +256,47 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   static String? getPlatformDownloadUrl(List<dynamic> assets) {
     if (kIsWeb) return null;
 
-    String platformKey;
+    final platformKey = currentPlatformKey;
+    return platformKey == null
+        ? null
+        : findAssetDownloadUrl(assets, platformKey);
+  }
+
+  static String? get currentPlatformKey {
+    if (kIsWeb) return null;
     if (defaultTargetPlatform == TargetPlatform.android) {
-      platformKey = 'android';
-    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-      platformKey = 'ios';
-    } else if (Platform.isWindows) {
-      platformKey = 'windows';
-    } else if (Platform.isMacOS) {
-      platformKey = 'macos';
-    } else if (Platform.isLinux) {
-      platformKey = 'linux';
-    } else {
+      return 'android';
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'ios';
+    if (Platform.isWindows) return 'windows';
+    if (Platform.isMacOS) return 'macos';
+    if (Platform.isLinux) return 'linux';
+    return null;
+  }
+
+  /// Finds the exact recorded source release without changing normal update
+  /// selection or its cached pending-update state.
+  Future<StartupRollbackCandidate?> findStartupRollbackCandidate(
+      String sourceVersion) async {
+    final platformKey = currentPlatformKey;
+    if (platformKey == null ||
+        !StartupUpdateAttempt.isExactVersion(sourceVersion)) {
       return null;
     }
-
-    return findAssetDownloadUrl(assets, platformKey);
+    try {
+      final response = await _dio.get(_kAllReleasesUrl);
+      final releases = response.data;
+      if (releases is! List) return null;
+      return StartupRollbackCandidate.fromReleases(
+        sourceVersion: sourceVersion,
+        platformKey: platformKey,
+        releases: releases,
+      );
+    } catch (error) {
+      debugPrint(
+          '[UpdateNotifier] Startup rollback release lookup failed: $error');
+      return null;
+    }
   }
 
   /// Attempts to load the persisted [acceptPreRelease] preference
@@ -741,8 +769,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   ///
   /// The [downloadDir] parameter is optional and used primarily for testing
   /// to avoid dependency on platform path providers.
-  Future<void> downloadUpdate({String? downloadDir}) async {
-    final url = state.downloadUrl;
+  Future<void> downloadUpdate({
+    String? downloadDir,
+    String? downloadUrlOverride,
+    String? targetVersion,
+    bool recordStartupAttempt = true,
+  }) async {
+    final url = downloadUrlOverride ?? state.downloadUrl;
     if (url == null || url.isEmpty) {
       state = state.copyWith(
         isDownloading: false,
@@ -753,6 +786,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     // 防止重复下载
     if (state.isDownloading) return;
+    _downloadTargetVersion = targetVersion ?? state.latestVersion;
+    _recordStartupAttempt = recordStartupAttempt;
 
     state = state.copyWith(
       isDownloading: true,
@@ -940,6 +975,19 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     // Clear previous error before attempting installation
     state = state.copyWith(clearDownloadError: true);
+
+    final targetVersion = _downloadTargetVersion ?? state.latestVersion;
+    if (_recordStartupAttempt &&
+        (targetVersion == null ||
+            !await StartupUpdateAttempt.record(
+              sourceVersion: appVersion,
+              targetVersion: targetVersion,
+            ))) {
+      state = state.copyWith(
+        downloadError: _localizations().startupSafetyUpdateAttemptUnavailable,
+      );
+      return;
+    }
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {

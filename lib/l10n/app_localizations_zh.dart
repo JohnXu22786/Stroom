@@ -9849,6 +9849,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get startupSafetyUpdateButton => '更新应用';
 
   @override
+  String get startupSafetyRollbackButton => '恢复到之前的版本';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '没有找到记录版本的直接安装包。请先导出数据，再手动安装该版本。';
+
+  @override
+  String get startupSafetyRollbackRecommended => '更新失败前记录的推荐版本';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => '版本说明';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => '没有可用的版本说明。';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => '确认恢复版本';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return '即将下载并打开版本 $version。请先导出数据。操作系统可能会拒绝安装较旧版本，Stroom 不会绕过安装器限制。';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '继续';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '无法记录本次更新尝试，因此没有启动安装程序。请检查存储权限后重试。';
+
+  @override
   String get startupSafetyCheckingUpdates => '正在检查更新...';
 
   @override
@@ -21242,6 +21273,37 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get startupSafetyUpdateButton => '更新应用';
+
+  @override
+  String get startupSafetyRollbackButton => '恢复到之前的版本';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '没有找到记录版本的直接安装包。请先导出数据，再手动安装该版本。';
+
+  @override
+  String get startupSafetyRollbackRecommended => '更新失败前记录的推荐版本';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => '版本说明';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => '没有可用的版本说明。';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => '确认恢复版本';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return '即将下载并打开版本 $version。请先导出数据。操作系统可能会拒绝安装较旧版本，Stroom 不会绕过安装器限制。';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '继续';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '无法记录本次更新尝试，因此没有启动安装程序。请检查存储权限后重试。';
 
   @override
   String get startupSafetyCheckingUpdates => '正在检查更新...';

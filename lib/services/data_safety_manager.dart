@@ -53,6 +53,10 @@ class DataSafetyStatus {
   /// 失败迁移的目标格式版本（冻结记录，仅展示用）。
   final int? targetFormatVersion;
 
+  /// Whether the pre-migration snapshot was successfully restored after the
+  /// migration failure. Null in legacy markers means safety is unproven.
+  final bool? preMigrationDataSafe;
+
   final DateTime? updatedAt;
 
   const DataSafetyStatus({
@@ -60,6 +64,7 @@ class DataSafetyStatus {
     this.frozenByVersion,
     this.failedMigration,
     this.targetFormatVersion,
+    this.preMigrationDataSafe,
     this.updatedAt,
   });
 
@@ -76,6 +81,8 @@ class DataSafetyStatus {
         if (failedMigration != null) 'failedMigration': failedMigration,
         if (targetFormatVersion != null)
           'targetFormatVersion': targetFormatVersion,
+        if (preMigrationDataSafe != null)
+          'preMigrationDataSafe': preMigrationDataSafe,
         'updatedAt': (updatedAt ?? DateTime.now()).toIso8601String(),
       };
 
@@ -93,6 +100,7 @@ class DataSafetyStatus {
     final frozenByVersion = json['frozenByVersion'];
     final failedMigration = json['failedMigration'];
     final targetFormatVersion = json['targetFormatVersion'];
+    final preMigrationDataSafe = json['preMigrationDataSafe'];
     final updatedAtValue = json['updatedAt'];
     if (frozenByVersion != null && frozenByVersion is! String ||
         failedMigration != null && failedMigration is! String ||
@@ -100,6 +108,7 @@ class DataSafetyStatus {
             (targetFormatVersion is! num ||
                 !targetFormatVersion.isFinite ||
                 targetFormatVersion != targetFormatVersion.toInt()) ||
+        preMigrationDataSafe != null && preMigrationDataSafe is! bool ||
         updatedAtValue != null && updatedAtValue is! String) {
       throw const FormatException('数据安全状态字段格式无效');
     }
@@ -123,6 +132,7 @@ class DataSafetyStatus {
       frozenByVersion: frozenByVersion as String?,
       failedMigration: failedMigration as String?,
       targetFormatVersion: (targetFormatVersion as num?)?.toInt(),
+      preMigrationDataSafe: preMigrationDataSafe as bool?,
       updatedAt: updatedAt,
     );
   }
@@ -215,6 +225,7 @@ class DataSafetyManager {
   static Future<void> freezeForMigrationFailure({
     required int targetFormatVersion,
     required String description,
+    required bool preMigrationDataSafe,
   }) async {
     final current = await loadStatus();
     if (current.isUnreadable) {
@@ -226,6 +237,7 @@ class DataSafetyManager {
       frozenByVersion: appVersion,
       failedMigration: description,
       targetFormatVersion: targetFormatVersion,
+      preMigrationDataSafe: preMigrationDataSafe,
       updatedAt: DateTime.now(),
     ));
     await AppLogService.error(

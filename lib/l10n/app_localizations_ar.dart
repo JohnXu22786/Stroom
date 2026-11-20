@@ -10488,6 +10488,38 @@ class AppLocalizationsAr extends AppLocalizations {
   String get startupSafetyUpdateButton => 'تحديث التطبيق';
 
   @override
+  String get startupSafetyRollbackButton => 'العودة إلى الإصدار السابق';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'لم يتم العثور على مُثبّت مباشر للإصدار المسجّل. صدّر بياناتك ثم ثبّت ذلك الإصدار يدويًا.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'الإصدار الموصى به والمسجّل قبل فشل التحديث';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'ملاحظات الإصدار';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => 'لا تتوفر ملاحظات للإصدار.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => 'تأكيد استعادة الإصدار';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'سيتم تنزيل الإصدار $version وفتحه. صدّر بياناتك أولًا. قد يرفض نظام التشغيل تثبيت إصدار أقدم؛ لن يتجاوز Stroom قيود المُثبّت.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'متابعة';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'تعذّر تسجيل محاولة التحديث، لذلك لم يتم تشغيل المُثبّت. تحقّق من أذونات التخزين ثم حاول مرة أخرى.';
+
+  @override
   String get startupSafetyCheckingUpdates => 'جارٍ التحقق من وجود تحديثات...';
 
   @override
@@ -22631,6 +22663,38 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get startupSafetyUpdateButton => 'تحديث التطبيق';
+
+  @override
+  String get startupSafetyRollbackButton => 'العودة إلى الإصدار السابق';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'لم يتم العثور على مُثبّت مباشر للإصدار المسجّل. صدّر بياناتك ثم ثبّت ذلك الإصدار يدويًا.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'الإصدار الموصى به والمسجّل قبل فشل التحديث';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'ملاحظات الإصدار';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => 'لا تتوفر ملاحظات للإصدار.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => 'تأكيد استعادة الإصدار';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'سيتم تنزيل الإصدار $version وفتحه. صدّر بياناتك أولًا. قد يرفض نظام التشغيل تثبيت إصدار أقدم؛ لن يتجاوز Stroom قيود المُثبّت.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'متابعة';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'تعذّر تسجيل محاولة التحديث، لذلك لم يتم تشغيل المُثبّت. تحقّق من أذونات التخزين ثم حاول مرة أخرى.';
 
   @override
   String get startupSafetyCheckingUpdates => 'جارٍ التحقق من وجود تحديثات...';

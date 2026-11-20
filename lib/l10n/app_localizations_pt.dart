@@ -10522,6 +10522,40 @@ class AppLocalizationsPt extends AppLocalizations {
   String get startupSafetyUpdateButton => 'Atualizar app';
 
   @override
+  String get startupSafetyRollbackButton => 'Voltar à versão anterior';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'Não foi encontrado um instalador direto para a versão registrada. Exporte seus dados e instale essa versão manualmente.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Versão recomendada registrada antes da falha da atualização';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Notas da versão';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'Não há notas da versão disponíveis.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle =>
+      'Confirmar recuperação da versão';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'A versão $version será baixada e aberta. Exporte seus dados primeiro. O sistema pode recusar uma versão mais antiga; Stroom não contornará as restrições do instalador.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Continuar';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'Não foi possível registrar esta tentativa de atualização, então o instalador não foi iniciado. Verifique as permissões de armazenamento e tente novamente.';
+
+  @override
   String get startupSafetyCheckingUpdates => 'Verificando atualizações...';
 
   @override
@@ -22715,6 +22749,40 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get startupSafetyUpdateButton => 'Atualizar app';
+
+  @override
+  String get startupSafetyRollbackButton => 'Voltar à versão anterior';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'Não foi encontrado um instalador direto para a versão registrada. Exporte seus dados e instale essa versão manualmente.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Versão recomendada registrada antes da falha da atualização';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Notas da versão';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'Não há notas da versão disponíveis.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle =>
+      'Confirmar recuperação da versão';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'A versão $version será baixada e aberta. Exporte seus dados primeiro. O sistema pode recusar uma versão mais antiga; Stroom não contornará as restrições do instalador.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Continuar';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'Não foi possível registrar esta tentativa de atualização, então o instalador não foi iniciado. Verifique as permissões de armazenamento e tente novamente.';
 
   @override
   String get startupSafetyCheckingUpdates => 'Verificando atualizações...';

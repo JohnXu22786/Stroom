@@ -5968,6 +5968,22 @@
   "startupSafetyExportButton": "تصدير البيانات",
   "startupSafetyExitButton": "إنهاء التطبيق",
   "startupSafetyUpdateButton": "تحديث التطبيق",
+  "startupSafetyRollbackButton": "العودة إلى الإصدار السابق",
+  "startupSafetyRollbackNoCandidate": "لم يتم العثور على مُثبّت مباشر للإصدار المسجّل. صدّر بياناتك ثم ثبّت ذلك الإصدار يدويًا.",
+  "startupSafetyRollbackRecommended": "الإصدار الموصى به والمسجّل قبل فشل التحديث",
+  "startupSafetyRollbackReleaseNotes": "ملاحظات الإصدار",
+  "startupSafetyRollbackNoReleaseNotes": "لا تتوفر ملاحظات للإصدار.",
+  "startupSafetyRollbackConfirmTitle": "تأكيد استعادة الإصدار",
+  "startupSafetyRollbackConfirmMessage": "سيتم تنزيل الإصدار {version} وفتحه. صدّر بياناتك أولًا. قد يرفض نظام التشغيل تثبيت إصدار أقدم؛ لن يتجاوز Stroom قيود المُثبّت.",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "متابعة",
+  "startupSafetyUpdateAttemptUnavailable": "تعذّر تسجيل محاولة التحديث، لذلك لم يتم تشغيل المُثبّت. تحقّق من أذونات التخزين ثم حاول مرة أخرى.",
   "startupSafetyCheckingUpdates": "جارٍ التحقق من وجود تحديثات...",
   "startupSafetyUpToDate": "لديك أحدث إصدار",
   "startupSafetyNewerDataVersion": "أُنشئت هذه البيانات بإصدار أحدث من التطبيق ({version}).\n\nلا يمكن لإصدار التطبيق هذا قراءة البيانات بأمان. ثبّت أحدث إصدار للمتابعة. لم يتم تغيير بياناتك.",

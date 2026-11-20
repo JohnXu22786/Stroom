@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/startup/startup_update_recovery.dart';
 
 class _ApplicationCachePathProvider extends PathProviderPlatform {
   _ApplicationCachePathProvider(this.path);
@@ -1088,6 +1089,40 @@ void main() {
       expect(notifier.state.downloadUrl, isNot(contains('releases/tag')));
     });
 
+    test(
+        'startup rollback lookup isolates exact source release from update state',
+        () async {
+      final assets = _allPlatformAssets('v0.2.12-hotfix.1');
+      final dio = _createMockDio(_githubRelease(
+        'v0.2.12-hotfix.1',
+        body: 'Recorded source release',
+        assets: assets,
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      final originalState = notifier.state;
+
+      final candidate =
+          await notifier.findStartupRollbackCandidate('0.2.12-hotfix.1');
+
+      expect(candidate?.version, '0.2.12-hotfix.1');
+      expect(candidate?.releaseNotes, 'Recorded source release');
+      expect(candidate?.downloadUrl, contains('/releases/download/'));
+      expect(identical(notifier.state, originalState), isTrue);
+    });
+
+    test('startup rollback lookup never falls back to a release page',
+        () async {
+      final dio = _createMockDio(_githubRelease('v0.2.12'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      expect(
+        await notifier.findStartupRollbackCandidate('0.2.12'),
+        isNull,
+      );
+      expect(notifier.state.updateAvailable, isFalse);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
     test('downloadUrl falls back to html_url when no assets provided',
         () async {
       SharedPreferences.setMockInitialValues({});
@@ -1375,6 +1410,93 @@ void main() {
       expect(notifier.state.downloadedFilePath, isNotNull);
       // downloadError might be set due to auto-install failure in test environment
       // but that is acceptable - the key is download completed
+    });
+
+    test('persists exact update attempt before installer flow starts',
+        () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        latestVersion: '0.2.14-rc.2+build.4',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14-rc.2/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      final attempt = await StartupUpdateAttempt.load();
+      expect(attempt?.targetVersion, '0.2.14-rc.2+build.4');
+      expect(attempt?.sourceVersion, isNotEmpty);
+    });
+
+    test('rollback installer attempt preserves the failed-update evidence',
+        () async {
+      await StartupUpdateAttempt.record(
+        sourceVersion: '0.2.12',
+        targetVersion: '0.2.13',
+      );
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.downloadUpdate(
+        downloadDir: tempDir,
+        downloadUrlOverride:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.12/update.zip',
+        targetVersion: '0.2.12',
+        recordStartupAttempt: false,
+      );
+
+      final attempt = await StartupUpdateAttempt.load();
+      expect(attempt?.sourceVersion, '0.2.12');
+      expect(attempt?.targetVersion, '0.2.13');
+    });
+
+    test('does not start installer when the exact attempt cannot be recorded',
+        () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        latestVersion: 'dev',
+        downloadUrl: 'https://example.com/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      expect(notifier.state.downloadComplete, isTrue);
+      expect(
+        notifier.state.downloadError,
+        'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.',
+      );
     });
 
     test('downloadUpdate uses the app cache instead of shared temp storage',
@@ -1700,7 +1822,10 @@ void main() {
           dio: Dio(BaseOptions()),
           localizations: () =>
               appLocalizationsForLocale(const Locale('en', 'US')),
-        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
         await english.installDownloadedFile();
         expect(
           english.state.downloadError,
@@ -1711,7 +1836,10 @@ void main() {
           dio: Dio(BaseOptions()),
           localizations: () =>
               appLocalizationsForLocale(const Locale('zh', 'CN')),
-        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
         await chinese.installDownloadedFile();
         expect(chinese.state.downloadError, '安装失败，请手动打开 APK 安装');
       } finally {
@@ -1777,7 +1905,10 @@ void main() {
             final notifier = UpdateNotifier(
               dio: Dio(BaseOptions()),
               localizations: () => appLocalizationsForLocale(locale),
-            )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+            )..state = UpdateState(
+                latestVersion: '0.2.14',
+                downloadedFilePath: '$tempDir/update.apk',
+              );
 
             await notifier.installDownloadedFile();
 

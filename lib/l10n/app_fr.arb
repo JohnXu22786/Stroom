@@ -5968,6 +5968,22 @@
   "startupSafetyExportButton": "Exporter les données",
   "startupSafetyExitButton": "Quitter l’application",
   "startupSafetyUpdateButton": "Mettre à jour l’application",
+  "startupSafetyRollbackButton": "Revenir à la version précédente",
+  "startupSafetyRollbackNoCandidate": "Aucun programme d’installation direct n’a été trouvé pour la version enregistrée. Exportez vos données puis installez cette version manuellement.",
+  "startupSafetyRollbackRecommended": "Version recommandée enregistrée avant l’échec de la mise à jour",
+  "startupSafetyRollbackReleaseNotes": "Notes de version",
+  "startupSafetyRollbackNoReleaseNotes": "Aucune note de version disponible.",
+  "startupSafetyRollbackConfirmTitle": "Confirmer la récupération de version",
+  "startupSafetyRollbackConfirmMessage": "La version {version} va être téléchargée puis ouverte. Exportez d’abord vos données. Le système peut refuser une version plus ancienne ; Stroom ne contournera pas les restrictions de l’installateur.",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "Continuer",
+  "startupSafetyUpdateAttemptUnavailable": "La tentative de mise à jour n’a pas pu être enregistrée ; le programme d’installation n’a donc pas été lancé. Vérifiez les autorisations de stockage puis réessayez.",
   "startupSafetyCheckingUpdates": "Recherche de mises à jour…",
   "startupSafetyUpToDate": "Votre application est à jour",
   "startupSafetyNewerDataVersion": "Ces données ont été créées avec une version plus récente de l’application ({version}).\n\nCette version de l’application ne peut pas les lire sans risque. Installez la dernière version pour continuer. Vos données n’ont pas été modifiées.",
