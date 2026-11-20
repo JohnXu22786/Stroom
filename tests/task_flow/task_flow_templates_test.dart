@@ -175,8 +175,7 @@ void main() {
     );
     final updatedFinder = find.byWidgetPredicate(
       (widget) =>
-          widget is ConstrainedText &&
-          widget.data == strings.commonHoursAgo(5),
+          widget is ConstrainedText && widget.data == strings.commonHoursAgo(5),
     );
     final count = tester.widget<ConstrainedText>(countFinder);
     final updated = tester.widget<ConstrainedText>(updatedFinder);

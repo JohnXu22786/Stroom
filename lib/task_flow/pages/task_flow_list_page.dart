@@ -290,13 +290,12 @@ class TaskFlowListPage extends ConsumerWidget {
                                 );
                               }
 
-                              final gap =
-                                  constraints.maxWidth >= 8 ? 8.0 : 0.0;
+                              final gap = constraints.maxWidth >= 8 ? 8.0 : 0.0;
                               final labelWidth = constraints.maxWidth - gap;
-                              final updatedSlotWidth = updatedWidth <=
-                                      labelWidth / 2
-                                  ? updatedWidth
-                                  : labelWidth / 2;
+                              final updatedSlotWidth =
+                                  updatedWidth <= labelWidth / 2
+                                      ? updatedWidth
+                                      : labelWidth / 2;
                               return Row(
                                 children: [
                                   Expanded(child: countLabel),
