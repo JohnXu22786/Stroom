@@ -323,6 +323,134 @@ void main() {
     });
   });
 
+  group('TTSCreatePage - bounded speed and volume sliders', () {
+    ProviderEntry sliderEntry({double speedMax = 2, double volumeMax = 2}) =>
+        ProviderEntry(
+          id: 'slider_tts',
+          type: 'tts',
+          name: 'TTS供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'OpenAI',
+              host: 'https://api.openai.com/v1',
+              key: 'test-key',
+              models: [
+                ModelConfig(
+                  name: 'Slider model',
+                  modelId: 'slider-model',
+                  hasSpeed: true,
+                  hasVolume: true,
+                  speedMax: speedMax,
+                  volumeMax: volumeMax,
+                ),
+              ],
+            ),
+          ],
+        );
+
+    Future<void> pumpSliderPage(
+      WidgetTester tester, {
+      required ProviderEntry entry,
+      required Locale locale,
+      required double textScale,
+      ThemeData? theme,
+    }) async {
+      const size = Size(320, 640);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [entry],
+          locale: locale,
+          theme: theme,
+          textScaler: TextScaler.linear(textScale),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'German slider labels fit at 320px and both sliders remain operable',
+      (tester) async {
+        await pumpSliderPage(
+          tester,
+          entry: sliderEntry(),
+          locale: const Locale('de', 'DE'),
+          textScale: 1,
+        );
+
+        final strings = AppLocalizations.of(
+          tester.element(find.byType(TTSCreatePage)),
+        )!;
+        await tester.ensureVisible(find.byType(Slider).first);
+        await tester.pumpAndSettle();
+        expect(find.text(strings.ttsSpeed), findsOneWidget);
+        expect(find.text(strings.ttsVolume), findsOneWidget);
+        expect(find.text(strings.ttsNormal), findsNWidgets(2));
+        expect(find.byType(ConstrainedText), findsWidgets);
+        ConstrainedText label(String text) => tester.widget<ConstrainedText>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is ConstrainedText && widget.data == text,
+              ).first,
+            );
+        expect(label('0.5x').textAlign, isNull);
+        expect(label(strings.ttsNormal).textAlign, TextAlign.center);
+        expect(label('2.0x').textAlign, TextAlign.end);
+        expect(label('1.0x').textAlign, TextAlign.end);
+        expect(tester.takeException(), isNull);
+
+        await tester.drag(find.byType(Slider).first, const Offset(40, 0));
+        await tester.pump();
+        expect(
+          tester.widget<Slider>(find.byType(Slider).first).value,
+          greaterThan(1),
+        );
+
+        await tester.drag(find.byType(Slider).last, const Offset(40, 0));
+        await tester.pump();
+        expect(
+          tester.widget<Slider>(find.byType(Slider).last).value,
+          greaterThan(1),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'long configured endpoints stay bounded with scaled dark-theme labels',
+      (tester) async {
+        await pumpSliderPage(
+          tester,
+          entry: sliderEntry(
+            speedMax: 1234567890123.9,
+            volumeMax: 987654321098.1,
+          ),
+          locale: const Locale('de', 'DE'),
+          textScale: 1.6,
+          theme: ThemeData.dark(useMaterial3: true),
+        );
+
+        await tester.ensureVisible(find.byType(Slider).first);
+        await tester.pump();
+        final longLabels = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText &&
+              (widget.data.contains('1234567890123.9') ||
+                  widget.data.contains('987654321098.1')),
+        );
+        expect(longLabels, findsNWidgets(2));
+        for (final label in tester.widgetList<ConstrainedText>(longLabels)) {
+          expect(tester.getSize(find.byWidget(label)).width, lessThan(100));
+        }
+        expect(find.text('Normal'), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
   group('TTSCreatePage - model selector (OCR/ASR style)', () {
     testWidgets('shows pill model selector with "ModelName | ProviderName"', (
       tester,
