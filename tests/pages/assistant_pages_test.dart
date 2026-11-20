@@ -1304,7 +1304,8 @@ void main() {
 
           final title = AppLocalizations.of(
             tester.element(find.byType(AssistantDefaultsTab)),
-          )!.assistantNewConversationPreview;
+          )!
+              .assistantNewConversationPreview;
           final heading = find.byWidgetPredicate(
             (widget) => widget is ConstrainedText && widget.data == title,
           );
