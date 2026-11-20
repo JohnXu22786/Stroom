@@ -372,7 +372,7 @@ class AnkiDroidPage extends ConsumerWidget {
                         isCloze = m.name == 'Cloze';
                         hintText = isCloze
                             ? AppLocalizations.of(ctx)!
-                                  .ankiClozeTextHint('{{c1::答案}}')
+                                .ankiClozeTextHint('{{c1::答案}}')
                             : AppLocalizations.of(ctx)!.ankiFrontQuestionHint;
                       });
                     },
@@ -433,9 +433,7 @@ class AnkiDroidPage extends ConsumerWidget {
               FilledButton(
                 onPressed: () {
                   if (fc.text.trim().isNotEmpty && bc.text.trim().isNotEmpty) {
-                    ref
-                        .read(ankiActionsProvider)
-                        .addCard(
+                    ref.read(ankiActionsProvider).addCard(
                           did,
                           fc.text.trim(),
                           bc.text.trim(),
