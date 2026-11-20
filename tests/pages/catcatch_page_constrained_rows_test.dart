@@ -7,31 +7,33 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/catcatch_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/video_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 Widget _testApp({
   double textScale = 1,
   ThemeMode themeMode = ThemeMode.light,
-}) => ProviderScope(
-  child: MaterialApp(
-    locale: const Locale('de', 'DE'),
-    supportedLocales: AppLocalizations.supportedLocales,
-    theme: ThemeData.light(),
-    darkTheme: ThemeData.dark(),
-    themeMode: themeMode,
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context)
-          .copyWith(textScaler: TextScaler.linear(textScale)),
-      child: child!,
-    ),
-    home: const CatCatchPage(),
-  ),
-);
+}) =>
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.light(),
+        darkTheme: ThemeData.dark(),
+        themeMode: themeMode,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: const CatCatchPage(),
+      ),
+    );
 
 void main() {
   testWidgets(
@@ -67,6 +69,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text(folder), findsOneWidget);
+      final folderPath = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == folder,
+      );
+      final videoLabel = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText && widget.data == 'Video speichern unter',
+      );
+      expect(
+        tester.getSize(folderPath).width,
+        greaterThan(tester.getSize(videoLabel).width),
+        reason:
+            'The selected path should have room after its fixed affordances.',
+      );
       await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));

@@ -12,4 +12,4 @@ The motion preview uses the shared `ConstrainedText` delayed, bidirectional reve
 
 ## Verification
 
-`tests/pages/catcatch_page_test.dart` exercises the production page at 320 × 640, de-DE, and 1× text scale. It selects a long folder, confirms the fitting root state, then checks that the duration preview, task count, full folder value, and page layout remain available without a framework overflow.
+`tests/pages/catcatch_page_constrained_rows_test.dart` exercises the production page at 320 × 640, de-DE, and 1× text scale. It selects a long folder, confirms the fitting root state, then checks that the duration preview, task count, full folder value, and page layout remain available without a framework overflow. A second test checks the task count at 1.6× text scale in dark theme.

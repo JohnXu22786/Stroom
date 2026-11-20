@@ -764,6 +764,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               ),
               const SizedBox(width: 4),
               Expanded(
+                flex: 2,
                 child: ConstrainedText(
                   currentFolder.isEmpty
                       ? _l10n.catCatchRootFolder
@@ -777,7 +778,6 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
               Icon(
                 Icons.chevron_right,
                 size: 16,
