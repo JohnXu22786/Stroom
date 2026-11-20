@@ -104,24 +104,51 @@ class _StartupPageState extends State<StartupPage>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final hero = Center(child: _buildMintHero());
                   final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final isCompact = constraints.maxHeight < 520;
 
-                  // Keep display text at its intended size; compact viewports
-                  // and enlarged text can scroll instead of shrinking the card.
-                  if (constraints.maxHeight < 520 || textScale > 1) {
-                    return SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          hero,
-                          const SizedBox(height: 24),
-                          _buildLoadingSection(),
-                        ],
-                      ),
+                  // Keep display text at its intended size. A compact card uses
+                  // less decorative spacing; enlarged text and very short
+                  // layouts scroll the hero while keeping startup feedback visible.
+                  if (isCompact && textScale <= 1) {
+                    final compactHero = Center(
+                      child: _buildMintHero(compact: true),
+                    );
+                    final hasStartupDetails =
+                        widget.statusMessage.isNotEmpty ||
+                        (widget.progressDetail?.isNotEmpty ?? false);
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: hasStartupDetails
+                              ? SingleChildScrollView(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 24,
+                                  ),
+                                  child: compactHero,
+                                )
+                              : compactHero,
+                        ),
+                        _buildLoadingSection(),
+                      ],
                     );
                   }
+
+                  if (isCompact || textScale > 1) {
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: _buildMintHero()),
+                          ),
+                        ),
+                        _buildLoadingSection(),
+                      ],
+                    );
+                  }
+
+                  final hero = Center(child: _buildMintHero());
 
                   return Column(
                     children: [
@@ -141,12 +168,12 @@ class _StartupPageState extends State<StartupPage>
     );
   }
 
-  Widget _buildMintHero() {
+  Widget _buildMintHero({bool compact = false}) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 320),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(compact ? 14 : 24),
         decoration: BoxDecoration(
           color: _visualStyle.cardSurface.withValues(alpha: 0.24),
           border: Border.all(color: _visualStyle.cardBorder),
@@ -184,13 +211,13 @@ class _StartupPageState extends State<StartupPage>
                 ),
               ],
             ),
-            const SizedBox(height: 22),
-            _buildAppIcon(size: 68),
-            const SizedBox(height: 18),
+            SizedBox(height: compact ? 12 : 22),
+            _buildAppIcon(size: compact ? 40 : 68),
+            SizedBox(height: compact ? 10 : 18),
             _buildBrandName(fontSize: 34, letterSpacing: 1),
-            const SizedBox(height: 7),
+            SizedBox(height: compact ? 4 : 7),
             _buildTagline(),
-            const SizedBox(height: 22),
+            SizedBox(height: compact ? 12 : 22),
             _buildFlowRail(),
           ],
         ),

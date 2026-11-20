@@ -1,6 +1,6 @@
 # Startup hero text sizing
 
-These captures show the production `StartupPage` in a temporary Flutter Web harness. The hero keeps its original text sizes at constrained heights; compact or enlarged-text layouts scroll vertically instead of scaling the entire card down. The `FOCUS FLOW` and `Stroom` labels use `ConstrainedText`; the localized tagline wraps naturally.
+These captures show the production `StartupPage` in a temporary Flutter Web harness. The hero keeps its original text sizes at constrained heights; short landscape uses tighter card spacing and keeps startup feedback visible, while detailed or enlarged-text layouts can scroll instead of scaling the entire card down. The `FOCUS FLOW` and `Stroom` labels use `ConstrainedText`; the localized tagline wraps naturally.
 
 ## Captures
 

@@ -137,6 +137,16 @@ void main() {
             'The hero may scroll, but its brand text must not be scaled down.',
       );
       expect(find.byType(FittedBox), findsNothing);
+      expect(
+        tester.getRect(find.byType(CircularProgressIndicator)).bottom,
+        lessThanOrEqualTo(320),
+        reason: 'Startup feedback should stay visible in compact landscape.',
+      );
+      expect(
+        tester.getRect(find.text('Stroom')).bottom,
+        lessThan(tester.getRect(find.byType(CircularProgressIndicator)).top),
+        reason: 'The compact hero should not overlap startup feedback.',
+      );
       expect(tester.takeException(), isNull);
     });
 
