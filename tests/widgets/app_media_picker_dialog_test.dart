@@ -880,7 +880,8 @@ void main() {
       expect(find.text('内部文件'), findsOneWidget);
     });
 
-    testWidgets('long back-row labels stay bounded and navigation still works', (
+    testWidgets('long back-row labels stay bounded and navigation still works',
+        (
       tester,
     ) async {
       tester.view.physicalSize = const Size(320, 640);
