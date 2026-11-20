@@ -830,7 +830,8 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
-          providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
+          providerEntriesProvider
+              .overrideWith((ref) => ProviderEntriesNotifier()),
         ],
       );
       await container.read(conversationsProvider.notifier).ready;
@@ -897,11 +898,12 @@ void main() {
       final deletedPaths = <String>[];
       final draftPathsAtDelete = <String, List<String>>{};
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        final saved = (jsonDecode((await store.getAll())['conversations']! as String)
-                as List)
-            .cast<Map<String, dynamic>>()
-            .map(Conversation.fromMap)
-            .single;
+        final saved =
+            (jsonDecode((await store.getAll())['conversations']! as String)
+                    as List)
+                .cast<Map<String, dynamic>>()
+                .map(Conversation.fromMap)
+                .single;
         draftPathsAtDelete[path] =
             saved.draftAttachments.map((att) => att.storagePath).toList();
         deletedPaths.add(path);

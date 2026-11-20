@@ -1567,7 +1567,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     final paths = <String>{};
     for (final conversation in snapshot) {
       paths.addAll(
-        conversation.draftAttachments.map((attachment) => attachment.storagePath),
+        conversation.draftAttachments
+            .map((attachment) => attachment.storagePath),
       );
       for (final message in conversation.messages) {
         paths.addAll(

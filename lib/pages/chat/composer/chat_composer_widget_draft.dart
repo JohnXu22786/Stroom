@@ -22,7 +22,8 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   List<String> _draftAttSignature([List<Attachment>? attachments]) =>
       (attachments ?? _pendingAttachments)
           .map(
-            (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
+            (a) =>
+                '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
           )
           .toList();
 
@@ -89,13 +90,12 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     final textToSave = _textController.text;
     final draftAttachments = _draftAttachmentSnapshot();
     final attachmentSignature = _draftAttSignature(draftAttachments);
-    final saved = await ref
-        .read(conversationsProvider.notifier)
-        .saveDraftAndWait(
-          convId,
-          textToSave,
-          draftAttachments: draftAttachments,
-        );
+    final saved =
+        await ref.read(conversationsProvider.notifier).saveDraftAndWait(
+              convId,
+              textToSave,
+              draftAttachments: draftAttachments,
+            );
     if (saved) {
       _lastSavedDraft = textToSave;
       _lastSavedDraftAttSignature = attachmentSignature;
