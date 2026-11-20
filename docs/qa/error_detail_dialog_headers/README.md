@@ -10,4 +10,4 @@ The screenshot and motion preview render the production `ErrorDetailDialogHeader
 
 [Play the header motion preview](asr-error-details-motion-preview.webm)
 
-`tests/widgets/error_detail_dialog_header_test.dart` checks both localized labels, the 320 × 640/2× rendering, the fixed error icon and close action, and dialog dismissal. It passed with `flutter test --no-pub tests/widgets/error_detail_dialog_header_test.dart --reporter expanded`.
+`tests/pages/content/ocr_error_details_header_test.dart` checks both localized labels, the 320 × 640/2× rendering, the fixed error icon and close action, and dialog dismissal. It passed with `flutter test --no-pub tests/pages/content/ocr_error_details_header_test.dart --reporter expanded`.
