@@ -410,7 +410,8 @@ void main() {
     expect(find.text('Downloading update… 1.0 KB'), findsOneWidget);
     notifier.state = notifier.state.copyWith(downloadTotalBytes: 2048);
     await tester.pump();
-    expect(find.text('Downloading update… 1.0 KB / 2.0 KB (42%)'), findsOneWidget);
+    expect(
+        find.text('Downloading update… 1.0 KB / 2.0 KB (42%)'), findsOneWidget);
     await tester.tap(find.text('Check for Updates'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));

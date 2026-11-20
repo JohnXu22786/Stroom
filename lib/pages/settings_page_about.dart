@@ -75,7 +75,8 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                           ? AppLocalizations.of(context)!.updateDownloadComplete
                           : updateState.downloadError ??
                               AppLocalizations.of(context)!
-                                  .aboutNewVersionFound(updateState.latestVersion!)
+                                  .aboutNewVersionFound(
+                                      updateState.latestVersion!)
                   : null,
               trailing: updateState.updateAvailable
                   ? Container(
