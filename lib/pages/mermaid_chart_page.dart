@@ -326,7 +326,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Icon(mode.icon, size: 20),
               const SizedBox(width: 12),
-              Text(mode.label(AppLocalizations.of(context)!)),
+              Flexible(
+                child: ConstrainedText(
+                  mode.label(AppLocalizations.of(context)!),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               if (mode == _editorMode) ...[
                 const Spacer(),
                 const Icon(Icons.check, size: 16, color: Colors.green),
@@ -944,9 +950,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
               const SizedBox(width: 4),
-              Text(
-                AppLocalizations.of(context)!.mermaidEditorSplitCodeLabel,
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.mermaidEditorSplitCodeLabel,
+                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Expanded(child: Divider(thickness: 0.5)),
             ],
