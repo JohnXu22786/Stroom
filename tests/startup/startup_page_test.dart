@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -10,10 +11,17 @@ Widget wrapStartupPage({
   bool isWorking = true,
   String statusMessage = '',
   String? progressDetail,
+  Locale locale = const Locale('en', 'US'),
+  TextScaler textScaler = TextScaler.noScaling,
 }) {
   return MaterialApp(
+    locale: locale,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+      child: child!,
+    ),
     home: StartupPage(
       isWorking: isWorking,
       statusMessage: statusMessage,
@@ -108,6 +116,53 @@ void main() {
 
       expect(find.text(longMessage), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '长状态文案必须可滚动而非溢出报错');
+    });
+
+    testWidgets('Mint Glass keeps hero text at full size on a short screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(640, 320);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(wrapStartupPage());
+      await tester.pump();
+
+      expect(
+        tester.getRect(find.text('Stroom')).height,
+        greaterThan(30),
+        reason: 'The hero may scroll, but its brand text must not be scaled down.',
+      );
+      expect(find.byType(FittedBox), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Mint Glass keeps localized hero text legible at large scale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        wrapStartupPage(
+          locale: const Locale('zh', 'CN'),
+          textScaler: const TextScaler.linear(2),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('你的学习助手'), findsOneWidget);
+      final tagline = tester.renderObject<RenderParagraph>(
+        find.text('你的学习助手'),
+      );
+      expect(tagline.maxLines, isNull);
+      expect(tagline.didExceedMaxLines, isFalse);
+      expect(tester.getRect(find.text('Stroom')).height, greaterThan(50));
+      expect(find.byType(FittedBox), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Mint Glass fits a compact landscape viewport', (tester) async {

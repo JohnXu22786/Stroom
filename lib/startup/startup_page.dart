@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../widgets/constrained_text.dart';
 import 'startup_backdrop_painter.dart';
 import 'startup_visual_style.dart';
 
@@ -103,21 +104,22 @@ class _StartupPageState extends State<StartupPage>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final hero = Center(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: _buildMintHero(),
-                    ),
-                  );
+                  final hero = Center(child: _buildMintHero());
+                  final textScale = MediaQuery.textScalerOf(context).scale(1);
 
-                  // Keep the redesigned card compact on short screens.
-                  if (constraints.maxHeight < 520) {
-                    return Column(
-                      children: [
-                        Expanded(child: hero),
-                        _buildLoadingSection(),
-                        const SizedBox(height: 24),
-                      ],
+                  // Keep display text at its intended size; compact viewports
+                  // and enlarged text can scroll instead of shrinking the card.
+                  if (constraints.maxHeight < 520 || textScale > 1) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          hero,
+                          const SizedBox(height: 24),
+                          _buildLoadingSection(),
+                        ],
+                      ),
                     );
                   }
 
@@ -162,13 +164,16 @@ class _StartupPageState extends State<StartupPage>
           children: [
             Row(
               children: [
-                Text(
-                  'FOCUS FLOW',
-                  style: TextStyle(
-                    color: _visualStyle.secondaryForeground,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2,
+                Expanded(
+                  child: ConstrainedText(
+                    'FOCUS FLOW',
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: _visualStyle.secondaryForeground,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 2,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -229,8 +234,9 @@ class _StartupPageState extends State<StartupPage>
     required double fontSize,
     required double letterSpacing,
   }) {
-    return Text(
+    return ConstrainedText(
       'Stroom',
+      maxLines: 1,
       textAlign: TextAlign.center,
       style: TextStyle(
         fontSize: fontSize,
