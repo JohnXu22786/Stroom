@@ -692,7 +692,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       }
       for (final entry in pendingRestoredConversations.entries) {
         final deletedAt = deletedConversationAt[entry.key];
-        if (deletedAt == null || !deletedAt.isAfter(entry.value)) {
+        if (deletedAt == null || deletedAt.isBefore(entry.value)) {
           deletedConversations.remove(entry.key);
           deletedConversationAt.remove(entry.key);
         }

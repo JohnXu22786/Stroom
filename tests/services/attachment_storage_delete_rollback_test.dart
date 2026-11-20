@@ -15,6 +15,7 @@ void main() {
         'attachments/first.png': Uint8List.fromList([1, 2, 3]),
         'attachments/second.png': Uint8List.fromList([4, 5, 6]),
       };
+      AttachmentStorage.deletionIdentitiesOverrideForTesting = (path) => {path};
       AttachmentStorage.readFileOverrideForTesting = (path) async {
         final bytes = files[path];
         return bytes == null ? null : Uint8List.fromList(bytes);
@@ -52,6 +53,7 @@ void main() {
         'attachments/first.png': Uint8List.fromList([1, 2, 3]),
         'attachments/second.png': Uint8List.fromList([4, 5, 6]),
       };
+      AttachmentStorage.deletionIdentitiesOverrideForTesting = (path) => {path};
       AttachmentStorage.readFileOverrideForTesting = (path) async {
         final bytes = files[path];
         return bytes == null ? null : Uint8List.fromList(bytes);

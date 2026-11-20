@@ -483,7 +483,10 @@ void main() {
         newerSelection.id,
       );
 
-      await prefs.setString('conversations', '[]');
+      await prefs.setString(
+        'conversations',
+        jsonEncode([replayConversation.toMap()]),
+      );
       await prefs.setBool('conversation_stream_checkpoints_present', true);
       await prefs.setString(
         'conversation_stream_pending_restore_snapshots',
@@ -493,6 +496,13 @@ void main() {
             'index': 0,
             'restoredAt': fallbackRestoredAt.toIso8601String(),
           },
+        }),
+      );
+      await prefs.setString(
+        'conversation_stream_pending_restores',
+        jsonEncode({
+          replayConversation.id:
+              '${replayConversation.createdAt.toIso8601String()}|${fallbackRestoredAt.toIso8601String()}',
         }),
       );
       await File(p.join(root.path, _journalName)).writeAsString(

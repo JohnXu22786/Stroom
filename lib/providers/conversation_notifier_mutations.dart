@@ -259,7 +259,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       } catch (error) {
         debugPrint('Failed to restore conversation checkpoint: $error');
         _pendingRestoredConversations[conversation.id] =
-            '${conversation.createdAt.toIso8601String()}|${DateTime.now().toIso8601String()}';
+            '${conversation.createdAt.toIso8601String()}|${restoredAt.toIso8601String()}';
         _pendingRestoredConversationSnapshots[conversation.id] = {
           'conversation': conversation.toMap(),
           'index': originalOrder.indexOf(conversation),
@@ -268,9 +268,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       }
     }
     if (_pendingRestoredConversations.isNotEmpty) {
-      final markerPersisted = await _persistPendingRestoredConversations();
       final snapshotPersisted =
           await _persistPendingRestoredConversationSnapshots();
+      final markerPersisted = snapshotPersisted
+          ? await _persistPendingRestoredConversations()
+          : false;
       if (!markerPersisted || !snapshotPersisted) {
         debugPrint('Failed to persist restored conversation checkpoint');
       }
