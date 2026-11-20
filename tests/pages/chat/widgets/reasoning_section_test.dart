@@ -256,6 +256,101 @@ void main() {
       expect(find.text('思考 2 思考完成'), findsOneWidget, reason: '多推理时应显示序号');
     });
 
+    testWidgets(
+      'narrow reasoning dialog bounds localized header and keeps controls',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        Future<void> showPanel({
+          required bool streaming,
+          int sectionIndex = 5,
+        }) async {
+          final overrides = [
+            streamingReasoningSectionsProvider('test-conv-id')
+                .overrideWith((ref) => ['Long reasoning body for the dialog']),
+          ];
+          if (streaming) {
+            overrides.addAll([
+              activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+              isStreamingProvider('test-conv-id').overrideWith((ref) => true),
+              streamingHasFirstTokenProvider('test-conv-id')
+                  .overrideWith((ref) => false),
+            ]);
+          }
+
+          await tester.pumpWidget(
+            ProviderScope(
+              key: ValueKey(streaming),
+              overrides: overrides,
+              child: MaterialApp(
+                locale: const Locale('fr'),
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: const [
+                  AppLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                home: Scaffold(
+                  body: ReasoningSection(
+                    sections: ReasoningSectionData(
+                      texts: ['Long reasoning body for the dialog'],
+                      streaming: streaming,
+                      sectionIndices: [sectionIndex],
+                    ),
+                    messageId: 'narrow-header-msg-id',
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(
+            find.text(streaming ? 'Réflexion' : 'Réflexion terminée'),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+        }
+
+        await showPanel(streaming: true, sectionIndex: 999999999);
+        expect(find.byType(Dialog), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('reasoning-corner-spinner')),
+          findsOneWidget,
+        );
+        expect(find.text(' (1000000000)'), findsOneWidget);
+        expect(find.byIcon(Icons.close), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+
+        await showPanel(streaming: false);
+        expect(find.byType(Dialog), findsOneWidget);
+        expect(find.text(' (6)'), findsOneWidget);
+        expect(find.byIcon(Icons.close), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('reasoning-corner-spinner')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
+
+        tester.view.physicalSize = const Size(700, 640);
+        await showPanel(streaming: false);
+        expect(find.text('Réflexion terminée'), findsWidgets);
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text('Réflexion terminée'), findsWidgets);
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
+      },
+    );
+
     testWidgets('tapping reasoning button opens a dialog', (
       tester,
     ) async {
