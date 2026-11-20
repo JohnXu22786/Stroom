@@ -17,6 +17,7 @@ import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/manifest_bridge.dart';
 import 'package:stroom/utils/sort_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/file_manager_view.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -968,6 +969,43 @@ void main() {
       );
       expect(scrollable.position.pixels, greaterThan(0));
       expect(tester.getTopLeft(backItem).dy, closeTo(backYBefore, 0.1));
+    });
+
+    testWidgets('back label and long folder path stay within narrow row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const longFolder =
+          'very-long-folder-name-with-multiple-segments-and-details';
+      await tester.pumpWidget(
+        _buildTestApp(build(records: [], folders: {longFolder})),
+      );
+      await tester.tap(find.text(longFolder));
+      await tester.pumpAndSettle();
+
+      final backItem = find.byKey(const Key('fm_back_item'));
+      final constrainedLabels = find.descendant(
+        of: backItem,
+        matching: find.byType(ConstrainedText),
+      );
+      expect(constrainedLabels, findsNWidgets(2));
+      final labels = constrainedLabels.evaluate().map(
+        (element) => element.widget as ConstrainedText,
+      );
+      final pathLabel = labels.singleWhere((label) => label.data == longFolder);
+      expect(pathLabel.textAlign, TextAlign.end);
+      expect(pathLabel.maxLines, 1);
+      expect(pathLabel.overflow, TextOverflow.clip);
+
+      final labelRects = constrainedLabels.evaluate().map(
+        (element) => tester.getRect(find.byWidget(element.widget)),
+      ).toList();
+      expect(labelRects[0].right, lessThanOrEqualTo(labelRects[1].left));
+      expect(labelRects[1].right, lessThanOrEqualTo(tester.getRect(backItem).right));
     });
 
     testWidgets('back item shows even when the subfolder is empty', (
