@@ -54,30 +54,74 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
     final prefs = await SharedPreferences.getInstance();
     final previousMode = prefs.getString(_keyMode);
     final previousEnabled = prefs.getBool(_keyEnabled);
-    if (!await prefs.setString(_keyMode, mode.name)) {
-      if (previousMode == null) {
-        await prefs.remove(_keyMode);
-      } else {
-        await prefs.setString(_keyMode, previousMode);
+    Future<bool> restoreMode() => previousMode == null
+        ? prefs.remove(_keyMode)
+        : prefs.setString(_keyMode, previousMode);
+    Future<bool> restoreEnabled() => previousEnabled == null
+        ? prefs.remove(_keyEnabled)
+        : prefs.setBool(_keyEnabled, previousEnabled);
+
+    Future<void> rollback({
+      bool restoreEnabledValue = true,
+      bool requireEnabledRestore = false,
+      bool requireModeRestore = true,
+    }) async {
+      Object? rollbackError;
+      if (restoreEnabledValue) {
+        try {
+          final restored = await restoreEnabled();
+          if (requireEnabledRestore && !restored) {
+            rollbackError =
+                StateError('Legacy mode rollback was not persisted');
+          }
+        } catch (error) {
+          rollbackError = error;
+        }
       }
+      try {
+        final restored = await restoreMode();
+        if (requireModeRestore && !restored) {
+          rollbackError ??= StateError('Mode rollback was not persisted');
+        }
+      } catch (error) {
+        rollbackError ??= error;
+      }
+      if (rollbackError != null) {
+        throw StateError('Failed to roll back the Anki sync mode preferences');
+      }
+    }
+
+    bool modeSaved;
+    try {
+      modeSaved = await prefs.setString(_keyMode, mode.name);
+    } catch (_) {
+      await rollback(
+        restoreEnabledValue: false,
+        requireModeRestore: true,
+      );
+      rethrow;
+    }
+    if (!modeSaved) {
+      await rollback(
+        restoreEnabledValue: false,
+        requireModeRestore: false,
+      );
       throw StateError('Failed to persist the Anki sync mode');
     }
     // Keep the former flag in sync for older app builds that may still read it.
+    bool enabledSaved;
     try {
-      if (!await prefs.setBool(_keyEnabled, mode == AnkiSyncMode.selfHosted)) {
-        throw StateError('Failed to persist the legacy Anki sync mode');
-      }
+      enabledSaved = await prefs.setBool(
+        _keyEnabled,
+        mode == AnkiSyncMode.selfHosted,
+      );
     } catch (_) {
-      final restoredEnabled = previousEnabled == null
-          ? await prefs.remove(_keyEnabled)
-          : await prefs.setBool(_keyEnabled, previousEnabled);
-      final restoredMode = previousMode == null
-          ? await prefs.remove(_keyMode)
-          : await prefs.setString(_keyMode, previousMode);
-      if (!restoredEnabled || !restoredMode) {
-        throw StateError('Failed to roll back the Anki sync mode preferences');
-      }
+      await rollback(requireEnabledRestore: true);
       rethrow;
+    }
+    if (!enabledSaved) {
+      await rollback(requireEnabledRestore: false);
+      throw StateError('Failed to persist the legacy Anki sync mode');
     }
     state = state.copyWith(mode: mode);
   }
