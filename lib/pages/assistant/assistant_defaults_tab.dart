@@ -565,13 +565,17 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         color: cs.secondary,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        AppLocalizations.of(context)!
-                            .assistantNewConversationPreview,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSecondaryContainer,
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!
+                              .assistantNewConversationPreview,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSecondaryContainer,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
