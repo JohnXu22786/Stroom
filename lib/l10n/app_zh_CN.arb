@@ -5968,6 +5968,22 @@
   "startupSafetyExportButton": "导出数据",
   "startupSafetyExitButton": "退出应用",
   "startupSafetyUpdateButton": "更新应用",
+  "startupSafetyRollbackButton": "恢复到之前的版本",
+  "startupSafetyRollbackNoCandidate": "没有找到记录版本的直接安装包。请先导出数据，再手动安装该版本。",
+  "startupSafetyRollbackRecommended": "更新失败前记录的推荐版本",
+  "startupSafetyRollbackReleaseNotes": "版本说明",
+  "startupSafetyRollbackNoReleaseNotes": "没有可用的版本说明。",
+  "startupSafetyRollbackConfirmTitle": "确认恢复版本",
+  "startupSafetyRollbackConfirmMessage": "即将下载并打开版本 {version}。请先导出数据。操作系统可能会拒绝安装较旧版本，Stroom 不会绕过安装器限制。",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "继续",
+  "startupSafetyUpdateAttemptUnavailable": "无法记录本次更新尝试，因此没有启动安装程序。请检查存储权限后重试。",
   "startupSafetyCheckingUpdates": "正在检查更新...",
   "startupSafetyUpToDate": "已是最新版本",
   "startupSafetyNewerDataVersion": "数据由更新版本的应用创建（{version}）。\n\n当前版本无法安全读取这些数据。请安装最新版本的应用后再继续，数据未做任何改动。",

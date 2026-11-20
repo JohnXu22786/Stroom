@@ -5966,6 +5966,22 @@
   "startupSafetyExportButton": "Daten exportieren",
   "startupSafetyExitButton": "App beenden",
   "startupSafetyUpdateButton": "App aktualisieren",
+  "startupSafetyRollbackButton": "Zur vorherigen Version zurückkehren",
+  "startupSafetyRollbackNoCandidate": "Für die gespeicherte Version wurde kein direkter Installer gefunden. Exportiere deine Daten und installiere diese Version manuell.",
+  "startupSafetyRollbackRecommended": "Vor dem fehlgeschlagenen Update gespeicherte empfohlene Version",
+  "startupSafetyRollbackReleaseNotes": "Versionshinweise",
+  "startupSafetyRollbackNoReleaseNotes": "Keine Versionshinweise verfügbar.",
+  "startupSafetyRollbackConfirmTitle": "Versionswiederherstellung bestätigen",
+  "startupSafetyRollbackConfirmMessage": "Version {version} wird heruntergeladen und geöffnet. Exportiere zuerst deine Daten. Das Betriebssystem kann eine ältere Version ablehnen; Stroom umgeht keine Installationsbeschränkungen.",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "Weiter",
+  "startupSafetyUpdateAttemptUnavailable": "Der Updateversuch konnte nicht gespeichert werden. Das Installationsprogramm wurde daher nicht gestartet. Prüfe die Speicherberechtigungen und versuche es erneut.",
   "startupSafetyCheckingUpdates": "Suche nach Updates …",
   "startupSafetyUpToDate": "Du verwendest die neueste Version",
   "startupSafetyNewerDataVersion": "Diese Daten wurden mit einer neueren Version der App erstellt ({version}).\n\nDiese App-Version kann die Daten nicht sicher lesen. Installiere die neueste Version, um fortzufahren. Deine Daten wurden nicht geändert.",

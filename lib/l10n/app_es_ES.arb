@@ -2859,6 +2859,22 @@
   "startupSafetyExportButton": "Exportar datos",
   "startupSafetyExitButton": "Salir de la aplicación",
   "startupSafetyUpdateButton": "Actualizar aplicación",
+  "startupSafetyRollbackButton": "Volver a la versión anterior",
+  "startupSafetyRollbackNoCandidate": "No se encontró un instalador directo para la versión registrada. Exporta tus datos e instala esa versión manualmente.",
+  "startupSafetyRollbackRecommended": "Versión recomendada registrada antes del fallo de actualización",
+  "startupSafetyRollbackReleaseNotes": "Notas de la versión",
+  "startupSafetyRollbackNoReleaseNotes": "No hay notas de la versión disponibles.",
+  "startupSafetyRollbackConfirmTitle": "Confirmar recuperación de versión",
+  "startupSafetyRollbackConfirmMessage": "Se descargará y abrirá la versión {version}. Exporta primero tus datos. El sistema operativo puede rechazar una versión anterior; Stroom no omitirá las restricciones del instalador.",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "Continuar",
+  "startupSafetyUpdateAttemptUnavailable": "No se pudo registrar este intento de actualización, así que no se inició el instalador. Comprueba los permisos de almacenamiento e inténtalo de nuevo.",
   "startupSafetyCheckingUpdates": "Buscando actualizaciones...",
   "startupSafetyUpToDate": "Estás al día",
   "startupSafetyNewerDataVersion": "Estos datos fueron creados por una versión más reciente de la aplicación ({version}).\n\nEsta versión de la aplicación no puede leer los datos de forma segura. Instale la última versión para continuar. Tus datos no han sido modificados.",
