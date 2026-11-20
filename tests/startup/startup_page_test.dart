@@ -106,7 +106,8 @@ void main() {
     ) async {
       // 启动检查发现多个问题时状态文案会非常长（所有问题拼接），
       // 必须在受限高度内滚动而不是触发 RenderFlex overflow。
-      final longMessage = '启动完成（注意: 发现 3 个数据问题:\n'
+      final longMessage =
+          '启动完成（注意: 发现 3 个数据问题:\n'
           '  • provider_entries[0]: id 字段缺失或为空\n'
           '  • provider_entries[1]: type 字段缺失或为空\n'
           '  • conversations[2]: messages 字段缺失\n'
@@ -132,7 +133,8 @@ void main() {
       expect(
         tester.getRect(find.text('Stroom')).height,
         greaterThan(30),
-        reason: 'The hero may scroll, but its brand text must not be scaled down.',
+        reason:
+            'The hero may scroll, but its brand text must not be scaled down.',
       );
       expect(find.byType(FittedBox), findsNothing);
       expect(tester.takeException(), isNull);
@@ -155,9 +157,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('你的学习助手'), findsOneWidget);
-      final tagline = tester.renderObject<RenderParagraph>(
-        find.text('你的学习助手'),
-      );
+      final tagline = tester.renderObject<RenderParagraph>(find.text('你的学习助手'));
       expect(tagline.maxLines, isNull);
       expect(tagline.didExceedMaxLines, isFalse);
       expect(tester.getRect(find.text('Stroom')).height, greaterThan(50));
