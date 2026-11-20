@@ -759,7 +759,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText: AppLocalizations.of(context)!.ocrInheritProvider,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
