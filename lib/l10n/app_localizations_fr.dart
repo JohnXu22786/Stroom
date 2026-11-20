@@ -1174,6 +1174,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get updateDownloading => 'Téléchargement de la mise à jour…';
 
   @override
+  String get updateCancelDownload => 'Annuler le téléchargement';
+
+  @override
+  String get updateDownloadInBackground => 'Télécharger en arrière-plan';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Erreur réseau : $details';
   }
@@ -13426,6 +13432,12 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get updateDownloading => 'Téléchargement de la mise à jour…';
+
+  @override
+  String get updateCancelDownload => 'Annuler le téléchargement';
+
+  @override
+  String get updateDownloadInBackground => 'Télécharger en arrière-plan';
 
   @override
   String updateCheckNetworkError(Object details) {

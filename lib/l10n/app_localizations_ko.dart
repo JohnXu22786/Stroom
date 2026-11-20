@@ -1122,6 +1122,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get updateDownloading => '업데이트 다운로드 중…';
 
   @override
+  String get updateCancelDownload => '다운로드 취소';
+
+  @override
+  String get updateDownloadInBackground => '백그라운드에서 다운로드';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return '네트워크 오류: $details';
   }
@@ -12824,6 +12830,12 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get updateDownloading => '업데이트 다운로드 중…';
+
+  @override
+  String get updateCancelDownload => '다운로드 취소';
+
+  @override
+  String get updateDownloadInBackground => '백그라운드에서 다운로드';
 
   @override
   String updateCheckNetworkError(Object details) {

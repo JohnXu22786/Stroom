@@ -315,6 +315,8 @@
   "updateLatestBadge": "最新",
   "updateSelectVersion": "バージョンの選択",
   "updateDownloading": "アップデートをダウンロード中…",
+  "updateCancelDownload": "ダウンロードをキャンセル",
+  "updateDownloadInBackground": "バックグラウンドでダウンロード",
   "updateCheckNetworkError": "ネットワークエラー: {details}",
   "updateCheckHttpFailed": "アップデートのチェックに失敗しました: HTTP {statusCode}",
   "updateCheckInvalidResponse": "更新のチェックに失敗しました: サーバーは認識できないデータを返しました",

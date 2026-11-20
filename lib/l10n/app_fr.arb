@@ -320,6 +320,8 @@
   "updateLatestBadge": "Dernière version",
   "updateSelectVersion": "Sélectionner une version",
   "updateDownloading": "Téléchargement de la mise à jour…",
+  "updateCancelDownload": "Annuler le téléchargement",
+  "updateDownloadInBackground": "Télécharger en arrière-plan",
   "updateCheckNetworkError": "Erreur réseau : {details}",
   "updateCheckHttpFailed": "Échec de la recherche de mises à jour : HTTP {statusCode}",
   "updateCheckInvalidResponse": "Échec de la recherche de mises à jour : le serveur a renvoyé des données non reconnues",

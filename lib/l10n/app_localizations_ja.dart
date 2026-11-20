@@ -1108,6 +1108,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get updateDownloading => 'アップデートをダウンロード中…';
 
   @override
+  String get updateCancelDownload => 'ダウンロードをキャンセル';
+
+  @override
+  String get updateDownloadInBackground => 'バックグラウンドでダウンロード';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'ネットワークエラー: $details';
   }
@@ -12819,6 +12825,12 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get updateDownloading => 'アップデートをダウンロード中…';
+
+  @override
+  String get updateCancelDownload => 'ダウンロードをキャンセル';
+
+  @override
+  String get updateDownloadInBackground => 'バックグラウンドでダウンロード';
 
   @override
   String updateCheckNetworkError(Object details) {

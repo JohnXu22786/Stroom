@@ -320,6 +320,8 @@
   "updateLatestBadge": "الأحدث",
   "updateSelectVersion": "اختيار الإصدار",
   "updateDownloading": "جارٍ تنزيل التحديث…",
+  "updateCancelDownload": "إلغاء التنزيل",
+  "updateDownloadInBackground": "التنزيل في الخلفية",
   "updateCheckNetworkError": "خطأ في الشبكة: {details}",
   "updateCheckHttpFailed": "تعذّر التحقق من التحديثات: HTTP {statusCode}",
   "updateCheckInvalidResponse": "تعذّر التحقق من التحديثات: أعاد الخادم بيانات غير معروفة",

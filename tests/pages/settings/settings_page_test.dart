@@ -379,6 +379,79 @@ void main() {
     await verifyError(const Locale('zh', 'CN'), '网络错误：connection failed');
   });
 
+  testWidgets('About update entry shows and reopens a background download', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = UpdateNotifier()
+      ..state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.5.5',
+        downloadUrl: 'https://example.com/latest.zip',
+        isDownloading: true,
+        downloadInBackground: true,
+        downloadProgress: 0.42,
+        downloadReceivedBytes: 1024,
+      );
+    await tester.pumpWidget(
+      _buildSettingsTestApp(
+        locale: const Locale('en', 'US'),
+        updateNotifier: notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollSettingsToEnd(tester);
+
+    expect(find.text('Downloading update… 1.0 KB'), findsOneWidget);
+    notifier.state = notifier.state.copyWith(downloadTotalBytes: 2048);
+    await tester.pump();
+    expect(
+        find.text('Downloading update… 1.0 KB / 2.0 KB (42%)'), findsOneWidget);
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Cancel download'), findsOneWidget);
+    expect(find.text('Download in background'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('About update entry reopens a failed download for retry', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = UpdateNotifier()
+      ..state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.5.5',
+        downloadUrl: 'https://example.com/latest.zip',
+        downloadError: 'Download failed: no network',
+      );
+    await tester.pumpWidget(
+      _buildSettingsTestApp(
+        locale: const Locale('en', 'US'),
+        updateNotifier: notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollSettingsToEnd(tester);
+
+    expect(find.text('Download failed: no network'), findsOneWidget);
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Retry download'), findsOneWidget);
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // From settings_page_asr_test.dart
   // ─────────────────────────────────────────────────────────────────────

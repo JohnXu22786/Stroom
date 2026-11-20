@@ -318,6 +318,8 @@
   "updateLatestBadge": "Neueste",
   "updateSelectVersion": "Version auswählen",
   "updateDownloading": "Update wird heruntergeladen…",
+  "updateCancelDownload": "Download abbrechen",
+  "updateDownloadInBackground": "Im Hintergrund herunterladen",
   "updateCheckNetworkError": "Netzwerkfehler: {details}",
   "updateCheckHttpFailed": "Update-Prüfung fehlgeschlagen: HTTP {statusCode}",
   "updateCheckInvalidResponse": "Update-Prüfung fehlgeschlagen: Der Server hat unbekannte Daten zurückgegeben.",

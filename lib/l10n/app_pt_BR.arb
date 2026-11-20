@@ -320,6 +320,8 @@
   "updateLatestBadge": "Mais recente",
   "updateSelectVersion": "Selecionar versão",
   "updateDownloading": "Baixando atualização…",
+  "updateCancelDownload": "Cancelar download",
+  "updateDownloadInBackground": "Baixar em segundo plano",
   "updateCheckNetworkError": "Erro de rede: {details}",
   "updateCheckHttpFailed": "Falha ao verificar atualizações: HTTP {statusCode}",
   "updateCheckInvalidResponse": "Falha ao verificar atualizações: o servidor retornou dados não reconhecidos",

@@ -1080,6 +1080,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateDownloading => '正在下载更新...';
 
   @override
+  String get updateCancelDownload => '取消下载';
+
+  @override
+  String get updateDownloadInBackground => '后台下载';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return '网络错误：$details';
   }
@@ -12467,6 +12473,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateDownloading => '正在下载更新...';
+
+  @override
+  String get updateCancelDownload => '取消下载';
+
+  @override
+  String get updateDownloadInBackground => '后台下载';
 
   @override
   String updateCheckNetworkError(Object details) {

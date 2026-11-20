@@ -2011,6 +2011,12 @@ abstract class AppLocalizations {
   /// **'Downloading update…'**
   String get updateDownloading;
 
+  /// Cancel the current update download.
+  String get updateCancelDownload;
+
+  /// Keep the update download running after closing the dialog.
+  String get updateDownloadInBackground;
+
   /// No description provided for @updateCheckNetworkError.
   ///
   /// In en, this message translates to:
