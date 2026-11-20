@@ -1579,10 +1579,12 @@ void main() {
       final lengthField = find.byWidgetPredicate(
         (w) =>
             w is TextField &&
-            w.decoration?.labelText == '最大字符数' &&
-            w.decoration?.helperText == '单位：字符（不是 token）',
+            w.keyboardType == TextInputType.number &&
+            w.decoration?.label != null,
       );
       expect(lengthField, findsOneWidget, reason: '必须标明字符单位，避免被误认为 token');
+      expect(find.text('最大字符数'), findsOneWidget);
+      expect(find.text('单位：字符（不是 token）'), findsOneWidget);
       expect(tester.widget<TextField>(lengthField).controller?.text, '5000');
     });
 
@@ -1610,7 +1612,10 @@ void main() {
       expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
-          (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+          (w) =>
+              w is TextField &&
+              w.keyboardType == TextInputType.number &&
+              w.decoration?.label != null,
         ),
         findsNothing,
       );
@@ -1646,7 +1651,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final lengthField = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+        (w) =>
+            w is TextField &&
+            w.keyboardType == TextInputType.number &&
+            w.decoration?.label != null,
       );
       await tester.enterText(lengthField, '8000');
       await tester.pump();
@@ -1683,7 +1691,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final lengthField = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+        (w) =>
+            w is TextField &&
+            w.keyboardType == TextInputType.number &&
+            w.decoration?.label != null,
       );
       // 超过最大有效范围（100000）：立即报错、不写入 vars
       // （短于 3 位的输入可能是合法值的中间态，如 "120"，不报错）
