@@ -236,6 +236,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   Future<List<String>> _cleanupConversationFiles(
     List<Conversation> conversations, {
     required ConversationsNotifier notifier,
+    required List<Conversation> fallbackCurrentConversations,
     Set<String> retainedPaths = const {},
   }) async {
     final attachmentPaths = conversations
@@ -251,7 +252,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       await AttachmentStorage.deleteFilesWithRollback(
         attachmentPaths,
         shouldDelete: (path) {
-          final currentRetainedPaths = notifier.currentConversations
+          final currentConversations = notifier.mounted
+              ? notifier.currentConversations
+              : fallbackCurrentConversations;
+          final currentRetainedPaths = currentConversations
               .expand(_conversationAttachmentPaths)
               .expand(AttachmentStorage.deletionIdentities)
               .toSet();
@@ -314,19 +318,26 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
     final notifier = ref.read(conversationsProvider.notifier);
     final convs = notifier.currentConversations;
-    final activeConversationId = ref.read(activeConversationIdProvider);
     final selectedIds = Set<String>.from(_selectedIds);
+    final fallbackCurrentConversations = convs
+        .where((conversation) => !selectedIds.contains(conversation.id))
+        .toList();
+    final activeConversationId = ref.read(activeConversationIdProvider);
     final deleted = await notifier.batchDelete(selectedIds.toList());
     if (deleted) {
       final deletedConversations =
           convs.where((conv) => selectedIds.contains(conv.id)).toList();
-      final retainedPaths = notifier.currentConversations
+      final currentConversations = notifier.mounted
+          ? notifier.currentConversations
+          : fallbackCurrentConversations;
+      final retainedPaths = currentConversations
           .expand(_conversationAttachmentPaths)
           .expand(AttachmentStorage.deletionIdentities)
           .toSet();
       final failedPaths = await _cleanupConversationFiles(
         deletedConversations,
         notifier: notifier,
+        fallbackCurrentConversations: fallbackCurrentConversations,
         retainedPaths: retainedPaths,
       );
       if (failedPaths.isNotEmpty) {
@@ -401,16 +412,22 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     final conv = convs.where((c) => c.id == topic.id).firstOrNull;
     if (conv == null) return;
     final notifier = ref.read(conversationsProvider.notifier);
+    final fallbackCurrentConversations =
+        convs.where((conversation) => conversation.id != topic.id).toList();
     final activeConversationId = ref.read(activeConversationIdProvider);
     final deleted = await notifier.deleteConversation(topic.id);
     if (deleted) {
-      final retainedPaths = notifier.currentConversations
+      final currentConversations = notifier.mounted
+          ? notifier.currentConversations
+          : fallbackCurrentConversations;
+      final retainedPaths = currentConversations
           .expand(_conversationAttachmentPaths)
           .expand(AttachmentStorage.deletionIdentities)
           .toSet();
       final failedPaths = await _cleanupConversationFiles(
         [conv],
         notifier: notifier,
+        fallbackCurrentConversations: fallbackCurrentConversations,
         retainedPaths: retainedPaths,
       );
       if (failedPaths.isNotEmpty) {

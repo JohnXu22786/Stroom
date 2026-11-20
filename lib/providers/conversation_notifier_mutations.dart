@@ -206,8 +206,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         'deletedAt': deletedAt.toIso8601String(),
       });
     } catch (error) {
-      state = _restoreDeletedConversationOrder(original, deleted);
-      _syncTemporaryTimer();
+      if (mounted) {
+        state = _restoreDeletedConversationOrder(original, deleted);
+        _syncTemporaryTimer();
+      }
       debugPrint('Failed to record conversation deletion: $error');
       return false;
     }
@@ -230,6 +232,38 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     required List<Conversation> originalOrder,
     String? previousActiveConversationId,
   }) async {
+    if (!mounted) {
+      for (final conversation in conversations) {
+        final restoredAt = _nextConversationCheckpointTime([conversation.id]);
+        try {
+          await _appendJournalBarrier({
+            'kind': 'conversationRestored',
+            'conversationId': conversation.id,
+            'conversation': conversation.toMap(),
+            'index': originalOrder.indexOf(conversation),
+            'restoredAt': restoredAt.toIso8601String(),
+          });
+        } catch (error) {
+          debugPrint('Failed to restore conversation checkpoint: $error');
+          _pendingRestoredConversations[conversation.id] =
+              '${conversation.createdAt.toIso8601String()}|${restoredAt.toIso8601String()}';
+          _pendingRestoredConversationSnapshots[conversation.id] = {
+            'conversation': conversation.toMap(),
+            'index': originalOrder.indexOf(conversation),
+            'restoredAt': restoredAt.toIso8601String(),
+          };
+        }
+      }
+      if (_pendingRestoredConversations.isNotEmpty) {
+        final snapshotPersisted =
+            await _persistPendingRestoredConversationSnapshots();
+        if (snapshotPersisted) {
+          await _persistPendingRestoredConversations();
+        }
+      }
+      return;
+    }
+
     final missing = conversations
         .where((conversation) =>
             !state.any((current) => current.id == conversation.id))
@@ -278,7 +312,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       }
     }
     try {
-      if (!await _persistNowChecked()) {
+      if (mounted && !await _persistNowChecked()) {
         debugPrint(
           'Failed to persist restored conversations after cleanup failure',
         );
@@ -565,8 +599,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         'deletedAt': deletedAt.toIso8601String(),
       });
     } catch (error) {
-      state = _restoreDeletedConversationOrder(original, deleted);
-      _syncTemporaryTimer();
+      if (mounted) {
+        state = _restoreDeletedConversationOrder(original, deleted);
+        _syncTemporaryTimer();
+      }
       debugPrint('Failed to record batch conversation deletion: $error');
       return false;
     }
