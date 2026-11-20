@@ -815,12 +815,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             children: [
               Icon(Icons.account_tree, size: 20, color: cs.primary),
               const SizedBox(width: 8),
-              Text(
-                flowName,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
+              Expanded(
+                child: ConstrainedText(
+                  flowName,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -884,12 +888,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               children: [
                 Icon(Icons.input, size: 18, color: cs.primary),
                 const SizedBox(width: 8),
-                Text(
-                  AppLocalizations.of(context)!.taskFlowUiInput(label),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
+                Expanded(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiInput(label),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1121,28 +1129,48 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 children: [
                   Icon(Icons.timer_outlined, size: 16, color: cs.primary),
                   const SizedBox(width: 4),
-                  Text(
-                    AppLocalizations.of(context)!.taskFlowUiPreview,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: cs.onSurfaceVariant),
-                  ),
-                  Text(
-                    preview,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.primary,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'monospace',
+                  Expanded(
+                    flex: 3,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ConstrainedText(
+                            AppLocalizations.of(context)!.taskFlowUiPreview,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Expanded(
+                          child: ConstrainedText(
+                            preview,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: cs.primary,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'monospace',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    AppLocalizations.of(context)!.taskFlowUiDurationFormat,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                  Expanded(
+                    flex: 2,
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.taskFlowUiDurationFormat,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
