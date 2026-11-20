@@ -1421,7 +1421,7 @@ void main() {
         (w) => w is TextField && w.decoration?.labelText == '最大字符数',
       );
       await tester.enterText(lengthField, '8000');
-      await tester.pumpAndSettle();
+      await tester.pump();
       // 副标题即时反映新上限
       expect(find.text('超长结果将截断至 8000 个字符'), findsOneWidget);
 
@@ -1460,7 +1460,7 @@ void main() {
       // 超过最大有效范围（100000）：立即报错、不写入 vars
       // （短于 3 位的输入可能是合法值的中间态，如 "120"，不报错）
       await tester.enterText(lengthField, '5000000');
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(
         find.text('有效范围：100–100000 个字符'),
         findsOneWidget,
