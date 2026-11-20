@@ -628,8 +628,7 @@ void main() {
     });
   });
 
-  testWidgets(
-      'long folder back row fits narrow RTL picker and navigates up',
+  testWidgets('long folder back row fits narrow RTL picker and navigates up',
       (tester) async {
     const parent = 'an-extremely-long-parent-folder-name-for-the-picker';
     const child = 'another-extremely-long-current-folder-name';
