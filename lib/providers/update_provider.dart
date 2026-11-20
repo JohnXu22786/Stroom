@@ -280,6 +280,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       String sourceVersion) async {
     final platformKey = currentPlatformKey;
     if (platformKey == null ||
+        // iOS requires an OS-managed app installation path; opening a local
+        // IPA through the generic file handler cannot safely install it.
+        defaultTargetPlatform == TargetPlatform.iOS ||
         !StartupUpdateAttempt.isExactVersion(sourceVersion)) {
       return null;
     }

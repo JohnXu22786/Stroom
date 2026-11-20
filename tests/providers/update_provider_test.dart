@@ -1123,6 +1123,33 @@ void main() {
       expect(notifier.state.availableVersions, isNull);
     });
 
+    test('startup rollback lookup excludes iOS installer-less candidates',
+        () async {
+      final originalPlatform =
+          debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final dio = _createMockDio(_githubRelease(
+          'v0.2.12',
+          assets: [
+            {
+              'name': 'stroom-ios-release-v0.2.12.ipa',
+              'browser_download_url':
+                  'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.12/stroom-ios-release-v0.2.12.ipa',
+            },
+          ],
+        ));
+        final notifier = UpdateNotifier(dio: dio);
+
+        expect(
+          await notifier.findStartupRollbackCandidate('0.2.12'),
+          isNull,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
     test('downloadUrl falls back to html_url when no assets provided',
         () async {
       SharedPreferences.setMockInitialValues({});
