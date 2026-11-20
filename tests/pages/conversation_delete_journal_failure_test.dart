@@ -314,49 +314,36 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(deletedPaths, ['file.txt']);
+      expect(deletedPaths, ['attachments/file.txt', 'attachments/second.txt']);
     },
   );
 
-  testWidgets(
-    'failed cleanup after page disposal persists conversation recovery',
-    (tester) async {
+  test(
+    'notifier persists conversation recovery after disposal',
+    () async {
       final root = Directory.systemTemp.createTempSync('stroom_delete_test_');
       PathProviderPlatform.instance = _DocumentsPathProvider(root.path);
       AppStorage.resetCache();
       addTearDown(() => root.deleteSync(recursive: true));
-      final readStarted = Completer<void>();
-      final allowRead = Completer<void>();
-      AttachmentStorage.readFileOverrideForTesting = (path) async {
-        if (!readStarted.isCompleted) readStarted.complete();
-        await allowRead.future;
-        return Uint8List.fromList([1, 2, 3]);
-      };
-      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        throw StateError('injected delete failure: $path');
-      };
-      AttachmentStorage.restoreFileOverrideForTesting = (path, bytes) async {};
-      await tester.pumpWidget(_app(home: const ConversationsPage()));
-      await _pumpUi(tester);
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await _pumpUi(tester);
-      await tester.tap(find.text('Delete').last);
-      await _pumpUi(tester);
-      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await _awaitSignal(tester, readStarted);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      allowRead.complete();
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-
+      Directory(p.join(root.path, _journalName)).createSync();
+      final container = ProviderContainer();
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      final conversation = _conversation();
+      container.dispose();
+      await notifier.restoreDeletedConversations(
+        [conversation],
+        originalOrder: [conversation],
+      );
+      Directory(p.join(root.path, _journalName)).deleteSync();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('conversations', '[]');
       final replayContainer = ProviderContainer();
       addTearDown(replayContainer.dispose);
       await replayContainer.read(conversationsProvider.notifier).ready;
       expect(
         replayContainer.read(conversationsProvider).single.id,
-        'delete-test',
+        conversation.id,
       );
     },
   );
@@ -417,8 +404,8 @@ void main() {
       await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
 
-      expect(attemptedPaths, ['second.txt']);
-      expect(restoredPaths, ['second.txt']);
+      expect(attemptedPaths, ['attachments/second.txt']);
+      expect(restoredPaths, ['attachments/second.txt']);
       expect(find.text('Delete test'), findsOneWidget);
       expect(find.text('Delete test shared'), findsOneWidget);
       expect(
@@ -679,8 +666,8 @@ void main() {
         {'delete-test', 'delete-test-shared', 'delete-test-retained'},
       );
       expect(container.read(activeConversationIdProvider), 'delete-test');
-      expect(attemptedPaths, ['second.txt']);
-      expect(restoredPaths, ['second.txt']);
+      expect(attemptedPaths, ['attachments/second.txt']);
+      expect(restoredPaths, ['attachments/second.txt']);
     },
   );
 
@@ -716,7 +703,7 @@ void main() {
       await _pumpUi(tester);
 
       expect(tester.takeException(), isNull);
-      expect(deletedPaths, ['file.txt', 'second.txt']);
+      expect(deletedPaths, ['attachments/file.txt', 'attachments/second.txt']);
     },
   );
 

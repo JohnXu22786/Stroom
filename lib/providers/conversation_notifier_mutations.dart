@@ -272,7 +272,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
     state = _restoreDeletedConversationOrder(originalOrder, missing);
     _syncTemporaryTimer();
-    if (previousActiveConversationId != null &&
+    if (mounted &&
+        previousActiveConversationId != null &&
         missing.any(
           (conversation) => conversation.id == previousActiveConversationId,
         ) &&
@@ -322,7 +323,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         'Failed to persist restored conversations after cleanup failure: $error',
       );
     }
-    if (previousActiveConversationId != null &&
+    if (mounted &&
+        previousActiveConversationId != null &&
         missing.any(
           (conversation) => conversation.id == previousActiveConversationId,
         ) &&
