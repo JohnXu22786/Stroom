@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'constrained_text.dart';
@@ -17,9 +19,29 @@ class SaveToFolderSelector extends StatelessWidget {
   final VoidCallback? onTap;
   final bool enabled;
 
+  double _naturalTextWidth(BuildContext context, String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: DefaultTextStyle.of(context).style.merge(style),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    return painter.width;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final labelStyle = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    final folderStyle = TextStyle(
+      fontSize: 12,
+      color: cs.primary,
+      fontWeight: FontWeight.w500,
+    );
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
@@ -31,33 +53,58 @@ class SaveToFolderSelector extends StatelessWidget {
         onTap: enabled ? onTap : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Flexible(
-                child: ConstrainedText(
-                  label,
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: ConstrainedText(
-                  folder,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.primary,
-                    fontWeight: FontWeight.w500,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const fixedWidth = 16 + 8 + 4 + 16;
+              final availableTextWidth = constraints.maxWidth - fixedWidth;
+              final labelWidth = _naturalTextWidth(context, label, labelStyle);
+              final folderWidth = _naturalTextWidth(
+                context,
+                folder,
+                folderStyle,
+              );
+              final combinedTextWidth = labelWidth + folderWidth;
+              final labelSlotWidth = combinedTextWidth <= availableTextWidth
+                  ? labelWidth
+                  : math.min(
+                      labelWidth,
+                      availableTextWidth -
+                          math.min(
+                            folderWidth,
+                            math.min(64.0, availableTextWidth * 0.25),
+                          ),
+                    );
+
+              return Row(
+                children: [
+                  Icon(Icons.folder_outlined, size: 16, color: cs.primary),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: labelSlotWidth,
+                    child: ConstrainedText(
+                      label,
+                      style: labelStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: ConstrainedText(
+                      folder,
+                      style: folderStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
