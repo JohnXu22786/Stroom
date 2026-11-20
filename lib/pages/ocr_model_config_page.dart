@@ -759,7 +759,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText: AppLocalizations.of(context)!.ocrInheritProvider,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
@@ -784,19 +788,26 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                Text(
-                  AppLocalizations.of(context)!.chatCustomParameters,
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  icon: const Icon(Icons.add, size: 18),
-                  label: ConstrainedText(
-                    AppLocalizations.of(context)!.assistantAddParameter,
+                Flexible(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.chatCustomParameters,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  onPressed: _addCustomParam,
+                ),
+                const Spacer(),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 148),
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add, size: 18),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.assistantAddParameter,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: _addCustomParam,
+                  ),
                 ),
               ],
             ),
@@ -837,8 +848,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: AppLocalizations.of(context)!
-                                      .assistantParameterName,
+                                  label: ConstrainedText(
+                                    AppLocalizations.of(context)!
+                                        .assistantParameterName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                   errorText: isDuplicate
@@ -961,8 +976,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   CodeSmartInputFormatter(),
                                 ],
                                 decoration: InputDecoration(
-                                  labelText: AppLocalizations.of(context)!
-                                      .modelParamDefaultValue,
+                                  label: ConstrainedText(
+                                    AppLocalizations.of(context)!
+                                        .modelParamDefaultValue,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   hintText: localizedParamTypeDefaultValueHint(
                                     AppLocalizations.of(context)!,
                                     param.paramType,
