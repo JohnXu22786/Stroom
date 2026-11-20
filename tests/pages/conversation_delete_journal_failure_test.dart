@@ -406,90 +406,13 @@ void main() {
     },
   );
 
-  testWidgets(
-    'single delete preserves a late shared attachment and restores on cleanup failure',
-    (tester) async {
+  test(
+    'restart replay preserves restored attachments and newer journal state',
+    () async {
       final root = Directory.systemTemp.createTempSync('stroom_delete_test_');
       PathProviderPlatform.instance = _DocumentsPathProvider(root.path);
       AppStorage.resetCache();
       addTearDown(() => root.deleteSync(recursive: true));
-      final attemptedPaths = <String>[];
-      final restoredPaths = <String>[];
-      final cleanupComplete = Completer<void>();
-      final readStarted = Completer<void>();
-      final allowRead = Completer<void>();
-      AttachmentStorage.readFileOverrideForTesting = (path) async {
-        if (!readStarted.isCompleted) {
-          readStarted.complete();
-          await allowRead.future;
-        }
-        return Uint8List.fromList([1, 2, 3]);
-      };
-      AttachmentStorage.restoreFileOverrideForTesting = (path, _) async {
-        restoredPaths.add(path);
-      };
-      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        attemptedPaths.add(path);
-        if (path == 'attachments/second.txt') {
-          if (!cleanupComplete.isCompleted) cleanupComplete.complete();
-          throw FileSystemException('failed');
-        }
-        if (!cleanupComplete.isCompleted) cleanupComplete.complete();
-        return true;
-      };
-      await tester.pumpWidget(_app(home: const ConversationsPage()));
-      await _pumpUi(tester);
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(ConversationsPage)),
-        listen: false,
-      );
-      var sawConversationRemoval = false;
-      final conversationRestored = Completer<void>();
-      final restorationSubscription = container.listen(
-        conversationsProvider,
-        (_, conversations) {
-          final isPresent = conversations
-              .any((conversation) => conversation.id == 'delete-test');
-          if (!isPresent) {
-            sawConversationRemoval = true;
-          } else if (sawConversationRemoval &&
-              !conversationRestored.isCompleted) {
-            conversationRestored.complete();
-          }
-        },
-      );
-      addTearDown(restorationSubscription.close);
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await _pumpUi(tester);
-      await tester.tap(find.text('Delete').last);
-      await _pumpUi(tester);
-      container.read(activeConversationIdProvider.notifier).state =
-          'delete-test';
-      await _pumpUi(tester);
-      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
-      await _awaitSignal(tester, readStarted);
-      container.read(conversationsProvider.notifier).state = [
-        _conversationSharingFile(
-          id: 'delete-test-retained',
-          storagePath: 'temp_edited/file.txt',
-        ),
-      ];
-      allowRead.complete();
-      await _awaitSignal(tester, cleanupComplete);
-      await _awaitSignal(tester, conversationRestored);
-      await _pumpUi(tester);
-
-      expect(attemptedPaths, ['attachments/second.txt']);
-      expect(restoredPaths, ['second.txt']);
-      expect(find.text('Delete test'), findsOneWidget);
-      expect(find.text('Delete test shared'), findsOneWidget);
-      expect(
-        container.read(conversationsProvider).map((conv) => conv.id).toSet(),
-        {'delete-test', 'delete-test-retained'},
-      );
-      expect(container.read(activeConversationIdProvider), 'delete-test');
-
-      await tester.pumpWidget(const SizedBox.shrink());
       final replayConversation = _conversation()
         ..draftAttachments = [
           Attachment(
@@ -676,6 +599,93 @@ void main() {
         newerRestoreContainer.read(conversationsProvider).single.title,
         'Journal restoration is newer',
       );
+    },
+  );
+
+  testWidgets(
+    'single delete preserves a late shared attachment and restores on cleanup failure',
+    (tester) async {
+      final root = Directory.systemTemp.createTempSync('stroom_delete_test_');
+      PathProviderPlatform.instance = _DocumentsPathProvider(root.path);
+      AppStorage.resetCache();
+      addTearDown(() => root.deleteSync(recursive: true));
+      final attemptedPaths = <String>[];
+      final restoredPaths = <String>[];
+      final cleanupComplete = Completer<void>();
+      final readStarted = Completer<void>();
+      final allowRead = Completer<void>();
+      AttachmentStorage.readFileOverrideForTesting = (path) async {
+        if (!readStarted.isCompleted) {
+          readStarted.complete();
+          await allowRead.future;
+        }
+        return Uint8List.fromList([1, 2, 3]);
+      };
+      AttachmentStorage.restoreFileOverrideForTesting = (path, _) async {
+        restoredPaths.add(path);
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        attemptedPaths.add(path);
+        if (path == 'attachments/second.txt') {
+          if (!cleanupComplete.isCompleted) cleanupComplete.complete();
+          throw FileSystemException('failed');
+        }
+        if (!cleanupComplete.isCompleted) cleanupComplete.complete();
+        return true;
+      };
+      await tester.pumpWidget(_app(home: const ConversationsPage()));
+      await _pumpUi(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ConversationsPage)),
+        listen: false,
+      );
+      var sawConversationRemoval = false;
+      final conversationRestored = Completer<void>();
+      final restorationSubscription = container.listen(
+        conversationsProvider,
+        (_, conversations) {
+          final isPresent = conversations
+              .any((conversation) => conversation.id == 'delete-test');
+          if (!isPresent) {
+            sawConversationRemoval = true;
+          } else if (sawConversationRemoval &&
+              !conversationRestored.isCompleted) {
+            conversationRestored.complete();
+          }
+        },
+      );
+      addTearDown(restorationSubscription.close);
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await _pumpUi(tester);
+      await tester.tap(find.text('Delete').last);
+      await _pumpUi(tester);
+      container.read(activeConversationIdProvider.notifier).state =
+          'delete-test';
+      await _pumpUi(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await _awaitSignal(tester, readStarted);
+      container.read(conversationsProvider.notifier).state = [
+        _conversationSharingFile(
+          id: 'delete-test-retained',
+          storagePath: 'temp_edited/file.txt',
+        ),
+      ];
+      allowRead.complete();
+      await _awaitSignal(tester, cleanupComplete);
+      await _awaitSignal(tester, conversationRestored);
+      await _pumpUi(tester);
+
+      expect(attemptedPaths, ['attachments/second.txt']);
+      expect(restoredPaths, ['second.txt']);
+      expect(find.text('Delete test'), findsOneWidget);
+      expect(find.text('Delete test shared'), findsOneWidget);
+      expect(
+        container.read(conversationsProvider).map((conv) => conv.id).toSet(),
+        {'delete-test', 'delete-test-retained'},
+      );
+      expect(container.read(activeConversationIdProvider), 'delete-test');
+
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
