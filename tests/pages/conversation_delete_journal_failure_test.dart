@@ -100,7 +100,8 @@ Conversation _conversation() => Conversation(
 Conversation _conversationSharingFile({
   required String id,
   required String storagePath,
-}) => Conversation(
+}) =>
+    Conversation(
       id: id,
       title: 'Delete test shared',
       assistantId: 'assistant',
@@ -473,10 +474,10 @@ void main() {
       await fallbackContainer
           .read(conversationsProvider.notifier)
           .restoreDeletedConversations(
-            [replayConversation],
-            originalOrder: [replayConversation, newerSelection],
-            previousActiveConversationId: replayConversation.id,
-          );
+        [replayConversation],
+        originalOrder: [replayConversation, newerSelection],
+        previousActiveConversationId: replayConversation.id,
+      );
       expect(
         fallbackContainer.read(activeConversationIdProvider),
         newerSelection.id,
@@ -503,9 +504,7 @@ void main() {
       );
       final laterDeleteContainer = ProviderContainer();
       addTearDown(laterDeleteContainer.dispose);
-      await laterDeleteContainer
-          .read(conversationsProvider.notifier)
-          .ready;
+      await laterDeleteContainer.read(conversationsProvider.notifier).ready;
       expect(laterDeleteContainer.read(conversationsProvider), isEmpty);
 
       await prefs.setString('conversations', '[]');

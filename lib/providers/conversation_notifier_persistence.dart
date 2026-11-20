@@ -314,7 +314,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         persistedConversations.map((conversation) => conversation.id).toSet();
     var changed = false;
     for (final entry in _pendingRestoredConversationSnapshots.entries) {
-      if (persistedIds.contains(entry.key) || entry.value['supersededAt'] != null) {
+      if (persistedIds.contains(entry.key) ||
+          entry.value['supersededAt'] != null) {
         continue;
       }
       entry.value['supersededAt'] = DateTime.now().toIso8601String();
@@ -627,9 +628,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 );
                 if (restored.id == conversationId) {
                   restoredConversationSnapshots[conversationId] = restored;
-                  restoredConversationTimes[conversationId] =
-                      DateTime.tryParse(decoded['restoredAt'] as String? ?? '') ??
-                          restored.updatedAt;
+                  restoredConversationTimes[conversationId] = DateTime.tryParse(
+                          decoded['restoredAt'] as String? ?? '') ??
+                      restored.updatedAt;
                   final index = decoded['index'];
                   if (index is int) {
                     restoredConversationIndexes[conversationId] = index;
@@ -700,8 +701,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         final raw = entry.value['conversation'];
         if (raw is! Map) continue;
         try {
-          final restored =
-              Conversation.fromMap(Map<String, dynamic>.from(raw));
+          final restored = Conversation.fromMap(Map<String, dynamic>.from(raw));
           final restoredAt = DateTime.tryParse(
             entry.value['restoredAt'] as String? ?? '',
           );
@@ -712,8 +712,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               (journalRestoredAt != null &&
                   restoredAt != null &&
                   journalRestoredAt.isAfter(restoredAt)) ||
-              recreatedConversations[entry.key]
-                      ?.isAfter(restored.createdAt) ==
+              recreatedConversations[entry.key]?.isAfter(restored.createdAt) ==
                   true ||
               (deletedAt != null &&
                   restoredAt != null &&
@@ -723,7 +722,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           deletedConversations.remove(entry.key);
           deletedConversationAt.remove(entry.key);
           restoredConversationSnapshots[entry.key] = restored;
-          restoredConversationTimes[entry.key] = restoredAt ?? restored.updatedAt;
+          restoredConversationTimes[entry.key] =
+              restoredAt ?? restored.updatedAt;
           final index = entry.value['index'];
           if (index is int) restoredConversationIndexes[entry.key] = index;
         } catch (_) {

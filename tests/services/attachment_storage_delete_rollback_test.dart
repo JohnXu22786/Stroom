@@ -97,8 +97,7 @@ void main() {
         return bytes == null ? null : Uint8List.fromList(bytes);
       };
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        for (final identity
-            in AttachmentStorage.deletionIdentities(path)) {
+        for (final identity in AttachmentStorage.deletionIdentities(path)) {
           files.remove(identity);
         }
         retained = true;

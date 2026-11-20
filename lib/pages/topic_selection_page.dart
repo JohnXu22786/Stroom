@@ -331,10 +331,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       );
       if (failedPaths.isNotEmpty) {
         await notifier.restoreDeletedConversations(
-              deletedConversations,
-              originalOrder: convs,
-              previousActiveConversationId: activeConversationId,
-            );
+          deletedConversations,
+          originalOrder: convs,
+          previousActiveConversationId: activeConversationId,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -415,10 +415,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       );
       if (failedPaths.isNotEmpty) {
         await notifier.restoreDeletedConversations(
-              [conv],
-              originalOrder: convs,
-              previousActiveConversationId: activeConversationId,
-            );
+          [conv],
+          originalOrder: convs,
+          previousActiveConversationId: activeConversationId,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

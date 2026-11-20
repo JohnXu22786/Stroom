@@ -247,8 +247,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           previousActiveConversationId;
     }
     for (final conversation in missing) {
-      final restoredAt =
-          _nextConversationCheckpointTime([conversation.id]);
+      final restoredAt = _nextConversationCheckpointTime([conversation.id]);
       try {
         await _appendJournalBarrier({
           'kind': 'conversationRestored',
@@ -291,7 +290,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         missing.any(
           (conversation) => conversation.id == previousActiveConversationId,
         ) &&
-        _ref.read(activeConversationIdProvider) == previousActiveConversationId) {
+        _ref.read(activeConversationIdProvider) ==
+            previousActiveConversationId) {
       await _persistActiveId();
     }
   }
