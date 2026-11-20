@@ -14,6 +14,7 @@ import 'provider_config_page.dart';
 import 'tts_create_shared.dart';
 
 import '../widgets/constrained_text.dart';
+import '../widgets/save_to_folder_selector.dart';
 
 /// TTS创建页面 - 用于文本转语音转换
 ///
@@ -1299,7 +1300,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // 保存位置选择器（生成按钮上方）
-            _buildSaveToSelector(cs),
+            _buildSaveToSelector(),
             const SizedBox(height: 4),
             // 生成文件的路径预览（标题/文本非空时显示完整路径）
             if (_textController.text.trim().isNotEmpty ||
@@ -1349,46 +1350,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return l10n.ttsSaveAs(folder, name, format);
   }
 
-  Widget _buildSaveToSelector(ColorScheme cs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: _pickSaveFolder,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context)!.saveTo,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: ConstrainedText(
-                  _saveFolder.isEmpty
-                      ? AppLocalizations.of(context)!.rootFolder
-                      : _saveFolder,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildSaveToSelector() {
+    final l10n = AppLocalizations.of(context)!;
+    return SaveToFolderSelector(
+      label: l10n.saveTo,
+      folder: _saveFolder.isEmpty ? l10n.rootFolder : _saveFolder,
+      onTap: _pickSaveFolder,
     );
   }
 

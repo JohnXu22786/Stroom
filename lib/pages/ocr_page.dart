@@ -35,6 +35,7 @@ import 'ocr/ocr_shared.dart';
 import 'ocr/ocr_retry_snapshot.dart';
 import 'provider_config_page.dart';
 import '../widgets/constrained_text.dart';
+import '../widgets/save_to_folder_selector.dart';
 
 export 'ocr/ocr_shared.dart';
 
@@ -1858,7 +1859,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Save-to folder selector (above start button)
-            _buildSaveToSelector(cs),
+            _buildSaveToSelector(),
             if (_legacyModelConfirmationPending && selectedModelIndex != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -1960,43 +1961,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // Save-to Folder Selector
   // ==================================================================
 
-  Widget _buildSaveToSelector(ColorScheme cs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: _ocrStarting || _isProcessing ? null : _pickSaveFolder,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context)!.ocrSaveTo,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _saveFolder.isEmpty
-                    ? AppLocalizations.of(context)!.ocrRootDirectory
-                    : _saveFolder,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildSaveToSelector() {
+    final l10n = AppLocalizations.of(context)!;
+    return SaveToFolderSelector(
+      label: l10n.ocrSaveTo,
+      folder: _saveFolder.isEmpty ? l10n.ocrRootDirectory : _saveFolder,
+      onTap: _pickSaveFolder,
+      enabled: !_ocrStarting && !_isProcessing,
     );
   }
 
