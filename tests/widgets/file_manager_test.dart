@@ -971,6 +971,47 @@ void main() {
       expect(tester.getTopLeft(backItem).dy, closeTo(backYBefore, 0.1));
     });
 
+    testWidgets('back label and long folder path stay within narrow row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const longFolder =
+          'very-long-folder-name-with-multiple-segments-and-details';
+      await tester.pumpWidget(
+        _buildTestApp(build(records: [], folders: {longFolder})),
+      );
+      await tester.tap(find.text(longFolder));
+      await tester.pumpAndSettle();
+
+      final backItem = find.byKey(const Key('fm_back_item'));
+      final constrainedLabels = find.descendant(
+        of: backItem,
+        matching: find.byType(ConstrainedText),
+      );
+      expect(constrainedLabels, findsNWidgets(2));
+      final labels = constrainedLabels.evaluate().map(
+            (element) => element.widget as ConstrainedText,
+          );
+      final pathLabel = labels.singleWhere((label) => label.data == longFolder);
+      expect(pathLabel.textAlign, TextAlign.end);
+      expect(pathLabel.maxLines, 1);
+      expect(pathLabel.overflow, TextOverflow.clip);
+
+      final labelRects = constrainedLabels
+          .evaluate()
+          .map(
+            (element) => tester.getRect(find.byWidget(element.widget)),
+          )
+          .toList();
+      expect(labelRects[0].right, lessThanOrEqualTo(labelRects[1].left));
+      expect(labelRects[1].right,
+          lessThanOrEqualTo(tester.getRect(backItem).right));
+    });
+
     testWidgets('back item shows even when the subfolder is empty', (
       tester,
     ) async {
@@ -3160,7 +3201,7 @@ void main() {
 
   // ===========================================================================
   // Current-folder breadcrumb title (basename + ancestor dropdown) and the
-  // full-path label (front-truncated) on the fixed back item header.
+  // full-path label (clipped and revealed when needed) on the fixed back row.
   // ===========================================================================
 
   /// True when [value] contains no lone surrogates — every high surrogate is
@@ -3402,15 +3443,11 @@ void main() {
     );
 
     testWidgets(
-      'back item grey path truncates from the front when it does not fit',
+      'back item keeps the complete path available when it is clipped',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(340, 640));
         addTearDown(() => tester.binding.setSurfaceSize(null));
 
-        // 5 levels deep with a long deepest name — the full path cannot fit
-        // on a 340px-wide screen next to the blue "返回:" label. Short
-        // intermediate names keep the blue label short so the kept tail is
-        // comfortably large (the test must not sit at the keep==0 boundary).
         const fullPath = 'a/b/c/d/eeeeeeeeeeeeeeee';
         await tester.pumpWidget(
           buildBreadcrumbFM(
@@ -3432,43 +3469,25 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        // The full path is not shown as a single text inside the back item
-        expect(
-          find.descendant(
-            of: find.byKey(const Key('fm_back_item')),
-            matching: find.text(fullPath),
-          ),
-          findsNothing,
-        );
-        // Instead a front-truncated variant is shown: starts with "…" and
-        // keeps a tail of the path so the deepest folder stays readable.
-        final truncated = find.descendant(
+        final path = find.descendant(
           of: find.byKey(const Key('fm_back_item')),
-          matching: find.textContaining('…'),
+          matching: find.byType(ConstrainedText),
         );
-        expect(truncated, findsOneWidget);
-        final data = tester.widget<Text>(truncated).data!;
-        expect(data.startsWith('…'), isTrue);
-        // The visible tail is a non-empty suffix of the full path
-        // (front-truncation keeps the end, not the start)
-        expect(data.length, greaterThan(1));
-        expect(fullPath.endsWith(data.substring(1)), isTrue);
+        final pathText = tester.widget<ConstrainedText>(path.last);
+        expect(pathText.data, fullPath);
+        expect(pathText.textAlign, TextAlign.end);
+        expect(pathText.maxLines, 1);
+        expect(pathText.overflow, TextOverflow.clip);
       },
     );
 
     testWidgets(
-      'truncation never splits surrogate pairs (emoji folder names stay intact)',
+      'emoji folder path remains complete when clipped',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(340, 640));
         addTearDown(() => tester.binding.setSurfaceSize(null));
 
-        // The deepest folder name is a run of emoji (surrogate pairs).
-        // When the grey path is front-truncated, the cut must never land
-        // in the middle of a pair: a rendered lone surrogate shows as a
-        // garbled U+FFFD, and measuring a half pair is rejected by the
-        // text engine. `hasNoLoneSurrogates` below is the load-bearing
-        // check — it fails if the tail starts with a lone low surrogate.
-        const deepest = '😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀'; // 16 emoji
+        const deepest = '😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀';
         const fullPath = 'a/b/c/d/$deepest';
         await tester.pumpWidget(
           buildBreadcrumbFM(
@@ -3490,24 +3509,14 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        final truncated = find.descendant(
+        final path = find.descendant(
           of: find.byKey(const Key('fm_back_item')),
-          matching: find.textContaining('…'),
+          matching: find.byType(ConstrainedText),
         );
-        expect(truncated, findsOneWidget);
-        final data = tester.widget<Text>(truncated).data!;
-        expect(data.startsWith('…'), isTrue);
-        // The rendered tail is valid UTF-16 — no lone surrogates anywhere
-        expect(hasNoLoneSurrogates(data), isTrue, reason: 'data=$data');
-        // The deepest folder (the emoji run) is fully preserved at the end
-        expect(data.endsWith('😀'), isTrue, reason: 'data=$data');
-        // The cut is aligned to a surrogate-pair boundary: the first unit
-        // of the kept tail is never a lone low surrogate
-        expect(data.length, greaterThan(1));
-        final cut = fullPath.length - (data.length - 1);
-        final cutUnit = fullPath.codeUnitAt(cut);
-        expect(cutUnit < 0xDC00 || cutUnit > 0xDFFF, isTrue,
-            reason: 'data=$data cut=$cut');
+        final pathText = tester.widget<ConstrainedText>(path.last);
+        expect(pathText.data, fullPath);
+        expect(hasNoLoneSurrogates(pathText.data), isTrue);
+        expect(pathText.data.endsWith(deepest), isTrue);
       },
     );
 
