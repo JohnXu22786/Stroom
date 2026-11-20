@@ -10,12 +10,13 @@ import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 Widget _testApp({
+  Locale locale = const Locale('de', 'DE'),
   double textScale = 1,
   ThemeMode themeMode = ThemeMode.light,
 }) =>
     ProviderScope(
       child: MaterialApp(
-        locale: const Locale('de', 'DE'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData.light(),
         darkTheme: ThemeData.dark(),
@@ -36,6 +37,60 @@ Widget _testApp({
     );
 
 void main() {
+  testWidgets(
+    'Spanish duration labels stay readable while numeric fields retain editing',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      ManifestDatabase.enableTestMode();
+      VideoManifest.invalidateCache();
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _testApp(locale: const Locale('es', 'ES'), textScale: 1.6),
+      );
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      final fields = find.byType(TextFormField);
+      TextField textField(int index) => tester.widget<TextField>(
+        find.descendant(of: fields.at(index), matching: find.byType(TextField)),
+      );
+      expect(fields, findsNWidgets(4));
+      final durationLabels = ['Horas', 'Minutos', 'Artículos de segunda clase'];
+      for (final label in durationLabels) {
+        final constrainedLabel = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == label,
+        );
+        expect(constrainedLabel, findsOneWidget);
+        expect(
+          tester.widget<ConstrainedText>(constrainedLabel).maxLines,
+          1,
+          reason: 'Duration labels must measure and reveal clipped text.',
+        );
+      }
+
+      await tester.ensureVisible(fields.at(1));
+      await tester.enterText(fields.at(1), '12');
+      await tester.enterText(fields.at(2), '3x4');
+      await tester.enterText(fields.at(3), '56');
+      await tester.pump();
+      await tester.showKeyboard(find.byType(EditableText).at(2));
+      await tester.pump();
+
+      expect(textField(1).controller!.text, '12');
+      expect(textField(2).controller!.text, '34');
+      expect(textField(3).controller!.text, '56');
+      expect(textField(1).keyboardType, TextInputType.number);
+      expect(textField(1).textInputAction, TextInputAction.next);
+      expect(textField(3).textInputAction, TextInputAction.done);
+      expect(tester.testTextInput.isVisible, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'narrow German folder and duration rows keep complete clipped labels',
     (tester) async {

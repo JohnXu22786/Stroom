@@ -452,7 +452,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.hourController,
                       decoration: InputDecoration(
-                        labelText: _l10n.catCatchHour,
+                        label: ConstrainedText(_l10n.catCatchHour, maxLines: 1),
                         hintText: '0',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -474,7 +474,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.minuteController,
                       decoration: InputDecoration(
-                        labelText: _l10n.catCatchMinute,
+                        label: ConstrainedText(
+                          _l10n.catCatchMinute,
+                          maxLines: 1,
+                        ),
                         hintText: '0',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -496,7 +499,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.secondController,
                       decoration: InputDecoration(
-                        labelText: _l10n.catCatchSecond,
+                        label: ConstrainedText(
+                          _l10n.catCatchSecond,
+                          maxLines: 1,
+                        ),
                         hintText: '0',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
