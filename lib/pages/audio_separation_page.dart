@@ -896,13 +896,17 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   children: [
                     Icon(Icons.videocam, size: 14, color: cs.onSurfaceVariant),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.audioSeparationSelectedVideoCount(
-                        _selectedVideos.length,
-                      ),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                    Flexible(
+                      child: ConstrainedText(
+                        _l10n.audioSeparationSelectedVideoCount(
+                          _selectedVideos.length,
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
