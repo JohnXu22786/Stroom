@@ -85,6 +85,14 @@ void main() {
     Attachment? editingAttachment,
     String conversationId = 'race-test',
   }) async {
+    final conversation = Conversation(
+      id: conversationId,
+      title: 'Race test',
+      messages: [],
+    );
+    SharedPreferences.setMockInitialValues({
+      'conversations': jsonEncode([conversation.toMap()]),
+    });
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

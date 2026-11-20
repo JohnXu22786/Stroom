@@ -449,8 +449,8 @@ void main() {
       final selectedBytes = Completer<Uint8List>();
       late Future<void> pendingImport;
       await tester.runAsync(() async {
-        pendingImport = key.currentState!
-            .addPendingAttachmentAfterPickerForTesting(
+        pendingImport =
+            key.currentState!.addPendingAttachmentAfterPickerForTesting(
           'picked-in-conv-1.txt',
           selectedBytes.future,
         );
@@ -695,8 +695,7 @@ void main() {
       expect(
         stored.draftAttachments[0].base64Data,
         isNull,
-        reason:
-            '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
+        reason: '恢复路径必须深拷贝——文件 base64 不得写回对话持有的对象，'
             '否则对话 JSON 会被撑爆（持久化静默失败）',
       );
     });
@@ -943,9 +942,8 @@ void main() {
             .cast<Map<String, dynamic>>()
             .map(Conversation.fromMap)
             .single;
-        draftPathsAtDelete[path] = saved.draftAttachments
-            .map((att) => att.storagePath)
-            .toList();
+        draftPathsAtDelete[path] =
+            saved.draftAttachments.map((att) => att.storagePath).toList();
         deletedPaths.add(path);
         await File('${tmpRoot.path}/$path').delete();
         if (path == secondPath) secondDeleteFinished.complete();
@@ -1053,7 +1051,8 @@ void main() {
       // bytes/path without allowing its 800ms draft debounce to persist.
       late Future<void> removal;
       await tester.runAsync(() async {
-        removal = composerKey.currentState!.removePendingAttachmentForTesting(0);
+        removal =
+            composerKey.currentState!.removePendingAttachmentForTesting(0);
         await store.writeStarted!.future;
       });
       await tester.runAsync(
@@ -1115,8 +1114,8 @@ void main() {
         draftAttachments: [attachment],
       );
       var deleteCalled = false;
-      AttachmentStorage.deletionIdentitiesOverrideForTesting = (path) =>
-          path == editedPath ? {editedPath, attachmentPath} : {path};
+      AttachmentStorage.deletionIdentitiesOverrideForTesting =
+          (path) => path == editedPath ? {editedPath, attachmentPath} : {path};
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deleteCalled = true;
         await File('${tmpRoot.path}/$path').delete();
