@@ -365,32 +365,41 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       color: Colors.red,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      strings.unifiedTaskErrorDetails,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red[700],
+                    Expanded(
+                      child: ConstrainedText(
+                        strings.unifiedTaskErrorDetails,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red[700],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(),
-                    if (hasRawData)
-                      TextButton.icon(
-                        onPressed: () => _showErrorDetailDialog(context, task),
-                        icon: const Icon(Icons.preview, size: 14),
-                        label: ConstrainedText(
-                          strings.unifiedTaskViewErrorDetails,
-                          style: TextStyle(fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    if (hasRawData) ...[
+                      const SizedBox(width: 4),
+                      Flexible(
+                        flex: 2,
+                        child: TextButton.icon(
+                          onPressed: () =>
+                              _showErrorDetailDialog(context, task),
+                          icon: const Icon(Icons.preview, size: 14),
+                          label: ConstrainedText(
+                            strings.unifiedTaskViewErrorDetails,
+                            style: TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
