@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/update_dialog.dart';
 
 /// Wraps the given [notifier] and shows [UpdateDialog] via [showDialog],
@@ -103,8 +104,87 @@ String _githubRelease(
 ''';
 }
 
+void _expectStatusClips(WidgetTester tester, Finder status) {
+  final widget = tester.widget<ConstrainedText>(status);
+  final context = tester.element(status);
+  final painter = TextPainter(
+    text: TextSpan(
+      text: widget.data,
+      style: DefaultTextStyle.of(context).style.merge(widget.style),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.localeOf(context),
+    maxLines: widget.maxLines,
+  )..layout();
+
+  expect(painter.width, greaterThan(tester.getSize(status).width));
+}
+
 void main() {
   group('UpdateDialog - Shared Dialog', () {
+    testWidgets('bounds the completed download status at large text scale', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          downloadComplete: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('de', 'DE'),
+        size: const Size(320, 640),
+        theme: ThemeData.light(),
+      );
+
+      final status = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == 'Download abgeschlossen',
+      );
+      expect(status, findsOneWidget);
+      _expectStatusClips(tester, status);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('bounds the installing status at large text scale', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          downloadComplete: true,
+          isInstalling: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('de', 'DE'),
+        size: const Size(320, 640),
+        theme: ThemeData.dark(),
+      );
+
+      final status = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText && widget.data == 'Wird installiert…',
+      );
+      expect(status, findsOneWidget);
+      _expectStatusClips(tester, status);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('does not expose manual release selection', (tester) async {
       final notifier = _setupNotifier(
         state: UpdateState(

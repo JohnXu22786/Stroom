@@ -122,12 +122,16 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        strings.updateInstalling,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: cs.onTertiaryContainer,
-                          fontSize: 15,
+                      Flexible(
+                        child: ConstrainedText(
+                          strings.updateInstalling,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: cs.onTertiaryContainer,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ],
@@ -164,9 +168,13 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   children: [
                     Icon(Icons.check_circle, color: cs.primary, size: 18),
                     const SizedBox(width: 4),
-                    Text(
-                      AppLocalizations.of(context)!.updateDownloadComplete,
-                      style: TextStyle(color: cs.primary),
+                    Flexible(
+                      child: ConstrainedText(
+                        strings.updateDownloadComplete,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: cs.primary),
+                      ),
                     ),
                   ],
                 ),
