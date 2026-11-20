@@ -130,44 +130,81 @@ class _SearchPanelState extends State<SearchPanel> {
               const SizedBox(height: 12),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    FilterChip(
-                      label: ConstrainedText(
-                        AppLocalizations.of(context)!.searchPanelByTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      selected: !_searchByContent,
-                      onSelected: (_) =>
-                          setState(() => _searchByContent = false),
-                      visualDensity: VisualDensity.compact,
-                      showCheckmark: false,
-                    ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      label: ConstrainedText(
-                        AppLocalizations.of(context)!.searchPanelByContent,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      selected: _searchByContent,
-                      onSelected: (_) =>
-                          setState(() => _searchByContent = true),
-                      visualDensity: VisualDensity.compact,
-                      showCheckmark: false,
-                    ),
-                    const Spacer(),
-                    if (_query.isNotEmpty)
-                      Text(
-                        AppLocalizations.of(context)!
-                            .searchPanelResults(filtered.length),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: cs.onSurfaceVariant,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final l10n = AppLocalizations.of(context)!;
+                    final hasResults = _query.isNotEmpty;
+                    const gap = 8.0;
+                    final resultSlotWidth =
+                        hasResults ? constraints.maxWidth / 3 : 0.0;
+                    final chipGroupWidth = hasResults
+                        ? constraints.maxWidth - resultSlotWidth - gap
+                        : constraints.maxWidth;
+                    return Row(
+                      children: [
+                        SizedBox(
+                          width: chipGroupWidth,
+                          child: Row(
+                            children: [
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: (chipGroupWidth - gap) / 2,
+                                ),
+                                child: FilterChip(
+                                  label: ConstrainedText(
+                                    l10n.searchPanelByTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  selected: !_searchByContent,
+                                  onSelected: (_) => setState(
+                                    () => _searchByContent = false,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  showCheckmark: false,
+                                ),
+                              ),
+                              const SizedBox(width: gap),
+                              Flexible(
+                                fit: FlexFit.loose,
+                                child: FilterChip(
+                                  label: ConstrainedText(
+                                    l10n.searchPanelByContent,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  selected: _searchByContent,
+                                  onSelected: (_) => setState(
+                                    () => _searchByContent = true,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  showCheckmark: false,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
+                        if (hasResults) const Spacer(),
+                        if (hasResults)
+                          SizedBox(
+                            width: resultSlotWidth,
+                            child: Align(
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: ConstrainedText(
+                                l10n.searchPanelResults(filtered.length),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 8),
