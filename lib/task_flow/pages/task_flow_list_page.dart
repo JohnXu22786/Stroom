@@ -223,25 +223,94 @@ class TaskFlowListPage extends ConsumerWidget {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: ConstrainedText(
-                            AppLocalizations.of(context)!
-                                .taskFlowBlockCount(flow.blocks.length),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: cs.onSurfaceVariant,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          formatRelativeTime(
-                            flow.updatedAt,
-                            AppLocalizations.of(context)!,
-                          ),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final count = strings.taskFlowBlockCount(
+                                flow.blocks.length,
+                              );
+                              final updated = formatRelativeTime(
+                                flow.updatedAt,
+                                strings,
+                              );
+                              final defaultStyle =
+                                  DefaultTextStyle.of(context).style;
+                              final countStyle = defaultStyle.merge(
+                                TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              );
+                              final updatedStyle = defaultStyle.merge(
+                                TextStyle(
+                                  fontSize: 10,
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              );
+                              final direction = Directionality.of(context);
+                              final scaler = MediaQuery.textScalerOf(context);
+                              final locale = Localizations.maybeLocaleOf(
+                                context,
+                              );
+                              double measure(String text, TextStyle style) =>
+                                  (TextPainter(
+                                    text: TextSpan(text: text, style: style),
+                                    textDirection: direction,
+                                    textScaler: scaler,
+                                    locale: locale,
+                                  )..layout())
+                                      .width;
+
+                              final countWidth = measure(count, countStyle);
+                              final updatedWidth =
+                                  measure(updated, updatedStyle);
+                              final countLabel = ConstrainedText(
+                                count,
+                                style: countStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                              final updatedLabel = ConstrainedText(
+                                updated,
+                                style: updatedStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                              );
+
+                              if (countWidth + updatedWidth <=
+                                  constraints.maxWidth) {
+                                return Row(
+                                  children: [
+                                    countLabel,
+                                    const Spacer(),
+                                    updatedLabel,
+                                  ],
+                                );
+                              }
+
+                              final gap =
+                                  constraints.maxWidth >= 8 ? 8.0 : 0.0;
+                              final labelWidth = constraints.maxWidth - gap;
+                              final updatedSlotWidth = updatedWidth <=
+                                      labelWidth / 2
+                                  ? updatedWidth
+                                  : labelWidth / 2;
+                              return Row(
+                                children: [
+                                  Expanded(child: countLabel),
+                                  SizedBox(width: gap),
+                                  SizedBox(
+                                    width: updatedSlotWidth,
+                                    child: Align(
+                                      alignment: AlignmentDirectional.centerEnd,
+                                      child: updatedLabel,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ],
