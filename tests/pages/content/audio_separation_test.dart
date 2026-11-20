@@ -16,6 +16,7 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
+import 'package:stroom/widgets/save_to_folder_selector.dart';
 
 Widget _buildTestApp() {
   return const ProviderScope(
@@ -150,11 +151,19 @@ void main() {
   });
 
   group('AudioSeparationPage - save-to folder selector', () {
-    testWidgets('save-to shows root directory by default', (tester) async {
+    testWidgets('save-to selector shows root and opens the folder picker', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
+      expect(find.byType(SaveToFolderSelector), findsOneWidget);
       expect(find.text('根目录'), findsOneWidget);
+
+      await tester.tap(find.byType(SaveToFolderSelector));
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择保存文件夹'), findsOneWidget);
     });
   });
 
