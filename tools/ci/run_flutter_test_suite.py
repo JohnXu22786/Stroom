@@ -134,6 +134,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/natural_sort_test.dart",
         "pages/backup_restore_page_test.dart",
         "pages/backup_restore_constrained_text_test.dart",
+        "widgets/clear_selected_data_confirmation_dialog_test.dart",
         "pages/files_page*_test.dart",
         "pages/content/text_storage_shared_test.dart",
         "pages/content/text_storage_page_empty_file_test.dart",
