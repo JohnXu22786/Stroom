@@ -5,6 +5,8 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_en.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/pages/task_list_page.dart';
+import 'package:stroom/pages/task_list_shared.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
@@ -101,6 +103,50 @@ Future<_RecordingTasks> _pumpList(WidgetTester tester,
   return notifier;
 }
 
+
+Future<void> _pumpTaskCard(
+  WidgetTester tester,
+  SynthesisTask task, {
+  Size size = const Size(320, 640),
+  Locale locale = const Locale('en'),
+  double textScale = 1,
+  bool darkMode = false,
+}) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = size;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  final executions = _SeededExecutions([]);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        taskListProvider.overrideWith((ref) => _RecordingTasks(ref, [task])),
+        taskFlowExecutionsProvider.overrideWith((ref) => executions),
+        taskFlowExecutionRestoreStatusProvider.overrideWith(
+          (ref) => FlowExecutionRestoreStatus.restoring,
+        ),
+      ],
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.light(useMaterial3: true),
+        darkTheme: ThemeData.dark(useMaterial3: true),
+        themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+          ),
+          child: child!,
+        ),
+        home: Scaffold(body: ListView(children: [TaskCard(task: task)])),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
 void main() {
   test('localized clear messages keep dynamic error details verbatim', () {
     final english = AppLocalizationsEnUs();
@@ -123,6 +169,95 @@ void main() {
       chinese.unifiedTaskListCancellationSaveFailed,
       '无法保存任务流的取消状态，请重试清除。',
     );
+  });
+
+  testWidgets('task detail dialog titles fit narrow localized layouts', (
+    tester,
+  ) async {
+    const error = 'The synthesis request failed after the server timed out.';
+    final task = SynthesisTask(
+      id: 'failed-dialog',
+      title: 'Failed task',
+      status: TaskStatus.failed,
+      error: error,
+      text: 'Request text',
+      providerConfig: ProviderConfigItem(providerName: 'Example'),
+      modelConfig: ModelConfig(name: 'Voice', modelId: 'voice'),
+      originalRequest: '{"model":"voice"}',
+      originalResponse: '{"error":"timeout"}',
+    );
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: const Size(320, 640),
+      locale: const Locale('de', 'DE'),
+      textScale: 1.5,
+      darkMode: true,
+    );
+
+    await tester.tap(find.text(error));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(TaskCard)),
+    )!;
+    expect(find.text(strings.taskListSynthesisErrorTitle), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == strings.taskListSynthesisErrorTitle,
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text(strings.taskListClose));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(strings.taskListDetail));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(strings.taskListOriginalExchange), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == strings.taskListOriginalExchange,
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('fitting task dialog title remains stationary', (tester) async {
+    const error = 'Short failure.';
+    final task = SynthesisTask(
+      id: 'failed-dialog-fitting',
+      title: 'Failed task',
+      status: TaskStatus.failed,
+      error: error,
+      text: 'Request text',
+      providerConfig: ProviderConfigItem(providerName: 'Example'),
+      modelConfig: ModelConfig(name: 'Voice', modelId: 'voice'),
+    );
+    await _pumpTaskCard(
+      tester,
+      task,
+      size: const Size(700, 640),
+    );
+    await tester.tap(find.text(error));
+    await tester.pumpAndSettle();
+    final title = find.text('Synthesis error details');
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == 'Synthesis error details',
+      ),
+      findsOneWidget,
+    );
+    final initialPosition = tester.getTopLeft(title);
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.takeException(), isNull);
+    expect(tester.getTopLeft(title), initialPosition);
   });
 
   testWidgets('task controls stay locked until flow ownership is restored',
