@@ -479,8 +479,10 @@ class _NotificationSettingsPageState
                     child: FilledButton.tonalIcon(
                       onPressed: _openSystemSettings,
                       icon: const Icon(Icons.settings, size: 18),
-                      label: Text(
+                      label: ConstrainedText(
                         _strings.notificationSettingsOpenSystemSettings,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -493,8 +495,10 @@ class _NotificationSettingsPageState
                       onPressed:
                           _isCheckingPermission ? null : _requestPermission,
                       icon: const Icon(Icons.notifications, size: 18),
-                      label: Text(
+                      label: ConstrainedText(
                         _strings.notificationSettingsRequestPermission,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
