@@ -239,6 +239,140 @@ void main() {
     );
   });
 
+  testWidgets(
+    'search panel bounds long German filters and result count at narrow width',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.25)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: SearchPanel(
+              conversations: const [],
+              onConversationSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(SearchPanel)),
+      )!;
+      final chips =
+          tester.widgetList<FilterChip>(find.byType(FilterChip)).toList();
+      expect(chips, hasLength(2));
+      final firstChip = find.byType(FilterChip).first;
+      final initialFirstChipLeft = tester.getRect(firstChip).left;
+      final rowException = tester.takeException();
+      expect(rowException, isNull, reason: rowException?.toString());
+
+      final contentChip = find.byType(FilterChip).at(1);
+      await tester.tap(contentChip);
+      await tester.pump();
+      expect(tester.widget<FilterChip>(contentChip).selected, isTrue);
+
+      await tester.enterText(find.byType(TextField), 'needle');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(l10n.searchPanelResults(0)), findsOneWidget);
+      expect(tester.getRect(firstChip).left, initialFirstChipLeft);
+      final chipRects = [
+        tester.getRect(find.byType(FilterChip).at(0)),
+        tester.getRect(find.byType(FilterChip).at(1)),
+      ];
+      expect(chipRects[1].left, greaterThanOrEqualTo(chipRects[0].right));
+      final resultsLabel = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == l10n.searchPanelResults(0),
+      );
+      expect(resultsLabel, findsOneWidget);
+      expect(tester.getRect(resultsLabel).right, lessThanOrEqualTo(304.01));
+      expect(tester.takeException(), isNull);
+      final filterLabels = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            (widget.data == l10n.searchPanelByTitle ||
+                widget.data == l10n.searchPanelByContent),
+      );
+      expect(filterLabels, findsNWidgets(2));
+      for (var i = 0; i < 2; i++) {
+        final label = filterLabels.at(i);
+        expect(tester.getRect(label).width.isFinite, isTrue);
+        expect(tester.getRect(label).right, lessThanOrEqualTo(304.01));
+      }
+    },
+  );
+
+  testWidgets('search panel fitting Spanish filters remain stationary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es', 'ES'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SearchPanel(
+            conversations: const [],
+            onConversationSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(SearchPanel)))!;
+    final titleLabel = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == l10n.searchPanelByTitle,
+    );
+    final contentLabel = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == l10n.searchPanelByContent,
+    );
+    expect(titleLabel, findsOneWidget);
+    expect(contentLabel, findsOneWidget);
+    final titleText = find.descendant(
+      of: titleLabel,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == l10n.searchPanelByTitle,
+      ),
+    );
+    final contentText = find.descendant(
+      of: contentLabel,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == l10n.searchPanelByContent,
+      ),
+    );
+    final initialTitlePosition = tester.getTopLeft(titleText);
+    final initialContentPosition = tester.getTopLeft(contentText);
+
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(tester.getTopLeft(titleText), initialTitlePosition);
+    expect(tester.getTopLeft(contentText), initialContentPosition);
+    expect(tester.getRect(titleLabel).right, lessThanOrEqualTo(304.01));
+    expect(tester.getRect(contentLabel).right, lessThanOrEqualTo(304.01));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('temporary conversation shows countdown before its title',
       (tester) async {
     final temporaryTopic = Conversation(
