@@ -12,6 +12,7 @@ import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 import 'package:stroom/pages/chat/composer/file_picker_shared.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
@@ -625,6 +626,70 @@ void main() {
       expect(find.text('选择文件'), findsNothing,
           reason: 'the explicit close button must always close the picker');
     });
+  });
+
+  testWidgets(
+      'long folder back row fits narrow RTL picker and navigates up',
+      (tester) async {
+    const parent = 'an-extremely-long-parent-folder-name-for-the-picker';
+    const child = 'another-extremely-long-current-folder-name';
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.runAsync(() async {
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'nested-note',
+          hash: 'nested-note',
+          size: 0,
+          createdAt: DateTime.now(),
+          folder: '$parent/$child',
+        ),
+      );
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ar'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showAppFilePickerDialog(context),
+            child: const Text('Open Picker'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open Picker'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(
+      find.ancestor(of: find.text(parent), matching: find.byType(Card)),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.ancestor(of: find.text(child), matching: find.byType(Card)),
+    );
+    await tester.pump();
+
+    final backRow = find.byKey(const Key('file_picker_back_item'));
+    expect(backRow, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    final rowRect = tester.getRect(backRow);
+    final currentLabelRect = tester.getRect(
+      find.ancestor(
+        of: find.text(child),
+        matching: find.byType(ConstrainedText),
+      ),
+    );
+    expect(currentLabelRect.left, closeTo(rowRect.left + 24, 2));
+
+    await tester.tap(
+      find.descendant(of: backRow, matching: find.byIcon(Icons.arrow_back)),
+    );
+    await tester.pump();
+    expect(find.text(child), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   group('AppFilePickerDialog localization', () {
