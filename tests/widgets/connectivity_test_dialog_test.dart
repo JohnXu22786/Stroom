@@ -1,12 +1,281 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/connectivity_test_dialog.dart';
 import 'package:stroom/services/connectivity_test_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
+  testWidgets(
+    'wraps the complete JSON helper in every locale at a narrow viewport',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+
+      for (final locale in AppLocalizations.supportedLocales) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            theme: locale.languageCode == 'en'
+                ? ThemeData.dark()
+                : ThemeData.light(),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => ConnectivityTestDialog(
+                      title: 'Proxy',
+                      initialContent: '{}',
+                      note: 'Read-only check.',
+                      onSave: (_) async {},
+                      onRun: (_) async => const ConnectivityTestResult(
+                        succeeded: true,
+                        summary: 'HTTP 200',
+                        details: '',
+                        elapsed: Duration.zero,
+                      ),
+                    ),
+                  ),
+                  child: const Text('Open dialog'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open dialog'));
+        await tester.pumpAndSettle();
+
+        final helper = AppLocalizations.delegate
+            .load(locale)
+            .then((localizations) => localizations.connectivityTestJsonHelp);
+        final helperText = await helper;
+        final helperFinder = find.text(helperText);
+        expect(helperFinder, findsOneWidget, reason: locale.toString());
+        final helperParagraph = tester.renderObject<RenderParagraph>(
+          helperFinder,
+        );
+        expect(
+          helperParagraph.didExceedMaxLines,
+          isFalse,
+          reason: '${locale.toString()} helper should not be truncated',
+        );
+        expect(
+          helperParagraph.size.height,
+          greaterThan(24),
+          reason: '${locale.toString()} helper should wrap naturally',
+        );
+        expect(tester.takeException(), isNull, reason: locale.toString());
+      }
+    },
+  );
+
+  testWidgets(
+    'keeps native JSON editing active with the multiline keyboard open',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.view.viewInsets = FakeViewPadding.zero);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      const locale = Locale('de', 'DE');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => ConnectivityTestDialog(
+                    title: 'Proxy',
+                    initialContent: '{}',
+                    note: 'Read-only check.',
+                    onSave: (_) async {},
+                    onRun: (_) async => const ConnectivityTestResult(
+                      succeeded: true,
+                      summary: 'HTTP 200',
+                      details: '',
+                      elapsed: Duration.zero,
+                    ),
+                  ),
+                ),
+                child: const Text('Open dialog'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open dialog'));
+      await tester.pumpAndSettle();
+
+      final fieldFinder = find.byType(TextField);
+      await tester.showKeyboard(fieldFinder);
+      const editedJson = '{\n  "edited": true\n}';
+      await tester.enterText(fieldFinder, editedJson);
+      await tester.pump();
+
+      final field = tester.widget<TextField>(fieldFinder);
+      expect(field.keyboardType, TextInputType.multiline);
+      expect(field.enabled, isTrue);
+      final editableText = tester.widget<EditableText>(
+        find.byType(EditableText),
+      );
+      expect(editableText.focusNode.hasFocus, isTrue);
+      expect(editableText.controller.text, editedJson);
+      expect(
+        editableText.controller.selection,
+        const TextSelection.collapsed(offset: editedJson.length),
+      );
+      expect(tester.view.viewInsets.bottom, 280);
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      expect(find.byType(ConnectivityTestDialog), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'saved status label is bounded when long and stationary when it fits',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      Future<void> showSavedDialog({
+        required Locale locale,
+        required Size size,
+        required double textScale,
+        ThemeData? theme,
+      }) async {
+        if (find.byType(ConnectivityTestDialog).evaluate().isNotEmpty) {
+          Navigator.of(tester.element(find.byType(ConnectivityTestDialog)))
+              .pop();
+          await tester.pumpAndSettle();
+        }
+        tester.platformDispatcher.textScaleFactorTestValue = 1;
+        await tester.binding.setSurfaceSize(const Size(800, 800));
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            theme: theme ?? ThemeData.light(),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => ConnectivityTestDialog(
+                      title: 'Proxy',
+                      initialContent: '{}',
+                      note: 'Read-only check.',
+                      onSave: (_) async {},
+                      onRun: (_) async => const ConnectivityTestResult(
+                        succeeded: true,
+                        summary: 'HTTP 200',
+                        details: '',
+                        elapsed: Duration.zero,
+                      ),
+                    ),
+                  ),
+                  child: const Text('Open dialog'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open dialog'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text(
+            locale.languageCode == 'de' ? 'Inhalt speichern' : 'Save Content',
+          ),
+        );
+        await tester.pumpAndSettle();
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        await tester.binding.setSurfaceSize(size);
+        await tester.pumpAndSettle();
+      }
+
+      await showSavedDialog(
+        locale: const Locale('de', 'DE'),
+        size: const Size(320, 640),
+        textScale: 1.8,
+      );
+
+      expect(tester.takeException(), isNull);
+      final germanLabel = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == 'Testinhalt gespeichert',
+      );
+      expect(germanLabel, findsOneWidget);
+      final germanText = tester.widget<ConstrainedText>(germanLabel);
+      final germanContext = tester.element(germanLabel);
+      final germanNatural = TextPainter(
+        text: TextSpan(
+          text: germanText.data,
+          style:
+              DefaultTextStyle.of(germanContext).style.merge(germanText.style),
+        ),
+        textDirection: Directionality.of(germanContext),
+        textScaler: MediaQuery.textScalerOf(germanContext),
+        locale: Localizations.localeOf(germanContext),
+        maxLines: germanText.maxLines,
+      )..layout();
+      expect(
+        germanNatural.width,
+        greaterThan(tester.getSize(germanLabel).width),
+      );
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+
+      await showSavedDialog(
+        locale: const Locale('en', 'US'),
+        size: const Size(800, 800),
+        textScale: 1,
+        theme: ThemeData.dark(),
+      );
+      final englishLabel = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText && widget.data == 'Test content saved',
+      );
+      expect(englishLabel, findsOneWidget);
+      final englishText = tester.widget<ConstrainedText>(englishLabel);
+      final englishContext = tester.element(englishLabel);
+      final englishNatural = TextPainter(
+        text: TextSpan(
+          text: englishText.data,
+          style: DefaultTextStyle.of(englishContext)
+              .style
+              .merge(englishText.style),
+        ),
+        textDirection: Directionality.of(englishContext),
+        textScaler: MediaQuery.textScalerOf(englishContext),
+        locale: Localizations.localeOf(englishContext),
+        maxLines: englishText.maxLines,
+      )..layout();
+      expect(
+        englishNatural.width,
+        lessThanOrEqualTo(tester.getSize(englishLabel).width),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('disables test content editing while saving or running', (
     tester,
   ) async {

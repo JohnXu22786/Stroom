@@ -587,12 +587,16 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              l10n.ttsSynthesisModel,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
+            Flexible(
+              child: ConstrainedText(
+                l10n.ttsSynthesisModel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),
@@ -611,6 +615,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                   child: DropdownButton<int>(
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
+                    menuWidth: (MediaQuery.sizeOf(context).width - 32)
+                        .clamp(0, 360)
+                        .toDouble(),
                     value: clampedIndex,
                     isDense: true,
                     isExpanded: true,
@@ -628,6 +635,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                       if (idx == null || idx >= _availableModels.length) return;
                       _onModelSelected(idx);
                     },
+                    selectedItemBuilder: (context) => List.generate(
+                      _availableModels.length,
+                      (i) {
+                        final opt = _availableModels[i];
+                        final modelName = opt.config.name.isNotEmpty
+                            ? opt.config.name
+                            : opt.config.modelId;
+                        final displayText = opt
+                                .providerConfig.providerName.isNotEmpty
+                            ? '$modelName | ${opt.providerConfig.providerName}'
+                            : modelName;
+                        return ConstrainedText(
+                          displayText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          useNaturalWidthLayout: true,
+                        );
+                      },
+                    ),
                     items: List.generate(_availableModels.length, (i) {
                       final opt = _availableModels[i];
                       final modelName = opt.config.name.isNotEmpty
@@ -643,6 +669,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                           displayText,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          useNaturalWidthLayout: true,
                         ),
                       );
                     }),
@@ -740,35 +767,43 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               children: [
                 _sectionIcon(Icons.drive_file_rename_outline, cs),
                 const SizedBox(width: 10),
-                Text(
-                  l10n.ttsOriginalTitle,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                Flexible(
+                  flex: 2,
+                  child: ConstrainedText(
+                    l10n.ttsOriginalTitle,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
                 if (widget.originalTitle != null)
-                  FilterChip(
-                    label: ConstrainedText(
-                      l10n.ttsUseOriginalTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  Flexible(
+                    flex: 3,
+                    child: FilterChip(
+                      label: ConstrainedText(
+                        l10n.ttsUseOriginalTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      selected: _useOriginalTitle,
+                      showCheckmark: false,
+                      avatar: Icon(
+                        _useOriginalTitle ? Icons.check : Icons.title,
+                        size: 16,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (selected) {
+                        setState(() {
+                          _useOriginalTitle = selected;
+                          if (selected) {
+                            _titleController.text = widget.originalTitle!;
+                          } else {
+                            _titleController.clear();
+                          }
+                        });
+                      },
                     ),
-                    selected: _useOriginalTitle,
-                    showCheckmark: false,
-                    avatar: Icon(
-                      _useOriginalTitle ? Icons.check : Icons.title,
-                      size: 16,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (selected) {
-                      setState(() {
-                        _useOriginalTitle = selected;
-                        if (selected) {
-                          _titleController.text = widget.originalTitle!;
-                        } else {
-                          _titleController.clear();
-                        }
-                      });
-                    },
                   ),
               ],
             ),
@@ -787,9 +822,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               children: [
                 _sectionIcon(Icons.subject_rounded, cs),
                 const SizedBox(width: 10),
-                Text(
-                  l10n.ttsTextToConvert,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                Expanded(
+                  child: ConstrainedText(
+                    l10n.ttsTextToConvert,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -840,11 +879,15 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                           color: Colors.red,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          l10n.ttsTextLimitWarning(limit),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.red,
+                        Flexible(
+                          child: ConstrainedText(
+                            l10n.ttsTextLimitWarning(limit),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                            ),
                           ),
                         ),
                       ],
@@ -998,22 +1041,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                    children: [
-                      TextSpan(text: l10n.ttsProviderSettingsLead),
-                      TextSpan(
-                        text: l10n.ttsProviderSettings,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          decoration: TextDecoration.underline,
+                Flexible(
+                  child: RichText(
+                    textAlign: TextAlign.end,
+                    text: TextSpan(
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                      children: [
+                        TextSpan(text: l10n.ttsProviderSettingsLead),
+                        TextSpan(
+                          text: l10n.ttsProviderSettings,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: (TapGestureRecognizer()
+                            ..onTap = _navigateToProviderConfig),
                         ),
-                        recognizer: (TapGestureRecognizer()
-                          ..onTap = _navigateToProviderConfig),
-                      ),
-                      TextSpan(text: l10n.ttsProviderSettingsTail),
-                    ],
+                        TextSpan(text: l10n.ttsProviderSettingsTail),
+                      ],
+                    ),
                   ),
                 ),
               ],
