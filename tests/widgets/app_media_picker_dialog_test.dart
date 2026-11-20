@@ -880,6 +880,61 @@ void main() {
       expect(find.text('内部文件'), findsOneWidget);
     });
 
+    testWidgets('long back-row labels stay bounded and navigation still works', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const parent = '父目录名称特别特别特别特别长';
+      const child = '子目录名称特别特别特别特别长';
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(
+            context,
+            _createTestConfig(
+              folders: {'$parent', '$parent/$child'},
+              records: [
+                const _TestRecord(
+                  id: 'long',
+                  name: '记录',
+                  folder: '$parent/$child',
+                ),
+              ],
+            ),
+          ),
+          child: const Text('Open'),
+        );
+      })));
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text(parent));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text(child));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byKey(const Key('media_picker_back_item')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('media_picker_back_item')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(parent), findsWidgets);
+      expect(find.byKey(const Key('media_picker_back_item')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('media_picker_back_item')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const Key('media_picker_back_item')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('folder navigation: back button returns to parent', (
       tester,
     ) async {
@@ -918,8 +973,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should see back button
-      expect(find.byKey(const Key('media_picker_back_item')), findsOneWidget);
+      // Should see back button with the short current-folder label at its
+      // original trailing edge.
+      final backItem = find.byKey(const Key('media_picker_back_item'));
+      expect(backItem, findsOneWidget);
+      final currentFolder = find.descendant(
+        of: backItem,
+        matching: find.text('子文件夹'),
+      );
+      final cardRect = tester.getRect(backItem);
+      final labelRect = tester.getRect(currentFolder);
+      expect((cardRect.right - 24 - labelRect.right).abs(), lessThan(1));
 
       // Tap back
       await tester.tap(find.byKey(const Key('media_picker_back_item')));
