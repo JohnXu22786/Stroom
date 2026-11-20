@@ -180,6 +180,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/media_preview_audio_classification_test.dart",
         "pages/settings/asr_page_test.dart",
         "pages/settings/asr_model_config_constrained_text_test.dart",
+        "pages/settings/ocr_model_config_constrained_text_test.dart",
         "pages/settings/ocr_model_config_page_test.dart",
         "pages/settings/tts_create_page_test.dart",
         "pages/voice_batch_add_page_test.dart",
