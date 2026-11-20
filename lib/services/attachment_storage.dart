@@ -295,6 +295,7 @@ class AttachmentStorage {
   static Future<void> deleteFilesWithRollback(
     Iterable<String> storagePaths, {
     bool Function(String storagePath)? shouldDelete,
+    void Function(String storagePath)? onCleanupFailure,
   }) async {
     final paths = storagePaths.toList();
     final originals = <String, Map<String, Uint8List>>{};
@@ -315,9 +316,19 @@ class AttachmentStorage {
         // example, temp_edited files have two web keys). Include the current
         // path in rollback before attempting deletion for that case.
         deletedPaths.add(path);
-        await deleteFile(path);
+        try {
+          await deleteFile(path);
+        } catch (_) {
+          onCleanupFailure?.call(path);
+          rethrow;
+        }
         if (shouldDelete != null && !shouldDelete(path)) {
-          await _restoreDeletionIdentities(path, originals[path]!);
+          try {
+            await _restoreDeletionIdentities(path, originals[path]!);
+          } catch (_) {
+            onCleanupFailure?.call(path);
+            rethrow;
+          }
           deletedPaths.removeLast();
         }
       }
@@ -328,6 +339,7 @@ class AttachmentStorage {
           await _restoreDeletionIdentities(path, originals[path]!);
         } catch (restoreError) {
           rollbackErrors.add(restoreError);
+          onCleanupFailure?.call(path);
           await AppLogService.error(
             'AttachmentStorage',
             '回滚附件删除失败: $path',

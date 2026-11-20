@@ -118,4 +118,39 @@ void main() {
       expect(files['attachments/shared.png'], [4, 5, 6]);
     },
   );
+
+  test(
+    'reports failed restore for a file retained during deletion',
+    () async {
+      final files = <String, Uint8List>{
+        'temp_edited/shared.png': Uint8List.fromList([1, 2, 3]),
+      };
+      var retained = false;
+      final failedPaths = <String>{};
+      AttachmentStorage.deletionIdentitiesOverrideForTesting = (path) => {path};
+      AttachmentStorage.readFileOverrideForTesting = (path) async {
+        final bytes = files[path];
+        return bytes == null ? null : Uint8List.fromList(bytes);
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        files.remove(path);
+        retained = true;
+        return true;
+      };
+      AttachmentStorage.restoreFileOverrideForTesting = (path, bytes) async {
+        throw StateError('restore failed');
+      };
+
+      await expectLater(
+        AttachmentStorage.deleteFilesWithRollback(
+          ['temp_edited/shared.png'],
+          shouldDelete: (_) => !retained,
+          onCleanupFailure: failedPaths.add,
+        ),
+        throwsA(isA<AttachmentDeleteRollbackException>()),
+      );
+
+      expect(failedPaths, {'temp_edited/shared.png'});
+    },
+  );
 }

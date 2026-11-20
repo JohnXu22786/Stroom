@@ -107,10 +107,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               .any(retainedPaths.contains),
         )
         .toList();
-    final failedPaths = <String>[];
+    final failedPaths = <String>{};
     try {
       await AttachmentStorage.deleteFilesWithRollback(
         attachmentPaths,
+        onCleanupFailure: failedPaths.add,
         shouldDelete: (path) {
           final currentConversations = notifier.mounted
               ? notifier.currentConversations
@@ -124,9 +125,23 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         },
       );
     } catch (_) {
-      failedPaths.addAll(attachmentPaths);
+      if (failedPaths.isEmpty) {
+        final currentConversations = notifier.mounted
+            ? notifier.currentConversations
+            : fallbackCurrentConversations;
+        final currentRetainedPaths = currentConversations
+            .expand(_conversationAttachmentPaths)
+            .expand(AttachmentStorage.deletionIdentities)
+            .toSet();
+        failedPaths.addAll(
+          attachmentPaths.where(
+            (path) => !AttachmentStorage.deletionIdentities(path)
+                .any(currentRetainedPaths.contains),
+          ),
+        );
+      }
     }
-    if (failedPaths.isNotEmpty) return failedPaths;
+    if (failedPaths.isNotEmpty) return failedPaths.toList();
     for (final conversation in conversations) {
       try {
         await AttachmentStorage.deleteConversationCompressedImages(
@@ -136,7 +151,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         // 非关键清理
       }
     }
-    return failedPaths;
+    return failedPaths.toList();
   }
 
   Future<void> _batchDelete() async {

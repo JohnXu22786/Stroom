@@ -358,8 +358,15 @@ void main() {
       final attemptedPaths = <String>[];
       final restoredPaths = <String>[];
       final cleanupComplete = Completer<void>();
-      AttachmentStorage.readFileOverrideForTesting =
-          (_) async => Uint8List.fromList([1, 2, 3]);
+      final readStarted = Completer<void>();
+      final allowRead = Completer<void>();
+      AttachmentStorage.readFileOverrideForTesting = (path) async {
+        if (!readStarted.isCompleted) {
+          readStarted.complete();
+          await allowRead.future;
+        }
+        return Uint8List.fromList([1, 2, 3]);
+      };
       AttachmentStorage.restoreFileOverrideForTesting = (path, _) async {
         restoredPaths.add(path);
       };
@@ -389,17 +396,18 @@ void main() {
         tester.element(find.byType(ConversationsPage)),
         listen: false,
       );
+      container.read(activeConversationIdProvider.notifier).state =
+          'delete-test';
+      await _pumpUi(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await _awaitSignal(tester, readStarted);
       container.read(conversationsProvider.notifier).state = [
-        _conversation(),
         _conversationSharingFile(
           id: 'delete-test-retained',
           storagePath: 'temp_edited/file.txt',
         ),
       ];
-      container.read(activeConversationIdProvider.notifier).state =
-          'delete-test';
-      await _pumpUi(tester);
-      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      allowRead.complete();
       await _awaitSignal(tester, cleanupComplete);
       await _awaitSignal(tester, rollback.restored);
       await _pumpUi(tester);
@@ -408,6 +416,8 @@ void main() {
       expect(restoredPaths, ['second.txt']);
       expect(find.text('Delete test'), findsOneWidget);
       expect(find.text('Delete test shared'), findsOneWidget);
+      expect(find.textContaining('attachments/second.txt'), findsOneWidget);
+      expect(find.textContaining('attachments/file.txt'), findsNothing);
       expect(
         container.read(conversationsProvider).map((conv) => conv.id).toSet(),
         {'delete-test', 'delete-test-retained'},
