@@ -1255,6 +1255,100 @@ void main() {
     );
 
     testWidgets(
+      'tool output limit label and helper remain readable in a narrow panel',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        SharedPreferences.setMockInitialValues({});
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              locale: const Locale('pt', 'BR'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  disableAnimations: false,
+                ),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: Center(
+                  child: SizedBox(
+                    width: 160,
+                    height: 600,
+                    child: AssistantDefaultsTab(
+                      defaultModelName: null,
+                      defaultModelId: null,
+                      defaultProviderName: null,
+                      defaultToolNames: null,
+                      maxToolOutputChars: 5000,
+                      enableMaxToolOutputChars: true,
+                      onDefaultModelChanged: (_) {},
+                      onDefaultToolsChanged: (_) {},
+                      onEnableMaxToolOutputCharsChanged: (_) {},
+                      onMaxToolOutputCharsChanged: (_) {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(AssistantDefaultsTab)),
+        )!;
+        final field = find.byType(TextField);
+        await tester.ensureVisible(field);
+        await tester.pump();
+
+        final label = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText &&
+              widget.data == l10n.assistantMaxCharacters,
+        );
+        expect(label, findsOneWidget);
+        final helper = find.text(l10n.assistantCharactersNotTokens);
+        expect(helper, findsOneWidget);
+        expect(tester.getSize(helper).height, greaterThan(16));
+        expect(tester.widget<TextField>(field).controller!.text, '5000');
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(field);
+        await tester.pump();
+        expect(tester.testTextInput.isVisible, isTrue);
+        await tester.enterText(field, '');
+        await tester.pump();
+        expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
+        await tester.enterText(field, '999999');
+        await tester.pump();
+        expect(
+          find.text(l10n.assistantCharacterRange('100', '100000')),
+          findsOneWidget,
+        );
+        await tester.enterText(field, '1200');
+        await tester.pump();
+        expect(
+          find.text(l10n.assistantCharacterRange('100', '100000')),
+          findsNothing,
+        );
+        expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pump();
+        await tester.ensureVisible(field);
+        await tester.pump();
+        expect(find.text(l10n.assistantCharactersNotTokens), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'assistant defaults preview heading stays within its icon row',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(320, 640));
