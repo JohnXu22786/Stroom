@@ -1,28 +1,25 @@
 # Unified task information and CatCatch URL QA
 
-Each PNG is a full rendered phone screen, with the page before the change on the left and the page after the change on the right. These captures use the app's real `TaskListPage` or `UnifiedTaskListPage`; they are not isolated widget crops or a mock page shell. The media-preview comparison shows the production bottom sheet over the actual unified task list.
+Each PNG is a side-by-side comparison of the real app page: the complete 320 × 720 phone viewport from before is on the left and after is on the right. A 28 px header identifies the source commits. The images are 640 × 748 px. Captures use the production `TaskListPage` or `UnifiedTaskListPage`, real task cards, and the production Application theme (blue seed, Material 3, app bar and card themes). The media-preview comparison opens the production bottom sheet from the CatCatch resource row.
 
 ## Capture conditions
 
-- Chromium rendering of the Flutter Web app and production pages/widgets
-- 320 × 900 logical-pixel viewport per side, device scale factor 1
-- Portuguese (Brazil), light Material 3 theme, text scale 2.0
-- Before source: `992481ff90017b5f4d041189bb14377348adff62`
-- After source: `0df0c31d1bdae4feceee1aabb92fb07e61d256c8`
-- Both sides use the same task scenario, viewport, locale, and theme
+- Chromium rendering of Flutter Web at a 320 × 720 logical-pixel viewport per side, device scale factor 1
+- Portuguese (Brazil) locale (`pt-BR`), light theme; locale is a screenshot-fidelity choice only and does not claim coverage for Chinese or other locales
+- Flutter's ordinary/default text scale (1.0); no `MediaQuery.textScaler` override
+- Before source: full checkout at `992481ff90017b5f4d041189bb14377348adff62`
+- After source: full checkout at `7bbc98644124b5c9e4eef842eed5b5d80851fd04`
+- Matching task seed, viewport, locale, theme, and default text scale on both sides
+- Static captures use `MediaQueryData.disableAnimations = true` in the temporary capture harness. The CatCatch URL comparison (#03) is captured separately with normal motion 9 seconds after page load, near the readable URL-tail endpoint so the newly exposed URL text can be compared with the older truncated prefix. No text scale is changed.
 
 ## Comparisons
 
-1. `01-info-row-label.png` — actual unified task list with an expanded OCR background task and its status detail row.
-2. `02-status-time-row.png` — actual synthesis task list with the production task title, status, and relative-time row.
-3. `03-catcatch-card-url.png` — actual unified task list with a collapsed CatCatch task and its URL title.
-4. `04-resource-selection-url.png` — actual unified task list with a CatCatch resource-selection task.
-5. `05-media-preview-title.png` — actual unified task list with the production media preview sheet open over it.
+1. `01-info-row-label.png` — `UnifiedTaskListPage` with an expanded OCR background task and its partial-result status row.
+2. `02-status-time-row.png` — `TaskListPage` with the completed synthesis task status and relative-time row; the completed state keeps the icon stable on both sides.
+3. `03-catcatch-card-url.png` — `UnifiedTaskListPage` with a CatCatch task whose title falls back to `https://e.co/watch/catcatch-long-title-example-video`. The before side shows the original shortened prefix; the after side is captured near the readable URL-tail endpoint (9 seconds after page load).
+4. `04-resource-selection-url.png` — the same page with CatCatch waiting for resource selection and the URL shown in the selection view.
+5. `05-media-preview-title.png` — the production media-preview bottom sheet opened from the playable resource row on the actual unified task list.
 
-The URL scenarios reproduce the old 40-character fallback passed by the former caller and the full URL passed by the updated caller. Screens were captured after Flutter Web completed the initial page layout; constrained titles were allowed to scroll before capture.
+`url-reveal.webm` is an 8-second, 320 × 108 clip of the real `UnifiedTaskListPage` at default text scale and normal motion. It is framed to the CatCatch task-card title region (page route `/?s=3`, y=112–220 of the 320 × 720 logical viewport) so sampled frames show the moving URL without the independently scrolling app-bar tab labels. The clip uses rendered production pixels; no UI is overlaid or altered. The full source URL is visible in successive readable segments as it moves through the title slot.
 
-`url-reveal.webm` is an 8-second capture of the actual unified task list at the same 320 px phone width, showing the full URL moving through the CatCatch title slot.
-
-## Regression coverage
-
-`tests/pages/unified_task_list/task_info_row_constrained_text_test.dart` checks a long localized info label at 280 dp and text scale 2.0. Existing background-card, shared task-list, and media-preview tests cover the other updated call sites and their surrounding controls.
+The headless Chromium media-preview capture displays the production sheet title and the expected `path_provider` web-platform error in the preview area; the selected task title comparison remains visible above it.
