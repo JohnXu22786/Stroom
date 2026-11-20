@@ -18,6 +18,7 @@ import '../utils/file_manifest.dart';
 import '../utils/pop_animation.dart';
 import '../utils/system_pick_utils.dart';
 import '../widgets/folder_picker_dialog.dart';
+import '../widgets/save_to_folder_selector.dart';
 import 'tts_page.dart';
 import 'audio_separation_shared.dart';
 import 'chat/composer/video_album_picker_dialog.dart';
@@ -887,7 +888,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Save-to folder selector (above start button)
-            _buildSaveToSelector(cs),
+            _buildSaveToSelector(),
             if (_selectedVideos.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 4, top: 4),
@@ -948,41 +949,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // Save-to Folder Selector
   // ==================================================================
 
-  Widget _buildSaveToSelector(ColorScheme cs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: _pickSaveFolder,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                _l10n.audioSeparationSaveTo,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _saveFolder.isEmpty ? _l10n.rootFolder : _saveFolder,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildSaveToSelector() {
+    return SaveToFolderSelector(
+      label: _l10n.audioSeparationSaveTo,
+      folder: _saveFolder.isEmpty ? _l10n.rootFolder : _saveFolder,
+      onTap: _pickSaveFolder,
     );
   }
 
