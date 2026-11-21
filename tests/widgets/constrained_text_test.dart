@@ -91,7 +91,8 @@ void main() {
                   controller: controller,
                   decoration: InputDecoration(
                     label: ConstrainedText(
-                      AppLocalizations.of(context)!.providerParamNameNestedLabel,
+                      AppLocalizations.of(context)!
+                          .providerParamNameNestedLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
