@@ -2935,43 +2935,52 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   Widget _buildErrorWidget(ColorScheme cs, String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 32, color: cs.error),
-            const SizedBox(height: 8),
-            Text(
-              AppLocalizations.of(context)!.mermaidRenderErrorTitle,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: cs.error,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final toolbarInset = widget.showToolbar || widget.showZoomControls
+            ? 48.0
+            : 16.0;
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, toolbarInset, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 32, color: cs.error),
+                  const SizedBox(height: 8),
+                  Text(
+                    AppLocalizations.of(context)!.mermaidRenderErrorTitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.error,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _retry,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.mermaidRetry,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            ConstrainedText(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _retry,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: ConstrainedText(
-                AppLocalizations.of(context)!.mermaidRetry,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

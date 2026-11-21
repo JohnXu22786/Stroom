@@ -466,6 +466,116 @@ void main() {
     }, skip: !kIsWeb);
   });
 
+  testWidgets(
+    'error diagnostics scroll naturally and retry stays reachable in short overlays',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final semantics = tester.ensureSemantics();
+
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(
+        () => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform(),
+      );
+
+      Future<_MermaidWebView> mount({required double height}) async {
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            theme: ThemeData.light(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.noScaling),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->B',
+                height: height,
+              ),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pump();
+
+        final webView = platform.webView!;
+        webView.controller.supportsJavaScriptHandlers = true;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.params.initialData?.baseUrl,
+        );
+        await tester.pump();
+        return webView;
+      }
+
+      final largeOverlay = await mount(height: 300);
+      final longMessage = List.generate(
+        24,
+        (index) =>
+            'Attempt ${index + 1}: net::ERR_CERT_AUTHORITY_INVALID while '
+            'loading https://cdn.example.com/mermaid.min.js; the certificate '
+            'chain could not be verified by the system trust store.',
+      ).join('\n');
+      largeOverlay.controller.simulateMermaidError(longMessage, 0);
+      await tester.pump();
+
+      final errorScrollView = find.byType(SingleChildScrollView);
+      expect(errorScrollView, findsOneWidget);
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(of: errorScrollView, matching: find.byType(Scrollable)),
+      );
+      expect(scrollable.position.maxScrollExtent, greaterThan(0));
+      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+      expect(find.byIcon(Icons.code), findsOneWidget);
+      expect(find.byIcon(Icons.save), findsOneWidget);
+      await tester.drag(errorScrollView, const Offset(0, -240));
+      await tester.pump();
+      expect(scrollable.position.pixels, greaterThan(0));
+      expect(find.text(longMessage), findsOneWidget);
+      expect(tester.getSemantics(find.text(longMessage)).label, longMessage);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      final shortOverlay = await mount(height: 112);
+      shortOverlay.controller.simulateMermaidError(
+        'The renderer could not load the page.',
+        0,
+      );
+      await tester.pump();
+
+      final retry = find.text('Retry');
+      expect(retry, findsOneWidget);
+      await tester.ensureVisible(retry);
+      expect(
+        tester
+            .getRect(retry)
+            .overlaps(tester.getRect(find.byType(MermaidRenderWidget))),
+        isTrue,
+      );
+      await tester.tap(retry);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   group('MermaidRenderWidget - bundled JavaScript loading', () {
     test(
       'failed asset reads retry while concurrent callers share the load',
