@@ -823,6 +823,7 @@
   "unifiedTaskContinue": "続く",
   "unifiedTaskRemoveFromList": "リストから削除",
   "unifiedTaskSynthesisText": "合成テキスト",
+  "unifiedTaskViewFullSynthesisText": "合成テキスト全体を表示",
   "unifiedTaskStatus": "状態",
   "unifiedTaskDetails": "詳細",
   "unifiedTaskSynthesisError": "合成エラーの詳細",

@@ -483,15 +483,32 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     color: cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: ConstrainedText(
-                    widget.task.text,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.onSurface,
-                      height: 1.4,
-                    ),
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        widget.task.text,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurface,
+                          height: 1.4,
+                        ),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: IconButton(
+                          tooltip: AppLocalizations.of(context)!
+                              .unifiedTaskViewFullSynthesisText,
+                          icon: const Icon(Icons.open_in_full),
+                          onPressed: () => _showSynthesisTextDialog(
+                            context,
+                            widget.task.text,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -635,6 +652,27 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showSynthesisTextDialog(BuildContext context, String text) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(AppLocalizations.of(context)!.unifiedTaskSynthesisText),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            text,
+            style: const TextStyle(fontSize: 13, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(AppLocalizations.of(context)!.unifiedTaskClose),
+          ),
+        ],
+      ),
     );
   }
 

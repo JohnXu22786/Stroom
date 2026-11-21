@@ -1057,6 +1057,7 @@
   "unifiedTaskContinue": "متابعة",
   "unifiedTaskRemoveFromList": "إزالة من القائمة",
   "unifiedTaskSynthesisText": "النص المُنشأ",
+  "unifiedTaskViewFullSynthesisText": "عرض النص المُنشأ كاملاً",
   "unifiedTaskStatus": "الحالة",
   "unifiedTaskDetails": "التفاصيل",
   "unifiedTaskSynthesisError": "تفاصيل خطأ التحويل إلى كلام",

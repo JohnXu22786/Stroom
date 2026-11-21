@@ -2868,6 +2868,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unifiedTaskSynthesisText => '합성된 텍스트';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => '합성된 텍스트 전체 보기';
+
+  @override
   String get unifiedTaskStatus => '상태';
 
   @override
@@ -14607,6 +14610,9 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get unifiedTaskSynthesisText => '합성된 텍스트';
+
+  @override
+  String get unifiedTaskViewFullSynthesisText => '합성된 텍스트 전체 보기';
 
   @override
   String get unifiedTaskStatus => '상태';

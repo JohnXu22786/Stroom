@@ -5018,6 +5018,12 @@ abstract class AppLocalizations {
   /// **'Synthesized text'**
   String get unifiedTaskSynthesisText;
 
+  /// No description provided for @unifiedTaskViewFullSynthesisText.
+  ///
+  /// In en, this message translates to:
+  /// **'View full synthesized text'**
+  String get unifiedTaskViewFullSynthesisText;
+
   /// No description provided for @unifiedTaskStatus.
   ///
   /// In en, this message translates to:

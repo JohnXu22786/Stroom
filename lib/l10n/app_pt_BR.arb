@@ -1057,6 +1057,7 @@
   "unifiedTaskContinue": "Continuar",
   "unifiedTaskRemoveFromList": "Remover da lista",
   "unifiedTaskSynthesisText": "Texto sintetizado",
+  "unifiedTaskViewFullSynthesisText": "Ver o texto sintetizado completo",
   "unifiedTaskStatus": "Estado",
   "unifiedTaskDetails": "Detalhes",
   "unifiedTaskSynthesisError": "Detalhes do erro de síntese",
