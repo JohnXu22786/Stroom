@@ -135,7 +135,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                 keyboardType: TextInputType.multiline,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 decoration: InputDecoration(
-                  labelText: localizations.connectivityTestJsonLabel,
+                  label: ConstrainedText(
+                    localizations.connectivityTestJsonLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
                   helper: Text(

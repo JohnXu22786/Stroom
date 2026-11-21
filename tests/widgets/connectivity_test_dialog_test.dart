@@ -148,6 +148,81 @@ void main() {
   );
 
   testWidgets(
+    'connectivity JSON field label uses a measured constrained label',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('de', 'DE'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => ConnectivityTestDialog(
+                    title: 'Proxy',
+                    initialContent: '{}',
+                    note: 'Read-only check.',
+                    onSave: (_) async {},
+                    onRun: (_) async => const ConnectivityTestResult(
+                      succeeded: true,
+                      summary: 'HTTP 200',
+                      details: '',
+                      elapsed: Duration.zero,
+                    ),
+                  ),
+                ),
+                child: const Text('Open dialog'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open dialog'));
+      await tester.pumpAndSettle();
+
+      final localizedLabel = AppLocalizations.delegate
+          .load(const Locale('de', 'DE'))
+          .then((localizations) => localizations.connectivityTestJsonLabel);
+      final labelText = await localizedLabel;
+      final labelFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == labelText,
+      );
+      expect(labelFinder, findsOneWidget);
+      final label = tester.widget<ConstrainedText>(labelFinder);
+      expect(label.maxLines, 1);
+      expect(label.overflow, TextOverflow.ellipsis);
+      final labelContext = tester.element(labelFinder);
+      final naturalLabel = TextPainter(
+        text: TextSpan(
+          text: label.data,
+          style: DefaultTextStyle.of(labelContext).style.merge(label.style),
+        ),
+        textDirection: Directionality.of(labelContext),
+        textScaler: MediaQuery.textScalerOf(labelContext),
+        locale: Localizations.localeOf(labelContext),
+        maxLines: label.maxLines,
+      )..layout();
+      expect(
+        naturalLabel.width,
+        greaterThan(tester.getSize(labelFinder).width),
+        reason: 'the localized field label should be clipped at this scale',
+      );
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text(labelText), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'saved status label is bounded when long and stationary when it fits',
     (tester) async {
       tester.view.devicePixelRatio = 1;
