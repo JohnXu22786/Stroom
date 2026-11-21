@@ -194,8 +194,11 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                     isExpanded: true,
                     initialValue: _endpointType,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!
-                          .providerEndpointTypeLabel,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.providerEndpointTypeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
                     ),

@@ -84,6 +84,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/assistant/assistant_*_test.dart",
         "pages/assistant_pages_test.dart",
         "pages/assistant_custom_param_dialog_test.dart",
+        "pages/llm_model_config_page_constrained_endpoint_label_test.dart",
         "pages/chat/**",
         "pages/chat_page/**",
         "pages/settings/llm_*_test.dart",
