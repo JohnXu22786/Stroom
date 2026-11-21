@@ -142,7 +142,7 @@ class AnkiApkgImporter {
         throw AnkiApkgException.unexpectedError(tmpDbPath);
       }
       try {
-        targetDb = await openDatabase(targetDbPath);
+        targetDb = await openDatabase(targetDbPath, singleInstance: false);
       } on DatabaseException catch (error) {
         throw _databaseException(error, targetDbPath);
       } catch (_) {
