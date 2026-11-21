@@ -309,7 +309,11 @@ class _ConstrainedTextState extends State<ConstrainedText>
     _started = true;
   }
 
-  Widget _original(TextStyle style, TextScaler scaler) {
+  Widget _original(
+    TextStyle style,
+    TextScaler scaler,
+    TextAlign textAlign,
+  ) {
     if (widget.highlightedText == null) {
       return Text(
         widget.data,
@@ -329,7 +333,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
     return Text.rich(
       _textSpan(style),
       strutStyle: widget.strutStyle,
-      textAlign: widget.textAlign ?? TextAlign.start,
+      textAlign: textAlign,
       textDirection: widget.textDirection,
       locale: widget.locale,
       softWrap: widget.softWrap ?? true,
@@ -366,11 +370,13 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final locale = widget.locale ?? Localizations.maybeLocaleOf(context);
     final animateable = (widget.maxLines != null || widget.softWrap == false) &&
         widget.maxLines != 0;
-    if (!animateable) return _original(style, scaler);
+    if (!animateable) return _original(style, scaler, textAlign);
     final measuredLayout = LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        if (!width.isFinite || width <= 0) return _original(style, scaler);
+        if (!width.isFinite || width <= 0) {
+          return _original(style, scaler, textAlign);
+        }
         _measure(
           width,
           direction,
@@ -384,7 +390,10 @@ class _ConstrainedTextState extends State<ConstrainedText>
         if (_overflow <= 0 ||
             MediaQuery.disableAnimationsOf(context) ||
             !TickerMode.valuesOf(context).enabled) {
-          return SizedBox(width: _layoutWidth, child: _original(style, scaler));
+          return SizedBox(
+            width: _layoutWidth,
+            child: _original(style, scaler, textAlign),
+          );
         }
         return Semantics(
           label: widget.semanticsLabel ?? widget.data,

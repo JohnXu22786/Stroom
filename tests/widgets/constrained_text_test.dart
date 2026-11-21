@@ -30,6 +30,38 @@ void main() {
     expect(tester.getTopLeft(find.text('Short label')), start);
   });
 
+  testWidgets('highlighted fitting text inherits its default text alignment', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: DefaultTextStyle(
+            style: TextStyle(),
+            textAlign: TextAlign.center,
+            child: ConstrainedText(
+              'A short matching label',
+              maxLines: 2,
+              highlightedText: TextSpan(
+                children: [
+                  TextSpan(text: 'A short '),
+                  TextSpan(
+                    text: 'matching',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: ' label'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.byType(Text));
+    expect(text.textAlign, TextAlign.center);
+  });
+
   testWidgets('moves clipped labels after the initial delay', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
