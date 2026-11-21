@@ -482,9 +482,17 @@ void main() {
         () => InAppWebViewPlatform.instance =
             previousPlatform ?? _MermaidWebViewPlatform(),
       );
+      final assetMessenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      assetMessenger.setMockMessageHandler(
+        'flutter/assets',
+        (_) async => null,
+      );
+      addTearDown(() {
+        assetMessenger.setMockMessageHandler('flutter/assets', null);
+      });
 
       Future<_MermaidWebView> mount({required double height}) async {
-        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
         await tester.pumpWidget(
           MaterialApp(
             locale: const Locale('en', 'US'),
