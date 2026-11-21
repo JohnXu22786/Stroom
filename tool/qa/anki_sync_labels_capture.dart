@@ -43,5 +43,6 @@ class _NoStoredKey extends FlutterSecureStorage {
     WebOptions? webOptions,
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
-  }) async => null;
+  }) async =>
+      null;
 }
