@@ -238,9 +238,7 @@ class _AssistantRemoteSourceDialogState
                 keyboardType: TextInputType.url,
                 decoration: InputDecoration(
                   label: ConstrainedText(
-                    _isZh
-                        ? '目录清单或助手文件 URL'
-                        : 'Catalog or assistant file URL',
+                    _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
