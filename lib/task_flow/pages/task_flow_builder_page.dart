@@ -1057,7 +1057,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.hourController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.taskFlowUiHour,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.taskFlowUiHour,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       hintText: '0',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -1080,7 +1084,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.minuteController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.taskFlowUiMinute,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.taskFlowUiMinute,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       hintText: '0',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -1103,7 +1111,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: TextField(
                     controller: entry.secondController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.taskFlowUiSecond,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.taskFlowUiSecond,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       hintText: '0',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
