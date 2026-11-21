@@ -19,6 +19,12 @@ import 'voice_editor_page.dart';
 
 import '../widgets/constrained_text.dart';
 
+Widget _boundedFieldLabel(String text) => ConstrainedText(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
 class ModelConfigPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex;
@@ -335,7 +341,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               TextField(
                 controller: nameCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimNameLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimNameLabel,
+                  ),
                   hintText: AppLocalizations.of(context)!.trimNameHint,
                   border: OutlineInputBorder(),
                 ),
@@ -345,7 +353,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               TextField(
                 controller: durationCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimDurationLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimDurationLabel,
+                  ),
                   hintText: AppLocalizations.of(context)!.trimDurationHint,
                   border: OutlineInputBorder(),
                 ),
@@ -459,7 +469,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               TextField(
                 controller: nameCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimNameLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimNameLabel,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 autofocus: true,
@@ -468,7 +480,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               TextField(
                 controller: durationCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimDurationLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimDurationLabel,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(
@@ -1148,7 +1162,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _volumeMinController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMinVolume,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMinVolume,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1161,7 +1177,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _volumeMaxController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMaxVolume,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMaxVolume,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1185,7 +1203,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _speedMinController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMinSpeed,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMinSpeed,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1198,7 +1218,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _speedMaxController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMaxSpeed,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMaxSpeed,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1214,7 +1236,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             TextField(
               controller: _maxWordsController,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.ttsMaxAudioLength,
+                label: _boundedFieldLabel(
+                  AppLocalizations.of(context)!.ttsMaxAudioLength,
+                ),
                 hintText: AppLocalizations.of(context)!.ttsAudioLengthHint,
                 border: OutlineInputBorder(),
               ),
@@ -1365,8 +1389,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: AppLocalizations.of(context)!
-                                      .assistantParameterName,
+                                  label: _boundedFieldLabel(
+                                    AppLocalizations.of(context)!
+                                        .assistantParameterName,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                   errorText: isDuplicate
@@ -1446,8 +1472,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         TextFormField(
                           initialValue: param.defaultValue,
                           decoration: InputDecoration(
-                            labelText: AppLocalizations.of(context)!
-                                .modelParamDefaultValue,
+                            label: _boundedFieldLabel(
+                              AppLocalizations.of(context)!
+                                  .modelParamDefaultValue,
+                            ),
                             hintText: localizedParamTypeDefaultValueHint(
                               AppLocalizations.of(context)!,
                               param.paramType,
