@@ -914,8 +914,7 @@ void main() {
         .descendant(of: card, matching: find.byType(ListTile))
         .evaluate()
         .map(
-          (element) =>
-              (element.widget as ListTile).title as ConstrainedText,
+          (element) => (element.widget as ListTile).title as ConstrainedText,
         )
         .map((title) => title.data)
         .toList();
