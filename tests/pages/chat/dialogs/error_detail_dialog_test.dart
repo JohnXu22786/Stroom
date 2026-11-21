@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/dialogs/error_detail_dialog.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
   group('DataDetailDialog (unified 6-section dialog)', () {
@@ -79,6 +80,73 @@ void main() {
       expect(find.text('状态码'), findsOneWidget);
       expect(find.text('响应标头'), findsOneWidget);
       expect(find.text('响应正文'), findsOneWidget);
+    });
+
+    testWidgets('localized and selected header titles stay bounded',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('es'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(1.8),
+            ),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://example.com'},
+                rawResponse: null,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      final heading = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText && widget.data == 'Detalles de datos',
+      );
+      expect(heading, findsOneWidget);
+      expect(tester.getSize(heading).width, lessThan(220));
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      await tester.tap(find.text('Solicitar URL'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText && widget.data == 'Solicitar URL',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('OCR diagnostics show safe summary fields only',

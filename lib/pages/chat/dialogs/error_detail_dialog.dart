@@ -171,17 +171,20 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
             color: Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(width: 8),
-          Text(
-            _selectedSectionId != null
-                ? _findSectionLabel(_selectedSectionId!)
-                : AppLocalizations.of(context)!.chatDataDetails,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.grey[300] : Colors.grey[800],
+          Expanded(
+            child: ConstrainedText(
+              _selectedSectionId != null
+                  ? _findSectionLabel(_selectedSectionId!)
+                  : AppLocalizations.of(context)!.chatDataDetails,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.grey[300] : Colors.grey[800],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Spacer(),
           IconButton(
             icon: Icon(
               Icons.close,
