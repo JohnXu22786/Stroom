@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:stroom/anki/apkg/apkg_importer.dart';
 import 'package:stroom/anki/apkg/apkg_result.dart';
+import 'package:stroom/anki/database/anki_database.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -227,6 +228,34 @@ void main() {
       ),
       throwsA(isA<FormatException>()),
     );
+  });
+
+  test('keeps the open Anki collection usable after APKG import', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_open_collection_test_',
+    );
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+    final sourcePath = '${documents.path}/source.anki2';
+    final collection = AnkiDatabase(basePath: documents.path);
+
+    try {
+      await collection.open();
+      await _createCollection(sourcePath, includeNote: true, includeCard: true);
+      final packagePath = await _packageCollection(documents, sourcePath);
+
+      await AnkiApkgImporter.import(packagePath);
+
+      final rows = await collection.db.rawQuery(
+        'SELECT id FROM col WHERE id = 1',
+      );
+      expect(rows, hasLength(1));
+      expect(await collection.db.query('notes'), hasLength(1));
+    } finally {
+      await collection.close();
+      PathProviderPlatform.instance = previous;
+      await documents.delete(recursive: true);
+    }
   });
 
   test('links imported cards to newly imported notes', () async {
