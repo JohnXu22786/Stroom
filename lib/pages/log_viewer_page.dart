@@ -591,7 +591,13 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
             DropdownButtonFormField<int>(
               isExpanded: true,
               initialValue: _retentionDays,
-              decoration: InputDecoration(labelText: l10n.appLogRetentionDays),
+              decoration: InputDecoration(
+                label: ConstrainedText(
+                  l10n.appLogRetentionDays,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               items: (retentionOptions.toList()..sort())
                   .map(
                     (days) => DropdownMenuItem(
@@ -612,7 +618,13 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
             DropdownButtonFormField<LogLevel>(
               isExpanded: true,
               initialValue: _minimumLevel,
-              decoration: InputDecoration(labelText: l10n.appLogMinimumLevel),
+              decoration: InputDecoration(
+                label: ConstrainedText(
+                  l10n.appLogMinimumLevel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               items: LogLevel.values
                   .map(
                     (level) => DropdownMenuItem(
@@ -633,7 +645,13 @@ class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
             DropdownButtonFormField<int>(
               isExpanded: true,
               initialValue: _maxStorageBytes,
-              decoration: InputDecoration(labelText: l10n.appLogStorageLimit),
+              decoration: InputDecoration(
+                label: ConstrainedText(
+                  l10n.appLogStorageLimit,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               items: (sizeOptions.toList()..sort()).map((sizeBytes) {
                 return DropdownMenuItem(
                   value: sizeBytes,
@@ -1046,7 +1064,11 @@ class _LogContentPageState extends State<LogContentPage> {
           TextField(
             controller: _keywordController,
             decoration: InputDecoration(
-              labelText: l10n.appLogSearch,
+              label: ConstrainedText(
+                l10n.appLogSearch,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               prefixIcon: const Icon(Icons.search),
               isDense: true,
             ),
@@ -1059,7 +1081,11 @@ class _LogContentPageState extends State<LogContentPage> {
                 child: TextField(
                   controller: _sourceController,
                   decoration: InputDecoration(
-                    labelText: l10n.appLogSource,
+                    label: ConstrainedText(
+                      l10n.appLogSource,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     prefixIcon: const Icon(Icons.source_outlined),
                     isDense: true,
                   ),
@@ -1073,7 +1099,11 @@ class _LogContentPageState extends State<LogContentPage> {
                   isExpanded: true,
                   initialValue: _levelFilter,
                   decoration: InputDecoration(
-                    labelText: l10n.appLogLevel,
+                    label: ConstrainedText(
+                      l10n.appLogLevel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     isDense: true,
                   ),
                   items: [
