@@ -11,6 +11,7 @@ import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
 import 'package:stroom/pages/chat/dialogs/json_inspection_dialog.dart';
 import 'package:stroom/pages/chat/dialogs/message_save_destination_dialog.dart';
 import 'package:stroom/pages/chat/dialogs/video_preview_dialog.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
   Widget localizedApp(Widget home) => MaterialApp(
@@ -193,6 +194,57 @@ void main() {
 
     expect(find.text('JSON 审查'), findsOneWidget);
     expect(find.text('无请求数据'), findsOneWidget);
+  });
+
+  testWidgets('JSON inspection title keeps a bounded slot beside close action',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.8),
+          ),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonInspectionDialog(
+              context: context,
+              rawRequest: null,
+              rawResponse: null,
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final title = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == 'JSON-Prüfung',
+    );
+    expect(title, findsOneWidget);
+    expect(tester.getSize(title).width, lessThan(256));
+    expect(
+      tester.getSize(find.byType(IconButton).last).width,
+      greaterThanOrEqualTo(48),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('audio preview dialog shows the localized close action',
