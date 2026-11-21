@@ -22,6 +22,7 @@ class ConstrainedText extends StatefulWidget {
     this.maxLines,
     this.semanticsLabel,
     this.selectionColor,
+    this.highlightedText,
     this.useNaturalWidthLayout = false,
   })  : speed = 24,
         marqueeTextAlign = null;
@@ -43,6 +44,7 @@ class ConstrainedText extends StatefulWidget {
         textScaler = null,
         semanticsLabel = null,
         selectionColor = null,
+        highlightedText = null,
         useNaturalWidthLayout = false;
 
   final String data;
@@ -59,6 +61,10 @@ class ConstrainedText extends StatefulWidget {
   final int? maxLines;
   final String? semanticsLabel;
   final Color? selectionColor;
+
+  /// Optional styled runs rendered in place of plain text while preserving
+  /// [data] as the complete string used for measurement and semantics.
+  final TextSpan? highlightedText;
 
   /// Uses a direct LayoutBuilder for contexts such as DropdownMenuItem, where
   /// a custom single-child layout can invalidate the parent baseline pass.
@@ -128,6 +134,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         oldWidget.speed != widget.speed ||
         oldWidget.marqueeTextAlign != widget.marqueeTextAlign ||
         oldWidget.softWrap != widget.softWrap ||
+        oldWidget.highlightedText != widget.highlightedText ||
         oldWidget.overflow != widget.overflow) {
       _reset();
     }
@@ -180,7 +187,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
               widget.data.contains('\n') &&
               widget.softWrap != false);
       final current = TextPainter(
-        text: TextSpan(text: widget.data, style: style),
+        text: _textSpan(style),
         textDirection: direction,
         textScaler: scaler,
         locale: widget.locale ?? locale,
@@ -191,7 +198,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
       )..layout(maxWidth: width);
       _layoutWidth = current.didExceedMaxLines ? width : current.width;
       final natural = TextPainter(
-        text: TextSpan(text: widget.data, style: style),
+        text: _textSpan(style),
         textDirection: direction,
         textScaler: scaler,
         locale: widget.locale ?? locale,
@@ -203,7 +210,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
       _overflow = 0;
       if (vertical && current.didExceedMaxLines) {
         final fullWrapped = TextPainter(
-          text: TextSpan(text: widget.data, style: style),
+          text: _textSpan(style),
           textDirection: direction,
           textScaler: scaler,
           locale: widget.locale ?? locale,
@@ -220,7 +227,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         for (var i = 0; i < 20; i++) {
           final middle = (low + high) / 2;
           final candidate = TextPainter(
-            text: TextSpan(text: widget.data, style: style),
+            text: _textSpan(style),
             textDirection: direction,
             textScaler: scaler,
             locale: widget.locale ?? locale,
@@ -235,7 +242,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
           }
         }
         final complete = TextPainter(
-          text: TextSpan(text: widget.data, style: style),
+          text: _textSpan(style),
           textDirection: direction,
           textScaler: scaler,
           locale: widget.locale ?? locale,
@@ -302,7 +309,13 @@ class _ConstrainedTextState extends State<ConstrainedText>
     _started = true;
   }
 
-  Widget _original() => Text(
+  Widget _original(
+    TextStyle style,
+    TextScaler scaler,
+    TextAlign textAlign,
+  ) {
+    if (widget.highlightedText == null) {
+      return Text(
         widget.data,
         style: widget.style,
         strutStyle: widget.strutStyle,
@@ -311,10 +324,31 @@ class _ConstrainedTextState extends State<ConstrainedText>
         locale: widget.locale,
         softWrap: widget.softWrap,
         overflow: widget.overflow,
-        textScaler: widget.textScaler,
+        textScaler: scaler,
         maxLines: widget.maxLines,
         semanticsLabel: widget.semanticsLabel,
         selectionColor: widget.selectionColor,
+      );
+    }
+    return Text.rich(
+      _textSpan(style),
+      strutStyle: widget.strutStyle,
+      textAlign: textAlign,
+      textDirection: widget.textDirection,
+      locale: widget.locale,
+      softWrap: widget.softWrap ?? true,
+      overflow: widget.overflow ?? TextOverflow.clip,
+      textScaler: scaler,
+      maxLines: widget.maxLines,
+      semanticsLabel: widget.semanticsLabel ?? widget.data,
+      selectionColor: widget.selectionColor,
+    );
+  }
+
+  TextSpan _textSpan(TextStyle style) => TextSpan(
+        text: widget.highlightedText == null ? widget.data : null,
+        style: style,
+        children: widget.highlightedText?.children,
       );
 
   @override
@@ -336,11 +370,13 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final locale = widget.locale ?? Localizations.maybeLocaleOf(context);
     final animateable = (widget.maxLines != null || widget.softWrap == false) &&
         widget.maxLines != 0;
-    if (!animateable) return _original();
+    if (!animateable) return _original(style, scaler, textAlign);
     final measuredLayout = LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        if (!width.isFinite || width <= 0) return _original();
+        if (!width.isFinite || width <= 0) {
+          return _original(style, scaler, textAlign);
+        }
         _measure(
           width,
           direction,
@@ -354,7 +390,10 @@ class _ConstrainedTextState extends State<ConstrainedText>
         if (_overflow <= 0 ||
             MediaQuery.disableAnimationsOf(context) ||
             !TickerMode.valuesOf(context).enabled) {
-          return SizedBox(width: _layoutWidth, child: _original());
+          return SizedBox(
+            width: _layoutWidth,
+            child: _original(style, scaler, textAlign),
+          );
         }
         return Semantics(
           label: widget.semanticsLabel ?? widget.data,
@@ -373,20 +412,35 @@ class _ConstrainedTextState extends State<ConstrainedText>
                   animation: _controller,
                   child: SizedBox(
                     width: _vertical ? width : _textWidth,
-                    child: Text(
-                      widget.data,
-                      style: style,
-                      strutStyle: widget.strutStyle,
-                      textAlign: widget.marqueeTextAlign ?? textAlign,
-                      textDirection: direction,
-                      locale: locale,
-                      softWrap: _vertical,
-                      overflow: TextOverflow.clip,
-                      textScaler: scaler,
-                      maxLines: _vertical ? null : widget.maxLines ?? 1,
-                      semanticsLabel: widget.semanticsLabel,
-                      selectionColor: widget.selectionColor,
-                    ),
+                    child: widget.highlightedText == null
+                        ? Text(
+                            widget.data,
+                            style: style,
+                            strutStyle: widget.strutStyle,
+                            textAlign: widget.marqueeTextAlign ?? textAlign,
+                            textDirection: direction,
+                            locale: locale,
+                            softWrap: _vertical,
+                            overflow: TextOverflow.clip,
+                            textScaler: scaler,
+                            maxLines: _vertical ? null : widget.maxLines ?? 1,
+                            semanticsLabel: widget.semanticsLabel,
+                            selectionColor: widget.selectionColor,
+                          )
+                        : Text.rich(
+                            _textSpan(style),
+                            strutStyle: widget.strutStyle,
+                            textAlign: widget.marqueeTextAlign ?? textAlign,
+                            textDirection: direction,
+                            locale: locale,
+                            softWrap: _vertical,
+                            overflow: TextOverflow.clip,
+                            textScaler: scaler,
+                            maxLines: _vertical ? null : widget.maxLines ?? 1,
+                            semanticsLabel:
+                                widget.semanticsLabel ?? widget.data,
+                            selectionColor: widget.selectionColor,
+                          ),
                   ),
                   builder: (context, child) {
                     final progress = _position.value;

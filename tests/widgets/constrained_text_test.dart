@@ -30,6 +30,38 @@ void main() {
     expect(tester.getTopLeft(find.text('Short label')), start);
   });
 
+  testWidgets('highlighted fitting text inherits its default text alignment', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: DefaultTextStyle(
+            style: TextStyle(),
+            textAlign: TextAlign.center,
+            child: ConstrainedText(
+              'A short matching label',
+              maxLines: 2,
+              highlightedText: TextSpan(
+                children: [
+                  TextSpan(text: 'A short '),
+                  TextSpan(
+                    text: 'matching',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: ' label'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.byType(Text));
+    expect(text.textAlign, TextAlign.center);
+  });
+
   testWidgets('moves clipped labels after the initial delay', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -140,10 +172,7 @@ void main() {
     final text = find.text(label);
     final context = tester.element(constrainedText);
     final painter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: DefaultTextStyle.of(context).style,
-      ),
+      text: TextSpan(text: label, style: DefaultTextStyle.of(context).style),
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
     )..layout();
@@ -217,6 +246,77 @@ void main() {
     expect(endRect.height, greaterThan(clipRect.height));
     expect(endRect.bottom, closeTo(clipRect.bottom, 2));
     expect(endRect.overlaps(clipRect), isTrue);
+  });
+
+  testWidgets('preserves styled runs while vertically revealing clipped text', (
+    tester,
+  ) async {
+    const label =
+        'Before the match and enough extra context to wrap repeatedly';
+    final highlightedStyle = const TextStyle(
+      backgroundColor: Colors.yellow,
+      color: Colors.black,
+      fontWeight: FontWeight.bold,
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 120,
+            child: ConstrainedText(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              useNaturalWidthLayout: true,
+              highlightedText: TextSpan(
+                children: [
+                  TextSpan(text: 'Before the '),
+                  TextSpan(
+                    text: 'match',
+                    style: TextStyle(
+                      backgroundColor: Colors.yellow,
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' and enough extra context to wrap repeatedly',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final richText = tester.widget<RichText>(find.byType(RichText).last);
+    final spans = richText.text.toPlainText();
+    expect(spans, label);
+    TextSpan? findMatch(InlineSpan span) {
+      if (span is! TextSpan) return null;
+      if (span.text == 'match') return span;
+      for (final child in span.children ?? const <InlineSpan>[]) {
+        final result = findMatch(child);
+        if (result != null) return result;
+      }
+      return null;
+    }
+
+    final matchSpan = findMatch(richText.text)!;
+    expect(matchSpan.style?.backgroundColor, Colors.yellow);
+    expect(matchSpan.style?.fontWeight, FontWeight.bold);
+    expect(find.bySemanticsLabel(label), findsOneWidget);
+
+    final clip = find.byType(ClipRect);
+    final start = tester.getTopLeft(find.byType(RichText).last);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(
+      tester.getTopLeft(find.byType(RichText).last).dy,
+      lessThan(start.dy),
+    );
+    expect(clip, findsOneWidget);
   });
 
   testWidgets('keeps clipped text discoverable while it scrolls', (

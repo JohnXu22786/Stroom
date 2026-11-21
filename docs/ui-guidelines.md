@@ -152,6 +152,7 @@ These contact sheets show selected real screens from the current Flutter Web bui
 | Empty Task Flow, its built-in template sheet, and empty audio-separation and web-download states. The task list is not pictured because the isolated fresh web profile could not restore its task history. | ![Task Flow and media examples](images/ui-guidelines/tasks-media.png) |
 | Settings overview, light and dark appearance, and a new OCR provider editor. The editor is unsaved; no provider request was made. | ![Settings and unsaved provider editor examples](images/ui-guidelines/settings-providers.png) |
 | Local sample text list, its actual file popup menu, blank new-text editor, and first-party Markdown preview. | ![Text files and first-party Markdown preview examples](images/ui-guidelines/files-markdown.png) |
+| Message Search at 320 × 640 logical pixels, zh_CN, light theme, and 1× text scale; includes a clipped highlighted snippet and a fitting highlighted snippet. | ![Message Search clipped and fitting highlighted snippet results](images/ui-guidelines/search-highlight-reveal/search-highlight-reveal-320x640.png) [Play the vertical reveal preview](images/ui-guidelines/search-highlight-reveal/search-highlight-reveal-motion.webm) |
 
 ## 8. Accessibility, localization, and platform behavior
 
