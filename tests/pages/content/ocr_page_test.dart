@@ -5087,6 +5087,15 @@ void main() {
       await tester.tap(find.text('添加指令'));
       await tester.pumpAndSettle();
 
+      final fields = tester
+          .widgetList<TextField>(
+            find.byType(TextField),
+          )
+          .toList();
+      expect(fields, hasLength(2));
+      expect(fields[0].decoration!.label, isA<ConstrainedText>());
+      expect(fields[1].decoration!.label, isA<ConstrainedText>());
+
       FilledButton saveButton() =>
           tester.widget<FilledButton>(find.widgetWithText(FilledButton, '保存'));
 

@@ -289,7 +289,11 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
             TextField(
               controller: _nameController,
               decoration: InputDecoration(
-                labelText: l10n.ocrInstructionNameLabel,
+                label: ConstrainedText(
+                  l10n.ocrInstructionNameLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -301,7 +305,11 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
               maxLines: 6,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                labelText: l10n.ocrInstructionContentLabel,
+                label: ConstrainedText(
+                  l10n.ocrInstructionContentLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 border: OutlineInputBorder(),
                 isDense: true,
                 alignLabelWithHint: true,
