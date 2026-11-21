@@ -829,11 +829,18 @@ Future<void> _showRemoteStatus(
   await tester.pumpAndSettle();
   await tester.scrollUntilVisible(find.text('Se connecter à AnkiWeb'), 300);
   await tester.tap(find.text('Se connecter à AnkiWeb'));
-  await tester.pumpAndSettle();
+  // The localized email label can be clipped at this width and keeps its
+  // reveal animation active, so settle the dialog transition with bounded
+  // frames instead of waiting for every ticker to stop.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
   await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
   await tester.enterText(find.byType(TextFormField).at(1), 'password');
   await tester.tap(find.text('Se connecter').last);
-  await tester.pumpAndSettle();
+  for (var frame = 0; frame < 20 && requests.length < 2; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pump(const Duration(milliseconds: 200));
   expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
 }
 
