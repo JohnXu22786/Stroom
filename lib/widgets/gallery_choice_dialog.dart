@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
-import 'constrained_text.dart';
-
 import '../l10n/app_localizations.dart';
 
 enum GalleryChoice { system, app }
@@ -148,14 +146,12 @@ class _ChoiceCard extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    ConstrainedText(
+                    Text(
                       subtitle,
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
