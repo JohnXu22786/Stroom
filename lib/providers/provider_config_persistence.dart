@@ -134,28 +134,21 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       } catch (_) {}
 
       List<Map<String, dynamic>> existingEntries = [];
-      var skippedCorruptEntry = false;
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
           final decoded = jsonDecode(existingJson);
           if (decoded is! List) {
-            // 现有 provider_entries 整体损坏（非数组）：先备份原始
-            // 数据再覆盖 —— 否则这里的写入会永久销毁损坏现场。
-            if (!await _backupCorruptProviderEntries(prefs, existingJson)) {
-              return;
-            }
+            // load() already quarantined this original value before entering
+            // migrations, so don't create a duplicate backup here.
             existingEntries = [];
           } else {
             // 兜底：使用 whereType 安全过滤非 Map 条目
             existingEntries =
                 decoded.whereType<Map<String, dynamic>>().toList();
-            skippedCorruptEntry = existingEntries.length != decoded.length;
           }
         } catch (_) {
-          // 现有数据损坏，忽略并用空列表重新开始
-          if (!await _backupCorruptProviderEntries(prefs, existingJson)) {
-            return;
-          }
+          // load() already quarantined this original value before entering
+          // migrations, so don't create a duplicate backup here.
           existingEntries = [];
         }
       }
@@ -229,11 +222,6 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             ),
           );
           existingEntry['configs'] = configs;
-          if (skippedCorruptEntry && existingJson != null) {
-            final backedUp =
-                await _backupCorruptProviderEntries(prefs, existingJson);
-            if (!backedUp) return;
-          }
           legacyConfigsPersisted = await prefs.setString(
             'provider_entries',
             jsonEncode(existingEntries),

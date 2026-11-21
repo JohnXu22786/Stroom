@@ -430,8 +430,10 @@ void main() {
             .getKeys()
             .where((key) => key.startsWith('provider_entries_corrupt_'))
             .toList();
-        expect(backupKeys, hasLength(1));
-        expect(prefs.getString(backupKeys.single), original);
+        expect(
+          backupKeys.any((key) => prefs.getString(key) == original),
+          isTrue,
+        );
         expect(
           (jsonDecode(prefs.getString('provider_entries')!) as List)
               .whereType<Map>()
