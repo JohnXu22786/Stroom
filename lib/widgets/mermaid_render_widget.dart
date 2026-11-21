@@ -2937,9 +2937,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Widget _buildErrorWidget(ColorScheme cs, String message) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final toolbarInset = widget.showToolbar || widget.showZoomControls
-            ? 48.0
-            : 16.0;
+        final toolbarInset =
+            widget.showToolbar || widget.showZoomControls ? 48.0 : 16.0;
         return SingleChildScrollView(
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
