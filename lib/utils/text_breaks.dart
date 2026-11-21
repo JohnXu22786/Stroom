@@ -32,8 +32,46 @@ String breakOverlongWords(
       ..text = TextSpan(text: chunk, style: style)
       ..layout();
     buffer.write(
-      painter.width > maxWidth ? chunk.characters.join('\u200B') : chunk,
+      painter.width > maxWidth
+          ? _insertEmergencyBreaks(
+              chunk,
+              maxWidth: maxWidth,
+              style: style,
+              painter: painter,
+            )
+          : chunk,
     );
+  }
+  return buffer.toString();
+}
+
+String _insertEmergencyBreaks(
+  String text, {
+  required double maxWidth,
+  required TextStyle style,
+  required TextPainter painter,
+}) {
+  final graphemes = text.characters.toList();
+  final buffer = StringBuffer();
+  var start = 0;
+  while (start < graphemes.length) {
+    var lastFittingEnd = start;
+    var candidate = '';
+    for (var end = start; end < graphemes.length; end++) {
+      candidate += graphemes[end];
+      painter
+        ..text = TextSpan(text: candidate, style: style)
+        ..layout();
+      if (painter.width <= maxWidth || end == start) {
+        lastFittingEnd = end + 1;
+      } else {
+        break;
+      }
+    }
+
+    buffer.write(graphemes.skip(start).take(lastFittingEnd - start).join());
+    start = lastFittingEnd;
+    if (start < graphemes.length) buffer.write('\u200B');
   }
   return buffer.toString();
 }
