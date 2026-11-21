@@ -1,6 +1,6 @@
 # Background optimization detail QA
 
-The screenshot shows the strategy-toggle `SwitchListTile` layout with the production German watchdog title and detail, plus a short fitting example. The subtitle retains paragraph breaks and wraps naturally; the info affordance and switch remain in their original positions.
+The screenshot shows the production background optimization page in German at the battery reminder setting. Its switch and title occupy their own row, and the complete multi-paragraph detail wraps beneath it at the card's full content width. The end of the cold-start explanation is also visible above.
 
 | Condition | Value |
 |---|---|
@@ -8,8 +8,8 @@ The screenshot shows the strategy-toggle `SwitchListTile` layout with the produc
 | Locale | German (`de-DE`) |
 | Text scale | 1× |
 | Theme | Material 3 light |
-| Renderer | Flutter Web release build in Chromium |
+| Renderer | Flutter Web debug build in Chromium; Android strategy controls enabled by the temporary local visual harness |
 
 - [German 320 × 640 capture](german_320x640_1x.png)
 
-The targeted production-page widget test checks that the German watchdog and cold-start subtitles equal their full localized strings. No animation changed, so no motion preview was needed.
+The focused production-page widget test checks that German watchdog and cold-start details receive more than 240 logical pixels at a 320 logical-pixel viewport width. No animation changed, so no motion preview was needed.
