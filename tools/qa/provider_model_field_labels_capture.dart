@@ -12,9 +12,8 @@ void main() {
     _ => const Locale('de', 'DE'),
   };
   final scale = double.tryParse(query['scale'] ?? '') ?? 1;
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
 
   runApp(
     ProviderScope(
