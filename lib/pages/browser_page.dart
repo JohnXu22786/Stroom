@@ -1055,7 +1055,19 @@ class _BrowserPageState extends State<BrowserPage> {
           onSubmitted: _goToUrl,
         ),
         actions: [
-          if (widget.recoveryMode)
+          if (widget.recoveryMode &&
+              MediaQuery.sizeOf(context).width < 360 &&
+              MediaQuery.textScalerOf(context).scale(1) > 1)
+            IconButton(
+              onPressed: _recoveryCanContinue &&
+                      _detectedUrls.isNotEmpty &&
+                      !_recoveryContinuationInProgress
+                  ? _continueRecovery
+                  : null,
+              icon: const Icon(Icons.play_arrow),
+              tooltip: l10n.browserRecoveryContinue,
+            )
+          else if (widget.recoveryMode)
             TextButton.icon(
               onPressed: _recoveryCanContinue &&
                       _detectedUrls.isNotEmpty &&
@@ -1080,16 +1092,20 @@ class _BrowserPageState extends State<BrowserPage> {
         ],
         bottom: widget.recoveryMode
             ? PreferredSize(
-                preferredSize: const Size.fromHeight(44),
+                preferredSize: const Size.fromHeight(112),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: ConstrainedText(
-                      l10n.catcatchWebViewRecoveryGuidance,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: SizedBox(
+                    height: 96,
+                    child: SingleChildScrollView(
+                      key: const Key('browser-recovery-guidance-scroll'),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          l10n.catcatchWebViewRecoveryGuidance,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                     ),
                   ),
                 ),
