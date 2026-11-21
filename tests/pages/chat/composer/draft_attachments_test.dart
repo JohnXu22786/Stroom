@@ -1702,7 +1702,9 @@ void main() {
       container.dispose();
     });
 
-    testWidgets('保存失败后下一次成功保存再清理旧压缩缓存', (tester) async {
+    // This is persistence/cache orchestration only, so use a real async test
+    // zone instead of widget FakeAsync for the serialized cleanup futures.
+    test('保存失败后下一次成功保存再清理旧压缩缓存', () async {
       final attachment = Attachment(
         id: 'retry-image',
         fileName: 'retry.png',
@@ -1732,26 +1734,20 @@ void main() {
         conversationId: 'conv-1',
         hash: attachment.hash,
       );
-      // Persistence also drains queued cache cleanup; let FakeAsync process
-      // the serialized Future chain before awaiting each save result.
-      final failedSaveFuture = notifier.saveDraftAndWait(
+      final failedSave = await notifier.saveDraftAndWait(
         'conv-1',
         '',
         draftAttachments: [],
       );
-      await tester.pump();
-      final failedSave = await failedSaveFuture;
       expect(failedSave, isFalse);
       expect(deletedCaches, isEmpty);
 
       store.allowWrites = true;
-      final retainedSaveFuture = notifier.saveDraftAndWait(
+      final retainedSave = await notifier.saveDraftAndWait(
         'conv-1',
         '',
         draftAttachments: [attachment],
       );
-      await tester.pump();
-      final retainedSave = await retainedSaveFuture;
       expect(retainedSave, isTrue);
       expect(deletedCaches, isEmpty);
 
@@ -1766,22 +1762,18 @@ void main() {
         fileSize: 3,
         conversationId: 'conv-2',
       );
-      final otherConversationSaveFuture = notifier.saveDraftAndWait(
+      final otherConversationSave = await notifier.saveDraftAndWait(
         'conv-2',
         '',
         draftAttachments: [otherConversationAttachment],
       );
-      await tester.pump();
-      final otherConversationSave = await otherConversationSaveFuture;
       expect(otherConversationSave, isTrue);
 
-      final successfulSaveFuture = notifier.saveDraftAndWait(
+      final successfulSave = await notifier.saveDraftAndWait(
         'conv-1',
         '',
         draftAttachments: [],
       );
-      await tester.pump();
-      final successfulSave = await successfulSaveFuture;
       expect(successfulSave, isTrue);
       expect(deletedCaches, ['conv-1:${attachment.hash}']);
       container.dispose();
