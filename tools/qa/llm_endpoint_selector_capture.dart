@@ -5,9 +5,8 @@ import 'package:stroom/pages/llm_model_config_page.dart';
 
 void main() {
   final query = Uri.base.queryParameters;
-  final locale = query['locale'] == 'en'
-      ? const Locale('en')
-      : const Locale('fr', 'FR');
+  final locale =
+      query['locale'] == 'en' ? const Locale('en') : const Locale('fr', 'FR');
   final brightness =
       query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
   final scale = double.tryParse(query['scale'] ?? '') ?? 1;
