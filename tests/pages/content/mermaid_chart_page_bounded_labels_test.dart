@@ -18,48 +18,64 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 const _longModeLabel =
     'Editar e visualizar diagramas Mermaid com uma descrição muito longa';
+const _longCodeFieldLabel =
+    'Código-fonte Mermaid para editar e visualizar diagramas detalhados';
 const _longCodeLabel =
     'Código-fonte Mermaid e edição do diagrama em modo dividido';
 const _captureKey = ValueKey('bounded-mermaid-page');
 
 class _TestPortugueseLocalizations extends AppLocalizationsPt {
-  _TestPortugueseLocalizations() : super('pt');
+  _TestPortugueseLocalizations({required this.longFieldLabel}) : super('pt');
+
+  final bool longFieldLabel;
 
   @override
   String get mermaidEditorModeSplit => _longModeLabel;
+
+  @override
+  String get mermaidEditorCodeLabel =>
+      longFieldLabel ? _longCodeFieldLabel : 'Código Mermaid';
 
   @override
   String get mermaidEditorSplitCodeLabel => _longCodeLabel;
 }
 
 class _TestPortugueseDelegate extends LocalizationsDelegate<AppLocalizations> {
-  const _TestPortugueseDelegate({required this.longLabels});
+  const _TestPortugueseDelegate({
+    required this.longLabels,
+    this.longFieldLabel = false,
+  });
 
   final bool longLabels;
+  final bool longFieldLabel;
 
   @override
   bool isSupported(Locale locale) => locale.languageCode == 'pt';
 
   @override
   Future<AppLocalizations> load(Locale locale) => SynchronousFuture(
-        longLabels
-            ? _TestPortugueseLocalizations()
+        longLabels || longFieldLabel
+            ? _TestPortugueseLocalizations(longFieldLabel: longFieldLabel)
             : AppLocalizationsPt(locale.toString()),
       );
 
   @override
   bool shouldReload(covariant _TestPortugueseDelegate old) =>
-      old.longLabels != longLabels;
+      old.longLabels != longLabels || old.longFieldLabel != longFieldLabel;
 }
 
-Widget _buildApp({required bool longLabels}) => RepaintBoundary(
+Widget _buildApp({required bool longLabels, bool longFieldLabel = false}) =>
+    RepaintBoundary(
       key: _captureKey,
       child: ProviderScope(
         child: MaterialApp(
           locale: const Locale('pt', 'BR'),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: [
-            _TestPortugueseDelegate(longLabels: longLabels),
+            _TestPortugueseDelegate(
+              longLabels: longLabels,
+              longFieldLabel: longFieldLabel,
+            ),
             ...AppLocalizations.localizationsDelegates,
           ],
           home: const MermaidChartPage(
@@ -207,6 +223,38 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       'graph TD\n  A-->C',
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('code editor field bounds its long label and remains editable', (
+    tester,
+  ) async {
+    _setNarrowViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      _buildApp(longLabels: false, longFieldLabel: true),
+    );
+    await tester.pump();
+
+    final field = find.byType(TextField);
+    final textField = tester.widget<TextField>(field);
+    expect(textField.decoration!.label, isA<ConstrainedText>());
+    final label = textField.decoration!.label! as ConstrainedText;
+    expect(label.data, _longCodeFieldLabel);
+    expect(label.maxLines, 1);
+    expect(label.overflow, TextOverflow.ellipsis);
+    final renderedLabel = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == _longCodeFieldLabel,
+    );
+    expect(renderedLabel, findsOneWidget);
+    expect(tester.getSemantics(renderedLabel).label, _longCodeFieldLabel);
+
+    await tester.enterText(field, 'graph TD\n  A-->C');
+    await tester.pump();
+    expect(textField.controller!.text, 'graph TD\n  A-->C');
+    expect(find.byType(TextField), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
