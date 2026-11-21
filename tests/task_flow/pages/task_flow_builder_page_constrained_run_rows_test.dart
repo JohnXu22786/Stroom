@@ -35,7 +35,7 @@ void main() {
         ProviderScope(
           overrides: [taskFlowListProvider.overrideWith((_) => flows)],
           child: MaterialApp(
-            locale: const Locale('de', 'DE'),
+            locale: const Locale('es', 'ES'),
             supportedLocales: AppLocalizations.supportedLocales,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             builder: (context, child) => MediaQuery(
@@ -64,14 +64,36 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
 
-      final secondsField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == 'Sek.',
+      for (final label in ['hora', 'mín.', 'segundo']) {
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.label is ConstrainedText &&
+                (widget.decoration!.label as ConstrainedText).data == label,
+          ),
+          findsOneWidget,
+        );
+      }
+
+      final secondsField = find.byWidgetPredicate((widget) {
+        if (widget is! TextField) return false;
+        final label = widget.decoration?.label;
+        return label is ConstrainedText && label.data == 'segundo';
+      });
+      expect(secondsField, findsOneWidget);
+      expect(
+        tester.widget<TextField>(secondsField).decoration?.labelText,
+        isNull,
       );
       await tester.enterText(secondsField, '42');
       await tester.pump();
 
       expect(find.text('00:00:42'), findsOneWidget);
+      final secondsEditableText = tester.widget<EditableText>(
+        find.descendant(of: secondsField, matching: find.byType(EditableText)),
+      );
+      expect(secondsEditableText.focusNode.hasFocus, isTrue);
       expect(tester.takeException(), isNull);
       expect(
         find.byWidgetPredicate(
