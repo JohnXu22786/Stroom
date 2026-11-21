@@ -1741,10 +1741,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
       ),
     );
     if (trusted != true || !mounted) return;
-    final imported = await showDialog<UserScript>(
-      context: context,
-      builder: (context) => const _ScriptImportDialog(),
-    );
+    final imported = await showBrowserUserScriptImportDialog(context);
     if (imported == null || !mounted) return;
     setState(() => _scripts.add(imported));
     _notifyChanged();
@@ -1754,10 +1751,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
     final isNew = index < 0;
     final script =
         isNew ? UserScript(name: '', code: '', matches: []) : _scripts[index];
-    final updated = await showDialog<UserScript>(
-      context: context,
-      builder: (ctx) => _ScriptEditDialog(script: script),
-    );
+    final updated = await showBrowserUserScriptEditDialog(context, script);
     // Only commit when the user saved; cancelling leaves the list unchanged.
     if (updated == null) return;
     setState(() {
@@ -1781,6 +1775,28 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
     _notifyChanged();
   }
 }
+
+@visibleForTesting
+Future<UserScript?> showBrowserUserScriptEditDialog(
+  BuildContext context,
+  UserScript script,
+) =>
+    showDialog<UserScript>(
+      context: context,
+      builder: (context) => _ScriptEditDialog(script: script),
+    );
+
+@visibleForTesting
+Future<UserScript?> showBrowserUserScriptImportDialog(
+  BuildContext context, {
+  Future<String> Function(String url)? fetchSource,
+}) =>
+    showDialog<UserScript>(
+      context: context,
+      builder: (context) => _ScriptImportDialog(
+        fetchSource: fetchSource ?? _fetchUserscript,
+      ),
+    );
 
 class _ScriptEditDialog extends StatefulWidget {
   final UserScript script;
@@ -1828,7 +1844,11 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               TextField(
                 controller: _nameCtrl,
                 decoration: InputDecoration(
-                  labelText: l10n.browserScriptName,
+                  label: ConstrainedText(
+                    l10n.browserScriptName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1838,7 +1858,11 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                 controller: _codeCtrl,
                 maxLines: 8,
                 decoration: InputDecoration(
-                  labelText: l10n.browserManualUserscriptLabel,
+                  label: ConstrainedText(
+                    l10n.browserManualUserscriptLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: OutlineInputBorder(),
                   hintText:
                       '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
@@ -1886,7 +1910,9 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
 }
 
 class _ScriptImportDialog extends StatefulWidget {
-  const _ScriptImportDialog();
+  final Future<String> Function(String url) fetchSource;
+
+  const _ScriptImportDialog({required this.fetchSource});
 
   @override
   State<_ScriptImportDialog> createState() => _ScriptImportDialogState();
@@ -1920,7 +1946,7 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
       _error = null;
     });
     try {
-      final source = await _fetchUserscript(_urlCtrl.text);
+      final source = await widget.fetchSource(_urlCtrl.text);
       if (!mounted) return;
       setState(() => _source = source);
     } on FormatException catch (e) {
@@ -1974,7 +2000,11 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
                 keyboardType: TextInputType.url,
                 readOnly: _loading,
                 decoration: InputDecoration(
-                  labelText: l10n.browserScriptImportUrl,
+                  label: ConstrainedText(
+                    l10n.browserScriptImportUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   hintText: 'https://greasyfork.org/scripts/…/script.user.js',
                   border: const OutlineInputBorder(),
                 ),
@@ -1999,7 +2029,11 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
                 const SizedBox(height: 8),
                 InputDecorator(
                   decoration: InputDecoration(
-                    labelText: l10n.browserScriptPreview,
+                    label: ConstrainedText(
+                      l10n.browserScriptPreview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     border: const OutlineInputBorder(),
                   ),
                   child: SizedBox(
