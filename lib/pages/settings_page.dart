@@ -112,8 +112,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }) {
     return ListTile(
       leading: leading,
-      title: Text(title),
-      subtitle: subtitle != null ? Text(subtitle) : null,
+      title: ConstrainedText(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: subtitle != null
+          ? ConstrainedText(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            )
+          : null,
       trailing: trailing,
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
