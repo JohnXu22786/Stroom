@@ -2975,7 +2975,11 @@ class _RenameFileDialogState extends State<_RenameFileDialog> {
                 isExpanded: true,
                 initialValue: _selectedFormat,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.fileManagerFormat,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.fileManagerFormat,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.symmetric(
                     horizontal: 12,
