@@ -57,12 +57,14 @@ void main() {
       expect(textFinder, findsOneWidget);
       expect(tester.getSize(textFinder).height, greaterThan(2 * 13));
       expect(
-        (tester.renderObject<RenderParagraph>(
+        (tester
+                .renderObject<RenderParagraph>(
                   find.descendant(
                     of: textFinder,
                     matching: find.byType(RichText),
                   ),
-                ).text as TextSpan)
+                )
+                .text as TextSpan)
             .text,
         contains('\u200B'),
       );
