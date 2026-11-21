@@ -577,6 +577,14 @@ void main() {
             .overlaps(tester.getRect(find.byType(MermaidRenderWidget))),
         isTrue,
       );
+      final toolbar = find.byIcon(Icons.fullscreen);
+      expect(toolbar, findsOneWidget);
+      await tester.ensureVisible(retry);
+      expect(
+        tester.getRect(errorScrollView).top,
+        greaterThanOrEqualTo(tester.getRect(toolbar).bottom),
+        reason: 'the fixed toolbar must not cover scrolling error content',
+      );
       await tester.tap(retry);
       await tester.pump();
       expect(tester.takeException(), isNull);

@@ -160,6 +160,11 @@ class MermaidRenderWidget extends StatefulWidget {
   /// {@endtemplate}
   final bool? testOnlyShowSourceCode;
 
+  /// Test-only: starts the production widget with this error visible. Used by
+  /// real-renderer QA captures where the web plugin cannot report JS errors.
+  @visibleForTesting
+  final String? testOnlyInitialErrorMessage;
+
   /// Test-only: overrides the initial folder lookup used by Save as MMD.
   final Future<Set<String>> Function()? testOnlyGetAllFolders;
 
@@ -180,6 +185,7 @@ class MermaidRenderWidget extends StatefulWidget {
     this.showToolbar = true,
     this.showZoomControls = false,
     this.testOnlyShowSourceCode,
+    this.testOnlyInitialErrorMessage,
     this.testOnlyGetAllFolders,
     this.testOnlyBeforeMmdFolderNameLock,
     this.testOnlyAfterMmdNameAllocation,
@@ -1314,6 +1320,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (widget.testOnlyShowSourceCode == true) {
       _showSourceCode = true;
       return;
+    }
+    final initialErrorMessage = widget.testOnlyInitialErrorMessage;
+    if (initialErrorMessage != null) {
+      _shouldCreateWebView = true;
+      _isReady = true;
+      _errorMessage = initialErrorMessage;
     }
     // Defer WebView creation until the page transition animation has
     // settled: creating the platform view mid-transition can leave the
@@ -2939,42 +2951,50 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       builder: (context, constraints) {
         final toolbarInset =
             widget.showToolbar || widget.showZoomControls ? 48.0 : 16.0;
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16, toolbarInset, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 32, color: cs.error),
-                  const SizedBox(height: 8),
-                  Text(
-                    AppLocalizations.of(context)!.mermaidRenderErrorTitle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: cs.error,
+        final contentHeight = constraints.hasBoundedHeight
+            ? (constraints.maxHeight - toolbarInset)
+                .clamp(0.0, constraints.maxHeight)
+            : 0.0;
+        return Padding(
+          padding: EdgeInsets.only(top: toolbarInset),
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: contentHeight),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 32, color: cs.error),
+                    const SizedBox(height: 8),
+                    Text(
+                      AppLocalizations.of(context)!.mermaidRenderErrorTitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.error,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _retry,
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: ConstrainedText(
-                      AppLocalizations.of(context)!.mermaidRetry,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 4),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _retry,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.mermaidRetry,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
