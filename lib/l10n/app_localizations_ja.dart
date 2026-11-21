@@ -2862,6 +2862,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unifiedTaskSynthesisText => '合成テキスト';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => '合成テキスト全体を表示';
+
+  @override
   String get unifiedTaskStatus => '状態';
 
   @override
@@ -14610,6 +14613,9 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get unifiedTaskSynthesisText => '合成テキスト';
+
+  @override
+  String get unifiedTaskViewFullSynthesisText => '合成テキスト全体を表示';
 
   @override
   String get unifiedTaskStatus => '状態';

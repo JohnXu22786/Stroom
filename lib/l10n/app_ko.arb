@@ -1060,6 +1060,7 @@
   "unifiedTaskContinue": "계속",
   "unifiedTaskRemoveFromList": "목록에서 제거",
   "unifiedTaskSynthesisText": "합성된 텍스트",
+  "unifiedTaskViewFullSynthesisText": "합성된 텍스트 전체 보기",
   "unifiedTaskStatus": "상태",
   "unifiedTaskDetails": "세부 정보",
   "unifiedTaskSynthesisError": "합성 오류 세부 정보",

@@ -2784,6 +2784,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unifiedTaskSynthesisText => '合成文本';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => '查看完整合成文本';
+
+  @override
   String get unifiedTaskStatus => '状态';
 
   @override
@@ -14208,6 +14211,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get unifiedTaskSynthesisText => '合成文本';
+
+  @override
+  String get unifiedTaskViewFullSynthesisText => '查看完整合成文本';
 
   @override
   String get unifiedTaskStatus => '状态';

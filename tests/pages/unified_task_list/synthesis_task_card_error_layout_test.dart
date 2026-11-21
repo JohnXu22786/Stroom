@@ -93,30 +93,46 @@ void main() {
     expect(more.right, lessThanOrEqualTo(390));
   });
 
-  testWidgets('long synthesis text remains vertically readable', (
+  testWidgets('long synthesis text opens in a scrollable full-text view', (
     tester,
   ) async {
-    const longText =
+    const paragraph =
         'Synthesis output begins with a detailed account of the meeting. '
         'The participants reviewed milestones, assigned owners, and discussed '
         'open questions. The next section records decisions and follow-up '
-        'actions, including dates, dependencies, risks, and expected outcomes. '
-        'This closing section contains additional context that must remain '
-        'available after the preview reaches its four-line display limit.';
-    await _pumpFailedCard(
-      tester,
-      390,
-      taskText: longText,
-      settle: false,
-    );
+        'actions, including dates, dependencies, risks, and expected outcomes.';
+    final longText = List.filled(12, paragraph).join('\n\n');
+    await _pumpFailedCard(tester, 390, taskText: longText, settle: false);
     expect(tester.takeException(), isNull);
 
-    final text = find.text(longText);
-    final initialTop = tester.getTopLeft(text).dy;
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.byTooltip('View full synthesized text'));
+    await tester.pumpAndSettle();
 
-    expect(tester.getTopLeft(text).dy, lessThan(initialTop - 5));
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Synthesized text'),
+      ),
+      findsOneWidget,
+    );
+    final fullText = find.byType(SelectableText);
+    expect(fullText, findsOneWidget);
+    expect(tester.widget<SelectableText>(fullText).data, longText);
+    final dialogContent = find
+        .descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(SingleChildScrollView),
+        )
+        .last;
+    final dialogScrollable = find
+        .descendant(of: dialogContent, matching: find.byType(Scrollable))
+        .first;
+    final scrollableState = tester.state<ScrollableState>(dialogScrollable);
+    expect(scrollableState.position.maxScrollExtent, greaterThan(0));
+    await tester.drag(dialogScrollable, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(scrollableState.position.pixels, greaterThan(0));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('phone gives the error summary its own line above Details', (

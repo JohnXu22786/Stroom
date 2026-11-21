@@ -2949,6 +2949,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unifiedTaskSynthesisText => 'Synthesized text';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => 'View full synthesized text';
+
+  @override
   String get unifiedTaskStatus => 'Status';
 
   @override
@@ -15012,6 +15015,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get unifiedTaskSynthesisText => 'Synthesized text';
+
+  @override
+  String get unifiedTaskViewFullSynthesisText => 'View full synthesized text';
 
   @override
   String get unifiedTaskStatus => 'Status';

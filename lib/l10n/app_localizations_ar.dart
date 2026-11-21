@@ -2991,6 +2991,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get unifiedTaskSynthesisText => 'النص المُنشأ';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => 'عرض النص المُنشأ كاملاً';
+
+  @override
   String get unifiedTaskStatus => 'الحالة';
 
   @override
@@ -15166,6 +15169,9 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get unifiedTaskSynthesisText => 'النص المُنشأ';
+
+  @override
+  String get unifiedTaskViewFullSynthesisText => 'عرض النص المُنشأ كاملاً';
 
   @override
   String get unifiedTaskStatus => 'الحالة';

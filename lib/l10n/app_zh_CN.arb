@@ -1057,6 +1057,7 @@
   "unifiedTaskContinue": "继续",
   "unifiedTaskRemoveFromList": "从列表移除",
   "unifiedTaskSynthesisText": "合成文本",
+  "unifiedTaskViewFullSynthesisText": "查看完整合成文本",
   "unifiedTaskStatus": "状态",
   "unifiedTaskDetails": "详情",
   "unifiedTaskSynthesisError": "合成错误详情",
