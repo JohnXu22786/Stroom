@@ -72,7 +72,8 @@ void main() {
     expect(find.text('关闭'), findsOneWidget);
   });
 
-  testWidgets('long file paths scroll on a narrow phone and keep close reachable',
+  testWidgets(
+      'long file paths scroll on a narrow phone and keep close reachable',
       (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
