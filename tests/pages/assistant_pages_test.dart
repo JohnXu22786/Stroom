@@ -835,7 +835,8 @@ void main() {
 
         final hint = AppLocalizations.of(
           tester.element(find.byType(AssistantSelectionPage)),
-        )!.assistantImportHint;
+        )!
+            .assistantImportHint;
         final hintText = tester.widget<Text>(
           find.byWidgetPredicate(
             (widget) => widget is Text && widget.data == hint,
