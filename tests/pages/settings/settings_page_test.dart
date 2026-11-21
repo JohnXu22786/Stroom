@@ -519,7 +519,8 @@ void main() {
     Future<void> openCompactionPanel(WidgetTester tester) async {
       final title = AppLocalizations.of(
         tester.element(find.byType(SettingsPage)),
-      )!.contextCompactionTriggerSettings;
+      )!
+          .contextCompactionTriggerSettings;
       final tileFinder = find.text(title).first;
       await tester.scrollUntilVisible(tileFinder, 300,
           scrollable: find.byType(Scrollable).first);
@@ -588,13 +589,16 @@ void main() {
         tester.element(find.byKey(const Key('compaction-settings-body'))),
       )!;
       final percentField = find.byKey(const Key('global-percent-field'));
-      final percentDecoration = tester.widget<InputDecorator>(
-        find.descendant(of: percentField, matching: find.byType(InputDecorator)),
-      ).decoration;
+      final percentDecoration = tester
+          .widget<InputDecorator>(
+            find.descendant(
+                of: percentField, matching: find.byType(InputDecorator)),
+          )
+          .decoration;
       final percentLabel = percentDecoration.label;
       expect(percentLabel, isA<ConstrainedText>());
-      expect((percentLabel! as ConstrainedText).data,
-          strings.contextPercentField);
+      expect(
+          (percentLabel! as ConstrainedText).data, strings.contextPercentField);
       expect((percentLabel as ConstrainedText).maxLines, 1);
 
       final modelTile =
@@ -611,9 +615,12 @@ void main() {
       );
       await tester.ensureVisible(tokenField);
       await tester.pump(const Duration(milliseconds: 100));
-      final tokenDecoration = tester.widget<InputDecorator>(
-        find.descendant(of: tokenField, matching: find.byType(InputDecorator)),
-      ).decoration;
+      final tokenDecoration = tester
+          .widget<InputDecorator>(
+            find.descendant(
+                of: tokenField, matching: find.byType(InputDecorator)),
+          )
+          .decoration;
       expect(tokenDecoration.label, isA<ConstrainedText>());
       expect((tokenDecoration.label! as ConstrainedText).data,
           strings.contextThresholdField);
