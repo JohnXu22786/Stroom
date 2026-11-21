@@ -41,6 +41,56 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     });
   }
 
+  Widget _buildReasoningCardHeader({
+    required IconData icon,
+    required String title,
+    required ColorScheme colorScheme,
+    required List<Widget> trailingControls,
+  }) {
+    final titleRow = Row(
+      children: [
+        Icon(icon, size: 18, color: colorScheme.primary),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.primary,
+            ),
+          ),
+        ),
+      ],
+    );
+    final controls = Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: trailingControls,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 400) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              titleRow,
+              const SizedBox(height: 4),
+              controls,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: titleRow),
+            const SizedBox(width: 4),
+            controls,
+          ],
+        );
+      },
+    );
+  }
+
   void _removeReasoningParam(int index) {
     setState(() {
       _reasoningParams.removeAt(index);
@@ -332,20 +382,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.toggle_on_outlined, size: 18, color: cs.primary),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context)!.providerReasoningToggle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: cs.primary,
-                    ),
-                  ),
-                ),
+            _buildReasoningCardHeader(
+              icon: Icons.toggle_on_outlined,
+              title: AppLocalizations.of(context)!.providerReasoningToggle,
+              colorScheme: cs,
+              trailingControls: [
                 // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
@@ -495,20 +536,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.tune, size: 18, color: cs.primary),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context)!.chatReasoningEffort,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: cs.primary,
-                    ),
-                  ),
-                ),
+            _buildReasoningCardHeader(
+              icon: Icons.tune,
+              title: AppLocalizations.of(context)!.chatReasoningEffort,
+              colorScheme: cs,
+              trailingControls: [
                 _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
                 IconButton(
@@ -682,44 +714,33 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                // 卡片间拖拽把手（附加参数排序）
-                _buildDragHandle(index: displayIndex),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: param.paramName,
-                    decoration: InputDecoration(
-                      label: _buildProviderInputLabel(
-                        AppLocalizations.of(context)!
-                            .providerParamNameNestedLabel,
-                      ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      hintText: AppLocalizations.of(
-                        context,
-                      )!
-                          .providerParamNameHint(
-                              'thinking.type, budget_tokens'),
-                      errorText: isDuplicate
-                          ? AppLocalizations.of(context)!
-                              .providerParamAlreadyExists(
-                              param.paramName.trim(),
-                            )
-                          : null,
-                      errorStyle: const TextStyle(fontSize: 11),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final nameField = TextFormField(
+                  initialValue: param.paramName,
+                  decoration: InputDecoration(
+                    label: _buildProviderInputLabel(
+                      AppLocalizations.of(context)!
+                          .providerParamNameNestedLabel,
                     ),
-                    onChanged: (v) {
-                      param.paramName = v;
-                      setState(() {});
-                    },
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    hintText:
+                        AppLocalizations.of(context)!.providerParamNameHint(
+                      'thinking.type, budget_tokens',
+                    ),
+                    errorText: isDuplicate
+                        ? AppLocalizations.of(context)!
+                            .providerParamAlreadyExists(param.paramName.trim())
+                        : null,
+                    errorStyle: const TextStyle(fontSize: 11),
                   ),
-                ),
-                const SizedBox(width: 4),
-                // 尾部控件（类型/删除）用 Wrap 包裹，窄屏自动换行，
-                // 避免 RenderFlex 溢出
-                Wrap(
+                  onChanged: (v) {
+                    param.paramName = v;
+                    setState(() {});
+                  },
+                );
+                final controls = Wrap(
                   spacing: 4,
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -737,8 +758,36 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                           .providerDeleteCustomParam,
                     ),
                   ],
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 400) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          _buildDragHandle(index: displayIndex),
+                          const SizedBox(width: 2),
+                          Expanded(child: nameField),
+                        ],
+                      ),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: controls,
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    _buildDragHandle(index: displayIndex),
+                    const SizedBox(width: 2),
+                    Expanded(child: nameField),
+                    const SizedBox(width: 4),
+                    controls,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             // 参数值区按类型区分（照搬本面板推理力度的样式）：

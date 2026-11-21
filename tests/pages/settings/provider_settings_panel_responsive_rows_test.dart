@@ -6,6 +6,120 @@ import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/asr_service.dart';
 
 void main() {
+  testWidgets('LLM reasoning controls reflow below their labels at 320 px', (
+    tester,
+  ) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('pt', 'BR'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => showProviderSettingsPanel(
+                  context: context,
+                  config: ProviderConfigItem(
+                    providerName: 'Provider QA',
+                    host: 'https://api.example.com/v1',
+                    key: 'test-key',
+                    reasoningParams: [
+                      ReasoningParam(
+                        paramName: 'reasoning.enabled',
+                        isReasoningToggle: true,
+                        onValue: 'yes',
+                        offValue: 'false',
+                        options: [],
+                      ),
+                      ReasoningParam(
+                        paramName: 'reasoning_effort',
+                        isEffortParam: true,
+                        options: ['low', 'high'],
+                      ),
+                      ReasoningParam(
+                        paramName: 'thinking.budget',
+                        options: ['1024', '4096'],
+                      ),
+                    ],
+                  ),
+                  providerType: 'llm',
+                ),
+                child: const Text('Open provider settings'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open provider settings'));
+    await tester.pumpAndSettle();
+    final localizations = AppLocalizations.of(
+      tester.element(find.byType(Dialog)),
+    )!;
+    final tabController = DefaultTabController.of(
+      tester.element(find.byType(TabBar)),
+    );
+    tabController.animateTo(1, duration: Duration.zero);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    for (final title in [
+      localizations.providerReasoningToggle,
+      localizations.chatReasoningEffort,
+    ]) {
+      final titleRect = tester.getRect(find.text(title));
+      final card =
+          find.ancestor(of: find.text(title), matching: find.byType(Card));
+      final dropdownRect = tester.getRect(
+        find.descendant(
+            of: card, matching: find.byType(DropdownButton<String>)),
+      );
+      expect(
+        dropdownRect.top,
+        greaterThanOrEqualTo(titleRect.bottom),
+        reason: '$title should have its own readable line before controls',
+      );
+    }
+    final additionalName = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextFormField && widget.initialValue == 'thinking.budget',
+    );
+    final additionalCard =
+        find.ancestor(of: additionalName, matching: find.byType(Card));
+    final additionalDropdown = find.descendant(
+      of: additionalCard,
+      matching: find.byType(DropdownButton<String>),
+    );
+    expect(
+      tester.getTopLeft(additionalDropdown).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(additionalName).dy),
+      reason: 'the additional-parameter name gets a full row before controls',
+    );
+    expect(find.byType(DropdownButton<String>), findsNWidgets(3));
+    expect(
+      find.byTooltip(localizations.providerDeleteReasoningToggle),
+      findsOneWidget,
+    );
+    expect(
+      find.byTooltip(localizations.providerDeleteReasoningEffort),
+      findsOneWidget,
+    );
+    final deleteAdditionalParam = find.ancestor(
+      of: find.byTooltip(localizations.providerDeleteCustomParam),
+      matching: find.byType(IconButton),
+    );
+    expect(
+        tester.widget<IconButton>(deleteAdditionalParam).onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('ASR setting labels and dropdowns fit narrow and wide dialogs', (
     tester,
   ) async {
