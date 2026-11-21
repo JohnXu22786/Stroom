@@ -403,19 +403,35 @@ class _ConstrainedTextState extends State<ConstrainedText>
                   animation: _controller,
                   child: SizedBox(
                     width: _vertical ? width : _textWidth,
-                    child: Text.rich(
-                      _textSpan(style),
-                      strutStyle: widget.strutStyle,
-                      textAlign: widget.marqueeTextAlign ?? textAlign,
-                      textDirection: direction,
-                      locale: locale,
-                      softWrap: _vertical,
-                      overflow: TextOverflow.clip,
-                      textScaler: scaler,
-                      maxLines: _vertical ? null : widget.maxLines ?? 1,
-                      semanticsLabel: widget.semanticsLabel ?? widget.data,
-                      selectionColor: widget.selectionColor,
-                    ),
+                    child: widget.highlightedText == null
+                        ? Text(
+                            widget.data,
+                            style: style,
+                            strutStyle: widget.strutStyle,
+                            textAlign: widget.marqueeTextAlign ?? textAlign,
+                            textDirection: direction,
+                            locale: locale,
+                            softWrap: _vertical,
+                            overflow: TextOverflow.clip,
+                            textScaler: scaler,
+                            maxLines: _vertical ? null : widget.maxLines ?? 1,
+                            semanticsLabel: widget.semanticsLabel,
+                            selectionColor: widget.selectionColor,
+                          )
+                        : Text.rich(
+                            _textSpan(style),
+                            strutStyle: widget.strutStyle,
+                            textAlign: widget.marqueeTextAlign ?? textAlign,
+                            textDirection: direction,
+                            locale: locale,
+                            softWrap: _vertical,
+                            overflow: TextOverflow.clip,
+                            textScaler: scaler,
+                            maxLines: _vertical ? null : widget.maxLines ?? 1,
+                            semanticsLabel:
+                                widget.semanticsLabel ?? widget.data,
+                            selectionColor: widget.selectionColor,
+                          ),
                   ),
                   builder: (context, child) {
                     final progress = _position.value;
