@@ -172,6 +172,9 @@ class _ProviderConfigDetailPageState
                     'fallbackMethod': 'all',
                   }
                 : {},
+            reasoningParams: entry.type == 'llm'
+                ? defaultLlmProviderReasoningParams()
+                : const [],
           );
 
     final result = await showProviderSettingsPanel(
