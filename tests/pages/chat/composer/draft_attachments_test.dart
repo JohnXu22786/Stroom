@@ -44,13 +44,17 @@ class _RetryableWritePreferencesStore extends InMemorySharedPreferencesStore {
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) async {
-    writeCount++;
-    if (!allowWrites) return false;
-    final gate = writeGate;
-    if (gate != null) {
-      writeGate = null;
-      writeStarted?.complete();
-      await gate.future;
+    // These tests exercise conversation snapshot ordering. Active-conversation
+    // preference writes are independent and must not consume its write gate.
+    if (key == 'flutter.conversations') {
+      writeCount++;
+      if (!allowWrites) return false;
+      final gate = writeGate;
+      if (gate != null) {
+        writeGate = null;
+        if (writeStarted?.isCompleted == false) writeStarted!.complete();
+        await gate.future;
+      }
     }
     return super.setValue(valueType, key, value);
   }
@@ -235,6 +239,17 @@ void main() {
     AppLogService.disableFileLogging();
     tmpRoot = Directory.systemTemp.createTempSync('stroom_draft_att_test_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+    AttachmentStorage.readFileOverrideForTesting = (path) async {
+      final file = File('${tmpRoot.path}/attachments/${path.split('/').last}');
+      return file.existsSync() ? file.readAsBytesSync() : null;
+    };
+    AttachmentStorage.restoreFileOverrideForTesting = (path, bytes) async {
+      final file = File('${tmpRoot.path}/attachments/${path.split('/').last}')
+        ..createSync(recursive: true);
+      file.writeAsBytesSync(bytes);
+    };
+    AttachmentStorage.deleteCompressedImageOverrideForTesting =
+        ({required conversationId, required hash}) async => true;
   });
 
   tearDown(() {
@@ -655,6 +670,96 @@ void main() {
       await tester.pump();
     });
 
+    testWidgets('旧对话附件保存完成不会跳过新对话相同文本', (tester) async {
+      final storagePath = 'attachments/switching-conversation.txt';
+      final attachment = Attachment(
+        id: 'switching-conversation',
+        fileName: 'switch.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'switching-conversation-hash',
+        storagePath: storagePath,
+        fileSize: 1,
+        conversationId: 'conv-1',
+      );
+      final conversationJson = jsonEncode([
+        Conversation(
+          id: 'conv-1',
+          title: '对话A',
+          messages: [],
+          draftAttachments: [attachment],
+        ).toMap(),
+        Conversation(id: 'conv-2', title: '对话B', messages: []).toMap(),
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'conversations': conversationJson,
+      });
+      final store = _RetryableWritePreferencesStore({
+        'flutter.conversations': conversationJson,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      final container = ProviderContainer(
+        overrides: [
+          activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      await notifier.persistSnapshotForAttachmentCleanup();
+      final writeGate = Completer<void>();
+      final writeStarted = Completer<void>();
+      store
+        ..allowWrites = true
+        ..writeStarted = writeStarted
+        ..writeGate = writeGate;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async => true;
+      final key = GlobalKey<ChatComposerWidgetState>();
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          conversationId: 'conv-1',
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'hello');
+      late Future<void> removal;
+      await tester.runAsync(() async {
+        removal = key.currentState!.removePendingAttachmentForTesting(0);
+        await writeStarted.future.timeout(const Duration(seconds: 15));
+      });
+
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          conversationId: 'conv-2',
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'hello');
+      writeGate.complete();
+      await tester.pump();
+      await tester.runAsync(() => removal);
+      await tester.pump(const Duration(milliseconds: 801));
+
+      expect(
+        container
+            .read(conversationsProvider)
+            .singleWhere((conversation) => conversation.id == 'conv-2')
+            .draftText,
+        'hello',
+      );
+      container.dispose();
+    });
+
     testWidgets('恢复草稿不污染对话持有的附件对象（文件 base64 不得写回 provider）', (tester) async {
       final container = _buildContainer();
       // 真实文件落盘（恢复时 readFile 能读到，才会触发 base64 编码）
@@ -735,7 +840,7 @@ void main() {
             .single;
         draftWasClearAtDelete = saved.draftAttachments.isEmpty;
         fileExistedAtDelete = file.existsSync();
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -810,7 +915,7 @@ void main() {
             .single;
         savedPathAtDelete = saved.draftAttachments.single.storagePath;
         oldFileExistedAtDelete = file.existsSync();
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -880,7 +985,7 @@ void main() {
       var deleteCalled = false;
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deleteCalled = true;
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -952,7 +1057,7 @@ void main() {
         draftPathsAtDelete[path] =
             saved.draftAttachments.map((att) => att.storagePath).toList();
         deletedPaths.add(path);
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         if (path == secondPath) secondDeleteFinished.complete();
         return true;
       };
@@ -989,6 +1094,7 @@ void main() {
       );
       await tester.pump();
       firstWriteGate.complete();
+      await tester.pump();
       await tester.runAsync(
         () => secondWriteStarted.future.timeout(const Duration(seconds: 15)),
       );
@@ -1000,6 +1106,7 @@ void main() {
       expect(draftPathsAtDelete[firstPath], [secondPath]);
 
       secondWriteGate.complete();
+      await tester.pump();
       await tester.runAsync(
         () => secondDeleteFinished.future.timeout(const Duration(seconds: 15)),
       );
@@ -1009,6 +1116,206 @@ void main() {
       expect(draftPathsAtDelete[firstPath], [secondPath]);
       expect(draftPathsAtDelete[secondPath], isEmpty);
       expect(deletedPaths, [firstPath, secondPath]);
+      container.dispose();
+    });
+
+    testWidgets('较早保存不会在更新的排队快照前删除附件', (tester) async {
+      final storagePath = 'attachments/queued-snapshot.txt';
+      late _RetryableWritePreferencesStore store;
+      final firstWriteGate = Completer<void>();
+      final firstWriteStarted = Completer<void>();
+      final fileDeleteStarted = Completer<void>();
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([7]);
+      final attachment = Attachment(
+        id: 'queued-snapshot',
+        fileName: 'queued.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'queued-snapshot-hash',
+        storagePath: storagePath,
+        fileSize: 1,
+        conversationId: 'conv-1',
+      );
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore
+            ..allowWrites = true
+            ..writeCount = 0
+            ..writeStarted = firstWriteStarted
+            ..writeGate = firstWriteGate;
+        },
+      );
+      var writesAtDelete = 0;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        writesAtDelete = store.writeCount;
+        fileDeleteStarted.complete();
+        File('${tmpRoot.path}/$path').deleteSync();
+        return true;
+      };
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier.queueDraftAttachmentFileDelete(storagePath);
+
+      late Future<bool> firstSave;
+      late Future<bool> readdSave;
+      late Future<bool> finalRemovalSave;
+      await tester.runAsync(() async {
+        firstSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        );
+        await firstWriteStarted.future.timeout(const Duration(seconds: 15));
+        readdSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [attachment],
+        );
+        finalRemovalSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        );
+      });
+      firstWriteGate.complete();
+      final saved = await tester.runAsync(() async {
+        return await firstSave && await readdSave && await finalRemovalSave;
+      });
+
+      expect(saved, isTrue);
+      await tester.runAsync(
+        () => fileDeleteStarted.future.timeout(const Duration(seconds: 15)),
+      );
+      expect(writesAtDelete, 3);
+      expect(file.existsSync(), isFalse);
+      container.dispose();
+    });
+
+    testWidgets('同一路径在删除进行中重新引用时恢复文件', (tester) async {
+      final storagePath = 'attachments/reintroduced-during-delete.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([4, 2]);
+      final attachment = Attachment(
+        id: 'reintroduced-during-delete',
+        fileName: 'reintroduced.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'reintroduced-during-delete-hash',
+        storagePath: storagePath,
+        fileSize: 2,
+        conversationId: 'conv-1',
+      );
+      final deleteStarted = Completer<void>();
+      final releaseDelete = Completer<void>();
+      final container = await _buildPersistedContainer();
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteStarted.complete();
+        await releaseDelete.future;
+        File('${tmpRoot.path}/$path').deleteSync();
+        return true;
+      };
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier.queueDraftAttachmentFileDelete(storagePath);
+
+      late Future<bool> firstSave;
+      late Future<bool> readdSave;
+      await tester.runAsync(() async {
+        firstSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        );
+        await deleteStarted.future.timeout(const Duration(seconds: 15));
+        readdSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [attachment],
+        );
+      });
+      releaseDelete.complete();
+      final saved = await tester.runAsync(
+        () async => await firstSave && await readdSave,
+      );
+
+      expect(saved, isTrue);
+      expect(file.readAsBytesSync(), [4, 2]);
+      expect(
+        container
+            .read(conversationsProvider)
+            .single
+            .draftAttachments
+            .single
+            .storagePath,
+        storagePath,
+      );
+      container.dispose();
+    });
+
+    testWidgets('删除首个文件期间新增的后续引用受到保护', (tester) async {
+      final firstPath = 'attachments/delete-first.txt';
+      final secondPath = 'attachments/protect-second.txt';
+      final firstFile = File('${tmpRoot.path}/$firstPath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1]);
+      final secondFile = File('${tmpRoot.path}/$secondPath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([2]);
+      final deleteGate = Completer<void>();
+      final firstDeleteStarted = Completer<void>();
+      final container = await _buildPersistedContainer();
+      final deletedPaths = <String>[];
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deletedPaths.add(path);
+        if (path == firstPath) {
+          firstDeleteStarted.complete();
+          await deleteGate.future;
+        }
+        File('${tmpRoot.path}/$path').deleteSync();
+        return true;
+      };
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier
+        ..queueDraftAttachmentFileDelete(firstPath)
+        ..queueDraftAttachmentFileDelete(secondPath);
+      late Future<bool> firstSave;
+      late Future<bool> secondSave;
+      await tester.runAsync(() async {
+        firstSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        );
+        await firstDeleteStarted.future.timeout(const Duration(seconds: 15));
+      });
+      final secondAttachment = Attachment(
+        id: 'protect-second-file',
+        fileName: 'second.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'protect-second-file-hash',
+        storagePath: secondPath,
+        fileSize: 1,
+        conversationId: 'conv-1',
+      );
+      await tester.runAsync(() async {
+        secondSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [secondAttachment],
+        );
+      });
+      deleteGate.complete();
+      expect(
+        await tester.runAsync(() async => await firstSave && await secondSave),
+        isTrue,
+      );
+
+      expect(deletedPaths, [firstPath]);
+      expect(firstFile.existsSync(), isFalse);
+      expect(secondFile.existsSync(), isTrue);
       container.dispose();
     });
 
@@ -1035,6 +1342,7 @@ void main() {
         configureStore: (preferencesStore) {
           store = preferencesStore
             ..allowWrites = true
+            ..writeCount = 0
             ..writeStarted = Completer<void>()
             ..writeGate = firstWriteGate;
         },
@@ -1042,7 +1350,7 @@ void main() {
       var deleteCalled = false;
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deleteCalled = true;
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
       AttachmentStorage.saveFileOverrideForTesting = (fileName, bytes) async {
@@ -1064,8 +1372,9 @@ void main() {
       // bytes/path without allowing its 800ms draft debounce to persist.
       late Future<void> removal;
       await tester.runAsync(() async {
-        removal =
-            composerKey.currentState!.removePendingAttachmentForTesting(0);
+        removal = composerKey.currentState!.removePendingAttachmentForTesting(
+          0,
+        );
         await store.writeStarted!.future.timeout(const Duration(seconds: 15));
       });
       await tester.runAsync(
@@ -1085,6 +1394,7 @@ void main() {
       );
       expect(store.writeCount, 1, reason: 'the re-add is still debounced');
       firstWriteGate.complete();
+      await tester.pump();
       await tester.runAsync(() => removal);
 
       expect(file.existsSync(), isTrue);
@@ -1104,6 +1414,65 @@ void main() {
           .single;
       expect(persisted.draftAttachments.single.storagePath, storagePath);
       expect(file.existsSync(), isTrue);
+      container.dispose();
+    });
+
+    testWidgets('导航离开期间移除附件仍完成持久化且不访问已销毁 widget', (
+      tester,
+    ) async {
+      final storagePath = 'attachments/remove-during-navigation.txt';
+      final file = File('${tmpRoot.path}/$storagePath')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final attachment = Attachment(
+        id: 'remove-during-navigation',
+        fileName: 'navigation.txt',
+        mimeType: 'text/plain',
+        fileType: 'document',
+        hash: 'remove-during-navigation-hash',
+        storagePath: storagePath,
+        fileSize: 3,
+        conversationId: 'conv-1',
+      );
+      late _RetryableWritePreferencesStore store;
+      final writeGate = Completer<void>();
+      final key = GlobalKey<ChatComposerWidgetState>();
+      final container = await _buildPersistedContainer(
+        draftAttachments: [attachment],
+        configureStore: (preferencesStore) {
+          store = preferencesStore
+            ..allowWrites = true
+            ..writeCount = 0
+            ..writeStarted = Completer<void>()
+            ..writeGate = writeGate;
+        },
+      );
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        File('${tmpRoot.path}/$path').deleteSync();
+        return true;
+      };
+      await tester.pumpWidget(
+        _composer(
+          container: container,
+          key: key,
+          initialDraftAttachments: [attachment],
+          onSend: (text, atts) {},
+        ),
+      );
+      await tester.pump();
+
+      late Future<void> removal;
+      await tester.runAsync(() async {
+        removal = key.currentState!.removePendingAttachmentForTesting(0);
+        await store.writeStarted!.future.timeout(const Duration(seconds: 15));
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+      writeGate.complete();
+      await tester.pump();
+      await tester.runAsync(() => removal);
+
+      expect(file.existsSync(), isFalse);
+      expect(store.writeCount, greaterThanOrEqualTo(1));
       container.dispose();
     });
 
@@ -1131,7 +1500,7 @@ void main() {
           (path) => path == editedPath ? {editedPath, attachmentPath} : {path};
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deleteCalled = true;
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -1174,7 +1543,7 @@ void main() {
         },
       );
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -1344,6 +1713,7 @@ void main() {
       expect(deletedCaches, isEmpty);
 
       removalWriteGate.complete();
+      await tester.pump();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
@@ -1441,6 +1811,186 @@ void main() {
       container.dispose();
     });
 
+    testWidgets('缓存删除期间新排队的清理请求不会被旧删除吞掉', (tester) async {
+      final cacheDeleteGate = Completer<void>();
+      final cacheDeleteStarted = Completer<void>();
+      final container = await _buildPersistedContainer();
+      var deleteCount = 0;
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
+        deleteCount++;
+        if (deleteCount == 1) {
+          cacheDeleteStarted.complete();
+          await cacheDeleteGate.future;
+        }
+        return true;
+      };
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier.queueDraftAttachmentCacheDelete(
+        conversationId: 'conv-1',
+        hash: 'same-hash',
+      );
+      late Future<bool> firstSave;
+      await tester.runAsync(() async {
+        firstSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        );
+        await cacheDeleteStarted.future.timeout(const Duration(seconds: 15));
+      });
+
+      final replacementCacheWrite = Completer<void>();
+      notifier
+        ..cancelDraftAttachmentCacheDelete(
+          conversationId: 'conv-1',
+          hash: 'same-hash',
+        )
+        ..queueDraftAttachmentCacheDelete(
+          conversationId: 'conv-1',
+          hash: 'same-hash',
+          waitFor: replacementCacheWrite.future,
+        );
+      cacheDeleteGate.complete();
+      expect(await tester.runAsync(() => firstSave), isTrue);
+      replacementCacheWrite.complete();
+      final retriedSave = await tester.runAsync(
+        () =>
+            notifier.saveDraftAndWait('conv-1', '', draftAttachments: const []),
+      );
+
+      expect(retriedSave, isTrue);
+      expect(deleteCount, 2);
+      container.dispose();
+    });
+
+    testWidgets('删除首个缓存期间新增的后续引用受到保护', (tester) async {
+      final deleteGate = Completer<void>();
+      final firstDeleteStarted = Completer<void>();
+      final container = await _buildPersistedContainer();
+      final deletedHashes = <String>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
+        deletedHashes.add(hash);
+        if (hash == 'first-cache') {
+          firstDeleteStarted.complete();
+          await deleteGate.future;
+        }
+        return true;
+      };
+      final notifier = container.read(conversationsProvider.notifier);
+      notifier
+        ..queueDraftAttachmentCacheDelete(
+          conversationId: 'conv-1',
+          hash: 'first-cache',
+        )
+        ..queueDraftAttachmentCacheDelete(
+          conversationId: 'conv-1',
+          hash: 'second-cache',
+        );
+      late Future<bool> firstSave;
+      late Future<bool> secondSave;
+      await tester.runAsync(() async {
+        firstSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: const [],
+        );
+        await firstDeleteStarted.future.timeout(const Duration(seconds: 15));
+      });
+      final secondAttachment = Attachment(
+        id: 'second-cache-reference',
+        fileName: 'second.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'second-cache',
+        storagePath: 'attachments/second.png',
+        fileSize: 1,
+        conversationId: 'conv-1',
+      );
+      await tester.runAsync(() async {
+        secondSave = notifier.saveDraftAndWait(
+          'conv-1',
+          '',
+          draftAttachments: [secondAttachment],
+        );
+      });
+      deleteGate.complete();
+      expect(
+        await tester.runAsync(() async => await firstSave && await secondSave),
+        isTrue,
+      );
+
+      expect(deletedHashes, ['first-cache']);
+      container.dispose();
+    });
+
+    testWidgets('dispose 后附件清理不会回退已成功的完整历史保存', (tester) async {
+      final message = ChatMessage(
+        id: 'preserve-raw-data',
+        role: 'assistant',
+        content: 'answer',
+        rawRequest: {'prompt': 'keep me'},
+        rawResponse: {'response': 'keep me'},
+      );
+      final conversation = Conversation(
+        id: 'conv-1',
+        title: '对话A',
+        messages: [message],
+      );
+      final conversationJson = jsonEncode([conversation.toMap()]);
+      SharedPreferences.setMockInitialValues({
+        'conversations': conversationJson,
+      });
+      final store = _RetryableWritePreferencesStore({
+        'flutter.conversations': conversationJson,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      final container = ProviderContainer(
+        overrides: [
+          activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      await notifier.persistSnapshotForAttachmentCleanup();
+      final writeStarted = Completer<void>();
+      final writeGate = Completer<void>();
+      store
+        ..allowWrites = true
+        ..writeStarted = writeStarted
+        ..writeGate = writeGate;
+      var deleteCalled = false;
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteCalled = true;
+        return true;
+      };
+      notifier.queueDraftAttachmentFileDelete('attachments/disposed.txt');
+
+      container.dispose();
+      await tester.runAsync(
+        () => writeStarted.future.timeout(const Duration(seconds: 15)),
+      );
+      writeGate.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+
+      final stored = (await store.getAll())['flutter.conversations']! as String;
+      final storedMessage = ((jsonDecode(stored) as List).single
+          as Map<String, dynamic>)['messages'] as List;
+      expect((storedMessage.single as Map<String, dynamic>)['rawRequest'], {
+        'prompt': 'keep me',
+      });
+      expect((storedMessage.single as Map<String, dynamic>)['rawResponse'], {
+        'response': 'keep me',
+      });
+      expect(deleteCalled, isTrue);
+    });
+
     testWidgets('无 conversation ID 的移除附件仍清理无主文件', (tester) async {
       final storagePath = 'attachments/no-conversation.txt';
       final file = File('${tmpRoot.path}/$storagePath')
@@ -1457,7 +2007,7 @@ void main() {
       );
       final container = _buildContainer();
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -1514,7 +2064,7 @@ void main() {
       var deleteCalled = false;
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deleteCalled = true;
-        await File('${tmpRoot.path}/$path').delete();
+        File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
 
@@ -1538,6 +2088,7 @@ void main() {
         () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
       );
       writeGate.complete();
+      await tester.pump();
       final persisted = await tester.runAsync(
         () => container
             .read(conversationsProvider.notifier)

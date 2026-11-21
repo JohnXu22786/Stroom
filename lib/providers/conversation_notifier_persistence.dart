@@ -1702,16 +1702,27 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       return false;
     }
     if (!_loadHasRun) return false;
-    final write = _persistQueue.then((_) => _persistSnapshot(snapshot));
+    final requestGeneration = ++_persistRequestGeneration;
+    _queuedDraftAttachmentPathsByPersistRequest[requestGeneration] =
+        _attachmentPathsInSnapshot(snapshot);
+    _queuedDraftAttachmentCachesByPersistRequest[requestGeneration] =
+        _attachmentCacheReferencesInSnapshot(snapshot);
+    final write = _persistQueue.then(
+      (_) => _persistSnapshot(snapshot, requestGeneration),
+    );
+    final trackedWrite = write.whenComplete(() {
+      _queuedDraftAttachmentPathsByPersistRequest.remove(requestGeneration);
+      _queuedDraftAttachmentCachesByPersistRequest.remove(requestGeneration);
+    });
     // Keep the queue usable after an unexpected write error. Callers still
     // await their own write and receive its error.
-    _persistQueue = write.then(
+    _persistQueue = trackedWrite.then(
       (_) {},
       onError: (Object error, StackTrace st) {
         debugPrint('Failed to queue conversation persistence: $error');
       },
     );
-    return write;
+    return trackedWrite;
   }
 
   Set<String> _attachmentPathsInSnapshot(List<Conversation> snapshot) {
@@ -1806,24 +1817,73 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<void> _flushPendingDraftAttachmentFileDeletes(
-    Set<String> referencedPaths,
-  ) async {
+    Set<String> referencedPaths, {
+    required int requestGeneration,
+  }) async {
     if (_pendingDraftAttachmentFileDeletes.isEmpty) return;
-    // A newer in-memory draft can be queued while this snapshot is being
-    // persisted. Keep its files alive even though the older durable snapshot
-    // no longer references them; the newer snapshot will be written next.
-    referencedPaths.addAll(_attachmentPathsInSnapshot(state));
-    final referencedIdentities = <String>{};
-    for (final path in referencedPaths) {
-      referencedIdentities.addAll(AttachmentStorage.deletionIdentities(path));
-    }
     for (final storagePath in _pendingDraftAttachmentFileDeletes.toList()) {
+      // Rebuild the reference set before each asynchronous deletion. Another
+      // save may queue or update the live draft while an earlier file delete
+      // is in flight.
+      final protectedPaths = <String>{...referencedPaths};
+      for (final entry in _queuedDraftAttachmentPathsByPersistRequest.entries) {
+        if (entry.key > requestGeneration) protectedPaths.addAll(entry.value);
+      }
+      if (mounted) protectedPaths.addAll(_attachmentPathsInSnapshot(state));
+      final referencedIdentities = <String>{};
+      for (final path in protectedPaths) {
+        referencedIdentities.addAll(AttachmentStorage.deletionIdentities(path));
+      }
       if (AttachmentStorage.deletionIdentities(storagePath)
           .any(referencedIdentities.contains)) {
         continue;
       }
       try {
+        // Keep a copy across the asynchronous delete. A newer snapshot may
+        // acquire this exact path while deleteFile is in flight.
+        final originalFiles = <String, Uint8List>{};
+        for (final identity
+            in AttachmentStorage.deletionIdentities(storagePath)) {
+          final bytes = await AttachmentStorage.readFile(identity);
+          if (bytes != null) originalFiles[identity] = bytes;
+        }
+        final stillProtected = <String>{...referencedPaths};
+        for (final entry
+            in _queuedDraftAttachmentPathsByPersistRequest.entries) {
+          if (entry.key > requestGeneration) stillProtected.addAll(entry.value);
+        }
+        if (mounted) stillProtected.addAll(_attachmentPathsInSnapshot(state));
+        final stillProtectedIdentities = <String>{};
+        for (final path in stillProtected) {
+          stillProtectedIdentities
+              .addAll(AttachmentStorage.deletionIdentities(path));
+        }
+        if (AttachmentStorage.deletionIdentities(storagePath)
+            .any(stillProtectedIdentities.contains)) {
+          continue;
+        }
         await AttachmentStorage.deleteFile(storagePath);
+        final reintroducedPaths = <String>{...referencedPaths};
+        for (final entry
+            in _queuedDraftAttachmentPathsByPersistRequest.entries) {
+          if (entry.key > requestGeneration) {
+            reintroducedPaths.addAll(entry.value);
+          }
+        }
+        if (mounted) {
+          reintroducedPaths.addAll(_attachmentPathsInSnapshot(state));
+        }
+        final reintroducedIdentities = <String>{};
+        for (final path in reintroducedPaths) {
+          reintroducedIdentities
+              .addAll(AttachmentStorage.deletionIdentities(path));
+        }
+        if (AttachmentStorage.deletionIdentities(storagePath)
+            .any(reintroducedIdentities.contains)) {
+          for (final entry in originalFiles.entries) {
+            await AttachmentStorage.restoreFile(entry.key, entry.value);
+          }
+        }
         _pendingDraftAttachmentFileDeletes.remove(storagePath);
       } catch (error) {
         debugPrint('Failed to clean removed draft attachment: $error');
@@ -1832,8 +1892,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<void> _flushPendingDraftAttachmentCacheDeletes(
-    Set<({String? conversationId, String hash})> references,
-  ) async {
+    Set<({String? conversationId, String hash})> references, {
+    required int requestGeneration,
+  }) async {
     for (final cache in _pendingDraftAttachmentCacheDeletes.keys.toList()) {
       while (true) {
         final waitFor = _pendingDraftAttachmentCacheDeletes[cache];
@@ -1843,8 +1904,23 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         }
       }
       if (!_pendingDraftAttachmentCacheDeletes.containsKey(cache)) continue;
-      if (references.contains(cache) ||
-          references.contains((conversationId: null, hash: cache.hash))) {
+      final cleanupRequest = _pendingDraftAttachmentCacheDeletes[cache];
+      final protectedCaches = <({String? conversationId, String hash})>{
+        ...references,
+      };
+      for (final entry
+          in _queuedDraftAttachmentCachesByPersistRequest.entries) {
+        if (entry.key > requestGeneration) protectedCaches.addAll(entry.value);
+      }
+      if (mounted) {
+        protectedCaches.addAll(_attachmentCacheReferencesInSnapshot(state));
+      }
+      if (!identical(
+            _pendingDraftAttachmentCacheDeletes[cache],
+            cleanupRequest,
+          ) ||
+          protectedCaches.contains(cache) ||
+          protectedCaches.contains((conversationId: null, hash: cache.hash))) {
         continue;
       }
       try {
@@ -1852,14 +1928,21 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           conversationId: cache.conversationId,
           hash: cache.hash,
         );
-        _pendingDraftAttachmentCacheDeletes.remove(cache);
+        // Preserve a newer request queued while this delete was in flight.
+        if (identical(
+            _pendingDraftAttachmentCacheDeletes[cache], cleanupRequest)) {
+          _pendingDraftAttachmentCacheDeletes.remove(cache);
+        }
       } catch (error) {
         debugPrint('Failed to clean removed draft attachment cache: $error');
       }
     }
   }
 
-  Future<bool> _persistSnapshot(List<Conversation> snapshot) async {
+  Future<bool> _persistSnapshot(
+    List<Conversation> snapshot,
+    int requestGeneration,
+  ) async {
     SharedPreferences? prefs;
     try {
       prefs = await SharedPreferences.getInstance();
@@ -1919,8 +2002,20 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         await _clearPendingRestoredConversationMarker();
         await _clearPendingRestoredMessageMarker();
       }
-      await _flushPendingDraftAttachmentFileDeletes(referencedPaths);
-      await _flushPendingDraftAttachmentCacheDeletes(cacheReferences);
+      try {
+        await _flushPendingDraftAttachmentFileDeletes(
+          referencedPaths,
+          requestGeneration: requestGeneration,
+        );
+        await _flushPendingDraftAttachmentCacheDeletes(
+          cacheReferences,
+          requestGeneration: requestGeneration,
+        );
+      } catch (error) {
+        // Cleanup follows a successful canonical write and must not invoke the
+        // stripped-history fallback or overwrite that save.
+        debugPrint('Failed to clean persisted draft attachments: $error');
+      }
       await AppLogService.debug(
         'ConversationsNotifier',
         '对话已持久化, 共 ${snapshot.length} 个',
@@ -1986,8 +2081,18 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         await _clearPendingRestoredConversationMarker();
         await _clearPendingRestoredMessageMarker();
       }
-      await _flushPendingDraftAttachmentFileDeletes(referencedPaths);
-      await _flushPendingDraftAttachmentCacheDeletes(cacheReferences);
+      try {
+        await _flushPendingDraftAttachmentFileDeletes(
+          referencedPaths,
+          requestGeneration: requestGeneration,
+        );
+        await _flushPendingDraftAttachmentCacheDeletes(
+          cacheReferences,
+          requestGeneration: requestGeneration,
+        );
+      } catch (error) {
+        debugPrint('Failed to clean persisted draft attachments: $error');
+      }
       await AppLogService.warning(
         'ConversationsNotifier',
         '持久化对话成功 (剥离 rawRequest/rawResponse 后)',

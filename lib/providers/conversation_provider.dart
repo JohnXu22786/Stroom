@@ -605,6 +605,15 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// persistence operation establishes an ordering barrier.
   _CoalescedStreamPersist? _coalescedStreamPersist;
 
+  /// Identifies full snapshots in queue order so cleanup can protect paths
+  /// referenced by any later snapshot that has not completed yet.
+  int _persistRequestGeneration = 0;
+
+  /// References held by full snapshots that are queued but not completed.
+  final Map<int, Set<String>> _queuedDraftAttachmentPathsByPersistRequest = {};
+  final Map<int, Set<({String? conversationId, String hash})>>
+      _queuedDraftAttachmentCachesByPersistRequest = {};
+
   /// Message IDs with checkpoint records that still need to be replayed or
   /// invalidated by an explicit history edit.
   final Set<String> _streamCheckpointKeys = <String>{};

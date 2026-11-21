@@ -391,6 +391,10 @@ class AttachmentStorage {
     await File(p.join(dir, p.basename(storagePath))).writeAsBytes(bytes);
   }
 
+  /// Restores a file after a draft cleanup raced with a newly queued reference.
+  static Future<void> restoreFile(String storagePath, Uint8List bytes) =>
+      _restoreFile(storagePath, bytes);
+
   static Future<String> getStorageDirPath() async {
     if (kIsWeb) return '';
     return _storageDir;

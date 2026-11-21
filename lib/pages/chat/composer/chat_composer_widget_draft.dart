@@ -33,7 +33,10 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 发送载荷（≤ 阈值）——未压缩完的原始大 base64 不携带（体积无谓
   /// 膨胀），恢复时重新读文件并触发预压缩。文件附件只存引用，
   /// 恢复时重新读取编码。总携带量受 [_kDraftB64BudgetBytes] 预算约束。
-  List<Attachment> _draftAttachmentSnapshot() {
+  List<Attachment> _draftAttachmentSnapshot([
+    ChatComposerWidget? ownerWidget,
+  ]) {
+    final conversationId = (ownerWidget ?? widget).conversationId;
     var budget = _kDraftB64BudgetBytes;
     return _pendingAttachments.map((a) {
       var includeB64 = false;
@@ -48,7 +51,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       }
       final copy = Attachment.fromMap(a.toMap(includeBase64Data: includeB64));
       // 草稿归属当前对话：恢复后的清理/缓存定位使用
-      copy.conversationId ??= widget.conversationId;
+      copy.conversationId ??= conversationId;
       return copy;
     }).toList();
   }
@@ -92,17 +95,29 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     }
 
     final textToSave = _textController.text;
-    final draftAttachments = _draftAttachmentSnapshot();
+    final draftAttachments = _draftAttachmentSnapshot(w);
     final attachmentSignature = _draftAttSignature(draftAttachments);
     _lastSavedDraft = textToSave;
     _lastSavedDraftAttSignature = attachmentSignature;
 
     scheduleMicrotask(() {
       try {
-        _conversationsNotifier.saveDraft(
-          convId,
-          textToSave,
-          draftAttachments: draftAttachments,
+        unawaited(
+          _conversationsNotifier
+              .saveDraftAndWait(
+            convId,
+            textToSave,
+            draftAttachments: draftAttachments,
+          )
+              .then((saved) {
+            if (!saved) {
+              debugPrint('[ChatComposer] draft save after dispose failed');
+            }
+          }).catchError((Object e) {
+            debugPrint(
+              '[ChatComposer] failed to save draft after dispose: $e',
+            );
+          }),
         );
       } catch (e) {
         debugPrint('[ChatComposer] failed to save draft after dispose: $e');
@@ -112,21 +127,30 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
 
   /// Persists the current draft snapshot and reports whether it reached
   /// storage. File cleanup must wait for this before deleting a referenced path.
-  Future<bool> _persistDraftSnapshotImmediately(ChatComposerWidget w) async {
+  Future<bool> _persistDraftSnapshotImmediately(
+    ChatComposerWidget w, {
+    String? textSnapshot,
+    List<Attachment>? attachmentSnapshot,
+  }) async {
     final convId = w.conversationId;
     if (w.editingMessageId != null) return false;
     // Attachments in a composer without a conversation cannot be referenced by
     // a persisted draft, so their files are safe to clean up immediately.
     if (convId == null) return true;
-    final textToSave = _textController.text;
-    final draftAttachments = _draftAttachmentSnapshot();
+    final textToSave = textSnapshot ?? _textController.text;
+    final draftAttachments = attachmentSnapshot ?? _draftAttachmentSnapshot(w);
     final attachmentSignature = _draftAttSignature(draftAttachments);
     final saved = await _conversationsNotifier.saveDraftAndWait(
       convId,
       textToSave,
       draftAttachments: draftAttachments,
     );
-    if (saved) {
+    if (saved &&
+        mounted &&
+        widget.conversationId == convId &&
+        widget.editingMessageId == null &&
+        _textController.text == textToSave &&
+        _draftAttSignature().toString() == attachmentSignature.toString()) {
       _lastSavedDraft = textToSave;
       _lastSavedDraftAttSignature = attachmentSignature;
     }

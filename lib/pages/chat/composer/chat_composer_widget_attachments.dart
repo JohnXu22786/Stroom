@@ -415,8 +415,11 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   }
 
   Future<void> _removePendingAttachment(int index) async {
+    final composerAtStart = widget;
+    final conversationId = composerAtStart.conversationId;
+    final editingMessageId = composerAtStart.editingMessageId;
     final att = _pendingAttachments[index];
-    final cacheConversationId = att.conversationId ?? widget.conversationId;
+    final cacheConversationId = att.conversationId ?? conversationId;
     _pendingImageBytes.remove(att.id);
     _pendingAttachmentEditRequests.remove(att.id);
     // 磁盘压缩缓存清理时机：
@@ -425,13 +428,15 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // - 编辑模式 + 原消息附件：**不立即清理**——用户可能取消编辑，
     //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
     //   再统一清理。
-    final isOriginalEditFile = widget.editingMessageId != null &&
-        (widget.editingMessageAttachments?.any(
+    final isOriginalEditFile = editingMessageId != null &&
+        (composerAtStart.editingMessageAttachments?.any(
               (a) => a.storagePath == att.storagePath,
             ) ??
             false);
-    final originalEditUsesHash = widget.editingMessageId != null &&
-        (widget.editingMessageAttachments?.any((a) => a.hash == att.hash) ??
+    final originalEditUsesHash = editingMessageId != null &&
+        (composerAtStart.editingMessageAttachments?.any(
+              (a) => a.hash == att.hash,
+            ) ??
             false);
     final editCacheStillReferenced = isOriginalEditFile || originalEditUsesHash;
     if (editCacheStillReferenced) {
@@ -456,13 +461,15 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // Persist the draft removal before deleting bytes that its previous saved
     // snapshot still referenced. Preserve files used by the edited message.
     if (!isOriginalEditFile) {
-      if (widget.editingMessageId == null) {
-        await _queueDraftAttachmentFileDelete(
+      if (editingMessageId == null) {
+        final queuedFileDelete = _queueDraftAttachmentFileDelete(
           att.storagePath,
           attachmentConversationId: att.conversationId,
         );
-        await _persistDraftSnapshotImmediately(widget);
-        if (widget.conversationId == null && cacheConversationId != null) {
+        final persistDraft = _persistDraftSnapshotImmediately(composerAtStart);
+        await queuedFileDelete;
+        await persistDraft;
+        if (conversationId == null && cacheConversationId != null) {
           await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
         }
       } else {
@@ -473,6 +480,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       }
     }
     // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
+    if (!mounted || widget.conversationId != conversationId) return;
     _scheduleDraftSave();
   }
 
@@ -612,11 +620,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // out BEFORE any file I/O so we never delete the file of an
     // attachment that is still in use.
     if (index >= _pendingAttachments.length) return;
+    final composerAtStart = widget;
     final oldAtt = _pendingAttachments[index];
     final editSessionGeneration = _pendingAttachmentDraftGeneration;
     final editConversationId = widget.editingMessageId == null
         ? widget.conversationId
         : _editSessionConversationId;
+    final oldCacheConversationId = oldAtt.conversationId ?? editConversationId;
     final editRequestId = ++_pendingAttachmentEditRequestId;
     _pendingAttachmentEditRequests[oldAtt.id] = editRequestId;
 
@@ -671,6 +681,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         _pendingAttachments[currentIndex] = updatedAtt;
         _pendingImageBytes[updatedAtt.id] = editedBytes;
       });
+      final draftTextSnapshot = _textController.text;
+      final draftAttachmentsSnapshot =
+          _draftAttachmentSnapshot(composerAtStart);
       unawaited(
         _preCompressPendingImage(
           updatedAtt,
@@ -694,19 +707,25 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
           // check and be writing the old hash's cache. Let it finish before
           // queueing cleanup so a durable save cannot race that final write.
           await _waitForPreCompress(replacedAtt.hash);
-          if (widget.conversationId == null) {
+          if (oldCacheConversationId == null) {
             await _deleteCompressedCacheAfterPreCompress(
               replacedAtt,
-              conversationId: editConversationId,
+              conversationId: null,
             );
           } else {
             _conversationsNotifier.queueDraftAttachmentCacheDelete(
-              conversationId: editConversationId,
+              conversationId: oldCacheConversationId,
               hash: replacedAtt.hash,
             );
           }
         }
-        if (!await _persistDraftSnapshotImmediately(widget)) return;
+        if (!await _persistDraftSnapshotImmediately(
+          composerAtStart,
+          textSnapshot: draftTextSnapshot,
+          attachmentSnapshot: draftAttachmentsSnapshot,
+        )) {
+          return;
+        }
         if (widget.conversationId == null &&
             replacedAtt.conversationId != null) {
           await _conversationsNotifier.persistSnapshotForAttachmentCleanup();
