@@ -5,13 +5,25 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/text_storage_shared.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
-Widget _buildTestApp({String initialFolder = ''}) {
+Widget _buildTestApp({
+  String initialFolder = '',
+  Locale locale = const Locale('zh', 'CN'),
+  double textScale = 1,
+}) {
   return MaterialApp(
-    locale: const Locale('zh', 'CN'),
+    locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     home: TextCreatePage(initialFolder: initialFolder),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(textScale),
+        disableAnimations: false,
+      ),
+      child: child!,
+    ),
   );
 }
 
@@ -25,6 +37,124 @@ void main() {
   });
 
   group('TextCreatePage', () {
+    testWidgets(
+      'uses constrained field labels without replacing native inputs',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pump();
+
+        final fields = tester.widgetList<TextField>(find.byType(TextField));
+        expect(fields, hasLength(2));
+        expect(
+          fields.map((field) => field.decoration!.label),
+          everyElement(isA<ConstrainedText>()),
+        );
+        expect(
+          tester
+              .widget<DropdownButtonFormField<String>>(
+                find.byType(DropdownButtonFormField<String>),
+              )
+              .decoration
+              .label,
+          isA<ConstrainedText>(),
+        );
+        final titleField = find.byType(TextField).first;
+        final titleController = tester
+            .widget<TextField>(titleField)
+            .controller!;
+
+        await tester.tap(titleField);
+        await tester.enterText(titleField, 'draft title');
+        titleController.value = titleController.value.copyWith(
+          selection: const TextSelection.collapsed(offset: 5),
+        );
+
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pump();
+        await tester.tap(find.text('md').last);
+        await tester.pump();
+
+        expect(titleController.text, 'draft title');
+        expect(
+          titleController.selection,
+          const TextSelection.collapsed(offset: 5),
+        );
+        expect(FocusManager.instance.primaryFocus?.hasFocus, isTrue);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'keeps fitting labels still and clips overflowing field labels',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(locale: const Locale('pt', 'BR'), textScale: 1),
+        );
+        await tester.pump();
+
+        final titleLabel = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == 'Título',
+        );
+        expect(titleLabel, findsOneWidget);
+        final titleText = find.descendant(
+          of: titleLabel,
+          matching: find.text('Título'),
+        );
+        final titleStart = tester.getTopLeft(titleText);
+        await tester.pump(const Duration(seconds: 3));
+        expect(tester.getTopLeft(titleText), titleStart);
+
+        await tester.pumpWidget(
+          _buildTestApp(locale: const Locale('pt', 'BR'), textScale: 2.5),
+        );
+        await tester.pump();
+        final formatLabel = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText && widget.data == 'Conteúdo do texto',
+        );
+        expect(formatLabel, findsOneWidget);
+        final formatText = find.descendant(
+          of: formatLabel,
+          matching: find.text('Conteúdo do texto'),
+        );
+        final formatContext = tester.element(formatLabel);
+        final naturalFormat = TextPainter(
+          text: TextSpan(
+            text: 'Conteúdo do texto',
+            style: DefaultTextStyle.of(formatContext).style,
+          ),
+          textDirection: Directionality.of(formatContext),
+          textScaler: MediaQuery.textScalerOf(formatContext),
+          maxLines: 1,
+        )..layout();
+        expect(
+          naturalFormat.width,
+          greaterThan(tester.getSize(formatLabel).width),
+          reason: 'the localized content label should exceed its field slot',
+        );
+        expect(
+          find.descendant(of: formatLabel, matching: find.byType(ClipRect)),
+          findsOneWidget,
+        );
+        expect(formatText, findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('rejects same-folder duplicate name and format', (
       tester,
     ) async {

@@ -163,8 +163,11 @@ class TextCreatePageState extends State<TextCreatePage> {
                   child: TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
-                      labelText:
-                          AppLocalizations.of(context)!.textCreateTitleLabel,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.textCreateTitleLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       hintText:
                           AppLocalizations.of(context)!.textCreateTitleHint,
                       border: OutlineInputBorder(),
@@ -180,8 +183,11 @@ class TextCreatePageState extends State<TextCreatePage> {
                     isExpanded: true,
                     initialValue: _selectedFormat,
                     decoration: InputDecoration(
-                      labelText:
-                          AppLocalizations.of(context)!.textCreateFormatLabel,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.textCreateFormatLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 12,
@@ -216,8 +222,11 @@ class TextCreatePageState extends State<TextCreatePage> {
               child: TextField(
                 controller: _contentController,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.textCreateContentLabel,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.textCreateContentLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   hintText: AppLocalizations.of(context)!.textCreateContentHint,
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
