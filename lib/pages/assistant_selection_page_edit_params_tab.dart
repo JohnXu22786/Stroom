@@ -209,7 +209,11 @@ Widget _buildEditParamsTab({
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.assistantRoundsLabel,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.assistantRoundsLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -288,7 +292,11 @@ Widget _buildEditParamsTab({
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.assistantSeedValue,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.assistantSeedValue,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText:
                     AppLocalizations.of(context)!.assistantIntegerSeedHint,
                 border: OutlineInputBorder(),

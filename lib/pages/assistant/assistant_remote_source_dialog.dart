@@ -237,8 +237,11 @@ class _AssistantRemoteSourceDialogState
                 controller: _urlController,
                 keyboardType: TextInputType.url,
                 decoration: InputDecoration(
-                  labelText:
-                      _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
+                  label: ConstrainedText(
+                    _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   hintText: 'https://…/catalog.json',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(

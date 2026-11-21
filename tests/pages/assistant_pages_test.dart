@@ -69,6 +69,66 @@ BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('assistant editor labels keep native field editing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final promptController = TextEditingController();
+    addTearDown(nameController.dispose);
+    addTearDown(descriptionController.dispose);
+    addTearDown(promptController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: assistant_shared.AssistantEditorFields(
+              nameController: nameController,
+              descriptionController: descriptionController,
+              promptController: promptController,
+              selectedEmoji: '🤖',
+              onEmojiSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final labels = tester.widgetList<ConstrainedText>(
+      find.byType(ConstrainedText),
+    );
+    expect(
+      labels.map((label) => label.data),
+      containsAll([
+        'Name des Assistenten',
+        'Beschreibung (optional)',
+        'System-Prompt',
+      ]),
+    );
+
+    final nameField = find.byType(TextField).first;
+    await tester.tap(nameField);
+    await tester.enterText(nameField, 'Mein Assistent');
+    await tester.pump();
+
+    expect(nameController.text, 'Mein Assistent');
+    expect(FocusManager.instance.primaryFocus?.hasFocus, isTrue);
+    expect(tester.testTextInput.hasAnyClients, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('emoji category tabs follow the selected locale', (tester) async {
     expect(
       EmojiCategories.categories.map((category) => category.type).toList(),
