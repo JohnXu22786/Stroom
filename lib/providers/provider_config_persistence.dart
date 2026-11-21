@@ -9,6 +9,46 @@ part of 'provider_config.dart';
 const int _maxCorruptProviderBackups = 3;
 
 extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
+  /// Ensure migrations and later CRUD writes cannot discard unreadable data.
+  /// On backup failure, retain the exact source string for a retry before any
+  /// subsequent write.
+  Future<void> _ensureCorruptProviderEntriesBackedUp(
+    SharedPreferences prefs,
+  ) async {
+    final original = prefs.getString('provider_entries');
+    if (original == null || original.isEmpty) return;
+
+    var corrupt = false;
+    try {
+      final decoded = jsonDecode(original);
+      if (decoded is! List) {
+        corrupt = true;
+      } else {
+        for (final raw in decoded) {
+          if (raw is! Map) {
+            corrupt = true;
+            break;
+          }
+          try {
+            ProviderEntry.fromMap(Map<String, dynamic>.from(raw));
+          } catch (_) {
+            corrupt = true;
+            break;
+          }
+        }
+      }
+    } catch (_) {
+      corrupt = true;
+    }
+
+    if (!corrupt) return;
+    if (await _backupCorruptProviderEntries(prefs, original)) {
+      _corruptProviderEntriesAwaitingBackup = null;
+    } else {
+      _corruptProviderEntriesAwaitingBackup = original;
+    }
+  }
+
   /// 迁移旧版 chat_configs（被重构删除的 ChatProviderConfigItem 格式）到 provider_entries
   Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
     final oldJson = prefs.getString('chat_configs');
@@ -738,6 +778,19 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     var attemptedGroupsWrite = false;
     try {
       prefs = await SharedPreferences.getInstance();
+      final pendingCorruptEntries = _corruptProviderEntriesAwaitingBackup;
+      if (pendingCorruptEntries != null) {
+        final backedUp = await _backupCorruptProviderEntries(
+          prefs,
+          pendingCorruptEntries,
+        );
+        if (!backedUp) {
+          throw StateError(
+            'Cannot persist provider configuration before corrupt data is backed up.',
+          );
+        }
+        _corruptProviderEntriesAwaitingBackup = null;
+      }
       if (rethrowOnFailure) {
         previousEntries = prefs.getString('provider_entries');
         if (persistMcpGroups) {

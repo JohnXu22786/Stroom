@@ -250,6 +250,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
   Future<void> _loading = Future<void>.value();
   Future<void> _stateMutationQueue = Future<void>.value();
+  String? _corruptProviderEntriesAwaitingBackup;
   Future<void> get ready => _loading;
 
   Future<void> _enqueueStateMutation(Future<void> Function() mutation) {
@@ -265,14 +266,20 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       final prefs = await SharedPreferences.getInstance();
       mcpGroups = _readMcpGroups(prefs.getString('mcp_provider_groups'));
 
+      // Establish a recoverable copy before any migration can rewrite this
+      // key. Keep the raw value pending if the backup store is unavailable.
+      await _ensureCorruptProviderEntriesBackedUp(prefs);
+
       // 第1步：迁移旧版 chat_configs → provider_entries
-      await _migrateOldChatConfigs(prefs);
+      if (_corruptProviderEntriesAwaitingBackup == null) {
+        await _migrateOldChatConfigs(prefs);
 
-      // 第2步：迁移旧版 CustomParam 缺少 type 字段的问题
-      await _migrateOldCustomParams(prefs);
+        // 第2步：迁移旧版 CustomParam 缺少 type 字段的问题
+        await _migrateOldCustomParams(prefs);
 
-      // 第2.5步：迁移旧版推理参数缺少 isEffortParam 标志的问题
-      await _migrateLegacyEffortParams(prefs);
+        // 第2.5步：迁移旧版推理参数缺少 isEffortParam 标志的问题
+        await _migrateLegacyEffortParams(prefs);
+      }
 
       // 第3步：正常加载 provider_entries
       final json = prefs.getString('provider_entries');
@@ -282,14 +289,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           jsonDecode(json) as List;
           // Covers old settings imported after startup as well: persist IDs
           // before publishing models to selectors or task flows.
-          await ProviderModelMigration.migrateSettings();
+          if (_corruptProviderEntriesAwaitingBackup == null) {
+            await ProviderModelMigration.migrateSettings();
+          }
           rawList = jsonDecode(prefs.getString('provider_entries')!) as List;
         } catch (e) {
           // 结构性损坏（非法 JSON）：备份原始数据再回退默认预置，
           // 否则后续任意 CRUD 的 _persist 会用默认值覆盖写坏，
           // 含 API key 的原始配置不可恢复地丢失。
           debugPrint('Failed to decode provider_entries: $e');
-          await _backupCorruptProviderEntries(prefs, json);
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
         }
@@ -298,29 +306,26 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         // 对齐 conversations 的防御风格。整表回退会导致含 API key
         // 的配置静默丢失且被后续 _persist 覆盖。
         final entries = <ProviderEntry>[];
-        var skippedCorruptEntry = false;
         for (final raw in rawList) {
           if (raw is! Map) {
-            skippedCorruptEntry = true;
             continue;
           }
           try {
             entries.add(ProviderEntry.fromMap(Map<String, dynamic>.from(raw)));
           } catch (e) {
-            skippedCorruptEntry = true;
             debugPrint('Skipping corrupt provider entry: $e');
           }
         }
         if (entries.isEmpty) {
           // 全部条目损坏：备份并回退默认（保留原始数据供恢复）
-          await _backupCorruptProviderEntries(prefs, json);
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
         }
-        if (skippedCorruptEntry) {
-          // 混合列表仍可加载有效条目，但后续持久化只写入已解析条目；
-          // 先备份原始 JSON，避免跳过的配置（可能含 API key）被永久覆盖。
-          await _backupCorruptProviderEntries(prefs, json);
+        if (_corruptProviderEntriesAwaitingBackup != null) {
+          // Keep readable entries available, but defer migrations and CRUD
+          // writes until the original configuration has been backed up.
+          state = ProviderEntriesState(entries: entries, mcpGroups: mcpGroups);
+          return;
         }
 
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
