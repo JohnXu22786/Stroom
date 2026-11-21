@@ -1496,12 +1496,12 @@ void main() {
     );
   });
   group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
-    testWidgets('strategy subtitles retain their complete localized text', (
+    testWidgets('strategy details wrap below the switch row at phone width', (
       tester,
     ) async {
       registerMockPlatform();
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.physicalSize = const Size(320, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -1515,20 +1515,16 @@ void main() {
       final strings = AppLocalizations.of(
         tester.element(find.byType(BackgroundOptimizationPage)),
       )!;
-      final watchdogTile = tester.widget<SwitchListTile>(
-        find.byType(SwitchListTile).first,
+      final watchdogDetail = find.textContaining(
+        strings.backgroundOptimizationWatchdogDetail.split('\n').first,
       );
-      final coldStartTile = tester.widget<SwitchListTile>(
-        find.byType(SwitchListTile).at(1),
+      final coldStartDetail = find.textContaining(
+        strings.backgroundOptimizationColdStartDetail.split('\n').first,
       );
-      expect(
-        (watchdogTile.subtitle as Text).data,
-        strings.backgroundOptimizationWatchdogDetail,
-      );
-      expect(
-        (coldStartTile.subtitle as Text).data,
-        strings.backgroundOptimizationColdStartDetail,
-      );
+      expect(watchdogDetail, findsOneWidget);
+      expect(coldStartDetail, findsOneWidget);
+      expect(tester.getSize(watchdogDetail).width, greaterThan(240));
+      expect(tester.getSize(coldStartDetail).width, greaterThan(240));
       debugDefaultTargetPlatformOverride = null;
     });
 

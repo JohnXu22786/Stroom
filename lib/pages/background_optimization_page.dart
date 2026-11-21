@@ -1020,32 +1020,40 @@ class _BackgroundOptimizationPageState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => _showDetailDialog(theme, title, detail),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(
-                Icons.info_outline,
-                size: 18,
-                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
               ),
-            ),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _showDetailDialog(theme, title, detail),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      subtitle: Text(detail, style: theme.textTheme.bodySmall),
-      value: value,
-      onChanged: onChanged,
+          value: value,
+          onChanged: onChanged,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Text(detail, style: theme.textTheme.bodySmall),
+        ),
+      ],
     );
   }
 
