@@ -80,6 +80,30 @@ Widget createComposerTestApp({
 
 void main() {
   group('Composer reasoning chip label', () {
+    testWidgets(
+        'reveals a long model-supplied effort value in the narrow row',
+        (tester) async {
+      const longValue =
+          'reasoning_effort_custom_option_value_that_exceeds_phone_width';
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        reasoningParamValues: {'reasoning_effort': longValue},
+      ));
+      await tester.pump();
+
+      final label = find.text(longValue);
+      expect(label, findsOneWidget);
+      final start = tester.getTopLeft(label);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(tester.getTopLeft(label).dx, lessThan(start.dx));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows effort value when reasoning ON + effort ON + value set',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
