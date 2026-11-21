@@ -397,46 +397,60 @@ class _StartupErrorBoundaryState extends State<StartupErrorBoundary> {
                 builder: (overlayContext) {
                   final l10n = AppLocalizations.of(overlayContext)!;
                   return Scaffold(
-                    body: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Colors.orange.shade400,
+                    body: SafeArea(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) =>
+                            SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              l10n.startupRecoveryTitle,
-                              style: Theme.of(overlayContext)
-                                  .textTheme
-                                  .headlineSmall,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _errorMessage.isNotEmpty
-                                  ? _errorMessage
-                                  : l10n.startupRecoveryFallbackMessage,
-                              textAlign: TextAlign.center,
-                              style: Theme.of(overlayContext)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(color: Colors.grey.shade600),
-                            ),
-                            const SizedBox(height: 24),
-                            FilledButton.icon(
-                              onPressed: _onRetry,
-                              icon: const Icon(Icons.refresh),
-                              label: ConstrainedText(
-                                l10n.startupRecoveryRetry,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: 64,
+                                      color: Colors.orange.shade400,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      l10n.startupRecoveryTitle,
+                                      style: Theme.of(overlayContext)
+                                          .textTheme
+                                          .headlineSmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _errorMessage.isNotEmpty
+                                          ? _errorMessage
+                                          : l10n.startupRecoveryFallbackMessage,
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(overlayContext)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: Colors.grey.shade600,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    FilledButton.icon(
+                                      onPressed: _onRetry,
+                                      icon: const Icon(Icons.refresh),
+                                      label: ConstrainedText(
+                                        l10n.startupRecoveryRetry,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
