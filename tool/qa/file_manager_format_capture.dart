@@ -114,8 +114,8 @@ class _CaptureLocalizations extends AppLocalizationsEn {
   @override
   String get fileManagerFormat =>
       Uri.base.queryParameters['longLabel'] == 'true'
-      ? 'Format label for test-only clipping evidence'
-      : super.fileManagerFormat;
+          ? 'Format label for test-only clipping evidence'
+          : super.fileManagerFormat;
 }
 
 class _CaptureLocalizationsDelegate

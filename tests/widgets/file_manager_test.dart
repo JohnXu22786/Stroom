@@ -2626,8 +2626,7 @@ void main() {
           final formatLabel = find.descendant(
             of: find.byKey(const Key('fm_rename_file_format_dropdown')),
             matching: find.byWidgetPredicate(
-              (widget) =>
-                  widget is ConstrainedText && widget.data == '格式',
+              (widget) => widget is ConstrainedText && widget.data == '格式',
             ),
           );
           expect(formatLabel, findsOneWidget);
