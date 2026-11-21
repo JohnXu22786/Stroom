@@ -16,3 +16,19 @@ These artifacts show the production `ProviderSettingsPanel` component in Flutter
 ![Provider parameter fields at 320 × 640, with a clipped localized field label and a fitting stationary label](images/provider-field-labels-320x640-pt-BR.png)
 
 [Play the 9-second clipped-label motion preview](images/provider-field-label-motion-320x640-pt-BR.webm)
+
+## Provider reasoning row reflow
+
+The narrow provider configuration tab now places each reasoning-card title above its type and delete controls, and places additional-parameter controls below the full-width native name field. No field is focused and the keyboard is closed in these captures; the controls retain their native dropdown, delete, edit, and drag behavior. The screenshots use the real `ProviderSettingsPanel` in Flutter Web release mode with the same 320 × 640 logical-pixel, 1×, light `pt-BR` state.
+
+### Before
+
+![Before: the Portuguese reasoning-toggle title wraps beside the type dropdown and delete action at 320 × 640](images/provider-field-labels-320x640-pt-BR.png)
+
+### After
+
+![After: the reasoning-toggle title has a full line above its type dropdown and delete action](images/provider-reasoning-reflow-320x640-pt-BR.png)
+
+![After: the effort parameter name uses a full-width field, and the additional-parameter name field remains usable](images/provider-reasoning-reflow-additional-320x640-pt-BR.png)
+
+Repeatable capture entry point: `tools/qa/provider_reasoning_reflow_capture.dart`.
