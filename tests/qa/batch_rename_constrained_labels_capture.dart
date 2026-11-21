@@ -29,53 +29,53 @@ class _CaptureAppState extends State<_CaptureApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    locale: const Locale('de', 'DE'),
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      cardTheme: const CardThemeData(elevation: 0),
-    ),
-    home: Builder(
-      builder: (context) {
-        if (!_opened) {
-          _opened = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!context.mounted) return;
-            const item = BatchRenameItem(
-              id: 'label-preview',
-              isFolder: false,
-              name: 'Very long original filename for label verification',
-              format: 'txt',
-            );
-            showDialog<void>(
-              context: context,
-              builder: (_) => BatchRenameDialog(
-                items: const [item],
-                allFiles: const [item],
-                allFolders: const {},
-                bridge: _bridge,
-                initialConfig: const BatchRenameConfig(
-                  rules: [
-                    BatchReplaceOp(
-                      enabled: true,
-                      find: 'original',
-                      replace: 'updated',
+        locale: const Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          cardTheme: const CardThemeData(elevation: 0),
+        ),
+        home: Builder(
+          builder: (context) {
+            if (!_opened) {
+              _opened = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!context.mounted) return;
+                const item = BatchRenameItem(
+                  id: 'label-preview',
+                  isFolder: false,
+                  name: 'Very long original filename for label verification',
+                  format: 'txt',
+                );
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => BatchRenameDialog(
+                    items: const [item],
+                    allFiles: const [item],
+                    allFolders: const {},
+                    bridge: _bridge,
+                    initialConfig: const BatchRenameConfig(
+                      rules: [
+                        BatchReplaceOp(
+                          enabled: true,
+                          find: 'original',
+                          replace: 'updated',
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            );
-          });
-        }
-        return const Scaffold(body: SizedBox.expand());
-      },
-    ),
-  );
+                  ),
+                );
+              });
+            }
+            return const Scaffold(body: SizedBox.expand());
+          },
+        ),
+      );
 }

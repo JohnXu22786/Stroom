@@ -10,11 +10,11 @@ import 'package:stroom/widgets/constrained_text.dart';
 import '../utils/batch_rename_test.dart' show bridge, file;
 
 Widget _localizedApp(Widget body, Locale locale) => MaterialApp(
-  locale: locale,
-  supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  home: Scaffold(body: body),
-);
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: Scaffold(body: body),
+    );
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -100,10 +100,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       final fittingField = find.byKey(const Key('batch_num_start_field'));
-      final fittingLabel = tester
-          .widget<TextField>(fittingField)
-          .decoration!
-          .label!;
+      final fittingLabel =
+          tester.widget<TextField>(fittingField).decoration!.label!;
       expect(fittingLabel, isA<ConstrainedText>());
       expect((fittingLabel as ConstrainedText).data, 'Start');
       expect(
