@@ -22,9 +22,10 @@ class ConstrainedText extends StatefulWidget {
     this.maxLines,
     this.semanticsLabel,
     this.selectionColor,
+    this.highlightedText,
     this.useNaturalWidthLayout = false,
-  })  : speed = 24,
-        marqueeTextAlign = null;
+  }) : speed = 24,
+       marqueeTextAlign = null;
 
   const ConstrainedText.home({
     super.key,
@@ -36,14 +37,15 @@ class ConstrainedText extends StatefulWidget {
     this.overflow = TextOverflow.ellipsis,
     this.softWrap = true,
     this.marqueeTextAlign,
-  })  : data = text,
-        strutStyle = null,
-        textDirection = null,
-        locale = null,
-        textScaler = null,
-        semanticsLabel = null,
-        selectionColor = null,
-        useNaturalWidthLayout = false;
+  }) : data = text,
+       strutStyle = null,
+       textDirection = null,
+       locale = null,
+       textScaler = null,
+       semanticsLabel = null,
+       selectionColor = null,
+       highlightedText = null,
+       useNaturalWidthLayout = false;
 
   final String data;
   final double speed;
@@ -59,6 +61,10 @@ class ConstrainedText extends StatefulWidget {
   final int? maxLines;
   final String? semanticsLabel;
   final Color? selectionColor;
+
+  /// Optional styled runs rendered in place of plain text while preserving
+  /// [data] as the complete string used for measurement and semantics.
+  final TextSpan? highlightedText;
 
   /// Uses a direct LayoutBuilder for contexts such as DropdownMenuItem, where
   /// a custom single-child layout can invalidate the parent baseline pass.
@@ -128,6 +134,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         oldWidget.speed != widget.speed ||
         oldWidget.marqueeTextAlign != widget.marqueeTextAlign ||
         oldWidget.softWrap != widget.softWrap ||
+        oldWidget.highlightedText != widget.highlightedText ||
         oldWidget.overflow != widget.overflow) {
       _reset();
     }
@@ -159,7 +166,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
     TextAlign textAlign,
     bool allowMotion,
   ) {
-    final measurementChanged = width != _measuredWidth ||
+    final measurementChanged =
+        width != _measuredWidth ||
         direction != _measuredDirection ||
         scaler != _measuredScaler ||
         style != _measuredStyle ||
@@ -175,12 +183,13 @@ class _ConstrainedTextState extends State<ConstrainedText>
       final previousOverflow = _overflow;
       final maxLines = widget.maxLines ?? 1;
       final singleLine = maxLines == 1 || widget.softWrap == false;
-      final vertical = (widget.maxLines != null && widget.maxLines! > 1) ||
+      final vertical =
+          (widget.maxLines != null && widget.maxLines! > 1) ||
           (widget.maxLines != null &&
               widget.data.contains('\n') &&
               widget.softWrap != false);
       final current = TextPainter(
-        text: TextSpan(text: widget.data, style: style),
+        text: _textSpan(style),
         textDirection: direction,
         textScaler: scaler,
         locale: widget.locale ?? locale,
@@ -191,7 +200,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
       )..layout(maxWidth: width);
       _layoutWidth = current.didExceedMaxLines ? width : current.width;
       final natural = TextPainter(
-        text: TextSpan(text: widget.data, style: style),
+        text: _textSpan(style),
         textDirection: direction,
         textScaler: scaler,
         locale: widget.locale ?? locale,
@@ -203,7 +212,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
       _overflow = 0;
       if (vertical && current.didExceedMaxLines) {
         final fullWrapped = TextPainter(
-          text: TextSpan(text: widget.data, style: style),
+          text: _textSpan(style),
           textDirection: direction,
           textScaler: scaler,
           locale: widget.locale ?? locale,
@@ -220,7 +229,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         for (var i = 0; i < 20; i++) {
           final middle = (low + high) / 2;
           final candidate = TextPainter(
-            text: TextSpan(text: widget.data, style: style),
+            text: _textSpan(style),
             textDirection: direction,
             textScaler: scaler,
             locale: widget.locale ?? locale,
@@ -235,7 +244,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
           }
         }
         final complete = TextPainter(
-          text: TextSpan(text: widget.data, style: style),
+          text: _textSpan(style),
           textDirection: direction,
           textScaler: scaler,
           locale: widget.locale ?? locale,
@@ -293,8 +302,9 @@ class _ConstrainedTextState extends State<ConstrainedText>
 
   void _startAnimation() {
     if (_animating || !_motionAllowed || _overflow <= 0) return;
-    final travel =
-        math.max(1, (_overflow / widget.speed * 1000).round()).toInt();
+    final travel = math
+        .max(1, (_overflow / widget.speed * 1000).round())
+        .toInt();
     _controller.duration = Duration(milliseconds: travel);
     _position = Tween<double>(begin: 0, end: 1).animate(_controller);
     _controller.forward(from: 0);
@@ -302,7 +312,9 @@ class _ConstrainedTextState extends State<ConstrainedText>
     _started = true;
   }
 
-  Widget _original() => Text(
+  Widget _original(TextStyle style, TextScaler scaler) {
+    if (widget.highlightedText == null) {
+      return Text(
         widget.data,
         style: widget.style,
         strutStyle: widget.strutStyle,
@@ -311,11 +323,32 @@ class _ConstrainedTextState extends State<ConstrainedText>
         locale: widget.locale,
         softWrap: widget.softWrap,
         overflow: widget.overflow,
-        textScaler: widget.textScaler,
+        textScaler: scaler,
         maxLines: widget.maxLines,
         semanticsLabel: widget.semanticsLabel,
         selectionColor: widget.selectionColor,
       );
+    }
+    return Text.rich(
+      _textSpan(style),
+      strutStyle: widget.strutStyle,
+      textAlign: widget.textAlign ?? TextAlign.start,
+      textDirection: widget.textDirection,
+      locale: widget.locale,
+      softWrap: widget.softWrap ?? true,
+      overflow: widget.overflow ?? TextOverflow.clip,
+      textScaler: scaler,
+      maxLines: widget.maxLines,
+      semanticsLabel: widget.semanticsLabel ?? widget.data,
+      selectionColor: widget.selectionColor,
+    );
+  }
+
+  TextSpan _textSpan(TextStyle style) => TextSpan(
+    text: widget.highlightedText == null ? widget.data : null,
+    style: style,
+    children: widget.highlightedText?.children,
+  );
 
   @override
   void dispose() {
@@ -334,13 +367,14 @@ class _ConstrainedTextState extends State<ConstrainedText>
     final textAlign =
         widget.textAlign ?? defaultTextStyle.textAlign ?? TextAlign.start;
     final locale = widget.locale ?? Localizations.maybeLocaleOf(context);
-    final animateable = (widget.maxLines != null || widget.softWrap == false) &&
+    final animateable =
+        (widget.maxLines != null || widget.softWrap == false) &&
         widget.maxLines != 0;
-    if (!animateable) return _original();
+    if (!animateable) return _original(style, scaler);
     final measuredLayout = LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        if (!width.isFinite || width <= 0) return _original();
+        if (!width.isFinite || width <= 0) return _original(style, scaler);
         _measure(
           width,
           direction,
@@ -354,7 +388,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
         if (_overflow <= 0 ||
             MediaQuery.disableAnimationsOf(context) ||
             !TickerMode.valuesOf(context).enabled) {
-          return SizedBox(width: _layoutWidth, child: _original());
+          return SizedBox(width: _layoutWidth, child: _original(style, scaler));
         }
         return Semantics(
           label: widget.semanticsLabel ?? widget.data,
@@ -373,9 +407,8 @@ class _ConstrainedTextState extends State<ConstrainedText>
                   animation: _controller,
                   child: SizedBox(
                     width: _vertical ? width : _textWidth,
-                    child: Text(
-                      widget.data,
-                      style: style,
+                    child: Text.rich(
+                      _textSpan(style),
                       strutStyle: widget.strutStyle,
                       textAlign: widget.marqueeTextAlign ?? textAlign,
                       textDirection: direction,
@@ -384,7 +417,7 @@ class _ConstrainedTextState extends State<ConstrainedText>
                       overflow: TextOverflow.clip,
                       textScaler: scaler,
                       maxLines: _vertical ? null : widget.maxLines ?? 1,
-                      semanticsLabel: widget.semanticsLabel,
+                      semanticsLabel: widget.semanticsLabel ?? widget.data,
                       selectionColor: widget.selectionColor,
                     ),
                   ),
@@ -393,10 +426,11 @@ class _ConstrainedTextState extends State<ConstrainedText>
                     final horizontalOffset = _vertical
                         ? 0.0
                         : direction == TextDirection.ltr
-                            ? -_overflow * progress
-                            : -_overflow * (1 - progress);
-                    final verticalOffset =
-                        _vertical ? -_overflow * progress : 0.0;
+                        ? -_overflow * progress
+                        : -_overflow * (1 - progress);
+                    final verticalOffset = _vertical
+                        ? -_overflow * progress
+                        : 0.0;
                     return Transform.translate(
                       offset: Offset(horizontalOffset, verticalOffset),
                       child: child,
@@ -411,25 +445,25 @@ class _ConstrainedTextState extends State<ConstrainedText>
     );
     final isDropdownItem =
         context.findAncestorWidgetOfExactType<DropdownMenuItem<dynamic>>() !=
-            null;
+        null;
     final isInputDecorator =
         context.findAncestorWidgetOfExactType<InputDecorator>() != null;
     final layout =
         widget.useNaturalWidthLayout || isDropdownItem || isInputDecorator
-            ? measuredLayout
-            : CustomSingleChildLayout(
-                delegate: _ConstrainedTextLayoutDelegate(
-                  data: widget.data,
-                  maxLines: widget.maxLines ?? 1,
-                  style: style,
-                  strutStyle: widget.strutStyle,
-                  textAlign: textAlign,
-                  textDirection: direction,
-                  locale: locale,
-                  textScaler: scaler,
-                ),
-                child: measuredLayout,
-              );
+        ? measuredLayout
+        : CustomSingleChildLayout(
+            delegate: _ConstrainedTextLayoutDelegate(
+              data: widget.data,
+              maxLines: widget.maxLines ?? 1,
+              style: style,
+              strutStyle: widget.strutStyle,
+              textAlign: textAlign,
+              textDirection: direction,
+              locale: locale,
+              textScaler: scaler,
+            ),
+            child: measuredLayout,
+          );
     return _ConstrainedTextIntrinsicLayout(
       data: widget.data,
       style: style,
@@ -467,22 +501,23 @@ class _ConstrainedTextLayoutDelegate extends SingleChildLayoutDelegate {
   final TextScaler textScaler;
 
   TextPainter _painter({int? lines, String? ellipsis}) => TextPainter(
-        text: TextSpan(text: data, style: style),
-        textDirection: textDirection,
-        textScaler: textScaler,
-        locale: locale,
-        strutStyle: strutStyle,
-        textAlign: textAlign,
-        maxLines: lines,
-        ellipsis: ellipsis,
-      );
+    text: TextSpan(text: data, style: style),
+    textDirection: textDirection,
+    textScaler: textScaler,
+    locale: locale,
+    strutStyle: strutStyle,
+    textAlign: textAlign,
+    maxLines: lines,
+    ellipsis: ellipsis,
+  );
 
   @override
   Size getSize(BoxConstraints constraints) {
     final intrinsic = _painter()..layout();
     final preferredWidth = intrinsic.maxIntrinsicWidth;
-    final width =
-        constraints.maxWidth.isFinite ? constraints.maxWidth : preferredWidth;
+    final width = constraints.maxWidth.isFinite
+        ? constraints.maxWidth
+        : preferredWidth;
     final bounded = _painter(lines: maxLines, ellipsis: '…')
       ..layout(maxWidth: width);
     return constraints.constrain(
@@ -621,15 +656,15 @@ class _RenderConstrainedTextIntrinsicLayout extends RenderProxyBox {
   }
 
   TextPainter _painter() => TextPainter(
-        text: TextSpan(text: _data, style: _style),
-        textDirection: _textDirection,
-        textScaler: _textScaler,
-        locale: _locale,
-        strutStyle: _strutStyle,
-        textAlign: _textAlign,
-        maxLines: _maxLines,
-        ellipsis: _overflow == TextOverflow.ellipsis ? '…' : null,
-      );
+    text: TextSpan(text: _data, style: _style),
+    textDirection: _textDirection,
+    textScaler: _textScaler,
+    locale: _locale,
+    strutStyle: _strutStyle,
+    textAlign: _textAlign,
+    maxLines: _maxLines,
+    ellipsis: _overflow == TextOverflow.ellipsis ? '…' : null,
+  );
 
   double _intrinsicWidth(double height, {required bool minimum}) {
     final painter = _painter()..layout();

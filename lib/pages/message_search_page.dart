@@ -204,8 +204,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
             child: _query.isEmpty
                 ? _buildInitialState(cs)
                 : _results.isEmpty
-                    ? _buildEmptyState(cs)
-                    : _buildResultsList(cs),
+                ? _buildEmptyState(cs)
+                : _buildResultsList(cs),
           ),
         ],
       ),
@@ -355,7 +355,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     ColorScheme cs,
   ) {
     // Compute match position relative to snippet start
-    final relativeStart = match.matchStart - snippetStart;
+    final relativeStart =
+        match.matchStart - snippetStart + (snippetStart > 0 ? 1 : 0);
     final queryLen = match.matchEnd - match.matchStart;
 
     if (relativeStart < 0 || relativeStart + queryLen > snippet.length) {
@@ -385,13 +386,13 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       spans.add(TextSpan(text: snippet.substring(relativeStart + queryLen)));
     }
 
-    return RichText(
+    return ConstrainedText(
+      snippet,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
-      text: TextSpan(
-        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-        children: spans,
-      ),
+      useNaturalWidthLayout: true,
+      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+      highlightedText: TextSpan(children: spans),
     );
   }
 
