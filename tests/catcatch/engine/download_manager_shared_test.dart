@@ -807,6 +807,75 @@ void main() {
     },
   );
 
+  test(
+    'does not resume saved parts from a different playlist with the same output name',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final origin = 'http://${server.address.address}:${server.port}';
+      final firstStarted = Completer<void>();
+      final releaseFirst = Completer<void>();
+      var replacementFirstRequests = 0;
+      var replacementSecondRequests = 0;
+      final serverDone = server.listen((request) async {
+        if (request.uri.path == '/old-first.ts') {
+          if (!firstStarted.isCompleted) firstStarted.complete();
+          await releaseFirst.future;
+          return;
+        }
+        if (request.uri.path == '/old-second.ts') {
+          request.response.write('old-second');
+        } else if (request.uri.path == '/new-first.ts') {
+          replacementFirstRequests++;
+          request.response.write('new-first');
+        } else {
+          replacementSecondRequests++;
+          request.response.write('new-second');
+        }
+        await request.response.close();
+      });
+      final directory = await Directory.systemTemp.createTemp(
+        'playlist-identity-resume-',
+      );
+      const taskId = 'playlist-identity-resume-test';
+      final outputPath = '${directory.path}/same_merged.ts';
+      final cancelToken = CancelToken();
+      final completedOutOfOrder = Completer<void>();
+      try {
+        final initialDownload = DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/old-first.ts', '$origin/old-second.ts'],
+          outputPath: outputPath,
+          concurrency: 2,
+          taskId: taskId,
+          cancelToken: cancelToken,
+          onProgress: (completed, total, progress) {
+            if (completed == 1 && !completedOutOfOrder.isCompleted) {
+              completedOutOfOrder.complete();
+            }
+          },
+        );
+        await firstStarted.future;
+        await completedOutOfOrder.future;
+        cancelToken.cancel('simulate retry after playlist reselection');
+        await expectLater(initialDownload, throwsA(anything));
+
+        final resumedPath = await DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/new-first.ts', '$origin/new-second.ts'],
+          outputPath: outputPath,
+          taskId: taskId,
+        );
+
+        expect(await File(resumedPath).readAsString(), 'new-firstnew-second');
+        expect(replacementFirstRequests, 1);
+        expect(replacementSecondRequests, 1);
+      } finally {
+        if (!releaseFirst.isCompleted) releaseFirst.complete();
+        await serverDone.cancel();
+        await server.close(force: true);
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
   test('releases a playlist output reservation when cancelled', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final serverDone = server.listen((request) async {

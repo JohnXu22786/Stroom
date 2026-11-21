@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
@@ -447,6 +448,21 @@ class DownloadManager {
     }
 
     final total = segmentUrls.length;
+    final resumeIdentity = sha256
+        .convert(
+          utf8.encode(
+            jsonEncode([
+              segmentUrls,
+              segmentRanges
+                  ?.map(
+                    (range) =>
+                        range == null ? null : [range.start, range.length],
+                  )
+                  .toList(),
+            ]),
+          ),
+        )
+        .toString();
     final tempDirPath = p.join(
       p.dirname(outputPath),
       '.${p.basename(outputPath)}_parts',
@@ -462,7 +478,7 @@ class DownloadManager {
     if (taskId.isNotEmpty && !hasByteRanges) {
       final saved = await loadSegmentProgress(taskId);
       final savedSegments = saved?['completedSegments'];
-      if (savedSegments is List) {
+      if (saved?['resumeIdentity'] == resumeIdentity && savedSegments is List) {
         completedSegments.addAll(
           savedSegments.whereType<int>().where(
                 (index) => index >= 0 && index < total,
@@ -532,6 +548,7 @@ class DownloadManager {
               progressWrite = progressWrite.then(
                 (_) => saveSegmentProgress(taskId, {
                   'completedSegments': savedSegments,
+                  'resumeIdentity': resumeIdentity,
                 }),
               );
               await progressWrite;
