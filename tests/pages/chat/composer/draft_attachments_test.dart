@@ -732,9 +732,7 @@ void main() {
       late Future<void> removal;
       removal = key.currentState!.removePendingAttachmentForTesting(0);
       await tester.pump();
-      await tester.runAsync(
-        () => writeStarted.future.timeout(const Duration(seconds: 15)),
-      );
+      expect(writeStarted.isCompleted, isTrue);
 
       await tester.pumpWidget(
         _composer(
@@ -748,7 +746,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'hello');
       writeGate.complete();
       await tester.pump();
-      await tester.runAsync(() => removal);
+      await removal;
       await tester.pump(const Duration(milliseconds: 801));
 
       expect(
@@ -860,9 +858,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.pump(const Duration(milliseconds: 50));
       await tester.pump();
 
       expect(draftWasClearAtDelete, isTrue);
@@ -992,9 +988,10 @@ void main() {
 
       final notifier = container.read(conversationsProvider.notifier);
       notifier.queueDraftAttachmentFileDelete(storagePath);
-      final saved = await tester.runAsync(
-        () =>
-            notifier.saveDraftAndWait('conv-1', '', draftAttachments: const []),
+      final saved = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
       );
 
       expect(saved, isTrue);
@@ -1078,9 +1075,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
-      );
+      expect(store.writeStarted!.isCompleted, isTrue);
       // Install the second write gate before the second removal can enqueue
       // and begin its save; otherwise its setValue may pass before the test
       // observes the signal.
@@ -1096,9 +1091,7 @@ void main() {
       await tester.pump();
       firstWriteGate.complete();
       await tester.pump();
-      await tester.runAsync(
-        () => secondWriteStarted.future.timeout(const Duration(seconds: 15)),
-      );
+      expect(secondWriteStarted.isCompleted, isTrue);
 
       // The first write must persist the snapshot that still includes the
       // second attachment before deleting only the first file.
@@ -1108,9 +1101,7 @@ void main() {
 
       secondWriteGate.complete();
       await tester.pump();
-      await tester.runAsync(
-        () => secondDeleteFinished.future.timeout(const Duration(seconds: 15)),
-      );
+      expect(secondDeleteFinished.isCompleted, isTrue);
 
       expect(firstFile.existsSync(), isFalse);
       expect(secondFile.existsSync(), isFalse);
@@ -1162,31 +1153,31 @@ void main() {
       late Future<bool> firstSave;
       late Future<bool> readdSave;
       late Future<bool> finalRemovalSave;
-      final saved = await tester.runAsync(() async {
-        firstSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        );
-        await firstWriteStarted.future.timeout(const Duration(seconds: 15));
-        readdSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [attachment],
-        );
-        finalRemovalSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        );
-        firstWriteGate.complete();
-        return await firstSave && await readdSave && await finalRemovalSave;
-      });
+      firstSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+      await tester.pump();
+      expect(firstWriteStarted.isCompleted, isTrue);
+      readdSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [attachment],
+      );
+      finalRemovalSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+      firstWriteGate.complete();
+      await tester.pump();
+      final saved =
+          await firstSave && await readdSave && await finalRemovalSave;
 
       expect(saved, isTrue);
-      await tester.runAsync(
-        () => fileDeleteStarted.future.timeout(const Duration(seconds: 15)),
-      );
+      await tester.pump();
+      expect(fileDeleteStarted.isCompleted, isTrue);
       expect(writesAtDelete, 3);
       expect(file.existsSync(), isFalse);
       container.dispose();
@@ -1221,21 +1212,21 @@ void main() {
 
       late Future<bool> firstSave;
       late Future<bool> readdSave;
-      final saved = await tester.runAsync(() async {
-        firstSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        );
-        await deleteStarted.future.timeout(const Duration(seconds: 15));
-        readdSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [attachment],
-        );
-        releaseDelete.complete();
-        return await firstSave && await readdSave;
-      });
+      firstSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+      await tester.pump();
+      expect(deleteStarted.isCompleted, isTrue);
+      readdSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [attachment],
+      );
+      releaseDelete.complete();
+      await tester.pump();
+      final saved = await firstSave && await readdSave;
 
       expect(saved, isTrue);
       expect(file.readAsBytesSync(), [4, 2]);
@@ -1279,14 +1270,13 @@ void main() {
         ..queueDraftAttachmentFileDelete(secondPath);
       late Future<bool> firstSave;
       late Future<bool> secondSave;
-      await tester.runAsync(() async {
-        firstSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        );
-        await firstDeleteStarted.future.timeout(const Duration(seconds: 15));
-      });
+      firstSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+      await tester.pump();
+      expect(firstDeleteStarted.isCompleted, isTrue);
       final secondAttachment = Attachment(
         id: 'protect-second-file',
         fileName: 'second.txt',
@@ -1297,18 +1287,14 @@ void main() {
         fileSize: 1,
         conversationId: 'conv-1',
       );
-      await tester.runAsync(() async {
-        secondSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [secondAttachment],
-        );
-      });
-      deleteGate.complete();
-      expect(
-        await tester.runAsync(() async => await firstSave && await secondSave),
-        isTrue,
+      secondSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [secondAttachment],
       );
+      deleteGate.complete();
+      await tester.pump();
+      expect(await firstSave && await secondSave, isTrue);
 
       expect(deletedPaths, [firstPath]);
       expect(firstFile.existsSync(), isFalse);
@@ -1368,17 +1354,12 @@ void main() {
       // Block the composer's real remove/save path, then re-import the same
       // bytes/path without allowing its 800ms draft debounce to persist.
       late Future<void> removal;
-      await tester.runAsync(() async {
-        removal = composerKey.currentState!.removePendingAttachmentForTesting(
-          0,
-        );
-        await store.writeStarted!.future.timeout(const Duration(seconds: 15));
-      });
-      await tester.runAsync(
-        () => composerKey.currentState!.addPendingAttachmentForTesting(
-          'readded.txt',
-          Uint8List.fromList([3, 4, 5]),
-        ),
+      removal = composerKey.currentState!.removePendingAttachmentForTesting(0);
+      await tester.pump();
+      expect(store.writeStarted!.isCompleted, isTrue);
+      await composerKey.currentState!.addPendingAttachmentForTesting(
+        'readded.txt',
+        Uint8List.fromList([3, 4, 5]),
       );
       expect(
         container
@@ -1392,20 +1373,17 @@ void main() {
       expect(store.writeCount, 1, reason: 'the re-add is still debounced');
       firstWriteGate.complete();
       await tester.pump();
-      await tester.runAsync(() => removal);
+      await removal;
 
       expect(file.existsSync(), isTrue);
       expect(deleteCalled, isFalse);
-      final saved = await tester.runAsync(
-        () => container
-            .read(conversationsProvider.notifier)
-            .persistSnapshotForAttachmentCleanup(),
-      );
+      final saved = await container
+          .read(conversationsProvider.notifier)
+          .persistSnapshotForAttachmentCleanup();
       expect(saved, isTrue);
-      final storedConversations = await tester.runAsync(
-        () async => (await store.getAll())['flutter.conversations']! as String,
-      );
-      final persisted = (jsonDecode(storedConversations!) as List)
+      final storedConversations =
+          (await store.getAll())['flutter.conversations']! as String;
+      final persisted = (jsonDecode(storedConversations) as List)
           .cast<Map<String, dynamic>>()
           .map(Conversation.fromMap)
           .single;
@@ -1459,14 +1437,13 @@ void main() {
       await tester.pump();
 
       late Future<void> removal;
-      await tester.runAsync(() async {
-        removal = key.currentState!.removePendingAttachmentForTesting(0);
-        await store.writeStarted!.future.timeout(const Duration(seconds: 15));
-      });
+      removal = key.currentState!.removePendingAttachmentForTesting(0);
+      await tester.pump();
+      expect(store.writeStarted!.isCompleted, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
       writeGate.complete();
       await tester.pump();
-      await tester.runAsync(() => removal);
+      await removal;
 
       expect(file.existsSync(), isFalse);
       expect(store.writeCount, greaterThanOrEqualTo(1));
@@ -1503,12 +1480,10 @@ void main() {
 
       final notifier = container.read(conversationsProvider.notifier);
       notifier.queueDraftAttachmentFileDelete(editedPath);
-      final saved = await tester.runAsync(
-        () => notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [attachment],
-        ),
+      final saved = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [attachment],
       );
 
       expect(saved, isTrue);
@@ -1559,9 +1534,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.pump(const Duration(milliseconds: 50));
       expect(file.existsSync(), isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1626,22 +1599,23 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.pump(const Duration(milliseconds: 50));
       expect(deletedCaches, isEmpty);
 
       store.allowWrites = true;
       final notifier = container.read(conversationsProvider.notifier);
-      final retainedSave = await tester.runAsync(
-        () =>
-            notifier.saveDraftAndWait('conv-1', '', draftAttachments: [second]),
+      final retainedSave = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [second],
       );
       expect(retainedSave, isTrue);
       expect(deletedCaches, isEmpty);
 
-      final removedSave = await tester.runAsync(
-        () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
+      final removedSave = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [],
       );
       expect(removedSave, isTrue);
       expect(deletedCaches, ['conv-1:${first.hash}']);
@@ -1697,9 +1671,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
-      );
+      expect(store.writeStarted!.isCompleted, isTrue);
 
       await tester.runAsync(
         () => key.currentState!.addPendingAttachmentForTesting(
@@ -1711,14 +1683,8 @@ void main() {
 
       removalWriteGate.complete();
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.pump();
 
       expect(deletedCaches, isEmpty);
       expect(
@@ -1763,19 +1729,19 @@ void main() {
         conversationId: 'conv-1',
         hash: attachment.hash,
       );
-      final failedSave = await tester.runAsync(
-        () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
+      final failedSave = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [],
       );
       expect(failedSave, isFalse);
       expect(deletedCaches, isEmpty);
 
       store.allowWrites = true;
-      final retainedSave = await tester.runAsync(
-        () => notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [attachment],
-        ),
+      final retainedSave = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [attachment],
       );
       expect(retainedSave, isTrue);
       expect(deletedCaches, isEmpty);
@@ -1791,17 +1757,17 @@ void main() {
         fileSize: 3,
         conversationId: 'conv-2',
       );
-      final otherConversationSave = await tester.runAsync(
-        () => notifier.saveDraftAndWait(
-          'conv-2',
-          '',
-          draftAttachments: [otherConversationAttachment],
-        ),
+      final otherConversationSave = await notifier.saveDraftAndWait(
+        'conv-2',
+        '',
+        draftAttachments: [otherConversationAttachment],
       );
       expect(otherConversationSave, isTrue);
 
-      final successfulSave = await tester.runAsync(
-        () => notifier.saveDraftAndWait('conv-1', '', draftAttachments: []),
+      final successfulSave = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [],
       );
       expect(successfulSave, isTrue);
       expect(deletedCaches, ['conv-1:${attachment.hash}']);
@@ -1828,14 +1794,13 @@ void main() {
         hash: 'same-hash',
       );
       late Future<bool> firstSave;
-      await tester.runAsync(() async {
-        firstSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        );
-        await cacheDeleteStarted.future.timeout(const Duration(seconds: 15));
-      });
+      firstSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+      await tester.pump();
+      expect(cacheDeleteStarted.isCompleted, isTrue);
 
       final replacementCacheWrite = Completer<void>();
       notifier
@@ -1849,11 +1814,13 @@ void main() {
           waitFor: replacementCacheWrite.future,
         );
       cacheDeleteGate.complete();
-      expect(await tester.runAsync(() => firstSave), isTrue);
+      await tester.pump();
+      expect(await firstSave, isTrue);
       replacementCacheWrite.complete();
-      final retriedSave = await tester.runAsync(
-        () =>
-            notifier.saveDraftAndWait('conv-1', '', draftAttachments: const []),
+      final retriedSave = await notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
       );
 
       expect(retriedSave, isTrue);
@@ -1887,14 +1854,13 @@ void main() {
         );
       late Future<bool> firstSave;
       late Future<bool> secondSave;
-      await tester.runAsync(() async {
-        firstSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: const [],
-        );
-        await firstDeleteStarted.future.timeout(const Duration(seconds: 15));
-      });
+      firstSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: const [],
+      );
+      await tester.pump();
+      expect(firstDeleteStarted.isCompleted, isTrue);
       final secondAttachment = Attachment(
         id: 'second-cache-reference',
         fileName: 'second.png',
@@ -1905,18 +1871,14 @@ void main() {
         fileSize: 1,
         conversationId: 'conv-1',
       );
-      await tester.runAsync(() async {
-        secondSave = notifier.saveDraftAndWait(
-          'conv-1',
-          '',
-          draftAttachments: [secondAttachment],
-        );
-      });
-      deleteGate.complete();
-      expect(
-        await tester.runAsync(() async => await firstSave && await secondSave),
-        isTrue,
+      secondSave = notifier.saveDraftAndWait(
+        'conv-1',
+        '',
+        draftAttachments: [secondAttachment],
       );
+      deleteGate.complete();
+      await tester.pump();
+      expect(await firstSave && await secondSave, isTrue);
 
       expect(deletedHashes, ['first-cache']);
       container.dispose();
@@ -1968,13 +1930,10 @@ void main() {
       notifier.queueDraftAttachmentFileDelete('attachments/disposed.txt');
 
       container.dispose();
-      await tester.runAsync(
-        () => writeStarted.future.timeout(const Duration(seconds: 15)),
-      );
+      await tester.pump();
+      expect(writeStarted.isCompleted, isTrue);
       writeGate.complete();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.pump();
 
       final stored = (await store.getAll())['flutter.conversations']! as String;
       final storedMessage = ((jsonDecode(stored) as List).single
@@ -2024,9 +1983,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.pump(const Duration(milliseconds: 50));
 
       expect(file.existsSync(), isFalse);
       container.dispose();
@@ -2081,16 +2038,12 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.runAsync(
-        () => store.writeStarted!.future.timeout(const Duration(seconds: 15)),
-      );
+      expect(store.writeStarted!.isCompleted, isTrue);
       writeGate.complete();
       await tester.pump();
-      final persisted = await tester.runAsync(
-        () => container
-            .read(conversationsProvider.notifier)
-            .persistSnapshotForAttachmentCleanup(),
-      );
+      final persisted = await container
+          .read(conversationsProvider.notifier)
+          .persistSnapshotForAttachmentCleanup();
 
       expect(persisted, isTrue);
       expect(file.existsSync(), isTrue);
