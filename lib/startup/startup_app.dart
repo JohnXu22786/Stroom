@@ -399,7 +399,8 @@ class _StartupErrorBoundaryState extends State<StartupErrorBoundary> {
                   return Scaffold(
                     body: SafeArea(
                       child: LayoutBuilder(
-                        builder: (context, constraints) => SingleChildScrollView(
+                        builder: (context, constraints) =>
+                            SingleChildScrollView(
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               minHeight: constraints.maxHeight,
