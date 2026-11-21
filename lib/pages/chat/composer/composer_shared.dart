@@ -101,20 +101,20 @@ class ChipBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = count > 99 ? '99+' : count.toString();
     return Container(
-      width: 14,
-      height: 14,
+      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+      padding: EdgeInsets.symmetric(horizontal: text.length == 1 ? 0 : 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
         ),
       ),
     );
