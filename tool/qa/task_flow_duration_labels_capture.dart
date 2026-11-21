@@ -14,9 +14,8 @@ void main() {
   final locale = Locale(parts.first, parts.length > 1 ? parts[1] : null);
   final textScale = double.tryParse(query['scale'] ?? '') ?? 1;
   final motion = query['motion'] == 'true';
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
 
   final flows = TaskFlowNotifier();
   final flowId = flows.addFlow(
