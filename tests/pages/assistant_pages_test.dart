@@ -814,6 +814,45 @@ void main() {
       expect(find.text('浏览可直接使用的内置助手，点击条目可预览后再添加。'), findsOneWidget);
     });
 
+    testWidgets(
+      'import instructions wrap naturally instead of being clipped',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          createTestApp(
+            assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.storefront));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('导入助手'));
+        await tester.pumpAndSettle();
+
+        final hint = AppLocalizations.of(
+          tester.element(find.byType(AssistantSelectionPage)),
+        )!.assistantImportHint;
+        final hintText = tester.widget<Text>(
+          find.byWidgetPredicate(
+            (widget) => widget is Text && widget.data == hint,
+          ),
+        );
+        expect(hintText.maxLines, isNull);
+        expect(hintText.overflow, isNull);
+        expect(find.byType(SingleChildScrollView), findsWidgets);
+        final importAction = find.text('连接目录或导入文件');
+        expect(importAction, findsOneWidget);
+        await tester.ensureVisible(importAction);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(importAction).dy, greaterThanOrEqualTo(0));
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('market cards have no text editing fields', (tester) async {
       await tester.pumpWidget(
         createTestApp(

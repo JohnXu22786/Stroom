@@ -421,10 +421,8 @@ class _AssistantImportTab extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 12),
-          ConstrainedText(
+          Text(
             strings.assistantImportHint,
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: Theme.of(context)
                 .textTheme
