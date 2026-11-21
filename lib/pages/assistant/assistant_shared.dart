@@ -290,7 +290,11 @@ class AssistantEditorFields extends StatelessWidget {
   Widget _promptField(AppLocalizations strings) => TextField(
         controller: promptController,
         decoration: InputDecoration(
-          labelText: strings.builtInPromptSystemPromptHeading,
+          label: ConstrainedText(
+            strings.builtInPromptSystemPromptHeading,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           border: OutlineInputBorder(),
           alignLabelWithHint: true,
         ),
@@ -319,7 +323,11 @@ class AssistantEditorFields extends StatelessWidget {
             child: TextField(
               controller: nameController,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.assistantNameLabel,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.assistantNameLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText: nameHint,
                 border: const OutlineInputBorder(),
               ),
@@ -332,7 +340,11 @@ class AssistantEditorFields extends StatelessWidget {
       TextField(
         controller: descriptionController,
         decoration: InputDecoration(
-          labelText: AppLocalizations.of(context)!.assistantDescriptionOptional,
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.assistantDescriptionOptional,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           hintText: descriptionHint,
           border: const OutlineInputBorder(),
         ),

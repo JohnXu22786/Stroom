@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/assistant/assistant_remote_source_dialog.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
   testWidgets('shows URL entry, update policy, safety option, and schema info',
@@ -34,6 +35,16 @@ void main() {
     expect(find.text('Review with the built-in safety agent'), findsOneWidget);
     expect(find.byTooltip('Parameter reference'), findsOneWidget);
     expect(find.byType(SwitchListTile), findsNWidgets(2));
+
+    final urlField = find.byType(TextField).first;
+    final urlInput = tester.widget<TextField>(urlField);
+    expect(urlInput.decoration!.label, isA<ConstrainedText>());
+    await tester.tap(urlField);
+    await tester.enterText(urlField, 'https://example.test/assistant.yaml');
+    await tester.pump();
+    expect(urlInput.controller!.text, 'https://example.test/assistant.yaml');
+    expect(FocusManager.instance.primaryFocus?.hasFocus, isTrue);
+    expect(tester.testTextInput.hasAnyClients, isTrue);
 
     await tester.tap(find.byTooltip('Parameter reference'));
     await tester.pumpAndSettle();
