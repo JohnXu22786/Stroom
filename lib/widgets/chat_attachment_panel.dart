@@ -123,7 +123,7 @@ void showChatAttachmentPanel({
                     ),
                   ];
 
-                  if (constraints.maxWidth < 352) {
+                  if (constraints.maxWidth < 320) {
                     return Column(
                       children: [
                         Row(

@@ -58,6 +58,28 @@ void main() {
     expect(centers.map((point) => point.dy).toSet(), hasLength(1));
   });
 
+  testWidgets('keeps one row at the 352 dp viewport boundary', (tester) async {
+    await _setViewport(tester, const Size(352, 640));
+    await _openPanel(tester, <String>[]);
+
+    expect(tester.takeException(), isNull);
+    final centers = [
+      for (final label in [
+        'Take photo',
+        'Device gallery',
+        'Device files',
+        'App files',
+      ])
+        tester.getCenter(
+          find.ancestor(
+            of: find.text(label),
+            matching: find.byType(InkWell),
+          ),
+        ),
+    ];
+    expect(centers.map((point) => point.dy).toSet(), hasLength(1));
+  });
+
   testWidgets('German action labels fit the two-column narrow panel', (
     tester,
   ) async {
