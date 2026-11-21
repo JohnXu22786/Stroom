@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -62,6 +63,62 @@ void main() {
             reason: '删除一个编辑后附件不能删除另一个相同内容附件');
       } finally {
         AttachmentStorage.resetNowForTesting();
+      }
+    });
+  });
+
+  group('AttachmentStorage 压缩缓存操作顺序', () {
+    test('删除进行中重新保存同一缓存时，写入排在删除之后', () async {
+      const conversationId = 'cache-order-conversation';
+      const hash = 'same-image-hash';
+      final cached = <String, Uint8List>{
+        '$conversationId:$hash': Uint8List.fromList([1]),
+      };
+      final deleteStarted = Completer<void>();
+      final deleteGate = Completer<void>();
+      AttachmentStorage.deleteCompressedImageOverrideForTesting = ({
+        required conversationId,
+        required hash,
+      }) async {
+        deleteStarted.complete();
+        await deleteGate.future;
+        cached.remove('$conversationId:$hash');
+        return true;
+      };
+      // ignore: invalid_use_of_visible_for_testing_member
+      AttachmentStorage.saveCompressedImageOverrideForTesting = ({
+        required conversationId,
+        required hash,
+        required bytes,
+        required mimeType,
+      }) async {
+        cached['$conversationId:$hash'] = bytes;
+        return 'temp_compressed/$conversationId/$hash.png';
+      };
+
+      try {
+        final deletion = AttachmentStorage.deleteCompressedImage(
+          conversationId: conversationId,
+          hash: hash,
+        );
+        await deleteStarted.future;
+        final replacementBytes = Uint8List.fromList([2, 3]);
+        final save = AttachmentStorage.saveCompressedImage(
+          conversationId: conversationId,
+          hash: hash,
+          bytes: replacementBytes,
+          mimeType: 'image/png',
+        );
+
+        expect(cached['$conversationId:$hash'], [1]);
+        deleteGate.complete();
+        expect(await deletion, isTrue);
+        expect(await save, 'temp_compressed/$conversationId/$hash.png');
+        expect(cached['$conversationId:$hash'], replacementBytes);
+      } finally {
+        if (!deleteGate.isCompleted) deleteGate.complete();
+        // ignore: invalid_use_of_visible_for_testing_member
+        AttachmentStorage.resetOverridesForTesting();
       }
     });
   });

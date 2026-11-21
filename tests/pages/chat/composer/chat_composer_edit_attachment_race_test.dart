@@ -32,6 +32,9 @@ class _FakePathProviderPlatform extends PathProviderPlatform {
 
 Future<T> _runInTestZone<T>(Future<T> Function() callback) => callback();
 
+Future<T> _waitForTestSignal<T>(Future<T> future) =>
+    future.timeout(const Duration(seconds: 15));
+
 void main() {
   late Directory root;
   late PathProviderPlatform previousPathProvider;
@@ -65,6 +68,11 @@ void main() {
       final bytes = storageFiles[path];
       return bytes == null ? null : Uint8List.fromList(bytes);
     };
+    AttachmentStorage.restoreFileOverrideForTesting = (path, bytes) async {
+      storageFiles[path] = bytes;
+    };
+    AttachmentStorage.deleteCompressedImageOverrideForTesting =
+        ({required conversationId, required hash}) async => true;
     AttachmentStorage.deleteFileOverrideForTesting = (path) async {
       storageFiles.remove(path);
       return true;
@@ -85,12 +93,17 @@ void main() {
     Attachment? editingAttachment,
     String conversationId = 'race-test',
   }) async {
+    final conversation = Conversation(
+      id: conversationId,
+      title: 'Race test',
+      messages: [],
+    );
+    SharedPreferences.setMockInitialValues({
+      'conversations': jsonEncode([conversation.toMap()]),
+    });
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          conversationsProvider.overrideWith(
-            (ref) => ConversationsNotifier(ref),
-          ),
           activeConversationIdProvider.overrideWith((ref) => conversationId),
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(),
@@ -126,6 +139,10 @@ void main() {
       ),
     );
     await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(composerKey)),
+    );
+    await container.read(conversationsProvider.notifier).ready;
   }
 
   Future<void> mountComposer(
@@ -146,12 +163,14 @@ void main() {
     final bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
     );
-    await _runInTestZone(
-      () => composerKey.currentState!.addPendingAttachmentForTesting(
-        '$id.png',
-        bytes,
-      ),
+    // Storage is in-memory in this suite and these tiny fixtures bypass the
+    // isolate compression path, so FakeAsync can drive the import directly.
+    await composerKey.currentState!.addPendingAttachmentForTesting(
+      '$id.png',
+      bytes,
+      scheduleDraftSave: false,
     );
+    await composerKey.currentState!.waitForPendingPreCompressionForTesting();
     await tester.pump();
     return composerKey.currentState!.pendingAttachmentsForTesting.singleWhere(
       (attachment) => attachment.fileName == '$id.png',
@@ -161,6 +180,43 @@ void main() {
   Future<void> removeFile(String storagePath) async {
     storageFiles.remove(storagePath);
   }
+
+  testWidgets(
+    'entering message edit while replacement waits preserves the draft result',
+    (tester) async {
+      await mountComposer(tester);
+      final source = await addImage(tester, 'draft-source');
+      final oldCompression = Completer<void>();
+      composerKey.currentState!.setPreCompressFutureForTesting(
+        source.hash,
+        oldCompression.future,
+      );
+      final editedBytes = Uint8List.fromList([9, 8, 7, 6]);
+
+      late Future<void> edit;
+      await _runInTestZone(() async {
+        edit = composerKey.currentState!
+            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+        await tester.pump();
+        await tester.pump();
+      });
+      final replacementPath = composerKey
+          .currentState!.pendingAttachmentsForTesting.single.storagePath;
+      await pumpComposer(tester, editingAttachment: source);
+      await tester.pump();
+      oldCompression.complete();
+      await _runInTestZone(() => edit);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byKey(composerKey)),
+      );
+      final saved = container
+          .read(conversationsProvider)
+          .singleWhere((conversation) => conversation.id == 'race-test');
+      expect(saved.draftAttachments.single.storagePath, replacementPath);
+      expect(storageFiles.containsKey(replacementPath), isTrue);
+    },
+  );
 
   testWidgets(
     'removing an attachment during old-file cleanup removes the saved edit',
@@ -183,21 +239,17 @@ void main() {
       };
 
       late Future<void> edit;
-      await _runInTestZone(() async {
-        edit = composerKey.currentState!
-            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-        await tester.pump();
-        await cleanupStarted.future;
-      });
-      await tester.tap(
-        find.descendant(
-          of: find.byKey(ValueKey('pending_att_${editedOriginal.id}')),
-          matching: find.byIcon(Icons.close),
-        ),
+      edit = composerKey.currentState!
+          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      await _waitForTestSignal(cleanupStarted.future);
+      final removal =
+          composerKey.currentState!.removePendingAttachmentForTesting(
+        0,
       );
       await tester.pump();
       finishCleanup.complete();
-      await _runInTestZone(() => edit);
+      await edit;
+      await removal;
 
       expect(
         storageFiles.keys,
@@ -232,16 +284,13 @@ void main() {
       };
 
       late Future<void> edit;
-      await _runInTestZone(() async {
-        edit = composerKey.currentState!
-            .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
-        await tester.pump();
-        await cleanupStarted.future;
-      });
+      edit = composerKey.currentState!
+          .updatePendingAttachmentAfterEditForTesting(0, editedBytes);
+      await _waitForTestSignal(cleanupStarted.future);
       composerKey.currentState!.reorderPendingAttachmentsForTesting(0, 1);
       await tester.pump();
       finishCleanup.complete();
-      await _runInTestZone(() => edit);
+      await edit;
 
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
@@ -671,6 +720,120 @@ void main() {
         reason:
             'submitting the edit must preserve its original attachment file',
       );
+    },
+  );
+
+  testWidgets(
+    'conversationless replacement still checks the old cache owner',
+    (tester) async {
+      final originalBytes = Uint8List.fromList([1, 2, 3, 4]);
+      final original = Attachment(
+        id: 'owned-cache',
+        fileName: 'owned.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: AttachmentStorage.computeHash(originalBytes),
+        storagePath: 'attachments/owned-cache.png',
+        fileSize: originalBytes.length,
+        conversationId: 'original-conversation',
+      );
+      final deletedCacheConversations = <String?>[];
+      AttachmentStorage.deleteCompressedImageOverrideForTesting =
+          ({required conversationId, required hash}) async {
+        deletedCacheConversations.add(conversationId);
+        return true;
+      };
+      final conversationJson = jsonEncode([
+        Conversation(
+          id: 'original-conversation',
+          title: 'Cache owner',
+          messages: [
+            ChatMessage(
+              id: 'attachment-owner',
+              role: 'user',
+              content: 'saved attachment',
+              attachments: [original],
+            ),
+          ],
+          draftAttachments: [original],
+        ).toMap(),
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'conversations': conversationJson,
+      });
+      composerKey = GlobalKey<ChatComposerWidgetState>();
+      sent = null;
+      final container = ProviderContainer(
+        overrides: [
+          activeConversationIdProvider.overrideWith(
+            (ref) => 'original-conversation',
+          ),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      await container.read(conversationsProvider.notifier).ready;
+      Widget composer(String? conversationId) => UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: Scaffold(
+                body: ChatComposerWidget(
+                  key: composerKey,
+                  conversationId: conversationId,
+                  initialDraftAttachments:
+                      conversationId == null ? const [] : [original],
+                  onSend: (text, attachments) => sent = attachments,
+                  onStop: () {},
+                  onEnabledToolsChanged: (_) {},
+                  onModelSelected: (_) {},
+                ),
+              ),
+            ),
+          );
+      await tester.pumpWidget(composer('original-conversation'));
+      await tester.pump();
+      await container.read(conversationsProvider.notifier).ready;
+      final oldCompression = Completer<void>();
+      composerKey.currentState!.setPreCompressFutureForTesting(
+        original.hash,
+        oldCompression.future,
+      );
+      final edit =
+          composerKey.currentState!.updatePendingAttachmentAfterEditForTesting(
+        0,
+        Uint8List.fromList([9, 8, 7, 6]),
+      );
+      await tester.pump();
+      expect(
+        composerKey
+            .currentState!.pendingAttachmentsForTesting.single.storagePath,
+        startsWith('temp_edited/'),
+      );
+
+      await tester.pumpWidget(composer(null));
+      await tester.pump();
+      oldCompression.complete();
+      await edit;
+
+      expect(deletedCacheConversations, isEmpty);
+      final savedConversation = container
+          .read(conversationsProvider)
+          .singleWhere(
+              (conversation) => conversation.id == 'original-conversation');
+      expect(
+        savedConversation.messages.single.attachments.single.hash,
+        original.hash,
+      );
+      container.dispose();
     },
   );
 

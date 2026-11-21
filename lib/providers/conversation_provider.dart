@@ -593,9 +593,26 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// or message save. The later deletion must be the last value on disk.
   Future<void> _persistQueue = Future<void>.value();
 
+  /// Attachment paths to remove after a successful snapshot no longer refers to them.
+  final Set<String> _pendingDraftAttachmentFileDeletes = <String>{};
+
+  /// Compressed caches to remove after a successful snapshot no longer refers
+  /// to their hashes.
+  final Map<({String? conversationId, String hash}), Future<void>>
+      _pendingDraftAttachmentCacheDeletes = {};
+
   /// A single queued periodic stream save may be updated until an explicit
   /// persistence operation establishes an ordering barrier.
   _CoalescedStreamPersist? _coalescedStreamPersist;
+
+  /// Identifies full snapshots in queue order so cleanup can protect paths
+  /// referenced by any later snapshot that has not completed yet.
+  int _persistRequestGeneration = 0;
+
+  /// References held by full snapshots that are queued but not completed.
+  final Map<int, Set<String>> _queuedDraftAttachmentPathsByPersistRequest = {};
+  final Map<int, Set<({String? conversationId, String hash})>>
+      _queuedDraftAttachmentCachesByPersistRequest = {};
 
   /// Message IDs with checkpoint records that still need to be replayed or
   /// invalidated by an explicit history edit.

@@ -278,8 +278,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final removed = await prefs.remove(_pendingRestoredConversationKey);
-      final snapshotsRemoved =
-          await prefs.remove(_pendingRestoredConversationSnapshotKey);
+      final snapshotsRemoved = await prefs.remove(
+        _pendingRestoredConversationSnapshotKey,
+      );
       if (removed && snapshotsRemoved) {
         _pendingRestoredConversations.clear();
         _pendingRestoredConversationSnapshots.clear();
@@ -629,7 +630,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 if (restored.id == conversationId) {
                   restoredConversationSnapshots[conversationId] = restored;
                   restoredConversationTimes[conversationId] = DateTime.tryParse(
-                          decoded['restoredAt'] as String? ?? '') ??
+                        decoded['restoredAt'] as String? ?? '',
+                      ) ??
                       restored.updatedAt;
                   final index = decoded['index'];
                   if (index is int) {
@@ -1176,8 +1178,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               ..addAll({
                 for (final entry in decoded.entries)
                   if (entry.key is String && entry.value is Map)
-                    entry.key as String:
-                        Map<String, dynamic>.from(entry.value as Map),
+                    entry.key as String: Map<String, dynamic>.from(
+                      entry.value as Map,
+                    ),
               });
           }
         } catch (e) {
@@ -1685,26 +1688,261 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
     final List<Conversation> snapshot;
     try {
-      snapshot = List<Conversation>.from(state);
+      // Conversation instances are mutable and several update methods mutate
+      // them in place. A shallow list copy lets a later update rewrite an
+      // earlier queued save's snapshot while that save waits in _persistQueue.
+      // Capture serialized copies so attachment cleanup is checked against
+      // the exact snapshot this write will persist.
+      snapshot = state
+          .map((conversation) => Conversation.fromMap(conversation.toMap()))
+          .toList();
     } catch (_) {
       // Notifier was already disposed before we could snapshot. Nothing we
       // can do — the previous good save is still on disk.
       return false;
     }
     if (!_loadHasRun) return false;
-    final write = _persistQueue.then((_) => _persistSnapshot(snapshot));
+    final requestGeneration = ++_persistRequestGeneration;
+    _queuedDraftAttachmentPathsByPersistRequest[requestGeneration] =
+        _attachmentPathsInSnapshot(snapshot);
+    _queuedDraftAttachmentCachesByPersistRequest[requestGeneration] =
+        _attachmentCacheReferencesInSnapshot(snapshot);
+    final write = _persistQueue.then(
+      (_) => _persistSnapshot(snapshot, requestGeneration),
+    );
+    final trackedWrite = write.whenComplete(() {
+      _queuedDraftAttachmentPathsByPersistRequest.remove(requestGeneration);
+      _queuedDraftAttachmentCachesByPersistRequest.remove(requestGeneration);
+    });
     // Keep the queue usable after an unexpected write error. Callers still
     // await their own write and receive its error.
-    _persistQueue = write.then(
+    _persistQueue = trackedWrite.then(
       (_) {},
       onError: (Object error, StackTrace st) {
         debugPrint('Failed to queue conversation persistence: $error');
       },
     );
-    return write;
+    return trackedWrite;
   }
 
-  Future<bool> _persistSnapshot(List<Conversation> snapshot) async {
+  Set<String> _attachmentPathsInSnapshot(List<Conversation> snapshot) {
+    final paths = <String>{};
+    for (final conversation in snapshot) {
+      paths.addAll(
+        conversation.draftAttachments.map(
+          (attachment) => attachment.storagePath,
+        ),
+      );
+      for (final message in conversation.messages) {
+        paths.addAll(
+          message.attachments.map((attachment) => attachment.storagePath),
+        );
+      }
+    }
+    void collectPreservedPaths(dynamic value) {
+      if (value is Map) {
+        final storagePath = value['storagePath'];
+        if (storagePath is String) paths.add(storagePath);
+        for (final nestedValue in value.values) {
+          collectPreservedPaths(nestedValue);
+        }
+      } else if (value is Iterable) {
+        for (final nestedValue in value) {
+          collectPreservedPaths(nestedValue);
+        }
+      }
+    }
+
+    for (final record in _unparsedConversationRecords) {
+      collectPreservedPaths(record);
+    }
+    return paths;
+  }
+
+  Set<({String? conversationId, String hash})>
+      _attachmentCacheReferencesInSnapshot(List<Conversation> snapshot) {
+    final references = <({String? conversationId, String hash})>{};
+    for (final conversation in snapshot) {
+      void addReference(Attachment attachment) {
+        references.add((
+          conversationId: attachment.conversationId ?? conversation.id,
+          hash: attachment.hash,
+        ));
+      }
+
+      conversation.draftAttachments.forEach(addReference);
+      for (final message in conversation.messages) {
+        message.attachments.forEach(addReference);
+      }
+    }
+
+    void collectPreservedCacheReferences(
+      dynamic value, {
+      required String? conversationId,
+    }) {
+      if (value is Map) {
+        final hash = value['hash'];
+        final explicitConversationId = value['conversationId'];
+        if (hash is String) {
+          references.add((
+            conversationId: explicitConversationId is String
+                ? explicitConversationId
+                : conversationId,
+            hash: hash,
+          ));
+        }
+        for (final nestedValue in value.values) {
+          collectPreservedCacheReferences(
+            nestedValue,
+            conversationId: conversationId,
+          );
+        }
+      } else if (value is Iterable) {
+        for (final nestedValue in value) {
+          collectPreservedCacheReferences(
+            nestedValue,
+            conversationId: conversationId,
+          );
+        }
+      }
+    }
+
+    for (final record in _unparsedConversationRecords) {
+      final conversationId = record is Map && record['id'] is String
+          ? record['id'] as String
+          : null;
+      collectPreservedCacheReferences(record, conversationId: conversationId);
+    }
+    return references;
+  }
+
+  Future<void> _flushPendingDraftAttachmentFileDeletes(
+    Set<String> referencedPaths, {
+    required int requestGeneration,
+  }) async {
+    if (_pendingDraftAttachmentFileDeletes.isEmpty) return;
+    for (final storagePath in _pendingDraftAttachmentFileDeletes.toList()) {
+      // Rebuild the reference set before each asynchronous deletion. Another
+      // save may queue or update the live draft while an earlier file delete
+      // is in flight.
+      final protectedPaths = <String>{...referencedPaths};
+      for (final entry in _queuedDraftAttachmentPathsByPersistRequest.entries) {
+        if (entry.key > requestGeneration) protectedPaths.addAll(entry.value);
+      }
+      if (mounted) protectedPaths.addAll(_attachmentPathsInSnapshot(state));
+      final referencedIdentities = <String>{};
+      for (final path in protectedPaths) {
+        referencedIdentities.addAll(AttachmentStorage.deletionIdentities(path));
+      }
+      if (AttachmentStorage.deletionIdentities(storagePath)
+          .any(referencedIdentities.contains)) {
+        continue;
+      }
+      try {
+        // Keep a copy across the asynchronous delete. A newer snapshot may
+        // acquire this exact path while deleteFile is in flight.
+        final originalFiles = <String, Uint8List>{};
+        for (final identity
+            in AttachmentStorage.deletionIdentities(storagePath)) {
+          final bytes = await AttachmentStorage.readFile(identity);
+          if (bytes != null) originalFiles[identity] = bytes;
+        }
+        final stillProtected = <String>{...referencedPaths};
+        for (final entry
+            in _queuedDraftAttachmentPathsByPersistRequest.entries) {
+          if (entry.key > requestGeneration) stillProtected.addAll(entry.value);
+        }
+        if (mounted) stillProtected.addAll(_attachmentPathsInSnapshot(state));
+        final stillProtectedIdentities = <String>{};
+        for (final path in stillProtected) {
+          stillProtectedIdentities
+              .addAll(AttachmentStorage.deletionIdentities(path));
+        }
+        if (AttachmentStorage.deletionIdentities(storagePath)
+            .any(stillProtectedIdentities.contains)) {
+          continue;
+        }
+        await AttachmentStorage.deleteFile(storagePath);
+        final reintroducedPaths = <String>{...referencedPaths};
+        for (final entry
+            in _queuedDraftAttachmentPathsByPersistRequest.entries) {
+          if (entry.key > requestGeneration) {
+            reintroducedPaths.addAll(entry.value);
+          }
+        }
+        if (mounted) {
+          reintroducedPaths.addAll(_attachmentPathsInSnapshot(state));
+        }
+        final reintroducedIdentities = <String>{};
+        for (final path in reintroducedPaths) {
+          reintroducedIdentities
+              .addAll(AttachmentStorage.deletionIdentities(path));
+        }
+        if (AttachmentStorage.deletionIdentities(storagePath)
+            .any(reintroducedIdentities.contains)) {
+          for (final entry in originalFiles.entries) {
+            await AttachmentStorage.restoreFile(entry.key, entry.value);
+          }
+        }
+        _pendingDraftAttachmentFileDeletes.remove(storagePath);
+      } catch (error) {
+        debugPrint('Failed to clean removed draft attachment: $error');
+      }
+    }
+  }
+
+  Future<void> _flushPendingDraftAttachmentCacheDeletes(
+    Set<({String? conversationId, String hash})> references, {
+    required int requestGeneration,
+  }) async {
+    for (final cache in _pendingDraftAttachmentCacheDeletes.keys.toList()) {
+      while (true) {
+        final waitFor = _pendingDraftAttachmentCacheDeletes[cache];
+        if (waitFor != null) await waitFor;
+        if (identical(_pendingDraftAttachmentCacheDeletes[cache], waitFor)) {
+          break;
+        }
+      }
+      if (!_pendingDraftAttachmentCacheDeletes.containsKey(cache)) continue;
+      final cleanupRequest = _pendingDraftAttachmentCacheDeletes[cache];
+      final protectedCaches = <({String? conversationId, String hash})>{
+        ...references,
+      };
+      for (final entry
+          in _queuedDraftAttachmentCachesByPersistRequest.entries) {
+        if (entry.key > requestGeneration) protectedCaches.addAll(entry.value);
+      }
+      if (mounted) {
+        protectedCaches.addAll(_attachmentCacheReferencesInSnapshot(state));
+      }
+      if (!identical(
+            _pendingDraftAttachmentCacheDeletes[cache],
+            cleanupRequest,
+          ) ||
+          protectedCaches.contains(cache) ||
+          protectedCaches.contains((conversationId: null, hash: cache.hash))) {
+        continue;
+      }
+      try {
+        await AttachmentStorage.deleteCompressedImage(
+          conversationId: cache.conversationId,
+          hash: cache.hash,
+        );
+        // Preserve a newer request queued while this delete was in flight.
+        if (identical(
+            _pendingDraftAttachmentCacheDeletes[cache], cleanupRequest)) {
+          _pendingDraftAttachmentCacheDeletes.remove(cache);
+        }
+      } catch (error) {
+        debugPrint('Failed to clean removed draft attachment cache: $error');
+      }
+    }
+  }
+
+  Future<bool> _persistSnapshot(
+    List<Conversation> snapshot,
+    int requestGeneration,
+  ) async {
     SharedPreferences? prefs;
     try {
       prefs = await SharedPreferences.getInstance();
@@ -1753,6 +1991,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         ...snapshot.map((conversation) => conversation.toMap()),
         ..._unparsedConversationRecords,
       ];
+      final referencedPaths = _attachmentPathsInSnapshot(snapshot);
+      final cacheReferences = _attachmentCacheReferencesInSnapshot(snapshot);
       final json = jsonEncode(records);
       if (!await prefs.setString('conversations', json)) {
         throw StateError('conversation save returned false');
@@ -1761,6 +2001,20 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
         await _clearPendingRestoredMessageMarker();
+      }
+      try {
+        await _flushPendingDraftAttachmentFileDeletes(
+          referencedPaths,
+          requestGeneration: requestGeneration,
+        );
+        await _flushPendingDraftAttachmentCacheDeletes(
+          cacheReferences,
+          requestGeneration: requestGeneration,
+        );
+      } catch (error) {
+        // Cleanup follows a successful canonical write and must not invoke the
+        // stripped-history fallback or overwrite that save.
+        debugPrint('Failed to clean persisted draft attachments: $error');
       }
       await AppLogService.debug(
         'ConversationsNotifier',
@@ -1816,6 +2070,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         ...stripped.map((conversation) => conversation.toMap()),
         ..._unparsedConversationRecords,
       ];
+      final referencedPaths = _attachmentPathsInSnapshot(stripped);
+      final cacheReferences = _attachmentCacheReferencesInSnapshot(stripped);
       final json = jsonEncode(records);
       if (!await prefs.setString('conversations', json)) {
         throw StateError('stripped conversation save returned false');
@@ -1824,6 +2080,18 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
         await _clearPendingRestoredMessageMarker();
+      }
+      try {
+        await _flushPendingDraftAttachmentFileDeletes(
+          referencedPaths,
+          requestGeneration: requestGeneration,
+        );
+        await _flushPendingDraftAttachmentCacheDeletes(
+          cacheReferences,
+          requestGeneration: requestGeneration,
+        );
+      } catch (error) {
+        debugPrint('Failed to clean persisted draft attachments: $error');
       }
       await AppLogService.warning(
         'ConversationsNotifier',

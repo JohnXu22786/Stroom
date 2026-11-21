@@ -594,6 +594,11 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// (e.g., after async _load() in ConversationsNotifier completes).
   void _registerConversationsListener() {
     ref.listen(conversationsProvider, (prev, next) {
+      // Child composer disposal can synchronously save a draft while this
+      // page is being removed. Its element is already deactivated at that
+      // point, so reading providers through `ref` would perform an unsafe
+      // inherited-widget lookup before Riverpod closes this subscription.
+      if (_isDeactivated || !mounted) return;
       if (prev != next) {
         // Detect deleted conversations: if a conversation that was
         // streaming was removed from the list, cancel its orphaned

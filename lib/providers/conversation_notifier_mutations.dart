@@ -878,11 +878,81 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Drafts are per-conversation and persisted along with the conversation
   /// data. When [draftText] is empty and [draftAttachments] is empty, the
   /// draft is cleared.
+  void queueDraftAttachmentFileDelete(String storagePath) {
+    _pendingDraftAttachmentFileDeletes.add(storagePath);
+  }
+
+  void queueDraftAttachmentCacheDelete({
+    required String? conversationId,
+    required String hash,
+    Future<void>? waitFor,
+  }) {
+    final key = (conversationId: conversationId, hash: hash);
+    if (waitFor == null) {
+      _pendingDraftAttachmentCacheDeletes.putIfAbsent(
+        key,
+        Future<void>.value,
+      );
+      return;
+    }
+
+    final previous = _pendingDraftAttachmentCacheDeletes[key];
+    _pendingDraftAttachmentCacheDeletes[key] = previous == null
+        ? waitFor
+        : Future.wait([previous, waitFor]).then((_) {});
+  }
+
+  void cancelDraftAttachmentCacheDelete({
+    required String conversationId,
+    required String hash,
+  }) {
+    _pendingDraftAttachmentCacheDeletes.remove(
+      (conversationId: conversationId, hash: hash),
+    );
+  }
+
   void saveDraft(
     String conversationId,
     String draftText, {
     List<Attachment>? draftAttachments,
   }) {
+    _updateDraft(conversationId, draftText, draftAttachments);
+    _persist();
+  }
+
+  /// Updates the in-memory draft without scheduling a storage write.
+  ///
+  /// The composer uses this as soon as an attachment enters its pending list
+  /// so an older persistence operation cannot clean up a file now owned by a
+  /// newer, not-yet-debounced draft.
+  void updateDraftInMemory(
+    String conversationId,
+    String draftText, {
+    List<Attachment>? draftAttachments,
+  }) {
+    _updateDraft(conversationId, draftText, draftAttachments);
+  }
+
+  /// Saves a draft and waits for the updated conversation snapshot to reach
+  /// storage before callers clean up files removed from the draft.
+  Future<bool> saveDraftAndWait(
+    String conversationId,
+    String draftText, {
+    List<Attachment>? draftAttachments,
+  }) {
+    _updateDraft(conversationId, draftText, draftAttachments);
+    return _persistNowChecked();
+  }
+
+  /// Persist a current snapshot so queued attachment cleanup can safely run
+  /// even when the composer has no draft to update (for example in edit mode).
+  Future<bool> persistSnapshotForAttachmentCleanup() => _persistNowChecked();
+
+  void _updateDraft(
+    String conversationId,
+    String draftText,
+    List<Attachment>? draftAttachments,
+  ) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.draftText = draftText;
@@ -893,7 +963,6 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       }
       return c;
     }).toList();
-    _persist();
   }
 
   /// Updates the enabled MCP/built-in tool names for a conversation.

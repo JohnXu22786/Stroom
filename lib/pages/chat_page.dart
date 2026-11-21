@@ -181,6 +181,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
 
+  /// A parent may be temporarily removed while its child composer saves a
+  /// draft from dispose(). Riverpod listeners can run during that unmount,
+  /// after this element is deactivated but before its subscription is closed.
+  bool _isDeactivated = false;
+
   /// Synchronous guard: set of conversation IDs that are currently in the
   /// async gap between passing the streaming guard in _onMessageSend and
   /// the synchronous _streams insertion in ChatStreamManager.startStreaming.
@@ -448,6 +453,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _performSearch(widget.initialSearchQuery!);
       });
     }
+  }
+
+  @override
+  void deactivate() {
+    _isDeactivated = true;
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _isDeactivated = false;
   }
 
   @override

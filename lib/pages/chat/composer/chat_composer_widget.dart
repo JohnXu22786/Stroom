@@ -138,6 +138,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
 
 class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     with WidgetsBindingObserver {
+  late final ConversationsNotifier _conversationsNotifier;
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   final List<Attachment> _pendingAttachments = [];
@@ -151,13 +152,32 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @visibleForTesting
   Future<void> addPendingAttachmentForTesting(
     String fileName,
-    Uint8List bytes,
-  ) =>
-      _addPendingAttachment(fileName, bytes);
+    Uint8List bytes, {
+    bool scheduleDraftSave = true,
+  }) =>
+      _addPendingAttachment(
+        fileName,
+        bytes,
+        scheduleDraftSave: scheduleDraftSave,
+      );
+
+  @visibleForTesting
+  Future<void> removePendingAttachmentForTesting(int index) =>
+      _removePendingAttachment(index);
 
   @visibleForTesting
   List<Attachment> get pendingAttachmentsForTesting =>
       List.unmodifiable(_pendingAttachments);
+
+  @visibleForTesting
+  void setPreCompressFutureForTesting(String hash, Future<void> future) {
+    _preCompressFutures[hash] = future;
+  }
+
+  @visibleForTesting
+  Future<void> waitForPendingPreCompressionForTesting() async {
+    await Future.wait(_preCompressFutures.values.toList());
+  }
 
   @visibleForTesting
   Future<void> updatePendingAttachmentAfterEditForTesting(
@@ -270,6 +290,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @override
   void initState() {
     super.initState();
+    _conversationsNotifier = ref.read(conversationsProvider.notifier);
 
     if (widget.editingMessageId != null) {
       _editSessionConversationId = widget.conversationId ??
@@ -548,10 +569,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         conversationId: _editSessionConversationId,
       );
     }
-    // Save draft before disposing. Use try-catch because ref may
-    // already be disposed during teardown, especially in tests.
+    // Defer the provider mutation until teardown has finished; Riverpod rejects
+    // synchronous state updates while Flutter is deactivating this subtree.
     try {
-      _saveDraftImmediately(widget);
+      _saveDraftAfterDispose(widget);
     } catch (e) {
       // Non-critical: draft is best-effort during disposal.
       // Log unexpected errors so they are visible during development

@@ -19,11 +19,13 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 当前 pending 附件的草稿快照签名：文字未变但附件变了时也要保存。
   /// 含 base64Data 长度——预压缩完成（base64 从原始大字节变为压缩
   /// 产物）也会触发一次保存，把可零等待的载荷落进草稿。
-  List<String> _draftAttSignature() => _pendingAttachments
-      .map(
-        (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
-      )
-      .toList();
+  List<String> _draftAttSignature([List<Attachment>? attachments]) =>
+      (attachments ?? _pendingAttachments)
+          .map(
+            (a) =>
+                '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}',
+          )
+          .toList();
 
   /// 生成待保存的附件草稿快照（深拷贝，与 pending 列表无引用共享）。
   ///
@@ -31,7 +33,10 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// 发送载荷（≤ 阈值）——未压缩完的原始大 base64 不携带（体积无谓
   /// 膨胀），恢复时重新读文件并触发预压缩。文件附件只存引用，
   /// 恢复时重新读取编码。总携带量受 [_kDraftB64BudgetBytes] 预算约束。
-  List<Attachment> _draftAttachmentSnapshot() {
+  List<Attachment> _draftAttachmentSnapshot([
+    ChatComposerWidget? ownerWidget,
+  ]) {
+    final conversationId = (ownerWidget ?? widget).conversationId;
     var budget = _kDraftB64BudgetBytes;
     return _pendingAttachments.map((a) {
       var includeB64 = false;
@@ -46,7 +51,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       }
       final copy = Attachment.fromMap(a.toMap(includeBase64Data: includeB64));
       // 草稿归属当前对话：恢复后的清理/缓存定位使用
-      copy.conversationId ??= widget.conversationId;
+      copy.conversationId ??= conversationId;
       return copy;
     }).toList();
   }
@@ -68,13 +73,100 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       return;
     }
     final textToSave = _textController.text;
-    ref.read(conversationsProvider.notifier).saveDraft(
-          convId,
-          textToSave,
-          draftAttachments: _draftAttachmentSnapshot(),
-        );
+    _conversationsNotifier.saveDraft(
+      convId,
+      textToSave,
+      draftAttachments: _draftAttachmentSnapshot(),
+    );
     _lastSavedDraft = textToSave;
     _lastSavedDraftAttSignature = _draftAttSignature();
+  }
+
+  /// Capture the draft while this State is still alive, then update Riverpod
+  /// after widget teardown has left the build/finalize lifecycle. Riverpod
+  /// rejects synchronous provider notifications from State.dispose().
+  void _saveDraftAfterDispose(ChatComposerWidget w) {
+    final convId = w.conversationId;
+    if (convId == null || w.editingMessageId != null) return;
+    if (_lastSavedDraft == _textController.text &&
+        _lastSavedDraftAttSignature.toString() ==
+            _draftAttSignature().toString()) {
+      return;
+    }
+
+    final textToSave = _textController.text;
+    final draftAttachments = _draftAttachmentSnapshot(w);
+    final attachmentSignature = _draftAttSignature(draftAttachments);
+    _lastSavedDraft = textToSave;
+    _lastSavedDraftAttSignature = attachmentSignature;
+
+    scheduleMicrotask(() {
+      try {
+        unawaited(
+          _conversationsNotifier
+              .saveDraftAndWait(
+            convId,
+            textToSave,
+            draftAttachments: draftAttachments,
+          )
+              .then((saved) {
+            if (!saved) {
+              debugPrint('[ChatComposer] draft save after dispose failed');
+            }
+          }).catchError((Object e) {
+            debugPrint(
+              '[ChatComposer] failed to save draft after dispose: $e',
+            );
+          }),
+        );
+      } catch (e) {
+        debugPrint('[ChatComposer] failed to save draft after dispose: $e');
+      }
+    });
+  }
+
+  /// Persists the current draft snapshot and reports whether it reached
+  /// storage. File cleanup must wait for this before deleting a referenced path.
+  Future<bool> _persistDraftSnapshotImmediately(
+    ChatComposerWidget w, {
+    String? textSnapshot,
+    List<Attachment>? attachmentSnapshot,
+  }) async {
+    final convId = w.conversationId;
+    if (w.editingMessageId != null) return false;
+    // Attachments in a composer without a conversation cannot be referenced by
+    // a persisted draft, so their files are safe to clean up immediately.
+    if (convId == null) return true;
+    final textToSave = textSnapshot ?? _textController.text;
+    final draftAttachments = attachmentSnapshot ?? _draftAttachmentSnapshot(w);
+    final attachmentSignature = _draftAttSignature(draftAttachments);
+    final saved = await _conversationsNotifier.saveDraftAndWait(
+      convId,
+      textToSave,
+      draftAttachments: draftAttachments,
+    );
+    if (saved &&
+        mounted &&
+        widget.conversationId == convId &&
+        widget.editingMessageId == null &&
+        _textController.text == textToSave &&
+        _draftAttSignature().toString() == attachmentSignature.toString()) {
+      _lastSavedDraft = textToSave;
+      _lastSavedDraftAttSignature = attachmentSignature;
+    }
+    return saved;
+  }
+
+  Future<void> _queueDraftAttachmentFileDelete(
+    String storagePath, {
+    String? attachmentConversationId,
+  }) async {
+    final convId = attachmentConversationId ?? widget.conversationId;
+    if (convId == null) {
+      await _deletePendingAttachmentFile(storagePath);
+      return;
+    }
+    _conversationsNotifier.queueDraftAttachmentFileDelete(storagePath);
   }
 
   /// 附件变化（添加/移除/编辑）后调度一次草稿保存（防抖，与文字
