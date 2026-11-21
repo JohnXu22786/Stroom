@@ -24,8 +24,10 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
         Icons.business,
         color: Theme.of(context).colorScheme.primary,
       ),
-      title: Text(
+      title: ConstrainedText(
         providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       trailing: const Icon(Icons.chevron_right),
       contentPadding: EdgeInsets.zero,
@@ -105,10 +107,18 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: iconColor),
-      title: Text(title),
+      title: ConstrainedText(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       // 模型名显示格式与对话页一致（"模型名 | 供应商名"）；未配置时
       // 提示跟随对话页当前模型。
-      subtitle: Text(_systemAssistantModelSubtitle(task, llmModels)),
+      subtitle: ConstrainedText(
+        _systemAssistantModelSubtitle(task, llmModels),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: () => _showSystemAssistantPanel(
         title: title,

@@ -24,6 +24,7 @@ class _PendingUpdateNotifier extends UpdateNotifier {
 Widget _buildApp({
   required Locale locale,
   UpdateNotifier? updateNotifier,
+  bool disableAnimations = true,
 }) {
   return ProviderScope(
     overrides: [
@@ -44,6 +45,14 @@ Widget _buildApp({
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      // These cases assert static layout and hit targets. Continuous clipped-
+      // label motion is covered by ConstrainedText's own tests and QA preview.
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          disableAnimations: disableAnimations,
+        ),
+        child: child!,
+      ),
       home: const SettingsPage(),
     ),
   );
@@ -152,7 +161,11 @@ void main() {
         _buildApp(locale: const Locale('fr'), updateNotifier: notifier),
       );
       await _showAbout(tester, label: 'Rechercher des mises à jour');
-      await tester.tap(find.text('Rechercher des mises à jour'));
+      final updatesTile = find.ancestor(
+        of: find.text('Rechercher des mises à jour'),
+        matching: find.byType(ListTile),
+      );
+      await tester.tap(updatesTile);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 

@@ -16,9 +16,15 @@ extension _SettingsPageContextManagementExt on _SettingsPageState {
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(AppLocalizations.of(context)!.contextToolPruneTitle),
-              subtitle: Text(
+              title: ConstrainedText(
+                AppLocalizations.of(context)!.contextToolPruneTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: ConstrainedText(
                 AppLocalizations.of(context)!.contextToolPruneDescription,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               value: settings.pruneEnabled,
               onChanged: notifier.setPruneEnabled,
