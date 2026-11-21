@@ -80,8 +80,7 @@ Widget createComposerTestApp({
 
 void main() {
   group('Composer reasoning chip label', () {
-    testWidgets(
-        'reveals a long model-supplied effort value in the narrow row',
+    testWidgets('reveals a long model-supplied effort value in the narrow row',
         (tester) async {
       const longValue =
           'reasoning_effort_custom_option_value_that_exceeds_phone_width';
