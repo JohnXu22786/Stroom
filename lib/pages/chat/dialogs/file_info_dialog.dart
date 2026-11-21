@@ -3,6 +3,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/widgets/info_row.dart';
 import 'package:stroom/utils/format_file_size.dart';
+import 'package:stroom/utils/text_breaks.dart';
 
 import '../../../widgets/constrained_text.dart';
 
@@ -76,15 +77,28 @@ void showFileInfoPreviewDialog({
                   ),
                   const SizedBox(height: 20),
                   // File name
-                  Text(
-                    attachment.fileName.characters.join('\u200B'),
-                    semanticsLabel: attachment.fileName,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final style = TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      );
+                      final displayName = breakOverlongWords(
+                        attachment.fileName,
+                        maxWidth: constraints.maxWidth,
+                        style: DefaultTextStyle.of(context).style.merge(style),
+                        textDirection: Directionality.of(context),
+                        textScaler: MediaQuery.textScalerOf(context),
+                        locale: Localizations.maybeLocaleOf(context),
+                      );
+                      return Text(
+                        displayName,
+                        semanticsLabel: attachment.fileName,
+                        textAlign: TextAlign.center,
+                        style: style,
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   // File info rows

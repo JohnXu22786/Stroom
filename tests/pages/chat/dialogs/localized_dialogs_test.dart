@@ -72,6 +72,37 @@ void main() {
     expect(find.text('关闭'), findsOneWidget);
   });
 
+  testWidgets('keeps fitting Arabic file names unchanged for native shaping',
+      (tester) async {
+    const fileName = 'تقرير.pdf';
+    final attachment = Attachment(
+      fileName: fileName,
+      mimeType: 'application/pdf',
+      fileType: 'document',
+      hash: 'test-hash',
+      storagePath: '/tmp/report.pdf',
+      fileSize: 32,
+    );
+
+    await tester.pumpWidget(localizedApp(Builder(
+      builder: (context) => TextButton(
+        onPressed: () => showFileInfoPreviewDialog(
+          context: context,
+          attachment: attachment,
+        ),
+        child: const Text('open'),
+      ),
+    )));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final fileNameFinder = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.semanticsLabel == fileName,
+    );
+    expect(fileNameFinder, findsOneWidget);
+    expect(tester.widget<Text>(fileNameFinder).data, fileName);
+  });
+
   testWidgets(
       'long file paths scroll on a narrow phone and keep close reachable',
       (tester) async {
