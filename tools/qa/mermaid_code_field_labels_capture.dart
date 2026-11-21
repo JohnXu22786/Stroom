@@ -29,9 +29,8 @@ class _LongFieldLabelDelegate extends LocalizationsDelegate<AppLocalizations> {
 void main() {
   final query = Uri.base.queryParameters;
   final scale = double.tryParse(query['scale'] ?? '') ?? 1;
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
 
   runApp(
     MaterialApp(
