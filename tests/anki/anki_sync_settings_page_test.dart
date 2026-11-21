@@ -15,6 +15,7 @@ import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 import 'package:stroom/pages/anki_sync_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 Widget _localizedApp({
   required Widget home,
@@ -29,6 +30,133 @@ Widget _localizedApp({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('constrains localized login labels according to measured fit', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => const _FakeSecureStorage(),
+          ),
+        ],
+        child: _localizedApp(
+          home: const AnkiSyncSettingsPage(),
+          locale: const Locale('de'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byIcon(Icons.login),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byIcon(Icons.login));
+    await tester.pumpAndSettle();
+
+    final usernameField = tester.widget<TextField>(
+      find.byType(TextField).at(0),
+    );
+    final passwordField = tester.widget<TextField>(
+      find.byType(TextField).at(1),
+    );
+    expect(usernameField.decoration!.label, isA<ConstrainedText>());
+    expect(passwordField.decoration!.label, isA<ConstrainedText>());
+    expect(
+      (usernameField.decoration!.label! as ConstrainedText).data,
+      'E-Mail-Adresse / Benutzername',
+    );
+    expect(
+      (passwordField.decoration!.label! as ConstrainedText).data,
+      'Passwort',
+    );
+    final usernameLabel = find.byWidget(usernameField.decoration!.label!);
+    final passwordLabel = find.byWidget(passwordField.decoration!.label!);
+    expect(
+      find.descendant(of: usernameLabel, matching: find.byType(Transform)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: passwordLabel, matching: find.byType(Transform)),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('login fields keep native editing state while labels reveal', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => const _FakeSecureStorage(),
+          ),
+        ],
+        child: _localizedApp(
+          home: const AnkiSyncSettingsPage(),
+          locale: const Locale('de'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byIcon(Icons.login),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byIcon(Icons.login));
+    await tester.pumpAndSettle();
+
+    final username = find.byType(TextFormField).at(0);
+    final password = find.byType(TextFormField).at(1);
+    await tester.tap(username);
+    await tester.enterText(username, 'fixture@example.invalid');
+    await tester.pump();
+    final usernameEditable = tester.widget<EditableText>(
+      find.descendant(of: username, matching: find.byType(EditableText)),
+    );
+    final usernameController = usernameEditable.controller;
+    usernameController.selection = const TextSelection.collapsed(offset: 7);
+    await tester.pump();
+
+    await tester.tap(password);
+    await tester.enterText(password, 'fixture-passphrase');
+    await tester.pump();
+    final passwordEditable = tester.widget<EditableText>(
+      find.descendant(of: password, matching: find.byType(EditableText)),
+    );
+    final passwordController = passwordEditable.controller;
+    passwordController.selection = const TextSelection.collapsed(offset: 8);
+    await tester.pump(const Duration(seconds: 3));
+
+    expect(usernameController.text, 'fixture@example.invalid');
+    expect(
+      usernameController.selection,
+      const TextSelection.collapsed(offset: 7),
+    );
+    expect(passwordController.text, 'fixture-passphrase');
+    expect(
+      passwordController.selection,
+      const TextSelection.collapsed(offset: 8),
+    );
+    expect(passwordEditable.focusNode.hasFocus, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('renders both sync modes in the settings page', (tester) async {
     SharedPreferences.setMockInitialValues({});

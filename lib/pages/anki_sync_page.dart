@@ -364,8 +364,12 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   autofocus: true,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: AppLocalizations.of(dialogContext)!
-                        .ankiSyncEmailOrUsername,
+                    label: ConstrainedText(
+                      AppLocalizations.of(dialogContext)!
+                          .ankiSyncEmailOrUsername,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (value) => value == null || value.trim().isEmpty
@@ -378,8 +382,11 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                 TextFormField(
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText:
-                        AppLocalizations.of(dialogContext)!.ankiSyncPassword,
+                    label: ConstrainedText(
+                      AppLocalizations.of(dialogContext)!.ankiSyncPassword,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     prefixIcon: Icon(Icons.lock_outline),
                   ),
                   validator: (value) => value == null || value.isEmpty
