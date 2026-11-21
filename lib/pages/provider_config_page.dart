@@ -413,7 +413,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           autofocus: true,
           maxLength: 30,
           decoration: InputDecoration(
-            labelText: AppLocalizations.of(context)!.providerGroupName,
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.providerGroupName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
         ),

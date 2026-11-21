@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
@@ -57,6 +58,63 @@ void main() {
     expect(tester.getTopLeft(text).dx, closeTo(start.dx, 0.01));
     await tester.pump(const Duration(milliseconds: 250));
     expect(start.dx - tester.getTopLeft(text).dx, closeTo(6, 1));
+  });
+
+  testWidgets('localized field labels reveal without disrupting editing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.8)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 140,
+              child: Builder(
+                builder: (context) => TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!
+                          .providerParamNameNestedLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField);
+    expect(find.byType(ConstrainedText), findsOneWidget);
+    await tester.tap(field);
+    await tester.enterText(field, 'reasoning.type');
+    await tester.pump();
+
+    expect(FocusManager.instance.primaryFocus?.hasFocus, isTrue);
+    expect(controller.text, 'reasoning.type');
+    expect(tester.testTextInput.hasAnyClients, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('shows the trailing text at the horizontal endpoint', (
