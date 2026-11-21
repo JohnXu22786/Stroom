@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/chat/widgets/info_row.dart';
 
 void main() {
-  testWidgets('keeps a long value available in its constrained text slot', (
+  testWidgets('shows long file information values without a line limit', (
     tester,
   ) async {
-    const value =
-        'A long file metadata value that can exceed the two line display area';
+    final value = List.filled(140, 'a').join();
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: SizedBox(
             width: 220,
@@ -20,6 +20,16 @@ void main() {
       ),
     );
 
-    expect(find.text(value), findsOneWidget);
+    final textFinder = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.semanticsLabel == value,
+    );
+    expect(textFinder, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.descendant(of: textFinder, matching: find.byType(RichText)),
+    );
+    expect(paragraph.maxLines, isNull);
+    expect(paragraph.overflow, TextOverflow.clip);
+    expect(tester.getSize(textFinder).height, greaterThan(2 * 13));
+    expect((paragraph.text as TextSpan).text, value.characters.join('\u200B'));
   });
 }

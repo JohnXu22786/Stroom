@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -69,6 +70,77 @@ void main() {
     expect(find.text('大小'), findsOneWidget);
     expect(find.text('路径'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
+  });
+
+  testWidgets('long file paths scroll on a narrow phone and keep close reachable',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final fileName = List.filled(140, 'f').join();
+    final mimeType = List.filled(140, 'm').join();
+    final storagePath =
+        '/application/support/attachments/${List.filled(600, 'a').join()}/notes.txt';
+    final attachment = Attachment(
+      fileName: fileName,
+      mimeType: mimeType,
+      fileType: 'document',
+      hash: 'test-hash',
+      storagePath: storagePath,
+      fileSize: 32,
+    );
+
+    await tester.pumpWidget(localizedApp(Builder(
+      builder: (context) => TextButton(
+        onPressed: () => showFileInfoPreviewDialog(
+          context: context,
+          attachment: attachment,
+        ),
+        child: const Text('open'),
+      ),
+    )));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    final dialogSurface = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(Material),
+    );
+    expect(tester.getRect(dialogSurface.first).bottom, lessThanOrEqualTo(600));
+    final fileNameFinder = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.semanticsLabel == fileName,
+    );
+    expect(fileNameFinder, findsOneWidget);
+    expect(tester.getSize(fileNameFinder).height, greaterThan(36));
+    final mimeTypeFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is Text && widget.semanticsLabel?.contains(mimeType) == true,
+    );
+    expect(mimeTypeFinder, findsOneWidget);
+    expect(tester.getSize(mimeTypeFinder).height, greaterThan(26));
+    final pathFinder = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.semanticsLabel == storagePath,
+    );
+    expect(pathFinder, findsOneWidget);
+    expect(
+      tester
+          .renderObject<RenderParagraph>(
+            find.descendant(of: pathFinder, matching: find.byType(RichText)),
+          )
+          .maxLines,
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+
+    final closeFinder = find.text('关闭');
+    await tester.ensureVisible(closeFinder);
+    await tester.tap(closeFinder);
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
   });
 
   testWidgets('JSON inspection dialog localizes the title and empty states',
