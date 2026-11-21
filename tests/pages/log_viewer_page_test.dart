@@ -49,6 +49,58 @@ void main() {
       );
 
   group('LogViewerPage localization', () {
+    testWidgets('constrains localized log settings and filter field labels', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogContentPage(
+            fileName: 'app_2026-11-20-12.log',
+            content: 'INFO: log entry',
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Filter log entries'));
+      await tester.pumpAndSettle();
+
+      final filterLabels = tester
+          .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+          .map((label) => label.data)
+          .toSet();
+      expect(filterLabels, containsAll(['Keyword', 'Source', 'Level']));
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogViewerPage(),
+        ),
+      );
+      await tester.tap(find.byTooltip('Log settings'));
+      await _pumpUntil(
+        tester,
+        () => tester.any(find.text('Application log settings')),
+      );
+
+      final settingsLabels = tester
+          .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+          .map((label) => label.data)
+          .toSet();
+      expect(
+        settingsLabels,
+        containsAll([
+          'Keep logs for',
+          'Minimum detail level',
+          'Maximum log storage',
+        ]),
+      );
+    });
+
     testWidgets('log content app bar keeps full labels at narrow widths', (
       tester,
     ) async {
