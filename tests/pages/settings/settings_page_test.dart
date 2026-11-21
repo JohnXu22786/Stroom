@@ -913,8 +913,11 @@ void main() {
     List<String> titlesIn(Finder card) => find
         .descendant(of: card, matching: find.byType(ListTile))
         .evaluate()
-        .map((element) => (element.widget as ListTile).title as Text)
-        .map((title) => title.data!)
+        .map(
+          (element) =>
+              (element.widget as ListTile).title as ConstrainedText,
+        )
+        .map((title) => title.data)
         .toList();
 
     expect(
