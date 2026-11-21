@@ -403,7 +403,11 @@ class _TokenFieldState extends State<_TokenField> {
       controller: _controller,
       enabled: widget.enabled,
       decoration: InputDecoration(
-        labelText: AppLocalizations.of(context)!.contextThresholdField,
+        label: ConstrainedText(
+          AppLocalizations.of(context)!.contextThresholdField,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         hintText: AppLocalizations.of(context)!.contextThresholdHint,
         border: OutlineInputBorder(),
         isDense: true,
@@ -513,7 +517,11 @@ class _PercentFieldState extends State<_PercentField> {
       controller: _controller,
       enabled: widget.enabled,
       decoration: InputDecoration(
-        labelText: AppLocalizations.of(context)!.contextPercentField,
+        label: ConstrainedText(
+          AppLocalizations.of(context)!.contextPercentField,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         hintText: AppLocalizations.of(context)!
             .contextPercentHint(kDefaultCompactionPercent),
         suffixText: '%',
