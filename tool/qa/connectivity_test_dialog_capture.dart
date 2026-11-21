@@ -47,7 +47,8 @@ void main() {
                   title: 'Proxy',
                   initialContent:
                       '{\n  "endpoint": "https://example.invalid"\n}',
-                  note: 'Lokaler Vorschaudialog. Es wird keine Verbindung gestartet.',
+                  note:
+                      'Lokaler Vorschaudialog. Es wird keine Verbindung gestartet.',
                   onSave: (_) async {},
                   onRun: (_) async => const ConnectivityTestResult(
                     succeeded: true,

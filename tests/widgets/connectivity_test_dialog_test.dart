@@ -304,8 +304,8 @@ void main() {
       final germanNatural = TextPainter(
         text: TextSpan(
           text: germanText.data,
-          style: DefaultTextStyle.of(germanContext).style
-              .merge(germanText.style),
+          style:
+              DefaultTextStyle.of(germanContext).style.merge(germanText.style),
         ),
         textDirection: Directionality.of(germanContext),
         textScaler: MediaQuery.textScalerOf(germanContext),
@@ -334,7 +334,8 @@ void main() {
       final englishNatural = TextPainter(
         text: TextSpan(
           text: englishText.data,
-          style: DefaultTextStyle.of(englishContext).style
+          style: DefaultTextStyle.of(englishContext)
+              .style
               .merge(englishText.style),
         ),
         textDirection: Directionality.of(englishContext),

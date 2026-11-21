@@ -79,8 +79,8 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
         setState(() {
           _result = ConnectivityTestResult(
             succeeded: false,
-            summary: AppLocalizations.of(context)!
-                .connectivityTestFailedSummary,
+            summary:
+                AppLocalizations.of(context)!.connectivityTestFailedSummary,
             details: _readableError(error),
             elapsed: Duration.zero,
           );
@@ -144,7 +144,9 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   border: OutlineInputBorder(),
                   helper: Text(
                     localizations.connectivityTestJsonHelp,
-                    style: Theme.of(context).textTheme.bodySmall
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
                         ?.copyWith(color: colorScheme.onSurfaceVariant),
                     softWrap: true,
                   ),
@@ -196,9 +198,8 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _isRunning || _isSaving
-              ? null
-              : () => Navigator.pop(context),
+          onPressed:
+              _isRunning || _isSaving ? null : () => Navigator.pop(context),
           child: ConstrainedText(
             localizations.connectivityTestClose,
             maxLines: 1,
