@@ -11,13 +11,35 @@ import 'package:stroom/providers/provider_config.dart';
 
 class _FailingProviderCorruptBackupStore
     extends InMemorySharedPreferencesStore {
-  _FailingProviderCorruptBackupStore(Map<String, Object> data)
+  _FailingProviderCorruptBackupStore(
+    Map<String, Object> data, {
+    this.failedBackupCount,
+  }) : super.withData(data);
+
+  int? failedBackupCount;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key.startsWith('flutter.provider_entries_corrupt_')) {
+      if (failedBackupCount == null || failedBackupCount! > 0) {
+        failedBackupCount =
+            failedBackupCount == null ? null : failedBackupCount! - 1;
+        return Future<bool>.value(false);
+      }
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _ThrowingProviderCorruptBackupStore
+    extends InMemorySharedPreferencesStore {
+  _ThrowingProviderCorruptBackupStore(Map<String, Object> data)
       : super.withData(data);
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) {
     if (key.startsWith('flutter.provider_entries_corrupt_')) {
-      return Future<bool>.value(false);
+      throw StateError('backup unavailable');
     }
     return super.setValue(valueType, key, value);
   }
@@ -300,6 +322,132 @@ void main() {
         }
       },
     );
+
+    test('CRUD does not overwrite corrupt entries when backup returns false',
+        () async {
+      final corruptProviderEntries = <String>[
+        'not-json{{{',
+        jsonEncode([
+          {'id': 'corrupt_provider', 'type': 'llm', 'configs': 'invalid'},
+        ]),
+        jsonEncode([
+          {'id': 'valid_llm', 'type': 'llm', 'name': 'LLM', 'configs': []},
+          {
+            'id': 'corrupt_provider',
+            'type': 'llm',
+            'name': 'Corrupt provider',
+            'configs': 'invalid configs',
+            'apiKey': 'recover-me',
+          },
+        ]),
+      ];
+
+      for (final original in corruptProviderEntries) {
+        SharedPreferences.setMockInitialValues({});
+        final previousStore = SharedPreferencesStorePlatform.instance;
+        SharedPreferencesStorePlatform.instance =
+            _FailingProviderCorruptBackupStore({
+          'flutter.provider_entries': original,
+        });
+        try {
+          final notifier = ProviderEntriesNotifier();
+          await notifier.load();
+          final loadedIds =
+              notifier.state.entries.map((entry) => entry.id).toList();
+
+          await expectLater(
+            notifier.addFirst(
+              ProviderEntry(id: 'new_provider', type: 'llm', name: 'New'),
+            ),
+            throwsA(isA<StateError>()),
+          );
+
+          final prefs = await SharedPreferences.getInstance();
+          expect(prefs.getString('provider_entries'), original);
+          expect(
+            notifier.state.entries.map((entry) => entry.id).toList(),
+            loadedIds,
+          );
+        } finally {
+          SharedPreferencesStorePlatform.instance = previousStore;
+        }
+      }
+    });
+
+    test('CRUD does not overwrite corrupt entries when backup throws',
+        () async {
+      const original = 'not-json{{{';
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _ThrowingProviderCorruptBackupStore({
+        'flutter.provider_entries': original,
+      });
+      try {
+        final notifier = ProviderEntriesNotifier();
+        await notifier.load();
+        final loadedIds =
+            notifier.state.entries.map((entry) => entry.id).toList();
+
+        await expectLater(
+          notifier.addFirst(
+            ProviderEntry(id: 'new_provider', type: 'llm', name: 'New'),
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('provider_entries'), original);
+        expect(
+          notifier.state.entries.map((entry) => entry.id).toList(),
+          loadedIds,
+        );
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
+
+    test('CRUD proceeds after a later corrupt backup succeeds', () async {
+      const original = 'not-json{{{';
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailingProviderCorruptBackupStore(
+        {'flutter.provider_entries': original},
+        failedBackupCount: 1,
+      );
+      SharedPreferencesStorePlatform.instance = store;
+      try {
+        final notifier = ProviderEntriesNotifier();
+        await notifier.load();
+        store.failedBackupCount = 0;
+
+        await notifier.addFirst(
+          ProviderEntry(id: 'new_provider', type: 'llm', name: 'New'),
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        final backupKeys = prefs
+            .getKeys()
+            .where((key) => key.startsWith('provider_entries_corrupt_'))
+            .toList();
+        expect(
+          backupKeys.any((key) => prefs.getString(key) == original),
+          isTrue,
+        );
+        expect(
+          (jsonDecode(prefs.getString('provider_entries')!) as List)
+              .whereType<Map>()
+              .any((entry) => entry['id'] == 'new_provider'),
+          isTrue,
+        );
+        expect(
+          notifier.state.entries.any((entry) => entry.id == 'new_provider'),
+          isTrue,
+        );
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
 
     test('usable LLM entry does not suppress unmatched legacy configs',
         () async {

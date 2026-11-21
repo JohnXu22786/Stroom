@@ -9,6 +9,46 @@ part of 'provider_config.dart';
 const int _maxCorruptProviderBackups = 3;
 
 extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
+  /// Ensure migrations and later CRUD writes cannot discard unreadable data.
+  /// On backup failure, retain the exact source string for a retry before any
+  /// subsequent write.
+  Future<void> _ensureCorruptProviderEntriesBackedUp(
+    SharedPreferences prefs,
+  ) async {
+    final original = prefs.getString('provider_entries');
+    if (original == null || original.isEmpty) return;
+
+    var corrupt = false;
+    try {
+      final decoded = jsonDecode(original);
+      if (decoded is! List) {
+        corrupt = true;
+      } else {
+        for (final raw in decoded) {
+          if (raw is! Map) {
+            corrupt = true;
+            break;
+          }
+          try {
+            ProviderEntry.fromMap(Map<String, dynamic>.from(raw));
+          } catch (_) {
+            corrupt = true;
+            break;
+          }
+        }
+      }
+    } catch (_) {
+      corrupt = true;
+    }
+
+    if (!corrupt) return;
+    if (await _backupCorruptProviderEntries(prefs, original)) {
+      _corruptProviderEntriesAwaitingBackup = null;
+    } else {
+      _corruptProviderEntriesAwaitingBackup = original;
+    }
+  }
+
   /// 迁移旧版 chat_configs（被重构删除的 ChatProviderConfigItem 格式）到 provider_entries
   Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
     final oldJson = prefs.getString('chat_configs');
@@ -94,28 +134,21 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       } catch (_) {}
 
       List<Map<String, dynamic>> existingEntries = [];
-      var skippedCorruptEntry = false;
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
           final decoded = jsonDecode(existingJson);
           if (decoded is! List) {
-            // 现有 provider_entries 整体损坏（非数组）：先备份原始
-            // 数据再覆盖 —— 否则这里的写入会永久销毁损坏现场。
-            if (!await _backupCorruptProviderEntries(prefs, existingJson)) {
-              return;
-            }
+            // load() already quarantined this original value before entering
+            // migrations, so don't create a duplicate backup here.
             existingEntries = [];
           } else {
             // 兜底：使用 whereType 安全过滤非 Map 条目
             existingEntries =
                 decoded.whereType<Map<String, dynamic>>().toList();
-            skippedCorruptEntry = existingEntries.length != decoded.length;
           }
         } catch (_) {
-          // 现有数据损坏，忽略并用空列表重新开始
-          if (!await _backupCorruptProviderEntries(prefs, existingJson)) {
-            return;
-          }
+          // load() already quarantined this original value before entering
+          // migrations, so don't create a duplicate backup here.
           existingEntries = [];
         }
       }
@@ -189,11 +222,6 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             ),
           );
           existingEntry['configs'] = configs;
-          if (skippedCorruptEntry && existingJson != null) {
-            final backedUp =
-                await _backupCorruptProviderEntries(prefs, existingJson);
-            if (!backedUp) return;
-          }
           legacyConfigsPersisted = await prefs.setString(
             'provider_entries',
             jsonEncode(existingEntries),
@@ -738,6 +766,19 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     var attemptedGroupsWrite = false;
     try {
       prefs = await SharedPreferences.getInstance();
+      final pendingCorruptEntries = _corruptProviderEntriesAwaitingBackup;
+      if (pendingCorruptEntries != null) {
+        final backedUp = await _backupCorruptProviderEntries(
+          prefs,
+          pendingCorruptEntries,
+        );
+        if (!backedUp) {
+          throw StateError(
+            'Cannot persist provider configuration before corrupt data is backed up.',
+          );
+        }
+        _corruptProviderEntriesAwaitingBackup = null;
+      }
       if (rethrowOnFailure) {
         previousEntries = prefs.getString('provider_entries');
         if (persistMcpGroups) {
