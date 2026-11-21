@@ -151,7 +151,11 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
           key: keyName == null ? null : _key(keyName),
           controller: _controller(field, initial),
           decoration: InputDecoration(
-            labelText: label,
+            label: ConstrainedText(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             hintText: hint,
             helperText: help,
             helperMaxLines: 3,
@@ -181,7 +185,11 @@ class _BatchRenameRuleEditorState extends State<BatchRenameRuleEditor> {
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(signed: true),
           decoration: InputDecoration(
-            labelText: label,
+            label: ConstrainedText(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             border: const OutlineInputBorder(),
             isDense: true,
             errorMaxLines: 2,

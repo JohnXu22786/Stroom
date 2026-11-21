@@ -363,7 +363,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           autofocus: true,
           maxLength: 60,
           decoration: InputDecoration(
-            labelText: strings.batchDlgPresetName,
+            label: ConstrainedText(
+              strings.batchDlgPresetName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             helperText: strings.batchDlgPresetHint,
           ),
         ),
@@ -514,7 +518,11 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           controller: controller,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: strings.batchDlgBaseName,
+            label: ConstrainedText(
+              strings.batchDlgBaseName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             helperText: r.item.format.isEmpty
                 ? strings.batchDlgOverrideHelp
                 : strings.batchDlgExtensionRetained(r.item.format),
