@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../../../widgets/constrained_text.dart';
+import 'package:stroom/utils/text_breaks.dart';
 
 /// A simple info row label: value pair used in file info preview dialogs.
 class InfoRow extends StatelessWidget {
@@ -27,14 +26,21 @@ class InfoRow extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: ConstrainedText(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              color: cs.onSurface,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final style = TextStyle(fontSize: 13, color: cs.onSurface);
+              final effectiveStyle =
+                  DefaultTextStyle.of(context).style.merge(style);
+              final displayValue = breakOverlongWords(
+                value,
+                maxWidth: constraints.maxWidth,
+                style: effectiveStyle,
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+                locale: Localizations.maybeLocaleOf(context),
+              );
+              return Text(displayValue, semanticsLabel: value, style: style);
+            },
           ),
         ),
       ],
