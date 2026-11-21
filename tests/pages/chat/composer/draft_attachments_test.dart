@@ -1336,9 +1336,12 @@ void main() {
         File('${tmpRoot.path}/$path').deleteSync();
         return true;
       };
-      AttachmentStorage.saveFileOverrideForTesting = (fileName, bytes) async {
-        await file.writeAsBytes(bytes);
-        return storagePath;
+      AttachmentStorage.saveFileOverrideForTesting = (fileName, bytes) {
+        // Keep this fixture inside widget-test FakeAsync. Real File IO waits
+        // for the host event loop, which does not advance while the test
+        // awaits the attachment import.
+        file.writeAsBytesSync(bytes);
+        return Future.value(storagePath);
       };
 
       await tester.pumpWidget(
@@ -1729,20 +1732,26 @@ void main() {
         conversationId: 'conv-1',
         hash: attachment.hash,
       );
-      final failedSave = await notifier.saveDraftAndWait(
+      // Persistence also drains queued cache cleanup; let FakeAsync process
+      // the serialized Future chain before awaiting each save result.
+      final failedSaveFuture = notifier.saveDraftAndWait(
         'conv-1',
         '',
         draftAttachments: [],
       );
+      await tester.pump();
+      final failedSave = await failedSaveFuture;
       expect(failedSave, isFalse);
       expect(deletedCaches, isEmpty);
 
       store.allowWrites = true;
-      final retainedSave = await notifier.saveDraftAndWait(
+      final retainedSaveFuture = notifier.saveDraftAndWait(
         'conv-1',
         '',
         draftAttachments: [attachment],
       );
+      await tester.pump();
+      final retainedSave = await retainedSaveFuture;
       expect(retainedSave, isTrue);
       expect(deletedCaches, isEmpty);
 
@@ -1757,18 +1766,22 @@ void main() {
         fileSize: 3,
         conversationId: 'conv-2',
       );
-      final otherConversationSave = await notifier.saveDraftAndWait(
+      final otherConversationSaveFuture = notifier.saveDraftAndWait(
         'conv-2',
         '',
         draftAttachments: [otherConversationAttachment],
       );
+      await tester.pump();
+      final otherConversationSave = await otherConversationSaveFuture;
       expect(otherConversationSave, isTrue);
 
-      final successfulSave = await notifier.saveDraftAndWait(
+      final successfulSaveFuture = notifier.saveDraftAndWait(
         'conv-1',
         '',
         draftAttachments: [],
       );
+      await tester.pump();
+      final successfulSave = await successfulSaveFuture;
       expect(successfulSave, isTrue);
       expect(deletedCaches, ['conv-1:${attachment.hash}']);
       container.dispose();
