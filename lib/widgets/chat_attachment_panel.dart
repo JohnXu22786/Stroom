@@ -79,48 +79,89 @@ void showChatAttachmentPanel({
               // ══════════════════════════════════════════════════
               // File action buttons
               // ══════════════════════════════════════════════════
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _FileActionButton(
-                    icon: Icons.camera_alt_outlined,
-                    label: AppLocalizations.of(context)!.chatAttachmentCamera,
-                    color: Colors.orange,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onPickFromCamera();
-                    },
-                  ),
-                  _FileActionButton(
-                    icon: Icons.photo_library_outlined,
-                    label: AppLocalizations.of(context)!
-                        .chatAttachmentDeviceGallery,
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onPickFromGallery();
-                    },
-                  ),
-                  _FileActionButton(
-                    icon: Icons.insert_drive_file_outlined,
-                    label:
-                        AppLocalizations.of(context)!.chatAttachmentDeviceFiles,
-                    color: Colors.green,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onPickFromFilePicker();
-                    },
-                  ),
-                  _FileActionButton(
-                    icon: Icons.folder_outlined,
-                    label: AppLocalizations.of(context)!.chatAttachmentAppFiles,
-                    color: Colors.purple,
-                    onTap: () {
-                      Navigator.pop(context);
-                      onPickFromAppFiles();
-                    },
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final actions = [
+                    _FileActionButton(
+                      icon: Icons.camera_alt_outlined,
+                      label: AppLocalizations.of(context)!.chatAttachmentCamera,
+                      color: Colors.orange,
+                      onTap: () {
+                        Navigator.pop(context);
+                        onPickFromCamera();
+                      },
+                    ),
+                    _FileActionButton(
+                      icon: Icons.photo_library_outlined,
+                      label: AppLocalizations.of(context)!
+                          .chatAttachmentDeviceGallery,
+                      color: Colors.blue,
+                      onTap: () {
+                        Navigator.pop(context);
+                        onPickFromGallery();
+                      },
+                    ),
+                    _FileActionButton(
+                      icon: Icons.insert_drive_file_outlined,
+                      label: AppLocalizations.of(context)!
+                          .chatAttachmentDeviceFiles,
+                      color: Colors.green,
+                      onTap: () {
+                        Navigator.pop(context);
+                        onPickFromFilePicker();
+                      },
+                    ),
+                    _FileActionButton(
+                      icon: Icons.folder_outlined,
+                      label:
+                          AppLocalizations.of(context)!.chatAttachmentAppFiles,
+                      color: Colors.purple,
+                      onTap: () {
+                        Navigator.pop(context);
+                        onPickFromAppFiles();
+                      },
+                    ),
+                  ];
+
+                  if (constraints.maxWidth < 320) {
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            for (final action in actions.take(2))
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  child: action.withWidth(double.infinity),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            for (final action in actions.skip(2))
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  child: action.withWidth(double.infinity),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: actions,
+                  );
+                },
               ),
             ],
           ),
@@ -136,13 +177,23 @@ class _FileActionButton extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final double width;
 
   const _FileActionButton({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
+    this.width = 80,
   });
+
+  Widget withWidth(double width) => _FileActionButton(
+        icon: icon,
+        label: label,
+        color: color,
+        onTap: onTap,
+        width: width,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +202,7 @@ class _FileActionButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        width: 80,
+        width: width,
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
@@ -160,15 +211,18 @@ class _FileActionButton extends StatelessWidget {
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+            Center(
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 24, color: color),
               ),
-              child: Icon(icon, size: 24, color: color),
             ),
             const SizedBox(height: 6),
             ConstrainedText(
