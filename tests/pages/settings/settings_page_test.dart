@@ -517,7 +517,11 @@ void main() {
 
   group('SettingsPage - 压缩触发设置面板', () {
     Future<void> openCompactionPanel(WidgetTester tester) async {
-      final tileFinder = find.text('压缩触发设置').first;
+      final title = AppLocalizations.of(
+        tester.element(find.byType(SettingsPage)),
+      )!
+          .contextCompactionTriggerSettings;
+      final tileFinder = find.text(title).first;
       await tester.scrollUntilVisible(tileFinder, 300,
           scrollable: find.byType(Scrollable).first);
       await tester.tap(tileFinder);
@@ -558,6 +562,90 @@ void main() {
             ?.text,
         '95',
       );
+    });
+
+    testWidgets('field labels are constrained without changing native editing',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _llmEntryWithModels(),
+      });
+
+      await tester.pumpWidget(
+        _buildSettingsTestApp(locale: const Locale('de', 'DE')),
+      );
+      await tester.pumpAndSettle();
+      await openCompactionPanel(tester);
+      tester.view.physicalSize = const Size(320, 640);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final strings = AppLocalizations.of(
+        tester.element(find.byKey(const Key('compaction-settings-body'))),
+      )!;
+      final percentField = find.byKey(const Key('global-percent-field'));
+      final percentDecoration = tester
+          .widget<InputDecorator>(
+            find.descendant(
+                of: percentField, matching: find.byType(InputDecorator)),
+          )
+          .decoration;
+      final percentLabel = percentDecoration.label;
+      expect(percentLabel, isA<ConstrainedText>());
+      expect(
+          (percentLabel! as ConstrainedText).data, strings.contextPercentField);
+      expect((percentLabel as ConstrainedText).maxLines, 1);
+
+      final modelTile =
+          find.widgetWithText(SwitchListTile, 'Model A | ProviderA');
+      await tester.drag(find.byType(ListView).last, const Offset(0, -160));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(modelTile);
+      await tester.pump(const Duration(milliseconds: 300));
+      final modelKey =
+          compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
+      final tokenField = find.descendant(
+        of: find.byKey(ValueKey('model-token-$modelKey')),
+        matching: find.byType(TextFormField),
+      );
+      await tester.ensureVisible(tokenField);
+      await tester.pump(const Duration(milliseconds: 100));
+      final tokenDecoration = tester
+          .widget<InputDecorator>(
+            find.descendant(
+                of: tokenField, matching: find.byType(InputDecorator)),
+          )
+          .decoration;
+      expect(tokenDecoration.label, isA<ConstrainedText>());
+      expect((tokenDecoration.label! as ConstrainedText).data,
+          strings.contextThresholdField);
+      expect((tokenDecoration.label! as ConstrainedText).maxLines, 1);
+
+      await tester.tap(tokenField);
+      await tester.enterText(tokenField, '48000');
+      await tester.pump();
+      final editableText = tester.widget<EditableText>(
+        find.descendant(of: tokenField, matching: find.byType(EditableText)),
+      );
+      editableText.controller.selection = const TextSelection(
+        baseOffset: 1,
+        extentOffset: 3,
+      );
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      final currentEditableText = tester.widget<EditableText>(
+        find.descendant(of: tokenField, matching: find.byType(EditableText)),
+      );
+      expect(currentEditableText.focusNode.hasFocus, isTrue);
+      expect(currentEditableText.controller.text, '48000');
+      expect(currentEditableText.controller.selection,
+          const TextSelection(baseOffset: 1, extentOffset: 3));
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('总开关关闭后下方设置全部置灰且不可操作', (tester) async {
