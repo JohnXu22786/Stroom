@@ -31,9 +31,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
   /// ── Settings row (model, tools, reasoning) ──
   /// Uses Wrap so tags use their natural width and flow to the next
   /// line when they don't fit side-by-side. ModelNameChip is constrained
-  /// to at most the full row width so its internal Flexible can
-  /// truncate text properly. Tools and reasoning chips use natural
-  /// width since their labels are short and fixed.
+  /// to at most the full row width; SettingsChip bounds its label within
+  /// the chip so model-provided reasoning option values cannot overflow.
   Widget _buildChipsSettingsRow({
     required ColorScheme cs,
     required bool hasAttachments,

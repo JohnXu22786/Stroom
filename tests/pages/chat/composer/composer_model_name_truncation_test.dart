@@ -74,6 +74,75 @@ void main() {
 
       expect(find.text('99+'), findsOneWidget);
     });
+
+    testWidgets('reveals a clipped label while keeping its badge', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const label = 'reasoning_effort_with_a_long_custom_option_value';
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SizedBox(
+              width: 140,
+              child: SettingsChip(
+                icon: Icons.psychology_outlined,
+                label: label,
+                color: Colors.purple,
+                badgeCount: 3,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(find.text(label), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byType(ConstrainedText)).label,
+        contains(label),
+      );
+      final text = find.text(label);
+      final start = tester.getTopLeft(text);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(tester.getTopLeft(text).dx, lessThan(start.dx));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('keeps fitting label still and tappable', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SettingsChip(
+              icon: Icons.build_outlined,
+              label: 'Tools',
+              color: Colors.teal,
+              onTap: () => tapped = true,
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final label = find.text('Tools');
+      final start = tester.getTopLeft(label);
+      await tester.pump(const Duration(seconds: 4));
+      expect(tester.getTopLeft(label), start);
+
+      await tester.tap(label);
+      expect(tapped, isTrue);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════

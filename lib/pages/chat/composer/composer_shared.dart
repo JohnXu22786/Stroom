@@ -62,14 +62,18 @@ class SettingsChip extends StatelessWidget {
               color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color,
             ),
             const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isDisabled
-                    ? Colors.grey.withValues(alpha: 0.4)
-                    : cs.onSurface,
+            Flexible(
+              child: ConstrainedText(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isDisabled
+                      ? Colors.grey.withValues(alpha: 0.4)
+                      : cs.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (showBadge) ...[
