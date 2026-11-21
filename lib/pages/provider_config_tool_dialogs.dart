@@ -157,7 +157,11 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 controller: _urlController,
                 readOnly: !_allowsCustomUrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.toolHttpAddress,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.toolHttpAddress,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: const OutlineInputBorder(),
                   errorText: _urlError,
                 ),
@@ -170,7 +174,11 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 controller: _apiKeyController,
                 obscureText: _obscureApiKey,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.mcpApiKey,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.mcpApiKey,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     tooltip: _obscureApiKey

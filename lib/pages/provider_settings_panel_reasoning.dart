@@ -121,8 +121,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         value: value,
         readOnly: !editable,
         decoration: InputDecoration(
-          labelText: AppLocalizations.of(context)!
-              .providerOptionIndexLabel((rowIndex + 1).toString()),
+          label: _buildProviderInputLabel(
+            AppLocalizations.of(context)!
+                .providerOptionIndexLabel((rowIndex + 1).toString()),
+          ),
           hintText: editable
               ? AppLocalizations.of(context)!
                   .providerOptionExampleHint('low, medium, high')
@@ -360,7 +362,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             TextFormField(
               initialValue: toggle.paramName,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.providerParamNameLabel,
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.providerParamNameLabel,
+                ),
                 hintText: AppLocalizations.of(context)!
                     .providerParamNameHint('thinking.type, reasoning'),
                 border: const OutlineInputBorder(),
@@ -394,8 +398,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     child: TextFormField(
                       initialValue: toggle.onValue ?? '',
                       decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context)!
-                            .providerToggleOnValueLabel,
+                        label: _buildProviderInputLabel(
+                          AppLocalizations.of(context)!
+                              .providerToggleOnValueLabel,
+                        ),
                         hintText: AppLocalizations.of(context)!
                             .providerParamNameHint('enabled, true'),
                         border: const OutlineInputBorder(),
@@ -412,8 +418,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     child: TextFormField(
                       initialValue: toggle.offValue ?? '',
                       decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context)!
-                            .providerToggleOffValueLabel,
+                        label: _buildProviderInputLabel(
+                          AppLocalizations.of(context)!
+                              .providerToggleOffValueLabel,
+                        ),
                         hintText: AppLocalizations.of(context)!
                             .providerParamNameHint('disabled, false'),
                         border: const OutlineInputBorder(),
@@ -517,7 +525,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               initialValue: effort.paramName,
               readOnly: false,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.providerParamNameLabel,
+                label: _buildProviderInputLabel(
+                  AppLocalizations.of(context)!.providerParamNameLabel,
+                ),
                 hintText: AppLocalizations.of(context)!
                     .providerParamNameHint('reasoning_effort'),
                 border: const OutlineInputBorder(),
@@ -551,8 +561,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.providerJsonValueLabel,
+                  label: _buildProviderInputLabel(
+                    AppLocalizations.of(context)!.providerJsonValueLabel,
+                  ),
                   hintText:
                       AppLocalizations.of(context)!.providerOptionExampleHint(
                     '{"thinking": {"budget": 1024}}',
@@ -680,8 +691,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   child: TextFormField(
                     initialValue: param.paramName,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!
-                          .providerParamNameNestedLabel,
+                      label: _buildProviderInputLabel(
+                        AppLocalizations.of(context)!
+                            .providerParamNameNestedLabel,
+                      ),
                       border: const OutlineInputBorder(),
                       isDense: true,
                       hintText: AppLocalizations.of(
@@ -745,8 +758,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     param.options.isNotEmpty ? param.options.first : '',
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.providerJsonValueLabel,
+                  label: _buildProviderInputLabel(
+                    AppLocalizations.of(context)!.providerJsonValueLabel,
+                  ),
                   hintText:
                       AppLocalizations.of(context)!.providerOptionExampleHint(
                     '{"thinking": {"budget": 1024}}',

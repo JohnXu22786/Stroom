@@ -43,8 +43,10 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
               child: SyncedValueField(
                 value: value,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!
-                      .providerOptionIndexLabel((j + 1).toString()),
+                  label: _buildProviderInputLabel(
+                    AppLocalizations.of(context)!
+                        .providerOptionIndexLabel((j + 1).toString()),
+                  ),
                   hintText: AppLocalizations.of(context)!
                       .providerOptionExampleHint('low, enabled, true, max'),
                   border: const OutlineInputBorder(),
