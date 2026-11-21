@@ -46,7 +46,7 @@ class _RetryableWritePreferencesStore extends InMemorySharedPreferencesStore {
   Future<bool> setValue(String valueType, String key, Object value) async {
     // These tests exercise conversation snapshot ordering. Active-conversation
     // preference writes are independent and must not consume its write gate.
-    if (key == 'flutter.conversations') {
+    if (key.endsWith('conversations')) {
       writeCount++;
       if (!allowWrites) return false;
       final gate = writeGate;
@@ -730,10 +730,11 @@ void main() {
       await tester.pump();
       await tester.enterText(find.byType(TextField), 'hello');
       late Future<void> removal;
-      await tester.runAsync(() async {
-        removal = key.currentState!.removePendingAttachmentForTesting(0);
-        await writeStarted.future.timeout(const Duration(seconds: 15));
-      });
+      removal = key.currentState!.removePendingAttachmentForTesting(0);
+      await tester.pump();
+      await tester.runAsync(
+        () => writeStarted.future.timeout(const Duration(seconds: 15)),
+      );
 
       await tester.pumpWidget(
         _composer(
@@ -1161,7 +1162,7 @@ void main() {
       late Future<bool> firstSave;
       late Future<bool> readdSave;
       late Future<bool> finalRemovalSave;
-      await tester.runAsync(() async {
+      final saved = await tester.runAsync(() async {
         firstSave = notifier.saveDraftAndWait(
           'conv-1',
           '',
@@ -1178,9 +1179,7 @@ void main() {
           '',
           draftAttachments: const [],
         );
-      });
-      firstWriteGate.complete();
-      final saved = await tester.runAsync(() async {
+        firstWriteGate.complete();
         return await firstSave && await readdSave && await finalRemovalSave;
       });
 
@@ -1222,7 +1221,7 @@ void main() {
 
       late Future<bool> firstSave;
       late Future<bool> readdSave;
-      await tester.runAsync(() async {
+      final saved = await tester.runAsync(() async {
         firstSave = notifier.saveDraftAndWait(
           'conv-1',
           '',
@@ -1234,11 +1233,9 @@ void main() {
           '',
           draftAttachments: [attachment],
         );
+        releaseDelete.complete();
+        return await firstSave && await readdSave;
       });
-      releaseDelete.complete();
-      final saved = await tester.runAsync(
-        () async => await firstSave && await readdSave,
-      );
 
       expect(saved, isTrue);
       expect(file.readAsBytesSync(), [4, 2]);
