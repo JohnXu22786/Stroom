@@ -66,9 +66,8 @@ void main() {
           isA<ConstrainedText>(),
         );
         final titleField = find.byType(TextField).first;
-        final titleController = tester
-            .widget<TextField>(titleField)
-            .controller!;
+        final titleController =
+            tester.widget<TextField>(titleField).controller!;
 
         await tester.tap(titleField);
         await tester.enterText(titleField, 'draft title');
