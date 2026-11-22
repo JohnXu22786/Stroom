@@ -164,6 +164,39 @@ void main() {
     });
 
     testWidgets(
+      'localized edit capsule stays within a narrow composer and remains cancelable',
+      (tester) async {
+        var cancelled = false;
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            locale: const Locale('fr'),
+            onEditCancel: () => cancelled = true,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final capsuleRect = tester.getRect(
+          find.byKey(const Key('editModeCapsule')),
+        );
+        expect(capsuleRect.left, greaterThanOrEqualTo(0));
+        expect(capsuleRect.right, lessThanOrEqualTo(320));
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pump();
+        expect(cancelled, isTrue);
+
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+        await tester.binding.setSurfaceSize(null);
+      },
+    );
+
+    testWidgets(
       'text field is pre-filled with editingMessageText in edit mode',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(1200, 2000));
