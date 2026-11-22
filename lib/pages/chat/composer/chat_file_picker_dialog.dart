@@ -14,7 +14,10 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
+
 import 'file_picker_shared.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 // ====================================================================
 // Public entry point
@@ -28,12 +31,19 @@ import 'file_picker_shared.dart';
 /// Returns a list of (fileName, bytes) for selected files, or null if
 /// the user cancels.
 Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
-  BuildContext context,
-) {
+  BuildContext context, {
+  Future<void> Function(String path, Uint8List bytes)? tempFileWriter,
+  Future<Directory> Function()? tempDirectoryProvider,
+  VoidCallback? onTempFileCleanupComplete,
+}) {
   return showDialog<List<MapEntry<String, Uint8List>>?>(
     context: context,
     useSafeArea: false,
-    builder: (ctx) => const _AppFilePickerDialog(),
+    builder: (ctx) => _AppFilePickerDialog(
+      tempFileWriter: tempFileWriter,
+      tempDirectoryProvider: tempDirectoryProvider,
+      onTempFileCleanupComplete: onTempFileCleanupComplete,
+    ),
   );
 }
 
@@ -42,7 +52,15 @@ Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
 // ====================================================================
 
 class _AppFilePickerDialog extends StatefulWidget {
-  const _AppFilePickerDialog();
+  const _AppFilePickerDialog({
+    this.tempFileWriter,
+    this.tempDirectoryProvider,
+    this.onTempFileCleanupComplete,
+  });
+
+  final Future<void> Function(String path, Uint8List bytes)? tempFileWriter;
+  final Future<Directory> Function()? tempDirectoryProvider;
+  final VoidCallback? onTempFileCleanupComplete;
 
   @override
   State<_AppFilePickerDialog> createState() => _AppFilePickerDialogState();
@@ -58,9 +76,14 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+  int _selectionGeneration = 0;
+  final Map<String, int> _pendingReadGenerationByKey = {};
+  final Map<String, Object> _pendingReadTokens = {};
+  int _pendingReadCount = 0;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
+  final Set<Future<void>> _pendingTempFileWrites = {};
 
   // Tab data (loaded asynchronously)
   final Map<_FileTabType, _TabData> _tabData = {};
@@ -101,17 +124,22 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Clean up any temp edit files written to the cache directory.
   Future<void> _cleanupTempFiles() async {
-    for (final path in _tempEditFiles) {
+    final onCleanupComplete = widget.onTempFileCleanupComplete;
+    final writesToFinish = List<Future<void>>.of(_pendingTempFileWrites);
+    final filesToDelete = List<String>.of(_tempEditFiles);
+    await Future.wait(writesToFinish);
+    for (final path in filesToDelete) {
       try {
         final file = File(path);
         if (await file.exists()) {
           await file.delete();
         }
+        _tempEditFiles.remove(path);
       } catch (_) {
-        // Non-critical cleanup
+        // Keep failed paths tracked so a later cleanup can retry them.
       }
     }
-    _tempEditFiles.clear();
+    onCleanupComplete?.call();
   }
 
   Future<void> _loadTabData(_FileTabType type) async {
@@ -144,10 +172,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
       if (!mounted) return;
       setState(() {
-        _tabData[type] = _TabData(
-          records: records,
-          allFolders: folders,
-        );
+        _tabData[type] = _TabData(records: records, allFolders: folders);
         _tabLoading[type] = false;
       });
     } catch (e) {
@@ -174,7 +199,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       };
 
   void _toggleSelection(
-      _FileTabType tabType, String recordId, String fileName, Uint8List bytes) {
+    _FileTabType tabType,
+    String recordId,
+    String fileName,
+    Uint8List bytes,
+  ) {
     final key = _selectionKey(tabType, recordId);
     setState(() {
       if (_selectedItems.containsKey(key)) {
@@ -186,9 +215,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   void _clearSelection() {
+    _selectionGeneration++;
     _cleanupTempFiles();
+    _pendingReadTokens.clear();
     setState(() {
       _selectedItems.clear();
+      _pendingReadCount = 0;
     });
   }
 
@@ -201,8 +233,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Navigate [type]'s folder view up one level.
   void _navigateUp(_FileTabType type) {
-    final parentFolder =
-        FolderPathUtils.getParentFolderPath(_currentFolders[type] ?? '');
+    final parentFolder = FolderPathUtils.getParentFolderPath(
+      _currentFolders[type] ?? '',
+    );
     setState(() {
       _currentFolders[type] = parentFolder;
     });
@@ -226,7 +259,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: Text(l10n.chatFilePickerTitle),
+          title: ConstrainedText(
+            l10n.chatFilePickerTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -237,9 +274,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
               TextButton(
                 key: const Key('file_picker_clear_btn'),
                 onPressed: _clearSelection,
-                child: Text(
+                child: ConstrainedText(
                   l10n.appMediaClearSelection(_selectedItems.length),
                   style: TextStyle(color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
@@ -254,7 +293,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 return Tab(
                   key: Key('file_picker_tab_${type.name}'),
                   icon: Icon(_tabIcons[type]),
-                  text: _tabLabel(l10n, type),
+                  child: ConstrainedText(
+                    _tabLabel(l10n, type),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 );
               }).toList(),
             ),
@@ -290,17 +333,21 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 ),
                 child: FilledButton.icon(
                   key: const Key('file_picker_confirm_btn'),
-                  onPressed: () {
-                    final result = _selectedItems.values.toList();
-                    Navigator.of(context).pop(result);
-                  },
+                  onPressed: _pendingReadCount > 0
+                      ? null
+                      : () {
+                          final result = _selectedItems.values.toList();
+                          Navigator.of(context).pop(result);
+                        },
                   icon: const Icon(Icons.check, size: 18),
-                  label: Text(
+                  label: ConstrainedText(
                     hasSelection
                         ? l10n.appMediaConfirmSelectionCount(
                             _selectedItems.length,
                           )
                         : l10n.appMediaConfirmSelection,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -345,8 +392,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     }).toList();
 
     // Sort by name
-    currentFiles
-        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    currentFiles.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
@@ -359,16 +407,17 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.folder,
-                    size: 14, color: cs.primary.withValues(alpha: 0.7)),
+                Icon(
+                  Icons.folder,
+                  size: 14,
+                  color: cs.primary.withValues(alpha: 0.7),
+                ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     currentFolder,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    maxLines: 1,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -429,6 +478,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final cs = Theme.of(context).colorScheme;
     final parentFolder = FolderPathUtils.getParentFolderPath(currentFolder);
     return Card(
+      key: const Key('file_picker_back_item'),
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: InkWell(
         onTap: () => _navigateUp(type),
@@ -438,18 +488,30 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             children: [
               Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
-              Text(
-                parentFolder.isEmpty
-                    ? AppLocalizations.of(context)!.appMediaRoot
-                    : AppLocalizations.of(context)!.appMediaParentFolder(
-                        FolderPathUtils.getFolderBaseName(parentFolder),
-                      ),
-                style: TextStyle(fontSize: 15, color: cs.primary),
+              Expanded(
+                child: ConstrainedText(
+                  parentFolder.isEmpty
+                      ? AppLocalizations.of(context)!.appMediaRoot
+                      : AppLocalizations.of(context)!.appMediaParentFolder(
+                          FolderPathUtils.getFolderBaseName(parentFolder),
+                        ),
+                  style: TextStyle(fontSize: 15, color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              Text(
-                FolderPathUtils.getFolderBaseName(currentFolder),
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: ConstrainedText(
+                    FolderPathUtils.getFolderBaseName(currentFolder),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ],
           ),
@@ -459,7 +521,10 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   Widget _buildFolderItem(
-      _FileTabType type, String folderPath, String currentFolder) {
+    _FileTabType type,
+    String folderPath,
+    String currentFolder,
+  ) {
     final cs = Theme.of(context).colorScheme;
     final baseName = FolderPathUtils.getFolderBaseName(folderPath);
     return Card(
@@ -483,15 +548,20 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
-                  child: Icon(Icons.folder_outlined,
-                      size: 22, color: Colors.amber),
+                  child: Icon(
+                    Icons.folder_outlined,
+                    size: 22,
+                    color: Colors.amber,
+                  ),
                 ),
               ),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   baseName,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 15),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -558,10 +628,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ConstrainedText(
                       '${record.name}.${record.format}',
                       style: const TextStyle(
-                          fontWeight: FontWeight.w500, fontSize: 15),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -576,7 +648,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                           ),
                           const SizedBox(width: 3),
                           Flexible(
-                            child: Text(
+                            child: ConstrainedText(
                               record.folder,
                               style: TextStyle(
                                 fontSize: 12,
@@ -591,8 +663,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                             width: 3,
                             height: 3,
                             decoration: BoxDecoration(
-                                color: cs.onSurfaceVariant,
-                                shape: BoxShape.circle),
+                              color: cs.onSurfaceVariant,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                           const SizedBox(width: 6),
                         ],
@@ -616,27 +689,62 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   void _onFileTap(_FileTabType type, FileRecord record) async {
-    // Read file bytes
-    Uint8List? bytes;
+    final key = _selectionKey(type, record.id);
+    if (_selectedItems.containsKey(key)) {
+      setState(() {
+        _selectedItems.remove(key);
+        _pendingReadGenerationByKey[key] =
+            (_pendingReadGenerationByKey[key] ?? 0) + 1;
+      });
+      return;
+    }
+    if (_pendingReadTokens.containsKey(key)) return;
+
+    final selectionGeneration = _selectionGeneration;
+    final pendingReadGeneration = _pendingReadGenerationByKey[key] ?? 0;
+    final pendingReadToken = Object();
+    _pendingReadTokens[key] = pendingReadToken;
+    setState(() {
+      _pendingReadCount++;
+    });
+
     try {
-      bytes = await _readFileBytes(type, record);
-    } catch (_) {}
-    if (bytes == null) {
-      if (mounted) {
+      // Read file bytes
+      Uint8List? bytes;
+      try {
+        bytes = await _readFileBytes(type, record);
+      } catch (_) {}
+      if (!mounted ||
+          selectionGeneration != _selectionGeneration ||
+          pendingReadGeneration != (_pendingReadGenerationByKey[key] ?? 0)) {
+        return;
+      }
+      if (bytes == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
           ),
         );
+        return;
       }
-      return;
+      final fileName = '${record.name}.${record.format}';
+      _toggleSelection(type, record.id, fileName, bytes);
+    } finally {
+      if (identical(_pendingReadTokens[key], pendingReadToken)) {
+        _pendingReadTokens.remove(key);
+      }
+      if (mounted && selectionGeneration == _selectionGeneration) {
+        setState(() {
+          _pendingReadCount--;
+        });
+      }
     }
-    final fileName = '${record.name}.${record.format}';
-    _toggleSelection(type, record.id, fileName, bytes);
   }
 
   Future<Uint8List?> _readFileBytes(
-      _FileTabType type, FileRecord record) async {
+    _FileTabType type,
+    FileRecord record,
+  ) async {
     switch (type) {
       case _FileTabType.text:
         return TextManifest.readFile((record as TextRecord).storagePath);
@@ -723,9 +831,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         color = cs.onSurfaceVariant;
     }
 
-    return Center(
-      child: Icon(icon, size: 22, color: color),
-    );
+    return Center(child: Icon(icon, size: 22, color: color));
   }
 
   Widget _defaultIcon() {
@@ -747,9 +853,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       height: 106,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,13 +861,15 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
@@ -785,6 +891,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                         .key;
                     setState(() {
                       _selectedItems.remove(key);
+                      _pendingReadGenerationByKey[key] =
+                          (_pendingReadGenerationByKey[key] ?? 0) + 1;
                     });
                   },
                   onTap: isImage ? () => _onPreviewImageTap(entry) : null,
@@ -804,14 +912,13 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   /// [entry] is the exact [MapEntry] instance stored in [_selectedItems]
   /// (identity is used to locate the item after editing).
   Future<void> _onPreviewImageTap(MapEntry<String, Uint8List> entry) async {
+    final editGeneration = _selectionGeneration;
     final fileName = entry.key;
     final imageBytes = entry.value;
     final shouldEdit = await showDialog<bool>(
       context: context,
-      builder: (ctx) => ImagePreviewDialog(
-        imageData: imageBytes,
-        fileName: fileName,
-      ),
+      builder: (ctx) =>
+          ImagePreviewDialog(imageData: imageBytes, fileName: fileName),
     );
 
     if (shouldEdit != true || !mounted) return;
@@ -819,10 +926,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     final editedBytes = await Navigator.push<Uint8List>(
       context,
       MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
-          fileName: fileName,
-        ),
+        builder: (_) =>
+            ExtendedImageEditorPage(imageBytes: imageBytes, fileName: fileName),
       ),
     );
 
@@ -830,12 +935,28 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
     // Save edited bytes to temp cache directory (do NOT overwrite original)
     try {
-      final tempDir = await getTemporaryDirectory();
+      final directoryProvider = widget.tempDirectoryProvider;
+      final tempDir = directoryProvider == null
+          ? await getTemporaryDirectory()
+          : await directoryProvider();
+      if (!mounted ||
+          editGeneration != _selectionGeneration ||
+          !_selectedItems.values.any(
+            (selected) => identical(selected, entry),
+          )) {
+        return;
+      }
       final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+          'edited_${DateTime.now().microsecondsSinceEpoch}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
       _tempEditFiles.add(tempFile.path);
+      final write = _writeTempEditFile(tempFile, editedBytes);
+      _pendingTempFileWrites.add(write);
+      try {
+        await write;
+      } finally {
+        _pendingTempFileWrites.remove(write);
+      }
     } catch (_) {
       // Temp file save is best-effort; keep bytes in memory
     }
@@ -851,6 +972,24 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       }
     } catch (_) {
       // Item was removed while editor was open — silently ignore
+    }
+  }
+
+  Future<void> _writeTempEditFile(File file, Uint8List bytes) async {
+    try {
+      final writer = widget.tempFileWriter;
+      if (writer == null) {
+        await file.writeAsBytes(bytes);
+      } else {
+        await writer(file.path, bytes);
+      }
+    } catch (_) {
+      try {
+        if (await file.exists()) await file.delete();
+        _tempEditFiles.remove(file.path);
+      } catch (_) {
+        // Keep the path tracked so the picker cleanup can retry it.
+      }
     }
   }
 }

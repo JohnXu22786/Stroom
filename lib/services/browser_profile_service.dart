@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show VoidCallback, debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -56,6 +57,8 @@ class BrowserProfileService {
   static String get _appDataPath => _resolvedAppDataPath ?? '';
   static String? _resolvedAppDataPath;
   static bool _actionInProgress = false;
+  @visibleForTesting
+  static VoidCallback? onPrepareForRestoreForTesting;
 
   static Future<String> _getAppDataPath() async {
     final cached = _resolvedAppDataPath;
@@ -81,9 +84,7 @@ class BrowserProfileService {
     }
     if (Platform.isIOS || Platform.isMacOS) {
       final libraryDirectory = await getLibraryDirectory();
-      return Directory(
-        p.join(libraryDirectory.path, 'WebKit', 'WebsiteData'),
-      );
+      return Directory(p.join(libraryDirectory.path, 'WebKit', 'WebsiteData'));
     }
     return null;
   }
@@ -91,6 +92,7 @@ class BrowserProfileService {
   /// Clears stale temporary data from a failed prior restore and rejects a
   /// second browser-profile operation until the user has restarted the app.
   static Future<void> prepareForRestore() async {
+    onPrepareForRestoreForTesting?.call();
     if (currentPlatformName == null) return;
     await _getAppDataPath();
     if (await File(_actionFilePath).exists()) {

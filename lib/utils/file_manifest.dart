@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
@@ -12,10 +13,52 @@ import 'file_record.dart';
 import '../services/manifest_database.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
+import 'folder_membership_lock.dart';
+import 'content_hash_save_lock.dart';
 
 // ====================================================================
 // AudioRecord
 // ====================================================================
+
+String _safeAudioFormat(String format, {required int maxLength}) {
+  const windowsInvalidCharacters = '<>:"/\\|?*';
+  final codeUnits = format.codeUnits;
+  var trailingDotOrSpaceStart = codeUnits.length;
+  while (trailingDotOrSpaceStart > 0 &&
+      (codeUnits[trailingDotOrSpaceStart - 1] == 0x20 ||
+          codeUnits[trailingDotOrSpaceStart - 1] == 0x2e)) {
+    trailingDotOrSpaceStart--;
+  }
+
+  final safeFormat = StringBuffer();
+  for (var i = 0; i < codeUnits.length; i++) {
+    final codeUnit = codeUnits[i];
+    final character = String.fromCharCode(codeUnit);
+    final needsEscape = codeUnit < 0x20 ||
+        character == '%' ||
+        windowsInvalidCharacters.contains(character) ||
+        i >= trailingDotOrSpaceStart;
+    if (needsEscape) {
+      safeFormat
+        ..write('%')
+        ..write(codeUnit.toRadixString(16).padLeft(4, '0'));
+    } else {
+      safeFormat.write(character);
+    }
+  }
+  final encoded = safeFormat.isEmpty ? '%' : safeFormat.toString();
+  if (encoded.length <= maxLength) return encoded;
+
+  final compact = '%fmt${sha256.convert(utf8.encode(format))}';
+  if (compact.length > maxLength) {
+    throw ArgumentError.value(
+      format,
+      'format',
+      'Audio format cannot fit in a Windows file name.',
+    );
+  }
+  return compact;
+}
 
 /// 音频文件记录（manifest 中的一条记录）
 class AudioRecord
@@ -54,12 +97,19 @@ class AudioRecord
   })  : modifiedAt = modifiedAt ?? createdAt,
         id = id ?? 'rec_${const Uuid().v4()}';
 
+  /// Audio storage filename for a hash and format, safe on Windows.
+  static String storageFileNameFor({
+    required String hash,
+    required String format,
+  }) =>
+      '$hash.${_safeAudioFormat(format, maxLength: 254 - hash.length)}';
+
   /// 音频文件的存储文件名（基于哈希）
-  String get storageFileName => '$hash.$format';
+  String get storageFileName => storageFileNameFor(hash: hash, format: format);
 
   /// 音频文件的实际存储路径（相对于 tts_audio 目录）
   @override
-  String get storagePath => '$hash.$format';
+  String get storagePath => storageFileName;
 
   /// 文本文件的存储路径
   String get textStoragePath => '$hash.txt';
@@ -155,9 +205,9 @@ String computeAudioHash(Uint8List data) {
 }
 
 class _StorageFileSaveContext {
-  _StorageFileSaveContext(this.storageName);
+  _StorageFileSaveContext(this.storageNames);
 
-  final String storageName;
+  final Set<String> storageNames;
   bool active = true;
 }
 
@@ -174,6 +224,7 @@ class _AudioHashFileSaveContext {
 
 /// Audio file manifest — delegates to [ManifestOperations].
 class FileManifest {
+  static final _recordMutationLocks = ContentHashSaveLock();
   static final Map<String, Future<void>> _storageFileSaveTails = {};
   static final Object _storageFileSaveZoneKey = Object();
   static final Map<String, Future<void>> _audioHashFileSaveTails = {};
@@ -287,6 +338,7 @@ class FileManifest {
     fromMap: AudioRecord.fromMap,
     tableName: 'audio_records',
     toMap: (r) => r.toMap(),
+    legacyStorageNameOf: (r) => '${r.hash}.${r.format}',
     onExtraDelete: (r) async {
       // Also delete the .txt sidecar file (same prefix convention)
       if (kIsWeb || WebFileStore.isTestMode) {
@@ -319,6 +371,24 @@ class FileManifest {
         onQueued: onQueued,
       );
 
+  static Future<T> withCopySourceLocks<T>(
+    Iterable<String> storageNames,
+    Future<T> Function() operation,
+  ) {
+    final ordered = storageNames.toSet().toList()..sort();
+    Future<T> acquire(int index) {
+      if (index == ordered.length) {
+        return _recordMutationLocks.withLock('manifest-records', operation);
+      }
+      return withStorageFileSaveLock(
+        ordered[index],
+        () => acquire(index + 1),
+      );
+    }
+
+    return acquire(0);
+  }
+
   static Future<T> _withStorageFileSaveLock<T>(
     String storageName,
     Future<T> Function() operation, {
@@ -331,7 +401,7 @@ class FileManifest {
         currentContext is _StorageFileSaveContext && currentContext.active;
     if (currentContext is _StorageFileSaveContext &&
         currentContext.active &&
-        currentContext.storageName == storageName) {
+        currentContext.storageNames.contains(storageName)) {
       return operation();
     }
 
@@ -385,7 +455,12 @@ class FileManifest {
       }
     }
 
-    final saveContext = _StorageFileSaveContext(storageName);
+    final inheritedStorageNames =
+        currentContext is _StorageFileSaveContext && currentContext.active
+            ? currentContext.storageNames
+            : const <String>{};
+    final saveContext =
+        _StorageFileSaveContext({...inheritedStorageNames, storageName});
     try {
       return await runZoned<Future<T>>(
         () => acquireAudioHashLock
@@ -453,12 +528,18 @@ class FileManifest {
     final currentContext = Zone.current[_storageFileSaveZoneKey];
     if (currentContext is _StorageFileSaveContext &&
         currentContext.active &&
-        currentContext.storageName == record.storageFileName) {
-      return _ops.addRecord(record);
+        currentContext.storageNames.contains(record.storageFileName)) {
+      return _recordMutationLocks.withLock(
+        'manifest-records',
+        () => _ops.addRecord(record),
+      );
     }
     return withStorageFileSaveLock(
       record.storageFileName,
-      () => _ops.addRecord(record),
+      () => _recordMutationLocks.withLock(
+        'manifest-records',
+        () => _ops.addRecord(record),
+      ),
     );
   }
 
@@ -551,6 +632,24 @@ class FileManifest {
         () => _ops.moveRecord(id, targetFolder),
       );
 
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) async {
+    var moved = false;
+    await _withRecordStorageFileSaveLock(id, () async {
+      moved = await _ops.moveRecordIfFolder(
+        id,
+        expectedFolder,
+        targetFolder,
+        onMoved: onMoved,
+      );
+    });
+    return moved;
+  }
+
   static Future<void> _withRecordStorageFileSaveLock(
     String id,
     Future<void> Function() operation,
@@ -588,6 +687,7 @@ class FileManifest {
     );
   }
 
+  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
   static Future<Uint8List?> readFileCancellable(
@@ -609,23 +709,30 @@ class FileManifest {
   }
 
   // Folder management
-  static Future<void> addFolder(String name) => _ops.addFolder(name);
+  static Future<void> addFolder(String name) =>
+      FolderMembershipLock.withAddLock(
+          'audio', name, () => _ops.addFolder(name));
   static Future<void> addFolderPath(String pathName) =>
-      _ops.addFolderPath(pathName);
+      FolderMembershipLock.withAddLock(
+          'audio', pathName, () => _ops.addFolderPath(pathName));
   static Future<void> removeFolder(
     String name, {
     void Function()? onWaitingForSaves,
   }) =>
-      _withFolderRemovalLock(
-        () async {
+      FolderMembershipLock.withDeleteLock(
+        'audio',
+        name,
+        () => _withFolderRemovalLock(() async {
           await loadRecordsStrict();
           await _ops.removeFolder(name);
-        },
-        onWaitingForSaves: onWaitingForSaves,
+        }, onWaitingForSaves: onWaitingForSaves),
       );
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
+
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _ops.removeFolderMetadataFromCache(folderPath);
   static void invalidateCache() => _ops.invalidateCache();
 
   // Path utilities — forward to shared utilities

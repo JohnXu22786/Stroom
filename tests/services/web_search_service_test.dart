@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/web_search_service.dart';
 
@@ -207,6 +208,48 @@ void main() {
   });
 
   group('WebSearchService - result formatting', () {
+    test('localizes labels while preserving provider result text', () async {
+      final results = [
+        SearchResult(
+          title: 'Provider title',
+          url: 'https://example.com/article',
+          snippet: 'Provider snippet',
+        ),
+      ];
+
+      final english = WebSearchService.formatResults(
+        results,
+        'google',
+        locale: const Locale('en', 'US'),
+      );
+      final chinese = WebSearchService.formatResults(
+        results,
+        'google',
+        locale: const Locale('zh', 'CN'),
+      );
+
+      expect(english, contains('Link: https://example.com/article'));
+      expect(english, contains('Summary: Provider snippet'));
+      expect(english, contains('Provider title'));
+      expect(chinese, contains('链接: https://example.com/article'));
+      expect(chinese, contains('摘要: Provider snippet'));
+      expect(chinese, contains('Provider title'));
+      expect(
+        await WebSearchService.handleWebSearch(
+          {'query': ''},
+          locale: const Locale('en', 'US'),
+        ),
+        'Error: The search query cannot be empty.',
+      );
+      expect(
+        await WebSearchService.handleWebSearch(
+          {'query': ''},
+          locale: const Locale('zh', 'CN'),
+        ),
+        '错误：搜索关键词不能为空。',
+      );
+    });
+
     test('formatResults returns formatted string with results', () {
       final results = [
         SearchResult(
@@ -229,8 +272,12 @@ void main() {
     });
 
     test('formatResults returns "no results" message when empty', () {
-      final formatted = WebSearchService.formatResults([], 'google');
-      expect(formatted, contains('未找到'));
+      final formatted = WebSearchService.formatResults(
+        [],
+        'google',
+        locale: const Locale('en', 'US'),
+      );
+      expect(formatted, contains('No relevant search results'));
     });
   });
 
@@ -239,16 +286,16 @@ void main() {
       final result = await WebSearchService.handleWebSearch({
         'query': '',
         'source': 'google',
-      });
-      expect(result, contains('不能为空'));
+      }, locale: const Locale('en', 'US'));
+      expect(result, contains('cannot be empty'));
     });
 
     test('invalid source returns error message', () async {
       final result = await WebSearchService.handleWebSearch({
         'query': 'test',
         'source': 'invalid_source',
-      });
-      expect(result, contains('不支持'));
+      }, locale: const Locale('en', 'US'));
+      expect(result, contains('Unsupported search engine'));
       expect(result, contains('google'));
       expect(result, contains('bing'));
       expect(result, contains('baidu'));

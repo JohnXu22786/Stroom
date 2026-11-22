@@ -21,4 +21,32 @@ void main() {
 
     expect(strings.localeName, 'zh_CN');
   });
+
+  test('French is selectable and resolves French system preferences', () {
+    const french = Locale('fr', 'FR');
+
+    expect(supportedAppLocales, contains(french));
+    expect(localeFromCode('fr_FR'), french);
+    expect(resolveSystemLocale(const Locale('fr')), french);
+    expect(appLocalizationsForLocale(french).localeName, 'fr_FR');
+  });
+
+  test(
+    'German locale is selectable and system-region variants resolve to it',
+    () {
+      expect(localeFromCode('de_DE'), const Locale('de', 'DE'));
+      expect(
+        resolveSystemLocale(const Locale('de', 'DE')),
+        const Locale('de', 'DE'),
+      );
+      expect(
+        resolveSystemLocale(const Locale('de', 'AT')),
+        const Locale('de', 'DE'),
+      );
+      expect(
+        appLocalizationsForLocale(const Locale('de', 'DE')).localeName,
+        'de_DE',
+      );
+    },
+  );
 }

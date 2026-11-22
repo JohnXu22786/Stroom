@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
+
+import '../providers/locale_provider.dart' show appLocalizationsForLocale;
 
 import '../models/tool_call.dart';
 
@@ -77,22 +80,28 @@ class TodoToolService {
   /// （null 视为省略）时读取当前待办列表，避免模型把可选数组序列化成
   /// null 时误清空整个列表。`todos` 存在但类型非法（非 List）时返回
   /// 错误提示，让模型自行修正，而不是静默走读取分支。
-  static Future<String> handleTodo(Map<String, dynamic> args) async {
+  static Future<String> handleTodo(
+    Map<String, dynamic> args, {
+    Locale? locale,
+  }) async {
     final todos = args['todos'];
     if (todos == null) {
-      return handleTodoRead(args);
+      return handleTodoRead(args, locale: locale);
     }
     if (todos is List) {
-      return handleTodoWrite(args);
+      return handleTodoWrite(args, locale: locale);
     }
-    return '错误: todos 参数必须是数组（省略或传 null 表示读取待办列表）';
+    return appLocalizationsForLocale(locale).toolResultTodoInvalid;
   }
 
   /// 处理 todowrite 调用
   ///
   /// [args] 包含：
   ///   - todos (List): 完整的待办事项列表，每个元素包含 content、status、priority
-  static Future<String> handleTodoWrite(Map<String, dynamic> args) async {
+  static Future<String> handleTodoWrite(
+    Map<String, dynamic> args, {
+    Locale? locale,
+  }) async {
     final todosRaw = args['todos'] as List<dynamic>? ?? [];
 
     _todos.clear();
@@ -113,13 +122,18 @@ class TodoToolService {
         .length;
     final jsonStr = jsonEncode(_todos.map((t) => t.toJson()).toList());
 
-    return '$activeCount todos\n\n```json\n$jsonStr\n```';
+    final countLabel =
+        appLocalizationsForLocale(locale).toolResultTodoCount(activeCount);
+    return '$countLabel\n\n```json\n$jsonStr\n```';
   }
 
   /// 处理读取分支（todos 缺失或为 null 时由 [handleTodo] 分发到这里）
-  static Future<String> handleTodoRead(Map<String, dynamic> args) async {
+  static Future<String> handleTodoRead(
+    Map<String, dynamic> args, {
+    Locale? locale,
+  }) async {
     if (_todos.isEmpty) {
-      return '当前没有待办事项。';
+      return appLocalizationsForLocale(locale).toolResultTodoEmpty;
     }
 
     final activeCount = _todos
@@ -127,7 +141,9 @@ class TodoToolService {
         .length;
     final jsonStr = jsonEncode(_todos.map((t) => t.toJson()).toList());
 
-    return '$activeCount todos\n\n```json\n$jsonStr\n```';
+    final countLabel =
+        appLocalizationsForLocale(locale).toolResultTodoCount(activeCount);
+    return '$countLabel\n\n```json\n$jsonStr\n```';
   }
 }
 

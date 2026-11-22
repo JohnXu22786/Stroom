@@ -23,13 +23,42 @@ void main() {
         const Locale('zh', 'CN'),
       );
       expect(resolveSystemLocale(const Locale('zh')), const Locale('zh', 'CN'));
+      expect(resolveSystemLocale(const Locale('es')), const Locale('es', 'ES'));
+      expect(
+        resolveSystemLocale(const Locale('es', 'MX')),
+        const Locale('es', 'ES'),
+      );
+      expect(resolveSystemLocale(const Locale('ja')), const Locale('ja', 'JP'));
+      expect(
+        resolveSystemLocale(const Locale('ja', 'US')),
+        const Locale('ja', 'JP'),
+      );
+      expect(resolveSystemLocale(const Locale('pt')), const Locale('pt', 'BR'));
+      expect(
+        resolveSystemLocale(const Locale('pt', 'BR')),
+        const Locale('pt', 'BR'),
+      );
+      expect(resolveSystemLocale(const Locale('de')), const Locale('de', 'DE'));
+      expect(
+        resolveSystemLocale(const Locale('de', 'AT')),
+        const Locale('de', 'DE'),
+      );
       expect(
         resolveSystemLocale(const Locale('zh', 'TW')),
         const Locale('en', 'US'),
       );
       expect(
-        resolveSystemLocale(const Locale('fr', 'FR')),
+        resolveSystemLocale(const Locale('it', 'IT')),
         const Locale('en', 'US'),
+      );
+      expect(
+        resolveSystemLocale(const Locale('fr', 'FR')),
+        const Locale('fr', 'FR'),
+      );
+      expect(resolveSystemLocale(const Locale('fr')), const Locale('fr', 'FR'));
+      expect(
+        resolveSystemLocale(const Locale('fr', 'CA')),
+        const Locale('fr', 'FR'),
       );
     },
   );
@@ -49,8 +78,22 @@ void main() {
     );
     expect(localeNativeName(const Locale('en', 'US')), 'English');
     expect(localeNativeName(const Locale('zh', 'CN')), '简体中文');
+    expect(localeNativeName(const Locale('es', 'ES')), 'Español');
+    expect(localeNativeName(const Locale('ja', 'JP')), '日本語');
+    expect(
+      localeDisplayName(AppLocalizationsEnUs(), const Locale('de', 'DE')),
+      'German',
+    );
+    expect(
+      localeDisplayName(AppLocalizationsZhCn(), const Locale('zh', 'CN')),
+      '简体中文',
+    );
+    expect(localeNativeName(const Locale('de', 'DE')), 'Deutsch');
     expect(localeIdTag(const Locale('en', 'US')), 'en-us');
     expect(localeIdTag(const Locale('zh', 'CN')), 'zh-cn');
+    expect(localeIdTag(const Locale('es', 'ES')), 'es-es');
+    expect(localeIdTag(const Locale('ja', 'JP')), 'ja-jp');
+    expect(localeIdTag(const Locale('de', 'DE')), 'de-de');
   });
 
   group('locale preference persistence', () {
@@ -62,16 +105,16 @@ void main() {
       final controller = container.read(localeProvider.notifier);
       await controller.load();
       expect(container.read(localeProvider), isNull);
-      SharedPreferences.setMockInitialValues({localePreferenceKey: 'fr_FR'});
+      SharedPreferences.setMockInitialValues({localePreferenceKey: 'invalid'});
       final invalidContainer = ProviderContainer();
       addTearDown(invalidContainer.dispose);
       await invalidContainer.read(localeProvider.notifier).load();
       expect(invalidContainer.read(localeProvider), isNull);
       await controller.setLocaleCode('fr_FR');
-      expect(container.read(localeProvider), isNull);
+      expect(container.read(localeProvider), const Locale('fr', 'FR'));
       expect(
         (await SharedPreferences.getInstance()).getString(localePreferenceKey),
-        isNull,
+        'fr_FR',
       );
     });
 
@@ -121,6 +164,8 @@ void main() {
   testWidgets('theme mode and language options update', (tester) async {
     tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
     addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(
       ProviderScope(
         overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
@@ -153,17 +198,65 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final themeCard = find.ancestor(
+      of: find.byIcon(Icons.light_mode),
+      matching: find.byType(Card),
+    );
+    final languageCard = find.ancestor(
+      of: find.byKey(const Key('language-search-field')),
+      matching: find.byType(Card),
+    );
+
     expect(find.text('Light mode'), findsOneWidget);
     expect(find.text('Dark mode'), findsOneWidget);
-    expect(find.text('Follow system'), findsNWidgets(2));
+    expect(
+      find.descendant(of: themeCard, matching: find.text('Follow system')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: languageCard, matching: find.text('Follow system')),
+      findsOneWidget,
+    );
     expect(find.text('Theme'), findsOneWidget);
     expect(find.text('Theme & Display'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
     expect(find.text('Search languages'), findsOneWidget);
+    final followSystemOption = find.descendant(
+      of: languageCard,
+      matching: find.text('Follow system'),
+    );
+    expect(followSystemOption, findsOneWidget);
+    final followSystemTile = find
+        .ancestor(of: followSystemOption, matching: find.byType(ListTile))
+        .first;
+    expect(tester.widget<ListTile>(followSystemTile).trailing, isA<Icon>());
     expect(find.text('English（English）'), findsOneWidget);
     expect(find.text('Chinese (Simplified)（简体中文）'), findsOneWidget);
     expect(find.text('en-us'), findsOneWidget);
     expect(find.text('zh-cn'), findsOneWidget);
+    final languageTags = find
+        .descendant(
+          of: languageCard,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                RegExp(r'^[a-z]{2}-[a-z]{2}$').hasMatch(widget.data ?? ''),
+          ),
+        )
+        .evaluate()
+        .map((element) => (element.widget as Text).data!)
+        .toList();
+    expect(languageTags, <String>[
+      'ar-sa',
+      'de-de',
+      'en-us',
+      'es-es',
+      'fr-fr',
+      'ja-jp',
+      'ko-kr',
+      'pt-br',
+      'zh-cn',
+    ]);
     expect(find.byType(Card), findsNWidgets(2));
     expect(find.text('system'), findsOneWidget);
 
@@ -199,22 +292,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
-    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(
+      find.descendant(of: themeCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
+    final chineseLanguageHeader = find.text('语言');
+    await tester.scrollUntilVisible(
+      chineseLanguageHeader,
+      300,
+      scrollable: pageScrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(chineseLanguageHeader, findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('language-search-field')),
       300,
       scrollable: pageScrollable,
     );
     await tester.pumpAndSettle();
-    expect(find.text('语言'), findsOneWidget);
+    expect(find.byKey(const Key('language-search-field')), findsOneWidget);
     expect(find.text('搜索语言'), findsOneWidget);
-    expect(find.text('跟随系统'), findsNWidgets(2));
+    final chineseFollowSystemOption = find.descendant(
+      of: languageCard,
+      matching: find.text('跟随系统'),
+    );
+    expect(chineseFollowSystemOption, findsOneWidget);
+    final chineseFollowSystemTile = find
+        .ancestor(
+          of: chineseFollowSystemOption,
+          matching: find.byType(ListTile),
+        )
+        .first;
+    expect(tester.widget<ListTile>(chineseFollowSystemTile).trailing, isNull);
     expect(find.text('英语（English）'), findsOneWidget);
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
+    expect(find.text('法语（Français）'), findsOneWidget);
     expect(find.text('en-us'), findsOneWidget);
     expect(find.text('zh-cn'), findsOneWidget);
+    expect(find.text('fr-fr'), findsOneWidget);
+    final frenchLanguage = find.text('法语（Français）');
+    await tester.ensureVisible(frenchLanguage);
+    await tester.pumpAndSettle();
+    await tester.tap(frenchLanguage);
+    await tester.pumpAndSettle();
+    expect(
+      (await SharedPreferences.getInstance()).getString(localePreferenceKey),
+      'fr_FR',
+    );
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('fr', 'FR'),
+    );
+    await tester.enterText(
+      find.byKey(const Key('language-search-field')),
+      'zh-cn',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chinois (simplifié)（简体中文）'));
+    await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const Key('language-search-field')),
@@ -223,7 +360,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('英语（English）'), findsNothing);
-    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(
+      find.descendant(of: languageCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const Key('language-search-field')),
@@ -231,6 +371,25 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('没有匹配的语言'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('language-search-field')),
+      'pt-br',
+    );
+    await tester.pumpAndSettle();
+    final portugueseLanguage = find.text('葡萄牙语（巴西）（Português (Brasil)）');
+    await tester.ensureVisible(portugueseLanguage);
+    await tester.pumpAndSettle();
+    await tester.tap(portugueseLanguage);
+    await tester.pumpAndSettle();
+    expect(
+      (await SharedPreferences.getInstance()).getString(localePreferenceKey),
+      'pt_BR',
+    );
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('pt', 'BR'),
+    );
   });
 
   testWidgets('settings entry opens the titled theme and display page', (

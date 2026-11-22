@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'file_record.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
+import 'folder_membership_lock.dart';
 
 // ====================================================================
 // TextRecord
@@ -207,6 +208,12 @@ class TextManifest {
     return acquire(0);
   }
 
+  static Future<T> withCopySourceLocks<T>(
+    Iterable<String> hashes,
+    Future<T> Function() action,
+  ) =>
+      _withSaveLocks(hashes, () => _withRecordMutationLock(action));
+
   /// Serializes text-row and folder membership changes with folder deletion.
   /// Callers that also need a content hash lock must acquire that lock first.
   static Future<T> _withRecordMutationLock<T>(
@@ -395,9 +402,52 @@ class TextManifest {
   static Future<String> saveTextRecord(TextRecord record, String text) =>
       withSaveLock(record.hash, () async {
         final filePath = await writeText(record.storagePath, text);
-        await addRecord(record);
+        try {
+          await addRecord(record);
+        } catch (_) {
+          await deleteFileIfUnreferenced(record.hash, record.storagePath);
+          rethrow;
+        }
         return filePath;
       });
+
+  /// Saves a newly created text record only when its name, format, and folder
+  /// are unused. The check and insertion share the record mutation lock so
+  /// concurrent create requests cannot both publish the same visible name.
+  static Future<bool> saveTextRecordIfUnique(TextRecord record, String text) =>
+      withSaveLock(
+          record.hash,
+          () => _withRecordMutationLock(() async {
+                final records = await _ops.loadRecords(
+                  forceRefresh: true,
+                  throwOnError: true,
+                );
+                if (records.any(
+                  (existing) =>
+                      existing.name == record.name &&
+                      existing.format == record.format &&
+                      existing.folder == record.folder,
+                )) {
+                  return false;
+                }
+
+                await writeText(record.storagePath, text);
+                try {
+                  await _ops.addRecord(record);
+                } catch (_) {
+                  try {
+                    await deleteFileIfUnreferenced(
+                      record.hash,
+                      record.storagePath,
+                    );
+                  } catch (_) {
+                    // Keep the original insertion failure if reference checks
+                    // or cleanup also fail.
+                  }
+                  rethrow;
+                }
+                return true;
+              }));
 
   /// Writes edited text and updates its manifest record under the content
   /// locks, so deletion cannot race a change to the record's content hash.
@@ -465,6 +515,20 @@ class TextManifest {
       _withRecordMutationLock(() => _ops.renameRecord(id, newName));
   static Future<void> moveRecord(String id, String targetFolder) =>
       _withRecordMutationLock(() => _ops.moveRecord(id, targetFolder));
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) =>
+      _withRecordMutationLock(
+        () => _ops.moveRecordIfFolder(
+          id,
+          expectedFolder,
+          targetFolder,
+          onMoved: onMoved,
+        ),
+      );
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
@@ -516,8 +580,16 @@ class TextManifest {
         () => _ops.getAllFolders(throwOnError: throwOnError),
       );
   static Future<void> addFolder(String name) =>
-      _withRecordMutationLock(() => _ops.addFolder(name));
-  static Future<void> removeFolder(String name) async {
+      FolderMembershipLock.withAddLock('text', name,
+          () => _withRecordMutationLock(() => _ops.addFolder(name)));
+  static Future<void> removeFolder(String name) =>
+      FolderMembershipLock.withDeleteLock(
+        'text',
+        name,
+        () => _removeFolder(name),
+      );
+
+  static Future<void> _removeFolder(String name) async {
     if (name.isEmpty) {
       await _withRecordMutationLock(() => _ops.removeFolder(name));
       return;
@@ -541,6 +613,9 @@ class TextManifest {
 
   static Future<void> removeFolderFromCache(String folderPath) =>
       _withRecordMutationLock(() => _ops.removeFolderFromCache(folderPath));
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _withRecordMutationLock(
+          () => _ops.removeFolderMetadataFromCache(folderPath));
   static void invalidateCache() {
     unawaited(
       _withRecordMutationLock(() async {

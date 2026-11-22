@@ -9,6 +9,7 @@ import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_templates.dart';
 import 'package:stroom/task_flow/pages/task_flow_list_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _TaskFlowNotifierWithState extends TaskFlowNotifier {
   _TaskFlowNotifierWithState(TaskFlowDefinition flow) {
@@ -122,5 +123,110 @@ void main() {
     );
 
     expect(find.text('OCR → Assistant Chat'), findsOneWidget);
+  });
+
+  testWidgets(
+      'block-count metadata preserves fit and reveals clipped Portuguese text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final flow = TaskFlowDefinition(
+      name: 'Flow',
+      blocks: List.generate(99, (_) => TaskFlowBlock(typeKey: BlockType.ocr)),
+      updatedAt: DateTime.now().subtract(const Duration(hours: 5)),
+    );
+
+    Widget buildPage(TextScaler textScaler) => ProviderScope(
+          overrides: [
+            taskFlowListProvider.overrideWith(
+              (ref) => _TaskFlowNotifierWithState(flow),
+            ),
+          ],
+          child: MediaQuery(
+            data: MediaQueryData(textScaler: textScaler),
+            child: MaterialApp(
+              locale: const Locale('pt', 'BR'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: const TaskFlowListPage(),
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(
+      buildPage(const TextScaler.linear(4)),
+    );
+
+    final strings = AppLocalizations.of(tester.element(
+      find.byType(TaskFlowListPage),
+    ))!;
+    final countFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText &&
+          widget.data == strings.taskFlowBlockCount(99),
+    );
+    final updatedFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText && widget.data == strings.commonHoursAgo(5),
+    );
+    final count = tester.widget<ConstrainedText>(countFinder);
+    final updated = tester.widget<ConstrainedText>(updatedFinder);
+    double naturalWidth(ConstrainedText label, TextScaler scaler) =>
+        (TextPainter(
+          text: TextSpan(text: label.data, style: label.style),
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+          locale: const Locale('pt', 'BR'),
+        )..layout())
+            .width;
+
+    expect(count.data, strings.taskFlowBlockCount(99));
+    expect(updated.data, strings.commonHoursAgo(5));
+    expect(
+      tester.getSize(countFinder).width,
+      lessThan(naturalWidth(count, const TextScaler.linear(4))),
+      reason: 'The localized block count clips in the narrow, scaled row.',
+    );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpWidget(buildPage(const TextScaler.linear(1)));
+    final fitCount = tester.widget<ConstrainedText>(countFinder);
+    final fitUpdated = tester.widget<ConstrainedText>(updatedFinder);
+    final fitRow =
+        find.ancestor(of: countFinder, matching: find.byType(Row)).first;
+    final naturalCountWidth = naturalWidth(
+      fitCount,
+      const TextScaler.linear(1),
+    );
+    final naturalUpdatedWidth = naturalWidth(
+      fitUpdated,
+      const TextScaler.linear(1),
+    );
+    expect(
+      tester.getSize(countFinder).width,
+      closeTo(naturalCountWidth, 0.5),
+    );
+    expect(
+      tester.getSize(updatedFinder).width,
+      closeTo(naturalUpdatedWidth, 0.5),
+    );
+    expect(
+      tester.getRect(countFinder).left,
+      closeTo(tester.getRect(fitRow).left, 0.5),
+    );
+    expect(
+      tester.getRect(updatedFinder).right,
+      closeTo(tester.getRect(fitRow).right, 0.5),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

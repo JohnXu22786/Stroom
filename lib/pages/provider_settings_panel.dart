@@ -12,6 +12,8 @@ import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 part 'provider_settings_panel_custom_params.dart';
 part 'provider_settings_panel_reasoning.dart';
 part 'provider_settings_panel_save.dart';
@@ -32,6 +34,68 @@ String? validateJsonValue(String type, String value) {
     }
   }
   return null;
+}
+
+Widget _buildAsrSelectedDropdownText(
+  BuildContext context,
+  String label, {
+  TextStyle? style,
+}) {
+  return Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: ConstrainedText(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style ?? Theme.of(context).textTheme.bodyMedium,
+    ),
+  );
+}
+
+Widget _buildProviderInputLabel(String label) => ConstrainedText(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
+Widget _buildResponsiveSettingsRow(
+  BuildContext context, {
+  required String label,
+  required Widget control,
+}) {
+  final colorScheme = Theme.of(context).colorScheme;
+  final labelWidget = Text(
+    label,
+    style: TextStyle(
+      fontWeight: FontWeight.w600,
+      fontSize: 14,
+      color: colorScheme.onSurface,
+    ),
+  );
+
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      if (MediaQuery.sizeOf(context).width < 800) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            labelWidget,
+            const SizedBox(height: 8),
+            SizedBox(width: constraints.maxWidth, child: control),
+          ],
+        );
+      }
+
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          labelWidget,
+          const SizedBox(width: 16),
+          Flexible(child: control),
+        ],
+      );
+    },
+  );
 }
 
 /// Shows a full-screen dialog to edit provider basic info and parameters.
@@ -92,19 +156,27 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   // ASR upload settings
   AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
   double _maxFileSizeMb = 25.0;
+  String? _maxFileSizeError;
   late final TextEditingController _maxFileSizeController;
   late final TextEditingController _ocrRequestSizeBudgetController;
 
   // ASR preprocessing & chunking
   String _preprocessing = 'none'; // 'none' | 'resampleMono'
   String _chunking =
-      'none'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
-  String _compression = 'none'; // 'none' | 'adpcm' | 'flac'
-  String _fallbackMethod = 'none'; // 'none' | 'specific' | 'generic' | 'all'
+      'silence'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
+  String _compression = 'flac'; // 'none' | 'adpcm' | 'flac'
+  String _fallbackMethod = 'all'; // 'none' | 'specific' | 'generic' | 'all'
 
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
   bool get _isOcrType => widget.providerType == 'ocr';
+
+  void _showMaxFileSizeError() {
+    setState(() {
+      _maxFileSizeError =
+          AppLocalizations.of(context)!.providerMaxUploadSizePositive;
+    });
+  }
 
   @override
   void initState() {
@@ -180,18 +252,38 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _maxFileSizeMb =
           (c.typeConfig['maxFileSizeMb'] as num?)?.toDouble() ?? 25.0;
       _maxFileSizeController = TextEditingController(
-        text: _maxFileSizeMb.toStringAsFixed(1),
+        text: _maxFileSizeMb.toString(),
       );
-      _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
-      _chunking = c.typeConfig['chunking'] as String? ?? 'none';
+      final savedPreprocessing =
+          c.typeConfig['preprocessing'] as String? ?? 'none';
+      _preprocessing =
+          savedPreprocessing == 'resampleMono' ? savedPreprocessing : 'none';
+      final savedChunking = c.typeConfig['chunking'] as String? ?? 'silence';
+      _chunking = const {
+        'none',
+        'silence',
+        'fixedDuration',
+        'fixedSize',
+      }.contains(savedChunking)
+          ? savedChunking
+          : 'silence';
       // Only codecs with valid standalone output are supported
       // ('opus'/'mp3' encoders are experimental and produce undecodable
       // output — legacy saved values are normalized to 'none').
-      final savedCompression = c.typeConfig['compression'] as String? ?? 'none';
+      final savedCompression = c.typeConfig['compression'] as String? ?? 'flac';
       _compression = (savedCompression == 'adpcm' || savedCompression == 'flac')
           ? savedCompression
           : 'none';
-      _fallbackMethod = c.typeConfig['fallbackMethod'] as String? ?? 'none';
+      final savedFallbackMethod =
+          c.typeConfig['fallbackMethod'] as String? ?? 'all';
+      _fallbackMethod = const {
+        'none',
+        'specific',
+        'generic',
+        'all',
+      }.contains(savedFallbackMethod)
+          ? savedFallbackMethod
+          : 'all';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
     }
@@ -246,12 +338,24 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ),
               TabBar(
-                labelPadding: const EdgeInsets.symmetric(horizontal: 24),
+                labelPadding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.sizeOf(context).width < 800 ? 8 : 24,
+                ),
                 tabs: [
-                  Tab(text: AppLocalizations.of(context)!.providerBasicInfoTab),
                   Tab(
-                    text: AppLocalizations.of(context)!
-                        .providerParameterSettingsTab,
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.providerBasicInfoTab,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Tab(
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!
+                          .providerParameterSettingsTab,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -265,22 +369,29 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 12,
+                  runSpacing: 4,
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!.batchDlgCancel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const SizedBox(width: 12),
                     FilledButton(
                       onPressed: () {
                         if (_validate()) {
                           Navigator.pop(context, _buildConfig());
                         }
                       },
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.mermaidSaveButton,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

@@ -1,12 +1,19 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/tool_call.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/pages/provider_config_tool_dialogs.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/http_tool_service.dart';
+import 'package:stroom/services/todo_tool_service.dart';
+import 'package:stroom/services/web_search_service.dart';
 
 /// Regression test for the MCP config page card style:
 ///
@@ -18,6 +25,18 @@ import 'package:stroom/providers/provider_config.dart';
 /// FIX: every MCP card uses the same neutral theme-adaptive background and
 /// simplified icon/text treatment, regardless of vendor or transport.
 void main() {
+  dynamic schemaContract(dynamic value) {
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          if (entry.key != 'description')
+            entry.key as String: schemaContract(entry.value),
+      };
+    }
+    if (value is List) return value.map(schemaContract).toList();
+    return value;
+  }
+
   ProviderEntriesState mixedState() {
     return ProviderEntriesState(
       entries: [
@@ -525,5 +544,174 @@ void main() {
       'http://localhost:8080',
       reason: 'invalid URLs are not saved to the provider config',
     );
+  });
+
+  testWidgets('built-in tool details are localized without changing schemas', (
+    tester,
+  ) async {
+    Future<void> showTool(Locale locale, ToolDefinition definition) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) =>
+                      BuiltinToolDetailsDialog(definition: definition),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    for (final locale in AppLocalizations.supportedLocales) {
+      for (final definition in [
+        TodoToolService.toolDefinitions.single,
+        WebSearchService.toolDefinitions.single,
+        ...HttpToolService.toolDefinitions,
+      ]) {
+        final schemaBefore = jsonEncode(definition.parameters);
+        final definitionDescriptionBefore = definition.description;
+        await showTool(locale, definition);
+
+        final description = tester
+            .widgetList<Text>(find.byType(Text))
+            .map((widget) => widget.data ?? '')
+            .join('\n');
+        final renderedParameters =
+            tester.widget<SelectableText>(find.byType(SelectableText)).data!;
+        final parameters =
+            jsonDecode(renderedParameters) as Map<String, dynamic>;
+
+        expect(parameters['type'], 'object');
+        final properties = parameters['properties'] as Map<String, dynamic>;
+        expect(
+          properties,
+          contains(definition.name == 'todowrite' ? 'todos' : 'query'),
+        );
+        if (locale.languageCode == 'en') {
+          expect(description, isNot(contains('通过网络搜索')));
+          expect(description, isNot(contains('创建、读取并管理')));
+          if (definition.name == 'todowrite') {
+            expect(
+              description,
+              contains('Create, read, and manage a to-do list.'),
+            );
+          } else if (definition.name == 'web_search') {
+            expect(
+              description,
+              contains('Search the web for current information.'),
+            );
+          }
+          expect(
+            renderedParameters,
+            contains(
+              definition.name == 'todowrite'
+                  ? 'Complete replacement of the to-do list'
+                  : 'Search terms',
+            ),
+          );
+          if (HttpToolService.toolDefinitions.contains(definition)) {
+            final expectedDescription = switch (definition.name) {
+              'brave_web_search' =>
+                'Search the web with the Brave Search API. Requires an API key.',
+              'bocha_web_search' =>
+                'Search the web with the Bocha AI Search API. Requires an API key.',
+              'querit_search' =>
+                'Search the web with Querit Search. Requires an API key.',
+              'searxng_search' =>
+                'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.',
+              _ => fail('Unexpected HTTP tool: ${definition.name}'),
+            };
+            expect(find.text(expectedDescription), findsOneWidget);
+            expect(properties['query']['description'], 'Search terms.');
+            expect(
+              properties['count']['description'],
+              definition.name == 'brave_web_search'
+                  ? 'Number of results to return (maximum 20).'
+                  : 'Number of results to return.',
+            );
+          }
+        } else if (locale.languageCode == 'zh') {
+          if (definition.name == 'todowrite') {
+            expect(description, contains('创建、读取并管理待办事项列表。'));
+          } else if (definition.name == 'web_search') {
+            expect(description, contains('通过网络搜索获取实时信息。'));
+          }
+          expect(
+            renderedParameters,
+            contains(definition.name == 'todowrite' ? '待办事项列表（全量替换）' : '搜索关键词'),
+          );
+          if (HttpToolService.toolDefinitions.contains(definition)) {
+            final expectedDescription = switch (definition.name) {
+              'brave_web_search' => '使用 Brave Search API 搜索网络。需要配置 API Key。',
+              'bocha_web_search' => '使用博查 AI Search API 搜索网络。需要配置 API Key。',
+              'querit_search' => '使用 Querit Search 搜索网络。需要配置 API Key。',
+              'searxng_search' => '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。',
+              _ => fail('Unexpected HTTP tool: ${definition.name}'),
+            };
+            expect(find.text(expectedDescription), findsOneWidget);
+            expect(properties['query']['description'], '搜索关键词。');
+            expect(
+              properties['count']['description'],
+              definition.name == 'brave_web_search'
+                  ? '返回结果数量（最大 20）。'
+                  : '返回结果数量。',
+            );
+          }
+        } else {
+          // Spanish and Japanese use generated app strings for HTTP tools;
+          // Todo and built-in web search still use their source schema text.
+          final strings = await AppLocalizations.delegate.load(locale);
+          if (definition.name == 'todowrite' ||
+              definition.name == 'web_search') {
+            expect(description, contains(definitionDescriptionBefore));
+            expect(parameters, equals(jsonDecode(schemaBefore)));
+          }
+          if (HttpToolService.toolDefinitions.contains(definition)) {
+            final expectedDescription = switch (definition.name) {
+              'brave_web_search' => strings.httpToolBraveDescription,
+              'bocha_web_search' => strings.httpToolBochaDescription,
+              'querit_search' => strings.httpToolQueritDescription,
+              'searxng_search' => strings.httpToolSearxngDescription,
+              _ => fail('Unexpected HTTP tool: ${definition.name}'),
+            };
+            expect(find.text(expectedDescription), findsOneWidget);
+            expect(
+              properties['query']['description'],
+              strings.httpToolSearchQueryDescription,
+            );
+            expect(
+              properties['count']['description'],
+              definition.name == 'brave_web_search'
+                  ? strings.httpToolSearchCountMax20Description
+                  : strings.httpToolSearchCountDescription,
+            );
+          }
+        }
+
+        expect(jsonEncode(definition.parameters), schemaBefore);
+        expect(definition.description, definitionDescriptionBefore);
+        expect(
+          schemaContract(parameters),
+          schemaContract(definition.parameters),
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
   });
 }

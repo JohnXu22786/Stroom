@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../l10n/app_localizations.dart';
 import '../providers/update_provider.dart';
+
+import 'constrained_text.dart';
 
 /// A shared update dialog used by both the settings page and the
 /// application startup flow.
@@ -26,12 +29,20 @@ class UpdateDialog extends ConsumerStatefulWidget {
 }
 
 class _UpdateDialogState extends ConsumerState<UpdateDialog> {
+  final ScrollController _releaseNotesController = ScrollController();
+
   /// Whether the download URL points to a GitHub release page (not a direct asset).
   /// When true, the "立即更新" button is replaced with "前往浏览器下载".
   bool get _isHtmlUrlFallback {
     final url = ref.read(updateProvider).downloadUrl;
     if (url == null) return false;
     return url.contains('/releases/tag/');
+  }
+
+  @override
+  void dispose() {
+    _releaseNotesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -43,15 +54,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     // Prevent dialog dismissal during download or install.
     // The user must not accidentally dismiss the dialog while
     // a critical operation is in progress.
-    final canPop = !state.isDownloading && !state.isInstalling;
-
-    // Determine header label: "最新版本" when newest is selected or
-    // only one version available, "已选择" when user picked an older version.
-    final _isNewestSelected = state.selectedVersionIndex == 0 ||
-        (state.availableVersions?.length ?? 0) <= 1;
-    final versionLabel = _isNewestSelected
-        ? strings.updateLatestVersionLabel
-        : strings.updateSelectedVersionLabel;
+    final canPop = (!state.isDownloading || state.downloadInBackground) &&
+        !state.isInstalling;
 
     return PopScope(
       canPop: canPop,
@@ -68,22 +72,30 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Version selection list (shown when multiple versions available)
-              if (state.availableVersions != null &&
-                  state.availableVersions!.length > 1) ...[
-                _buildVersionSelector(state, cs),
-                const SizedBox(height: 12),
-              ],
-              // Show selected version info
-              // Label changes to "已选择" when user picks a non-newest version
-              Text('$versionLabel: ${state.latestVersion ?? ''}'),
+              Text(
+                '${strings.updateLatestVersionLabel}: ${state.latestVersion ?? ''}',
+              ),
               if (state.releaseNotes != null &&
                   state.releaseNotes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(strings.updateReleaseNotesLabel,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  strings.updateReleaseNotesLabel,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 4),
-                Text(state.releaseNotes!),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+                  ),
+                  child: Scrollbar(
+                    controller: _releaseNotesController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _releaseNotesController,
+                      child: Text(state.releaseNotes!),
+                    ),
+                  ),
+                ),
               ],
               // Installing state — shown briefly while the app auto-installs
               if (state.isInstalling) ...[
@@ -94,10 +106,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   decoration: BoxDecoration(
                     color: cs.tertiaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: cs.tertiaryContainer,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: cs.tertiaryContainer, width: 0.5),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -108,21 +117,30 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                              cs.onTertiaryContainer),
+                            cs.onTertiaryContainer,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        strings.updateInstalling,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: cs.onTertiaryContainer,
-                          fontSize: 15,
+                      Flexible(
+                        child: ConstrainedText(
+                          strings.updateInstalling,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: cs.onTertiaryContainer,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+              ],
+              if (state.isDownloading) ...[
+                const SizedBox(height: 16),
+                _buildDownloadProgress(state),
               ],
               // Download error section
               if (state.downloadError != null) ...[
@@ -150,9 +168,13 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   children: [
                     Icon(Icons.check_circle, color: cs.primary, size: 18),
                     const SizedBox(width: 4),
-                    Text(
-                      AppLocalizations.of(context)!.updateDownloadComplete,
-                      style: TextStyle(color: cs.primary),
+                    Flexible(
+                      child: ConstrainedText(
+                        strings.updateDownloadComplete,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: cs.primary),
+                      ),
                     ),
                   ],
                 ),
@@ -169,14 +191,28 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     final strings = AppLocalizations.of(context)!;
     final notifier = ref.read(updateProvider.notifier);
 
-    // During download, show progress bar in the button area
+    // During download, keep cancellation and background actions fixed below progress.
     if (state.isDownloading) {
       return [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: SizedBox(
-            width: double.infinity,
-            child: _buildDownloadProgress(state),
+        TextButton(
+          onPressed: notifier.cancelDownload,
+          child: ConstrainedText(
+            strings.updateCancelDownload,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        FilledButton(
+          onPressed: () {
+            notifier.downloadInBackground();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) Navigator.of(context).pop();
+            });
+          },
+          child: ConstrainedText(
+            strings.updateDownloadInBackground,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ];
@@ -194,7 +230,11 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         return [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(strings.updateClose),
+            child: ConstrainedText(
+              strings.updateClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -202,7 +242,11 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               // with visual feedback (isInstalling state).
               notifier.retryInstall();
             },
-            child: Text(strings.updateManualInstall),
+            child: ConstrainedText(
+              strings.updateManualInstall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ];
       }
@@ -212,14 +256,22 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.updateClose),
+          child: ConstrainedText(
+            strings.updateClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: () {
             // Re-open the installer (same as manual install fallback)
             notifier.retryInstall();
           },
-          child: Text(strings.updateOpenInstaller),
+          child: ConstrainedText(
+            strings.updateOpenInstaller,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ];
     }
@@ -230,195 +282,118 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.updateClose),
+          child: ConstrainedText(
+            strings.updateClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         if (!isNonRecoverable)
           FilledButton(
             onPressed: () => notifier.downloadUpdate(),
-            child: Text(strings.updateRetryDownload),
+            child: ConstrainedText(
+              strings.updateRetryDownload,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ];
     }
 
     // Initial state: check if the download URL is a release page (html fallback)
     if (_isHtmlUrlFallback) {
-      return [
-        TextButton(
-          onPressed: () {
-            if (state.latestVersion != null) {
-              notifier.skipVersion(state.latestVersion!);
-            }
-            Navigator.of(context).pop();
-          },
-          child: Text(strings.updateSkipVersion),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.updateRemindLater),
-        ),
-        FilledButton(
+      return _buildInitialActions(
+        state,
+        primaryAction: FilledButton(
           onPressed: () => _openInBrowser(state.downloadUrl!),
-          child: Text(strings.updateOpenBrowser),
+          child: ConstrainedText(
+            strings.updateOpenBrowser,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    // Initial state with direct download URL: show all action buttons
+    return _buildInitialActions(
+      state,
+      primaryAction: FilledButton(
+        onPressed: () => notifier.downloadUpdate(),
+        child: ConstrainedText(
+          strings.updateNow,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildInitialActions(
+    UpdateState state, {
+    required Widget primaryAction,
+  }) {
+    final strings = AppLocalizations.of(context)!;
+    final notifier = ref.read(updateProvider.notifier);
+    final skipAction = TextButton(
+      onPressed: () {
+        if (state.latestVersion != null) {
+          notifier.skipVersion(state.latestVersion!);
+        }
+        Navigator.of(context).pop();
+      },
+      child: ConstrainedText(
+        strings.updateSkipVersion,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+    final remindAction = TextButton(
+      onPressed: () => Navigator.of(context).pop(),
+      child: ConstrainedText(
+        strings.updateRemindLater,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    if (viewportWidth >= 600 && textScale <= 1.2) {
+      return [skipAction, remindAction, primaryAction];
+    }
+
+    if (viewportWidth < 360 || textScale > 1.2) {
+      return [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(width: double.infinity, child: skipAction),
+            SizedBox(width: double.infinity, child: remindAction),
+            const SizedBox(height: 4),
+            SizedBox(width: double.infinity, child: primaryAction),
+          ],
         ),
       ];
     }
 
-    // Initial state with direct download URL: show all action buttons
     return [
-      TextButton(
-        onPressed: () {
-          if (state.latestVersion != null) {
-            notifier.skipVersion(state.latestVersion!);
-          }
-          Navigator.of(context).pop();
-        },
-        child: Text(strings.updateSkipVersion),
-      ),
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: Text(strings.updateRemindLater),
-      ),
-      FilledButton(
-        onPressed: () => notifier.downloadUpdate(),
-        child: Text(strings.updateNow),
-      ),
-    ];
-  }
-
-  /// Builds the version selection list showing all available updates.
-  /// The currently selected version is highlighted; tapping a different
-  /// version calls [UpdateNotifier.selectVersion] to update the state.
-  ///
-  /// When [state.acceptPreRelease] is `false`, pre-release versions are
-  /// hidden from the list (the toggle controls display, not data).
-  Widget _buildVersionSelector(UpdateState state, ColorScheme cs) {
-    final notifier = ref.read(updateProvider.notifier);
-    final versions = state.availableVersions!;
-    final selectedIndex = state.selectedVersionIndex;
-    final showAll = state.acceptPreRelease;
-    final strings = AppLocalizations.of(context)!;
-
-    // Count visible items first for proper border calculations.
-    final visibleCount =
-        versions.where((v) => showAll || !v.isPreRelease).length;
-
-    // Build the visible list items, skipping pre-releases when toggle is off.
-    final List<Widget> items = [];
-    int displayIdx = 0;
-    for (int realIdx = 0; realIdx < versions.length; realIdx++) {
-      final v = versions[realIdx];
-      // Hide pre-releases when the toggle is off (display filter only).
-      if (!showAll && v.isPreRelease) continue;
-      displayIdx++;
-
-      final isSelected = realIdx == selectedIndex;
-      final isLast = displayIdx == visibleCount;
-      items.add(InkWell(
-        onTap: () => notifier.selectVersion(realIdx),
-        borderRadius: displayIdx == 1
-            ? const BorderRadius.vertical(top: Radius.circular(8))
-            : isLast
-                ? const BorderRadius.vertical(bottom: Radius.circular(8))
-                : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color:
-                isSelected ? cs.primaryContainer.withValues(alpha: 0.4) : null,
-            border: !isLast
-                ? Border(
-                    bottom: BorderSide(color: cs.outlineVariant, width: 0.5))
-                : null,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                size: 18,
-                color: isSelected ? cs.primary : cs.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'v${v.version}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: isSelected ? cs.primary : cs.onSurface,
-                          ),
-                        ),
-                        if (v.isPreRelease) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              strings.updatePreviewBadge,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.orange.shade700,
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (realIdx == 0) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            strings.updateLatestBadge,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: cs.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ));
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: cs.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Text(
-              strings.updateSelectVersion,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
+          Row(
+            children: [
+              Expanded(child: skipAction),
+              Expanded(child: remindAction),
+            ],
           ),
-          ...items,
+          const SizedBox(height: 4),
+          SizedBox(width: double.infinity, child: primaryAction),
         ],
       ),
-    );
+    ];
   }
 
   /// Builds the download progress card shown in the actions area.
@@ -431,10 +406,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       decoration: BoxDecoration(
         color: cs.primaryContainer.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: cs.primaryContainer,
-          width: 0.5,
-        ),
+        border: Border.all(color: cs.primaryContainer, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,18 +416,24 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             children: [
               Icon(Icons.download, size: 18, color: cs.primary),
               const SizedBox(width: 6),
-              Text(strings.updateDownloading,
+              Expanded(
+                child: Text(
+                  strings.updateDownloading,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: cs.onSurface,
-                  )),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: state.downloadProgress,
+              value: state.downloadTotalBytes == null
+                  ? null
+                  : state.downloadProgress,
               minHeight: 10,
               backgroundColor: cs.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
@@ -463,12 +441,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           ),
           const SizedBox(height: 6),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: Alignment.center,
             child: Text(
-              '${(state.downloadProgress * 100).toInt()}%',
+              switch (state.downloadTotalBytes) {
+                final int total when total > 0 =>
+                  '${_formatBytes(state.downloadReceivedBytes)} / ${_formatBytes(total)}  ·  ${(state.downloadProgress * 100).toInt()}%',
+                _ => _formatBytes(state.downloadReceivedBytes),
+              },
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontWeight: FontWeight.w600,
                 color: cs.primary,
               ),
             ),
@@ -476,6 +457,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         ],
       ),
     );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String _localizedDownloadError(String error, AppLocalizations strings) {
@@ -494,9 +484,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       );
     }
     if (error.startsWith('下载失败: ')) {
-      return strings.updateDownloadFailed(
-        error.substring('下载失败: '.length),
-      );
+      return strings.updateDownloadFailed(error.substring('下载失败: '.length));
     }
     if (error.startsWith('无法打开文件，请手动安装: ')) {
       return strings.updateManualInstallFileError(

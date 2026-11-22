@@ -24,9 +24,14 @@ import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/thumbnail_utils.dart';
+import '../utils/video_thumbnail_temp_file.dart';
+import '../utils/storage_file_publication.dart';
+import '../utils/partial_import_refresh.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
+
+import '../widgets/constrained_text.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
@@ -181,44 +186,74 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           <String>{},
         );
 
-        await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
-        final videoPath = await VideoManifest.readFilePath(storageFileName);
-        if (kIsWeb || videoPath == null || videoPath.isEmpty) {
-          // Web 没有真实文件路径（readFilePath 返回虚拟 key），
-          // 直接从字节生成缩略图。
-          try {
-            final thumbBytes = await _generateThumbnailFromBytes(bytes);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
-            }
-          } catch (_) {}
-        } else {
-          try {
-            videoDurationMs = await _probeVideoDuration(videoPath);
-          } catch (_) {
-            // 时长探测失败不影响缩略图生成（下面继续尝试）
-          }
-          try {
-            final thumbBytes = await _generateThumbnailFromPath(videoPath);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
-            }
-          } catch (_) {
-            // Thumbnail detection failed
-          }
-        }
-        await VideoManifest.addRecord(
-          VideoRecord(
-            name: displayName,
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: _currentFolder,
-            duration: videoDurationMs,
-          ),
+        final destinationFolder = _currentFolder;
+        await VideoManifest.withFilePublicationLock(
+          hash,
+          destinationFolder,
+          () async {
+            await publishStorageFiles<void, VideoRecord>(
+              publish: (writeFile) async {
+                await writeFile(storageFileName, bytes);
+                // Try to obtain video duration and thumbnail from the file
+                final videoPath = await VideoManifest.readFilePath(
+                  storageFileName,
+                );
+                if (kIsWeb || videoPath == null || videoPath.isEmpty) {
+                  // Web 没有真实文件路径（readFilePath 返回虚拟 key），
+                  // 直接从字节生成缩略图。
+                  try {
+                    final thumbBytes = await _generateThumbnailFromBytes(bytes);
+                    if (thumbBytes != null) {
+                      await writeFile(
+                        VideoManifest.thumbnailFileName(hash),
+                        thumbBytes,
+                      );
+                    }
+                  } catch (_) {}
+                } else {
+                  try {
+                    videoDurationMs = await _probeVideoDuration(videoPath);
+                  } catch (_) {
+                    // 时长探测失败不影响缩略图生成（下面继续尝试）
+                  }
+                  try {
+                    final thumbBytes = await _generateThumbnailFromPath(
+                      videoPath,
+                    );
+                    if (thumbBytes != null) {
+                      await writeFile(
+                        VideoManifest.thumbnailFileName(hash),
+                        thumbBytes,
+                      );
+                    }
+                  } catch (_) {
+                    // Thumbnail detection failed
+                  }
+                }
+                await VideoManifest.addRecord(
+                  VideoRecord(
+                    name: displayName,
+                    hash: hash,
+                    format: format,
+                    createdAt: DateTime.now(),
+                    size: bytes.length,
+                    folder: destinationFolder,
+                    duration: videoDurationMs,
+                  ),
+                );
+              },
+              loadRecords: VideoManifest.loadRecordsStrict,
+              isReferenced: (record, name) =>
+                  record.hash == hash &&
+                  (name == record.storageFileName ||
+                      name == VideoManifest.thumbnailFileName(record.hash)),
+              writeFile: VideoManifest.writeFile,
+              readFile: VideoManifest.readFile,
+              fileExists: VideoManifest.fileExists,
+              deleteFile: VideoManifest.deleteFile,
+            );
+          },
         );
         videoSaved = true;
       }
@@ -263,6 +298,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   Future<void> _importFromGallery() async {
     if (_isImporting) return;
     _isImporting = true;
+    var count = 0;
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
     // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
@@ -303,64 +339,102 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       final records = ref.read(videoRecordsProvider);
       final usedInBatch = <String>{};
-      var count = 0;
-      for (final pickedFile in pickedFiles) {
-        final bytes = await pickedFile.readAsBytes();
-        if (bytes.isEmpty) continue;
+      count = await importBatchWithPartialRefresh(
+        items: pickedFiles,
+        importItem: (pickedFile) async {
+          final bytes = await pickedFile.readAsBytes();
+          if (bytes.isEmpty) return false;
 
-        final hash = computeVideoHash(bytes);
-        final rawName = sanitizeFileName(pickedFile.name);
-        final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
-        final format = ext.isNotEmpty ? ext : 'mp4';
-        final storageFileName = '$hash.$format';
+          final hash = computeVideoHash(bytes);
+          final rawName = sanitizeFileName(pickedFile.name);
+          final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
+          final format = ext.isNotEmpty ? ext : 'mp4';
+          final storageFileName = '$hash.$format';
 
-        final displayName = _uniqueVideoName(
-          p.basenameWithoutExtension(rawName),
-          records,
-          usedInBatch,
-        );
-        usedInBatch.add(displayName);
+          final displayName = _uniqueVideoName(
+            p.basenameWithoutExtension(rawName),
+            records,
+            usedInBatch,
+          );
+          usedInBatch.add(displayName);
 
-        final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration and thumbnail from the file
-        int videoDurationMs = 0;
-        if (kIsWeb || videoPath.isEmpty) {
-          // Web 没有真实文件路径（writeFile 返回虚拟 key），
-          // 直接从字节生成缩略图。
-          try {
-            final thumbBytes = await _generateThumbnailFromBytes(bytes);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
-            }
-          } catch (_) {}
-        } else {
-          try {
-            videoDurationMs = await _probeVideoDuration(videoPath);
-          } catch (_) {
-            // 时长探测失败不影响缩略图生成（下面继续尝试）
-          }
-          try {
-            final thumbBytes = await _generateThumbnailFromPath(videoPath);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
-            }
-          } catch (_) {
-            // Thumbnail detection failed
-          }
-        }
-        await VideoManifest.addRecord(
-          VideoRecord(
-            name: displayName,
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: _currentFolder,
-            duration: videoDurationMs,
-          ),
-        );
-        count++;
-      }
+          int videoDurationMs = 0;
+          final destinationFolder = _currentFolder;
+          await VideoManifest.withFilePublicationLock(
+            hash,
+            destinationFolder,
+            () async {
+              await publishStorageFiles<void, VideoRecord>(
+                publish: (writeFile) async {
+                  final videoPath =
+                      await writeFile(storageFileName, bytes) ?? '';
+                  // Try to obtain video duration and thumbnail from the file
+                  if (kIsWeb || videoPath.isEmpty) {
+                    // Web 没有真实文件路径（writeFile 返回虚拟 key），
+                    // 直接从字节生成缩略图。
+                    try {
+                      final thumbBytes = await _generateThumbnailFromBytes(
+                        bytes,
+                      );
+                      if (thumbBytes != null) {
+                        await writeFile(
+                          VideoManifest.thumbnailFileName(hash),
+                          thumbBytes,
+                        );
+                      }
+                    } catch (_) {}
+                  } else {
+                    try {
+                      videoDurationMs = await _probeVideoDuration(videoPath);
+                    } catch (_) {
+                      // 时长探测失败不影响缩略图生成（下面继续尝试）
+                    }
+                    try {
+                      final thumbBytes = await _generateThumbnailFromPath(
+                        videoPath,
+                      );
+                      if (thumbBytes != null) {
+                        await writeFile(
+                          VideoManifest.thumbnailFileName(hash),
+                          thumbBytes,
+                        );
+                      }
+                    } catch (_) {
+                      // Thumbnail detection failed
+                    }
+                  }
+                  await VideoManifest.addRecord(
+                    VideoRecord(
+                      name: displayName,
+                      hash: hash,
+                      format: format,
+                      createdAt: DateTime.now(),
+                      size: bytes.length,
+                      folder: destinationFolder,
+                      duration: videoDurationMs,
+                    ),
+                  );
+                },
+                loadRecords: VideoManifest.loadRecordsStrict,
+                isReferenced: (record, fileName) =>
+                    record.hash == hash &&
+                    (fileName == record.storageFileName ||
+                        fileName ==
+                            VideoManifest.thumbnailFileName(record.hash)),
+                writeFile: VideoManifest.writeFile,
+                readFile: VideoManifest.readFile,
+                fileExists: VideoManifest.fileExists,
+                deleteFile: VideoManifest.deleteFile,
+              );
+            },
+          );
+          return true;
+        },
+        refresh: () async {
+          await ref.read(videoRecordsProvider.notifier).loadRecords();
+          await ref.read(videoFolderListProvider.notifier).loadFolders();
+        },
+      );
 
       // Close loading indicator
       if (mounted) {
@@ -384,6 +458,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       _isImporting = false;
     } catch (e) {
       _isImporting = false;
+      if (mounted) {
+        await refreshAfterPartialImport(count, () async {
+          await ref.read(videoRecordsProvider.notifier).loadRecords();
+          await ref.read(videoFolderListProvider.notifier).loadFolders();
+        });
+      }
       if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
@@ -509,13 +589,24 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       final selectedFiles = ids
           .map((id) => records.firstWhere((record) => record.id == id))
           .toList();
-      validateUserVisibleExportPaths(
-        files: selectedFiles.map(
-          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
-        ),
-      );
+      final selectedPaths = selectedFiles
+          .map(
+            (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+          )
+          .toList();
+      validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         final data = await VideoManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -528,10 +619,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         if (useArchive) {
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
+          await writeUserVisibleExportFile(outputPath, data);
         }
         exportedCount++;
       }
@@ -588,18 +679,30 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(strings.galleryFolderExportTitle),
+              title: ConstrainedText(
+                strings.galleryFolderExportTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(strings.galleryWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(strings.actionCancel),
+                  child: ConstrainedText(
+                    strings.actionCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(strings.galleryDownloadZip),
+                  child: ConstrainedText(
+                    strings.galleryDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -678,7 +781,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       final records = ref.read(videoRecordsProvider);
       var exportedCount = 0;
-      final exportPaths = <String>{};
 
       final selectedFolders = <String>{
         ...names,
@@ -696,6 +798,16 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             ),
           )
           .toList();
+      final outputPaths = await resolveNonClobberingExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        directory: outputDir,
+        folders: selectedFolders,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
       validateUserVisibleExportPaths(
         files: folderFiles.map(
           (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
@@ -703,22 +815,20 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         folders: selectedFolders,
       );
       for (final folderName in selectedFolders) {
-        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+        await createUserVisibleExportDirectory(outputDir, folderName);
       }
 
-      for (final file in folderFiles) {
+      for (var i = 0; i < folderFiles.length; i++) {
+        final file = folderFiles[i];
         final data = await VideoManifest.readFile(file.storagePath);
         if (data == null) continue;
-
-        final exportName = '${file.name}.${file.format}';
-        final relativePath = p.posix.join(file.folder, exportName);
-        if (!exportPaths.add(relativePath)) {
-          throw StateError('导出路径重复: $relativePath');
-        }
-        final fileDir = p.join(outputDir, file.folder);
-        await Directory(fileDir).create(recursive: true);
-        final outputPath = p.join(fileDir, exportName);
-        await File(outputPath).writeAsBytes(data);
+        final outputPath = outputPaths[i];
+        final fileDir = p.dirname(outputPath);
+        await createUserVisibleExportDirectory(
+          outputDir,
+          p.relative(fileDir, from: outputDir),
+        );
+        await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }
 
@@ -782,9 +892,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.videocam, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryRecordVideo,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -801,9 +913,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.galleryImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -848,32 +962,34 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
     /// Internal — performs the actual thumbnail generation.
     Future<Uint8List?> generateThumbnailForFile(VideoRecord file) async {
-      try {
-        final videoPath = await VideoManifest.readFilePath(file.storagePath);
-        if (kIsWeb || videoPath == null || videoPath.isEmpty) {
-          // Web 没有真实文件路径（readFilePath 返回虚拟 key），
-          // 直接从存储读回视频字节并生成缩略图。
-          final videoBytes = await VideoManifest.readFile(file.storagePath);
-          if (videoBytes != null) {
-            final thumbBytes = await _generateThumbnailFromBytes(videoBytes);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(file.hash, thumbBytes);
-              return thumbBytes;
+      return VideoManifest.withSaveLock(file.hash, () async {
+        try {
+          final videoPath = await VideoManifest.readFilePath(file.storagePath);
+          if (kIsWeb || videoPath == null || videoPath.isEmpty) {
+            // Web 没有真实文件路径（readFilePath 返回虚拟 key），
+            // 直接从存储读回视频字节并生成缩略图。
+            final videoBytes = await VideoManifest.readFile(file.storagePath);
+            if (videoBytes != null) {
+              final thumbBytes = await _generateThumbnailFromBytes(videoBytes);
+              if (thumbBytes != null) {
+                await VideoManifest.writeThumbnail(file.hash, thumbBytes);
+                return thumbBytes;
+              }
             }
+            return null;
           }
-          return null;
-        }
 
-        final thumbBytes = await _generateThumbnailFromPath(videoPath);
-        if (thumbBytes != null && thumbBytes.isNotEmpty) {
-          await VideoManifest.writeThumbnail(file.hash, thumbBytes);
-          return thumbBytes;
+          final thumbBytes = await _generateThumbnailFromPath(videoPath);
+          if (thumbBytes != null && thumbBytes.isNotEmpty) {
+            await VideoManifest.writeThumbnail(file.hash, thumbBytes);
+            return thumbBytes;
+          }
+        } catch (e) {
+          debugPrint('generateThumbnailForFile error for ${file.hash}: $e');
+          // Silently fail — fallback to icon will be shown
         }
-      } catch (e) {
-        debugPrint('generateThumbnailForFile error for ${file.hash}: $e');
-        // Silently fail — fallback to icon will be shown
-      }
-      return null;
+        return null;
+      });
     }
 
     /// Try to read the cached thumbnail; if missing, generate it on demand.
@@ -971,15 +1087,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       },
       extraPopupMenuItems: (file) => [
         PopupMenuItem(
-          value: 'play',
-          child: ListTile(
-            leading: Icon(Icons.play_arrow, size: 20),
-            title: Text(AppLocalizations.of(context)!.galleryPlayVideo),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
           value: 'export',
           child: ListTile(
             leading: Icon(Icons.file_download, size: 20),
@@ -989,11 +1096,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         ),
       ],
-      onExtraMenuAction: (file, value) {
-        if (value == 'play') {
-          _playVideo(file);
-        }
-      },
     );
 
     final navigateToParentSignal = ref.watch(
@@ -1026,40 +1128,27 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onCopyFile: (id, selectedFolder) async {
-        try {
-          final source = records.firstWhere((r) => r.id == id);
-          String copyName = '${source.name}_副本';
-          int copyIdx = 2;
-          while (records.any(
-            (r) => r.name == copyName && r.folder == selectedFolder,
-          )) {
-            copyName = '${source.name}_副本 ($copyIdx)';
-            copyIdx++;
-          }
-          await VideoManifest.addRecord(
-            VideoRecord(
-              name: copyName,
-              hash: source.hash,
-              format: source.format,
-              createdAt: DateTime.now(),
-              size: source.size,
-              folder: selectedFolder,
-            ),
-          );
-          await ref.read(videoRecordsProvider.notifier).loadRecords();
-          await ref.read(videoFolderListProvider.notifier).loadFolders();
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  AppLocalizations.of(context)!.galleryCopyFailed(e.toString()),
-                ),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
+        final source = records.firstWhere((r) => r.id == id);
+        String copyName = '${source.name}_副本';
+        int copyIdx = 2;
+        while (records.any(
+          (r) => r.name == copyName && r.folder == selectedFolder,
+        )) {
+          copyName = '${source.name}_副本 ($copyIdx)';
+          copyIdx++;
         }
+        await VideoManifest.addRecord(
+          VideoRecord(
+            name: copyName,
+            hash: source.hash,
+            format: source.format,
+            createdAt: DateTime.now(),
+            size: source.size,
+            folder: selectedFolder,
+          ),
+        );
+        await ref.read(videoRecordsProvider.notifier).loadRecords();
+        await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onDeleteFile: (id) async {
         await ref.read(videoRecordsProvider.notifier).deleteRecord(id);
@@ -1192,22 +1281,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       return generateThumbnailFromBytes(videoBytes);
     }
     try {
-      // Write bytes to a temporary file so the per-platform generator can read
-      final tempDir = Directory.systemTemp;
-      final tempFile = File(
-        '${tempDir.path}/stroom_thumb_${DateTime.now().millisecondsSinceEpoch}.mp4',
+      return await withVideoThumbnailTempFile(
+        videoBytes,
+        _generateThumbnailFromPath,
       );
-      try {
-        await tempFile.writeAsBytes(videoBytes);
-        return await _generateThumbnailFromPath(tempFile.path);
-      } finally {
-        // Clean up temp file
-        try {
-          if (await tempFile.exists()) {
-            await tempFile.delete();
-          }
-        } catch (_) {}
-      }
     } catch (e) {
       debugPrint('_generateThumbnailFromBytes error: $e');
     }

@@ -6,8 +6,10 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
 
 import '../models/mcp.dart';
+import '../providers/locale_provider.dart' show appLocalizationsForLocale;
 import 'sse_client.dart';
 import 'app_log_service.dart';
 
@@ -891,12 +893,17 @@ class McpClient {
   }
 
   /// 调用 MCP 服务器上的工具
-  Future<String> callTool(String name, Map<String, dynamic> arguments) async {
+  Future<String> callTool(
+    String name,
+    Map<String, dynamic> arguments, {
+    Locale? locale,
+  }) async {
+    final l10n = appLocalizationsForLocale(locale);
     await AppLogService.info('McpClient', '调用 MCP 工具: $name (${config.name})');
     if (_state != _McpClientState.connected) {
       final connected = await connect();
       if (!connected) {
-        return 'Error: MCP server "${config.name}" is not connected';
+        return l10n.toolResultMcpNotConnected(config.name);
       }
     }
 
@@ -906,14 +913,16 @@ class McpClient {
         'arguments': arguments,
       });
       final response = JsonRpcUtils.extractCallResult(result);
-      if (response == null) return 'Error: No response from MCP tool "$name"';
-      if (response.isError) return 'Error: ${response.text}';
+      if (response == null) return l10n.toolResultMcpNoResponse(name);
+      if (response.isError) {
+        return l10n.toolResultMcpCallFailed(response.text);
+      }
       await AppLogService.info('McpClient', 'MCP 工具调用完成: $name');
       return response.text;
     } catch (e) {
       debugPrint('McpClient.callTool failed: $e');
       await AppLogService.error('McpClient', '调用 MCP 工具失败: $name', e);
-      return 'Error: ${e.toString()}';
+      return l10n.toolResultMcpCallFailed(e.toString());
     }
   }
 

@@ -142,6 +142,37 @@ abstract class BaseChatProvider {
     String? system,
   });
 
+  /// Non-streaming response with protocol events preserved.
+  ///
+  /// Consumers that need to display provider outputs beyond text (for example
+  /// generated images) should use this method and route the events through
+  /// their normal conversation event handling. Providers without additional
+  /// output types receive a text-only default implementation.
+  Future<List<AIStreamEvent>> chatWithEvents(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
+    String? system,
+  }) async {
+    final text = await chat(
+      messages,
+      model: model,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+      cancelToken: cancelToken,
+      extraParams: extraParams,
+      system: system,
+    );
+    return [if (text.isNotEmpty) AIStreamEvent(text)];
+  }
+
   Stream<AIStreamEvent> chatStream(
     List<Map<String, dynamic>> messages, {
     String? model,

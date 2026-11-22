@@ -64,9 +64,10 @@ void main() {
           kAntigravityProtocolId,
           connectorType: 'antigravity',
         ),
-        {kAntigravityProtocolId},
+        isEmpty,
       );
       for (final unsupported in const [
+        kAntigravityProtocolId,
         'google.gemini.generate_content',
         'openai.chat_completions',
       ]) {

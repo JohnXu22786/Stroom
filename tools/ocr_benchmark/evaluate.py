@@ -8,7 +8,9 @@ import binascii
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 import struct
 import sys
 import unicodedata
@@ -40,7 +42,14 @@ PNG_PRE_IDAT_CHUNKS = {
     b"sRGB",
     b"tRNS",
 }
+MAX_PNG_DIMENSION = 8192
+MAX_PNG_PIXELS = 4_000_000
+MAX_PNG_DECODED_BYTES = 64 * 1024 * 1024
+MAX_PNG_ENCODED_BYTES = 8 * 1024 * 1024
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
+# Keep accepted settings nesting well below Python's recursion limit so validation
+# reports malformed input instead of exhausting the interpreter stack.
+MAX_SAFE_SETTINGS_DEPTH = 64
 LITERAL_LATEX_DOLLAR = "\ue000"
 LATEX_GREEK_COMMANDS = {
     "Gamma": "Γ",
@@ -100,6 +109,7 @@ SECRET_SETTING_KEYS = {
     "authorization",
     "secret",
     "password",
+    "pwd",
     "credential",
     "credentials",
 }
@@ -128,6 +138,13 @@ OPAQUE_CREDENTIAL_PATTERNS = (
     re.compile(
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
     ),
+)
+OPAQUE_CREDENTIAL_IDENTIFIER_PATTERNS = tuple(
+    re.compile(
+        pattern.pattern.removeprefix(r"\b").removesuffix(r"\b"),
+        pattern.flags,
+    )
+    for pattern in OPAQUE_CREDENTIAL_PATTERNS
 )
 PREDICTION_FIELDS = {
     "fixture_id",
@@ -165,6 +182,82 @@ def _validate_unicode_scalar_text(value: str, fixture_id: str, field: str) -> No
         ) from error
 
 
+def _safe_validation_identifier(value: Any) -> str:
+    """Keep benign identifiers useful in errors without echoing credential-like text."""
+    if not isinstance(value, str):
+        return f"<{type(value).__name__}>"
+    if _is_credential_like_identifier(value) or _contains_credential_like_value(value):
+        return "[redacted]"
+    return "".join(
+        character if not unicodedata.category(character).startswith("C") else "�"
+        for character in value
+    )
+
+
+def _is_credential_like_identifier(value: str) -> bool:
+    """Recognize credential terms as whole identifier components, not substrings."""
+    word_boundaries = re.sub(
+        r"(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z0-9])(?=[A-Z])", " ", value
+    )
+    parts = [part.lower() for part in re.findall(r"[A-Za-z0-9]+", word_boundaries)]
+    if parts and parts[0] == "author" and len(parts) > 1:
+        parts = parts[1:]
+    credential_terms = SECRET_SETTING_KEYS | {
+        "auth",
+        "cookie",
+        "privatekey",
+        "apikey",
+        "accesskey",
+        "authorization",
+        "credential",
+        "credentials",
+        "password",
+    }
+    normalized = "".join(part for part in parts if not part.isdigit())
+    contains_opaque_credential = any(
+        pattern.search(value) for pattern in OPAQUE_CREDENTIAL_IDENTIFIER_PATTERNS
+    )
+    compound_key = re.fullmatch(
+        r"(?:access|api|client|openai|private|secret|service|session|signing|stripe)keys?\d*",
+        normalized,
+    )
+    key_qualifiers = {
+        "access",
+        "api",
+        "client",
+        "openai",
+        "private",
+        "secret",
+        "service",
+        "session",
+        "signing",
+        "stripe",
+    }
+    qualified_key_component = any(
+        parts[index] in key_qualifiers and parts[index + 1] in {"key", "keys"}
+        for index in range(len(parts) - 1)
+    )
+    return (
+        compound_key is not None
+        or qualified_key_component
+        or normalized in credential_terms
+        or contains_opaque_credential
+        or any(
+            re.sub(r"\d+$", "", part) in credential_terms
+            or (
+                re.sub(r"\d+$", "", part).endswith("s")
+                and re.sub(r"\d+$", "", part)[:-1] in credential_terms
+            )
+            or any(
+                marker not in {"auth", "key"}
+                and re.sub(r"s?\d*$", "", part).endswith(marker)
+                for marker in credential_terms
+            )
+            for part in parts
+        )
+    )
+
+
 def levenshtein_distance(left: str, right: str) -> int:
     """Return code-point Levenshtein distance using two working rows."""
     if len(left) < len(right):
@@ -197,60 +290,100 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         fixture_id = fixture.get("id")
         if not isinstance(fixture_id, str) or not fixture_id.strip():
             raise EvaluationError("each fixture needs a non-empty string id")
+        display_fixture_id = _safe_validation_identifier(fixture_id)
         if fixture_id in seen:
-            raise EvaluationError(f"duplicate fixture id: {fixture_id}")
+            raise EvaluationError(
+                f"duplicate fixture id: {display_fixture_id}"
+            )
         seen.add(fixture_id)
         if not isinstance(fixture.get("gold_text"), str):
-            raise EvaluationError(f"{fixture_id}: gold_text must be a string")
-        _validate_unicode_scalar_text(fixture["gold_text"], fixture_id, "gold_text")
+            raise EvaluationError(f"{display_fixture_id}: gold_text must be a string")
+        _validate_unicode_scalar_text(
+            fixture["gold_text"], display_fixture_id, "gold_text"
+        )
         categories = fixture.get("categories")
         if (
             not isinstance(categories, list)
             or not categories
             or any(not isinstance(category, str) for category in categories)
         ):
-            raise EvaluationError(f"{fixture_id}: categories must be strings")
+            raise EvaluationError(f"{display_fixture_id}: categories must be strings")
+        if "table" in categories and "table_text" not in fixture:
+            raise EvaluationError(
+                f"{display_fixture_id}: table fixture needs table_text"
+            )
+        if "formula" in categories and "formula_text" not in fixture:
+            raise EvaluationError(
+                f"{display_fixture_id}: formula fixture needs formula_text"
+            )
         for field in ("table_text", "formula_text"):
             if field in fixture and not isinstance(fixture[field], str):
-                raise EvaluationError(f"{fixture_id}: {field} must be a string")
+                raise EvaluationError(f"{display_fixture_id}: {field} must be a string")
             if field in fixture:
-                _validate_unicode_scalar_text(fixture[field], fixture_id, field)
+                _validate_unicode_scalar_text(
+                    fixture[field], display_fixture_id, field
+                )
             if field in fixture and not normalize_text(fixture[field]):
-                raise EvaluationError(f"{fixture_id}: {field} must not be empty")
+                raise EvaluationError(f"{display_fixture_id}: {field} must not be empty")
         reading_order = fixture.get("reading_order", [])
         if not isinstance(reading_order, list) or any(
             not isinstance(anchor, str)
             for anchor in reading_order
         ):
             raise EvaluationError(
-                f"{fixture_id}: reading_order must contain non-empty strings"
+                f"{display_fixture_id}: reading_order must contain non-empty strings"
             )
         for index, anchor in enumerate(reading_order):
             _validate_unicode_scalar_text(
-                anchor, fixture_id, f"reading_order[{index}]"
+                anchor, display_fixture_id, f"reading_order[{index}]"
             )
         if any(not normalize_text(anchor) for anchor in reading_order):
             raise EvaluationError(
-                f"{fixture_id}: reading_order must contain non-empty strings"
+                f"{display_fixture_id}: reading_order must contain non-empty strings"
             )
         normalized_anchors = [normalize_text(anchor) for anchor in reading_order]
         if len(set(normalized_anchors)) != len(normalized_anchors):
-            raise EvaluationError(f"{fixture_id}: reading_order anchors must be unique")
+            raise EvaluationError(
+                f"{display_fixture_id}: reading_order anchors must be unique"
+            )
         normalized_gold = normalize_text(fixture["gold_text"])
         if not normalized_gold and "blank" not in categories:
-            raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
+            raise EvaluationError(f"{display_fixture_id}: gold_text must not be empty")
         if normalized_gold and "blank" in categories:
             raise EvaluationError(
-                f"{fixture_id}: blank fixture needs empty gold_text"
+                f"{display_fixture_id}: blank fixture needs empty gold_text"
             )
         if any(anchor not in normalized_gold for anchor in normalized_anchors):
             raise EvaluationError(
-                f"{fixture_id}: every reading_order anchor must occur in gold_text"
+                f"{display_fixture_id}: every reading_order anchor must occur in gold_text"
             )
         for field in ("table_text", "formula_text"):
             if field in fixture and normalize_text(fixture[field]) not in normalized_gold:
                 raise EvaluationError(
-                    f"{fixture_id}: {field} must occur in gold_text"
+                    f"{display_fixture_id}: {field} must occur in gold_text"
+                )
+        if "table_text" in fixture:
+            table_column_counts = None
+            for line in fixture["table_text"].splitlines():
+                stripped = line.strip()
+                if "|" not in stripped:
+                    continue
+                raw_cells = _split_pipe_cells(stripped)
+                possible_counts = {len(raw_cells)}
+                if stripped.startswith("|"):
+                    possible_counts = {len(raw_cells) - 1}
+                    if _has_unescaped_trailing_pipe(stripped):
+                        possible_counts = {len(raw_cells) - 2}
+                elif _has_unescaped_trailing_pipe(stripped):
+                    possible_counts.add(len(raw_cells) - 1)
+                if len(raw_cells) > 1:
+                    if table_column_counts is None:
+                        table_column_counts = possible_counts
+                    else:
+                        table_column_counts &= possible_counts
+            if table_column_counts == set():
+                raise EvaluationError(
+                    f"{display_fixture_id}: table_text rows must have consistent columns"
                 )
     return fixtures
 
@@ -337,7 +470,13 @@ def _contains_credential_like_value(value: str) -> bool:
     )
 
 
-def _validate_safe_settings(value: Any, path: str = "settings") -> None:
+def _validate_safe_settings(
+    value: Any, path: str = "settings", depth: int = 0
+) -> None:
+    if isinstance(value, (dict, list)) and depth > MAX_SAFE_SETTINGS_DEPTH:
+        raise EvaluationError(
+            f"settings exceeds maximum nesting depth of {MAX_SAFE_SETTINGS_DEPTH}"
+        )
     if isinstance(value, dict):
         for key, child in value.items():
             if not isinstance(key, str):
@@ -346,10 +485,10 @@ def _validate_safe_settings(value: Any, path: str = "settings") -> None:
                 raise EvaluationError(
                     f"{path} contains a credential-like field name"
                 )
-            _validate_safe_settings(child, f"{path}.{key}")
+            _validate_safe_settings(child, f"{path}.{key}", depth + 1)
     elif isinstance(value, list):
         for index, child in enumerate(value):
-            _validate_safe_settings(child, f"{path}[{index}]")
+            _validate_safe_settings(child, f"{path}[{index}]", depth + 1)
     elif isinstance(value, str) and _contains_credential_like_value(value):
         raise EvaluationError(f"{path} contains a credential-like value")
     elif value is not None and not isinstance(value, (str, int, float, bool)):
@@ -393,24 +532,40 @@ def _validated_run_and_predictions(
             raise EvaluationError("each prediction must be an object")
         unknown = set(prediction) - PREDICTION_FIELDS
         if unknown:
+            safe_unknown = sorted(
+                _safe_validation_identifier(field) for field in unknown
+            )
             raise EvaluationError(
-                f"prediction contains unsupported fields: {sorted(unknown)}"
+                "prediction contains unsupported fields "
+                "(credential-like field names redacted): "
+                f"{safe_unknown}"
             )
         fixture_id = prediction.get("fixture_id")
         if not isinstance(fixture_id, str) or fixture_id not in fixture_ids:
-            raise EvaluationError(f"unknown fixture_id: {fixture_id!r}")
+            safe_fixture_id = (
+                _safe_validation_identifier(fixture_id)
+                if isinstance(fixture_id, str)
+                else "<invalid>"
+            )
+            raise EvaluationError(f"unknown fixture_id: {safe_fixture_id!r}")
         if fixture_id in by_id:
-            raise EvaluationError(f"duplicate prediction for fixture: {fixture_id}")
+            raise EvaluationError(
+                "duplicate prediction for fixture: "
+                f"{_safe_validation_identifier(fixture_id)}"
+            )
+        display_fixture_id = _safe_validation_identifier(fixture_id)
 
         text = prediction.get("text")
         if text is not None and not isinstance(text, str):
-            raise EvaluationError(f"{fixture_id}: text must be a string or null")
+            raise EvaluationError(
+                f"{display_fixture_id}: text must be a string or null"
+            )
         if text is not None:
             try:
                 text.encode("utf-8")
             except UnicodeEncodeError as error:
                 raise EvaluationError(
-                    f"{fixture_id}: text must contain valid Unicode scalar values"
+                    f"{display_fixture_id}: text must contain valid Unicode scalar values"
                 ) from error
         elapsed_ms = prediction.get("elapsed_ms")
         if elapsed_ms is not None:
@@ -418,7 +573,7 @@ def _validated_run_and_predictions(
                 elapsed_ms, (int, float)
             ):
                 raise EvaluationError(
-                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                    f"{display_fixture_id}: elapsed_ms must be a finite non-negative number"
                 )
             try:
                 is_finite_elapsed = math.isfinite(elapsed_ms)
@@ -426,7 +581,7 @@ def _validated_run_and_predictions(
                 is_finite_elapsed = False
             if not is_finite_elapsed or elapsed_ms < 0:
                 raise EvaluationError(
-                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                    f"{display_fixture_id}: elapsed_ms must be a finite non-negative number"
                 )
         returned_tokens = prediction.get("returned_tokens")
         if returned_tokens is not None and (
@@ -435,7 +590,7 @@ def _validated_run_and_predictions(
             or returned_tokens < 0
         ):
             raise EvaluationError(
-                f"{fixture_id}: returned_tokens must be a non-negative integer"
+                f"{display_fixture_id}: returned_tokens must be a non-negative integer"
             )
         by_id[fixture_id] = {
             "text": text,
@@ -646,7 +801,10 @@ def _table_rows(
                     cells = tuple(normalize_text(cell) for cell in line.split("\t"))
                     if column_count is None or (
                         len(cells) == column_count
-                        and cells in (matching_rows or set())
+                        and (
+                            matching_rows is None
+                            or cells in matching_rows
+                        )
                     ):
                         # Annotated rows disambiguate TSV from tab-delimited prose.
                         rows.append(cells)
@@ -1023,7 +1181,7 @@ def _strip_latex_markup(value: str) -> str:
     )
     fraction_command = re.compile(r"\\(?:dfrac|tfrac|frac)(?![A-Za-z])\s*")
     root_command = re.compile(r"\\sqrt\s*(?:\[(\d+)\])?\s*")
-    indexed_root_symbols = {"3": "∛", "4": "∜"}
+    indexed_root_symbols = {"2": "√", "3": "∛", "4": "∜"}
 
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
@@ -1630,7 +1788,16 @@ def _formula_span_matches(
     }
 
     def is_cjk_text_character(character: str) -> bool:
-        return "\u3400" <= character <= "\u9fff"
+        codepoint = ord(character)
+        return (
+            0x3400 <= codepoint <= 0x9FFF
+            or 0x3040 <= codepoint <= 0x309F
+            or 0x30A0 <= codepoint <= 0x30FF
+            or 0x31F0 <= codepoint <= 0x31FF
+        )
+
+    def is_hangul_text_character(character: str) -> bool:
+        return "\uac00" <= character <= "\ud7af"
 
     def is_formula_term(token: str) -> bool:
         latex_command = re.match(r"\\([A-Za-z]+)", token)
@@ -1642,6 +1809,7 @@ def _formula_span_matches(
                 len(token) == 1
                 and token.isalpha()
                 and not is_cjk_text_character(token)
+                and not is_hangul_text_character(token)
             )
             or function_name in math_functions
             or function_name in greek_symbols
@@ -1668,6 +1836,25 @@ def _formula_span_matches(
         token_without_punctuation = (
             token[:-1] if has_trailing_punctuation else token
         )
+        prose_tail_token = tokens[2] if len(tokens) > 2 else ""
+        while prose_tail_token and unicodedata.category(
+            prose_tail_token[-1]
+        ).startswith("P"):
+            prose_tail_token = prose_tail_token[:-1]
+        if (
+            from_right
+            and token_without_punctuation == "I"
+            and has_trailing_punctuation
+        ):
+            return True
+        if (
+            from_right
+            and token == "I"
+            and len(tokens) == 3
+            and tokens[1].casefold() == "think"
+            and prose_tail_token.casefold() == "so"
+        ):
+            return False
         if token_without_punctuation.casefold() in math_word_operators:
             if len(tokens) == 1:
                 return True
@@ -1785,6 +1972,7 @@ def _formula_span_matches(
                 not following.isspace()
                 and (following.isalnum() or following in "^_")
                 and not is_cjk_text_character(following)
+                and not is_hangul_text_character(following)
             ):
                 continue
             next_non_space = after.lstrip()[:1]
@@ -1820,7 +2008,12 @@ def _exact_snippet_metric(
                 gold_text=fixture.get("gold_text"),
             )
         else:
-            expected = _canonical_formula(fixture[field], output_format)
+            expected_text = fixture[field]
+            if output_format in {"markdown", "table"}:
+                emphasis = re.fullmatch(r"(\*\*|__)(.+?)\1", expected_text)
+                if emphasis:
+                    expected_text = emphasis.group(2)
+            expected = _canonical_formula(expected_text, output_format)
             actual = _normalized_formula_text(
                 text,
                 output_format,
@@ -1880,12 +2073,7 @@ def _reading_order_metric(
             pending_pages += 1
             continue
         normalized_prediction = normalize_text(text)
-        # Choose one canonical occurrence per anchor so every pair is evaluated
-        # from the same assignment, even when the prediction repeats anchors.
-        positions = [
-            normalized_prediction.find(anchor)
-            for anchor in anchors
-        ]
+        positions = _reading_order_anchor_positions(normalized_prediction, anchors)
         for left_index, left_position in enumerate(positions):
             for right_position in positions[left_index + 1 :]:
                 if left_position >= 0 and right_position >= 0:
@@ -1909,6 +2097,23 @@ def _reading_order_metric(
         "pending_pages": pending_pages,
         "status": status,
     }
+
+
+def _reading_order_anchor_positions(text: str, anchors: list[str]) -> list[int]:
+    """Use a distinct ordered occurrence when the prediction contains one."""
+    first_positions = [text.find(anchor) for anchor in anchors]
+    ordered_positions = []
+    search_from = 0
+    for anchor in anchors:
+        position = text.find(anchor, search_from)
+        if position < 0:
+            # Keep the established first-occurrence scoring for genuinely
+            # out-of-order text; a later occurrence only resolves ambiguity
+            # when all anchors can be matched in their annotated sequence.
+            return first_positions
+        ordered_positions.append(position)
+        search_from = position + 1
+    return ordered_positions
 
 
 def _usage_metric(
@@ -2237,6 +2442,14 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
                 or interlace not in (0, 1)
             ):
                 raise invalid()
+            if (
+                width > MAX_PNG_DIMENSION
+                or height > MAX_PNG_DIMENSION
+                or width * height > MAX_PNG_PIXELS
+            ):
+                raise EvaluationError(
+                    f"{fixture_id}: PNG exceeds the benchmark fixture resource limits"
+                )
             channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
             bits_per_pixel = channels * bit_depth
             if interlace == 0:
@@ -2257,6 +2470,14 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
                         (0, 1, 1, 2),
                     )
                 ]
+            decoded_bytes = sum(
+                ((pass_width * bits_per_pixel + 7) // 8 + 1) * pass_height
+                for pass_width, pass_height in passes
+            )
+            if decoded_bytes > MAX_PNG_DECODED_BYTES:
+                raise EvaluationError(
+                    f"{fixture_id}: PNG exceeds the benchmark fixture resource limits"
+                )
             set_pass(0)
         elif chunk_type == b"IHDR":
             raise invalid()
@@ -2287,9 +2508,12 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
             if chunk_type in (b"cHRM", b"gAMA", b"sRGB") and palette_seen:
                 raise invalid()
             if chunk_type == b"cHRM":
-                if chunk_length != 32 or any(
-                    value > 100000
-                    for (value,) in struct.iter_unpack(">I", chunk_data)
+                if chunk_length != 32:
+                    raise invalid()
+                chromaticities = struct.unpack(">IIIIIIII", chunk_data)
+                if any(value > 100000 for value in chromaticities) or any(
+                    x + y > 100000
+                    for x, y in zip(chromaticities[::2], chromaticities[1::2])
                 ):
                     raise invalid()
             if chunk_type == b"gAMA" and (
@@ -2426,7 +2650,11 @@ def verify_fixtures(
 ) -> dict[str, Any]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except RecursionError as error:
+        raise EvaluationError(
+            "cannot read fixture manifest: JSON nesting exceeds parser limit"
+        ) from error
+    except (OSError, UnicodeDecodeError, ValueError) as error:
         raise EvaluationError(f"cannot read fixture manifest: {error}") from error
     if not isinstance(manifest, dict):
         raise EvaluationError("fixture manifest must be an object")
@@ -2447,33 +2675,34 @@ def verify_fixtures(
     root = manifest_path.resolve().parent
     for fixture in fixtures:
         fixture_id = fixture["id"]
+        display_fixture_id = _safe_validation_identifier(fixture_id)
         image = fixture.get("image")
         digest = fixture.get("sha256")
         if not isinstance(image, str) or not isinstance(digest, str):
-            raise EvaluationError(f"{fixture_id}: image and sha256 are required")
-        image_path = (root / image).resolve()
+            raise EvaluationError(
+                f"{display_fixture_id}: image and sha256 are required"
+            )
+        image_path = _resolve_fixture_image_path(
+            manifest_path, image, display_fixture_id
+        )
         if not image_path.is_relative_to(root):
-            raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
+            raise EvaluationError(
+                f"{display_fixture_id}: image path escapes fixture root"
+            )
         _reject_output_input_collision(
             output_path, [("fixture image", image_path)]
         )
-        try:
-            image_bytes = image_path.read_bytes()
-        except OSError as error:
-            raise EvaluationError(f"{fixture_id}: cannot read {image}: {error}") from error
-        _validate_png(image_bytes, fixture_id)
+        image_bytes = _read_fixture_png(image_path, display_fixture_id)
+        _validate_png(image_bytes, display_fixture_id)
         actual_digest = hashlib.sha256(image_bytes).hexdigest()
         if actual_digest != digest:
-            raise EvaluationError(f"{fixture_id}: PNG SHA-256 does not match")
+            raise EvaluationError(f"{display_fixture_id}: PNG SHA-256 does not match")
         if "blank" in fixture["categories"] and normalize_text(
             fixture["gold_text"]
         ):
-            raise EvaluationError(f"{fixture_id}: blank fixture needs empty gold_text")
-        if "table" in fixture["categories"] and "table_text" not in fixture:
-            raise EvaluationError(f"{fixture_id}: table fixture needs table_text")
-        if "formula" in fixture["categories"] and "formula_text" not in fixture:
-            raise EvaluationError(f"{fixture_id}: formula fixture needs formula_text")
-
+            raise EvaluationError(
+                f"{display_fixture_id}: blank fixture needs empty gold_text"
+            )
     return {
         "fixture_count": len(fixtures),
         "categories": sorted(categories),
@@ -2481,10 +2710,41 @@ def verify_fixtures(
     }
 
 
+def _read_fixture_png(image_path: Path, fixture_id: str) -> bytes:
+    try:
+        image_stat = image_path.stat()
+        if not stat.S_ISREG(image_stat.st_mode):
+            raise EvaluationError(f"{fixture_id}: fixture image must be a regular file")
+        if image_stat.st_size > MAX_PNG_ENCODED_BYTES:
+            raise EvaluationError(
+                f"{fixture_id}: PNG exceeds the maximum encoded fixture size"
+            )
+        descriptor = os.open(
+            image_path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+        )
+        with os.fdopen(descriptor, "rb") as image_file:
+            if not stat.S_ISREG(os.fstat(image_file.fileno()).st_mode):
+                raise EvaluationError(
+                    f"{fixture_id}: fixture image must be a regular file"
+                )
+            image_bytes = image_file.read(MAX_PNG_ENCODED_BYTES + 1)
+    except OSError as error:
+        raise EvaluationError(f"{fixture_id}: cannot read fixture image") from error
+    if len(image_bytes) > MAX_PNG_ENCODED_BYTES:
+        raise EvaluationError(
+            f"{fixture_id}: PNG exceeds the maximum encoded fixture size"
+        )
+    return image_bytes
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except RecursionError as error:
+        raise EvaluationError(
+            f"cannot read {path}: JSON nesting exceeds parser limit"
+        ) from error
+    except (OSError, UnicodeDecodeError, ValueError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
         raise EvaluationError(f"{path} must contain a JSON object")
@@ -2506,11 +2766,26 @@ def _reject_output_input_collision(
                 and input_path.exists()
                 and output_path.samefile(input_path)
             ):
+                if option == "fixture image":
+                    raise EvaluationError(
+                        "--output path conflicts with input file fixture image"
+                    )
                 raise EvaluationError(
                     f"--output path conflicts with input file {option}: {input_path}"
                 )
     except (OSError, RuntimeError) as error:
+        if any(option == "fixture image" for option, _ in input_paths):
+            raise EvaluationError("cannot resolve output or fixture image path") from error
         raise EvaluationError(f"cannot resolve output or input path: {error}") from error
+
+
+def _resolve_fixture_image_path(
+    manifest_path: Path, image: str, fixture_id: str
+) -> Path:
+    try:
+        return (manifest_path.resolve().parent / image).resolve()
+    except (OSError, RuntimeError, ValueError) as error:
+        raise EvaluationError(f"{fixture_id}: cannot resolve fixture image path") from error
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2544,8 +2819,21 @@ def main(argv: list[str] | None = None) -> int:
             input_paths = [("--manifest", args.manifest), ("--predictions", args.predictions)]
             if args.baseline is not None:
                 input_paths.append(("--baseline", args.baseline))
-            _reject_output_input_collision(args.output, input_paths)
             manifest = _read_json(args.manifest)
+            for fixture in _validated_fixtures(manifest):
+                image = fixture.get("image")
+                if isinstance(image, str):
+                    input_paths.append(
+                        (
+                            "fixture image",
+                            _resolve_fixture_image_path(
+                                args.manifest,
+                                image,
+                                _safe_validation_identifier(fixture["id"]),
+                            ),
+                        )
+                    )
+            _reject_output_input_collision(args.output, input_paths)
             candidate = evaluate_predictions(
                 manifest, _read_json(args.predictions)
             )
@@ -2581,7 +2869,15 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as error:
                 raise EvaluationError(f"cannot write {args.output}: {error}") from error
         else:
-            print(output)
+            encoding = getattr(sys.stdout, "encoding", None)
+            if encoding and encoding.lower().replace("_", "-") != "utf-8":
+                stdout_buffer = getattr(sys.stdout, "buffer", None)
+            else:
+                stdout_buffer = None
+            if stdout_buffer is not None:
+                stdout_buffer.write((output + "\n").encode("utf-8"))
+            else:
+                print(output)
         return 0
     except EvaluationError as error:
         print(f"evaluation error: {error}", file=sys.stderr)

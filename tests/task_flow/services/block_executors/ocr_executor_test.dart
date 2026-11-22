@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,18 +9,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/models/llm_account.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_ja.dart';
+import 'package:stroom/l10n/app_localizations_zh.dart';
+import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
-import 'package:stroom/services/llm_account_migration_service.dart';
-import 'package:stroom/services/llm_chat_runtime.dart';
-import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
-import 'package:stroom/services/llm_connector_http_client.dart';
-import 'package:stroom/services/llm_connector_service.dart';
-import 'package:stroom/services/llm_credential_store.dart';
-import 'package:stroom/services/llm_model_group_provider.dart';
-import 'package:stroom/services/llm_routing_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -28,9 +26,102 @@ import 'package:stroom/task_flow/models/task_flow_exception.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/ocr_executor.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/http_timeout.dart';
+import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 Uint8List _validPng() => img.encodePng(img.Image(width: 2, height: 2));
+
+class _EchoingErrorAdapter implements HttpClientAdapter {
+  _EchoingErrorAdapter(this.apiKey);
+
+  final String apiKey;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    if (requestStream != null) {
+      await for (final _ in requestStream) {}
+    }
+    return ResponseBody.fromString(
+      '{"error":{"message":"Rejected key=$apiKey"}}',
+      401,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _CapturingSuccessAdapter implements HttpClientAdapter {
+  RequestOptions? capturedOptions;
+  List<int> capturedBodyBytes = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    capturedOptions = options;
+    if (requestStream != null) {
+      await for (final chunk in requestStream) {
+        capturedBodyBytes.addAll(chunk);
+      }
+    }
+    return ResponseBody.fromString(
+      '{"choices":[{"message":{"content":"recognized"},"finish_reason":"stop"}]}',
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _IncompleteOcrAdapter implements HttpClientAdapter {
+  _IncompleteOcrAdapter({this.finishReason = 'length'});
+
+  final String finishReason;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    if (requestStream != null) {
+      await for (final _ in requestStream) {}
+    }
+    return ResponseBody.fromString(
+      jsonEncode({
+        'choices': [
+          {
+            'message': {'content': 'partial OCR text'},
+            'finish_reason': finishReason,
+          }
+        ],
+      }),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +145,9 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
+    WebFileStore.enableTestMode();
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
     executions = TaskFlowExecutionNotifier();
@@ -69,42 +163,319 @@ void main() {
     executions.addSubTask(execId, subTask);
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await background.pendingPersistence;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     if (executions.mounted) executions.dispose();
     background.dispose();
+    WebFileStore.disableTestMode();
   });
 
-  ProviderEntriesState providerForOcr() => ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            name: 'OCR',
-            type: 'ocr',
-            configs: [
-              ProviderConfigItem(
-                id: 'config',
-                host: 'https://example.invalid/recognition',
-                key: 'test-key',
-                models: [
-                  ModelConfig(id: 'model', name: 'Test', modelId: 'test')
-                ],
+  ProviderEntriesState providerForOcr({
+    String key = 'test-key',
+    int? requestSizeBudgetBytes,
+    Map<String, dynamic> modelTypeConfig = const {},
+    List<CustomParam> customParams = const [],
+  }) =>
+      ProviderEntriesState(entries: [
+        ProviderEntry(name: 'OCR', type: 'ocr', configs: [
+          ProviderConfigItem(
+            id: 'config',
+            host: 'https://example.invalid/recognition',
+            key: key,
+            models: [
+              ModelConfig(
+                id: 'model',
+                name: 'Test',
+                modelId: 'test',
+                typeConfig: {
+                  ...modelTypeConfig,
+                  if (requestSizeBudgetBytes != null)
+                    'requestSizeBudgetBytes': requestSizeBudgetBytes,
+                },
+                customParams: customParams,
               ),
             ],
           ),
-        ],
-      );
+        ]),
+      ]);
 
-  TaskFlowBlock ocrBlock() => TaskFlowBlock(
+  TaskFlowBlock ocrBlock({String modelId = 'model'}) => TaskFlowBlock(
         typeKey: BlockType.ocr,
         params: {
-          'modelRef': {'configId': 'config', 'modelId': 'model'},
+          'modelRef': {'configId': 'config', 'modelId': modelId},
         },
       );
 
+  Future<String> expectPreflightFailure({
+    required String expectedError,
+    required Future<String> Function() execute,
+  }) async {
+    await expectLater(
+      execute(),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        expectedError,
+      )),
+    );
+
+    final failedTaskId =
+        executions.execution(execId)?.subTasks.single.subTaskId;
+    expect(failedTaskId, isNotEmpty);
+    final failedTask = background.taskById(failedTaskId!);
+    expect(failedTask, isNotNull);
+    expect(failedTask!.status, TaskStatus.failed);
+    expect(failedTask.error, expectedError);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+    return failedTaskId;
+  }
+
+  Future<void> expectPersistedPayloadFailure({
+    required AppLocalizations localizations,
+  }) async {
+    final source = await File(
+      '${directory.path}/corrupt_${localizations.localeName}.png',
+    ).writeAsBytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    final expectedError = localizations.ocrImageDecodeFailed;
+
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+      ),
+    );
+
+    await background.pendingPersistence;
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(
+      restored.taskById(background.state.single.id)?.error,
+      expectedError,
+      reason:
+          'the stored TaskFlow summary should retain the locale-specific cause',
+    );
+  }
+
+  Future<void> expectIncompleteOcrLocalization({
+    required AppLocalizations localizations,
+    required String expectedError,
+  }) async {
+    expect(
+      localizations.bgTaskOcrResultIncomplete('length'),
+      expectedError,
+      reason: 'The injected localization should provide the expected locale',
+    );
+    final source =
+        await File('${directory.path}/partial.png').writeAsBytes(_validPng());
+    final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
+
+    try {
+      await expectLater(
+        executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: source.path,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(),
+          localizations: localizations,
+          ocrDio: dio,
+        ),
+        throwsA(isA<BlockExecutionException>().having(
+          (error) => error.message,
+          'message',
+          expectedError,
+        )),
+      );
+    } finally {
+      dio.close(force: true);
+    }
+
+    final failedTask = background.state.single;
+    expect(failedTask.status, TaskStatus.failed);
+    expect(failedTask.result, 'partial OCR text');
+    expect(failedTask.resultIsComplete, isFalse);
+    expect(failedTask.error, expectedError);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+
+    await background.pendingPersistence;
+    final restored =
+        BackgroundTaskNotifier(localizationsResolver: () => localizations);
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    final restoredTask = restored.taskById(failedTask.id)!;
+    expect(restoredTask.result, 'partial OCR text');
+    expect(restoredTask.resultIsComplete, isFalse);
+    expect(restoredTask.error, expectedError);
+  }
+
+  Future<void> expectLocalizedFailureSummaries({
+    required AppLocalizations localizations,
+  }) async {
+    final restoredLocalizations = localizations is AppLocalizationsEn
+        ? AppLocalizationsZhCn()
+        : AppLocalizationsEn();
+
+    String localizeHiddenDetails(String detail, AppLocalizations target) {
+      final hiddenDetailsPrefixes = {
+        for (final locale in AppLocalizations.supportedLocales)
+          lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+      };
+      for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
+        if (detail == hiddenDetailsPrefix) {
+          return target.bgTaskOcrErrorDetailsHidden;
+        }
+        if (detail.startsWith('$hiddenDetailsPrefix（') &&
+            detail.endsWith('）')) {
+          return '${target.bgTaskOcrErrorDetailsHidden}${detail.substring(hiddenDetailsPrefix.length)}';
+        }
+      }
+      return detail;
+    }
+
+    String localizedSummary(String detail, AppLocalizations target) =>
+        '${target.unifiedTaskOcrFailed}: ${localizeHiddenDetails(detail, target)}';
+
+    final source =
+        await File('${directory.path}/localized_failure.png').writeAsBytes(
+      _validPng(),
+    );
+    BlockExecutionException? estimatorFailure;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          modelTypeConfig: {'userInstruction': 42},
+        ),
+        localizations: localizations,
+      );
+    } on BlockExecutionException catch (error) {
+      estimatorFailure = error;
+    }
+    expect(estimatorFailure, isNotNull);
+    final estimatorDetail = estimatorFailure!.message;
+    expect(estimatorDetail, isNotEmpty);
+    expect(
+      estimatorDetail,
+      localizations.bgTaskOcrErrorDetailsHidden,
+      reason: 'unsafe estimator details should use the active locale',
+    );
+    final estimatorTaskId =
+        executions.execution(execId)!.subTasks.single.subTaskId;
+    final estimatorTask = background.taskById(estimatorTaskId)!;
+    final estimatorSummary = localizedSummary(estimatorDetail, localizations);
+    expect(
+      estimatorTask.error,
+      estimatorSummary,
+    );
+    expect(estimatorTask.status, TaskStatus.failed);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+    await background.pendingPersistence;
+    final restoredEstimator = BackgroundTaskNotifier(
+      localizationsResolver: () => restoredLocalizations,
+    );
+    addTearDown(restoredEstimator.dispose);
+    expect(await restoredEstimator.restoreFromPersistence(), isTrue);
+    expect(
+      restoredEstimator.taskById(estimatorTask.id)?.error,
+      localizedSummary(estimatorDetail, restoredLocalizations),
+    );
+
+    BlockExecutionException? requestFailure;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async =>
+            throw StateError('HTTP 429 finish_reason=test-key'),
+      );
+    } on BlockExecutionException catch (error) {
+      requestFailure = error;
+    }
+    expect(requestFailure, isNotNull);
+    final requestDetail = requestFailure!.message;
+    expect(requestDetail, isNotEmpty);
+    expect(requestDetail, contains('HTTP 429'));
+    expect(requestDetail, isNot(contains('test-key')));
+    expect(
+      requestDetail,
+      '${localizations.bgTaskOcrErrorDetailsHidden}（HTTP 429）',
+      reason:
+          'unsafe request details should use the active locale and keep safe status metadata',
+    );
+    final requestTaskId =
+        executions.execution(execId)!.subTasks.single.subTaskId;
+    final requestTask = background.taskById(requestTaskId)!;
+    final requestSummary = localizedSummary(requestDetail, localizations);
+    expect(
+      requestTask.error,
+      requestSummary,
+    );
+    expect(requestTask.status, TaskStatus.failed);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+    await background.pendingPersistence;
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedRequest = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .firstWhere((row) => row['id'] == requestTask.id);
+    expect(persistedRequest['error'], requestSummary);
+    final restoredRequest = BackgroundTaskNotifier(
+      localizationsResolver: () => restoredLocalizations,
+    );
+    addTearDown(restoredRequest.dispose);
+    expect(await restoredRequest.restoreFromPersistence(), isTrue);
+    expect(
+      restoredRequest.taskById(requestTask.id)?.error,
+      localizedSummary(requestDetail, restoredLocalizations),
+    );
+  }
+
   test('OCR uses payload bytes instead of the filename suffix', () async {
     final bytes = _validPng();
-    final source = await File(
-      '${directory.path}/actually_png.jpg',
-    ).writeAsBytes(bytes);
+    final source =
+        await File('${directory.path}/actually_png.jpg').writeAsBytes(bytes);
     String? requestFormat;
 
     final result = await executeOcrBlock(
@@ -127,212 +498,900 @@ void main() {
     expect(requestFormat, 'png');
   });
 
-  test(
-    'legacy Task Flow OCR models are registered and account routed',
-    () async {
-      final preferences = _MemoryPreferences();
-      final accounts = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: _MemoryCredentialStore(),
-      );
-      final connector = _ExecutorFakeConnector(accounts);
-      final runtime = LlmChatRoutingRuntime(
-        accountService: accounts,
-        routingService: LlmRoutingService(
-          accountService: accounts,
-          stateStore: LlmRoutingStateStore(preferences: preferences),
-          concurrency: LlmConcurrencyReservations(),
-        ),
-        connectorClient: connector,
-      );
-      final source = await File(
-        '${directory.path}/task-flow-ocr.png',
-      ).writeAsBytes(_validPng());
-      final providerEntries = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            name: 'Legacy OCR',
-            type: 'ocr',
-            configs: [
-              ProviderConfigItem(
-                id: 'legacy-task-flow-config',
-                host: 'https://legacy.example.test/v1/chat/completions',
-                key: 'legacy-key',
-                providerName: 'Legacy OCR',
-                models: [
-                  ModelConfig(
-                    id: 'legacy-model',
-                    name: 'Legacy vision model',
-                    modelId: 'legacy-upstream-model',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      );
-      final block = TaskFlowBlock(
-        typeKey: BlockType.ocr,
-        params: {
-          'modelRef': {
-            'configId': 'legacy-task-flow-config',
-            'modelId': 'legacy-model',
-          },
-        },
-      );
+  test('OCR reads image bytes from a WebFileStore key', () async {
+    const key = 'attachments/taskflow_image.png';
+    final bytes = _validPng();
+    await WebFileStore.write(key, bytes);
+    Uint8List? requestedBytes;
+    String? requestFormat;
 
+    final result = await executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (payload, format) async {
+        requestedBytes = payload;
+        requestFormat = format;
+        return 'recognized web image';
+      },
+    );
+
+    expect(result, 'recognized web image');
+    expect(requestedBytes, bytes);
+    expect(requestFormat, 'png');
+  });
+
+  test(
+      'TaskFlow OCR send timeout includes instruction and custom parameter text',
+      () async {
+    final source = await File('${directory.path}/large_request.png')
+        .writeAsBytes(_validPng());
+    final instruction = List.filled(600000, 'i').join();
+    final customValue = List.filled(600000, 'c').join();
+    final adapter = _CapturingSuccessAdapter();
+    final dio = Dio()..httpClientAdapter = adapter;
+
+    try {
       final result = await executeOcrBlock(
-        block: block,
+        block: ocrBlock(),
         def: BlockTypeDefinition.ocr,
         input: source.path,
         execId: execId,
         execNotifier: executions,
         flowSubTask: subTask,
         bgNotifier: background,
-        providerEntries: providerEntries,
-        routingRuntime: Future.value(runtime),
-      );
-
-      final accountId = llmOcrAccountIdForConfig('legacy-task-flow-config');
-      final groupId = stableLlmModelGroupId(accountId, 'legacy-model');
-      expect(result, 'task flow recognized');
-      expect(connector.requestedAccountId, accountId);
-      expect(connector.requestedModelId, 'legacy-upstream-model');
-      expect(connector.requestBody?['model'], 'legacy-upstream-model');
-      expect(await accounts.readCredential(accountId), 'legacy-key');
-      expect((await accounts.listModelGroups()).single.id, groupId);
-    },
-  );
-
-  test('Task Flow OCR uses the captured model protocol for image requests',
-      () async {
-    const groupId = 'task-flow-anthropic-ocr-group';
-    const localModelId = 'task-flow-ocr-model';
-    const upstreamModelId = 'claude-vision';
-    final preferences = _MemoryPreferences();
-    final accounts = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: _MemoryCredentialStore(),
-    );
-    await accounts.saveAccount(
-      LlmAccount(
-        id: 'task-flow-anthropic-account',
-        connectorType: 'claude',
-        authType: 'api_key',
-        displayName: 'Task Flow Anthropic account',
-        status: LlmAccountStatus.ready,
-        endpointConfig: {'baseUrl': 'https://api.anthropic.com/v1'},
-        models: const [
-          LlmUpstreamModel(
-            id: 'claude-model',
-            upstreamModelId: upstreamModelId,
-            displayName: 'Claude vision',
-            capabilities: {'vision': true},
-            config: {'apiProtocolOverride': 'anthropic.messages'},
-          ),
-        ],
-      ),
-      secret: 'test-api-key',
-    );
-    await accounts.saveModelGroup(
-      LlmModelGroup(
-        id: groupId,
-        displayName: 'Task Flow OCR model',
-        members: const [
-          LlmModelGroupMember(
-            accountId: 'task-flow-anthropic-account',
-            upstreamModelId: upstreamModelId,
-            localModelId: localModelId,
-          ),
-        ],
-      ),
-    );
-    final connector = _ExecutorFakeConnector(
-      accounts,
-      responseBody: const {
-        'type': 'message',
-        'content': [
-          {'type': 'text', 'text': 'task flow recognized'},
-        ],
-        'stop_reason': 'end_turn',
-        'usage': {'input_tokens': 4, 'output_tokens': 3},
-      },
-    );
-    final runtime = LlmChatRoutingRuntime(
-      accountService: accounts,
-      routingService: LlmRoutingService(
-        accountService: accounts,
-        stateStore: LlmRoutingStateStore(preferences: preferences),
-        concurrency: LlmConcurrencyReservations(),
-      ),
-      connectorClient: connector,
-    );
-    final bytes = _validPng();
-    final source = await File('${directory.path}/task-flow-anthropic.png')
-        .writeAsBytes(bytes);
-    final providerEntries = ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          name: 'Captured OCR model',
-          type: 'ocr',
-          configs: [
-            ProviderConfigItem(
-              id: 'captured-ocr-config',
-              models: [
-                ModelConfig(
-                  id: localModelId,
-                  name: 'Captured vision model',
-                  modelId: upstreamModelId,
-                ),
-              ],
-              legacyFields: {kLlmModelGroupConfigField: groupId},
+        providerEntries: providerForOcr(
+          modelTypeConfig: {'userInstruction': instruction},
+          customParams: [
+            CustomParam(
+              paramName: 'custom_prompt',
+              defaultValue: customValue,
             ),
           ],
         ),
-      ],
+        ocrDio: dio,
+      );
+
+      expect(result, 'recognized');
+      expect(adapter.capturedOptions, isNotNull);
+      expect(adapter.capturedBodyBytes.length, greaterThan(1024 * 1024));
+      expect(
+        adapter.capturedOptions!.sendTimeout,
+        sendTimeoutForBytes(adapter.capturedBodyBytes.length),
+      );
+      expect(adapter.capturedOptions!.sendTimeout, const Duration(seconds: 62));
+    } finally {
+      dio.close(force: true);
+    }
+  });
+
+  test('incomplete OCR failure is localized in English', () async {
+    await expectIncompleteOcrLocalization(
+      localizations: AppLocalizationsEn(),
+      expectedError: 'OCR returned an incomplete result (finish_reason=length)',
     );
-    final block = TaskFlowBlock(
-      typeKey: BlockType.ocr,
-      params: {
-        'modelRef': {
-          'configId': 'captured-ocr-config',
-          'modelId': localModelId,
-        },
-      },
+  });
+
+  test('incomplete OCR failure is localized in Chinese', () async {
+    await expectIncompleteOcrLocalization(
+      localizations: AppLocalizationsZhCn(),
+      expectedError: 'OCR 返回了不完整结果（finish_reason=length）',
+    );
+  });
+
+  test('untrusted OCR finish reason is absent from persisted flow errors',
+      () async {
+    final source = await File('${directory.path}/untrusted_finish_reason.png')
+        .writeAsBytes(_validPng());
+    final secret = 'sk-secret-${List.filled(128, 'x').join()}';
+    final dio = Dio()
+      ..httpClientAdapter = _IncompleteOcrAdapter(finishReason: secret);
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        ocrDio: dio,
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    } finally {
+      dio.close(force: true);
+    }
+
+    expect(failure, isNotNull);
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.result, 'partial OCR text');
+    expect(task.resultIsComplete, isFalse);
+    expect(task.error, isNot(contains(secret)));
+    expect(
+      task.error,
+      AppLocalizationsEn().bgTaskOcrResultIncomplete('unknown'),
+    );
+    expect(failure!.message, isNot(contains(secret)));
+
+    executions.failExecution(execId, error: failure.toString());
+    final persistedExecution =
+        jsonEncode(executions.execution(execId)!.toMap());
+    expect(persistedExecution, isNot(contains(secret)));
+    expect(executions.execution(execId)!.status, FlowExecutionStatus.failed);
+  });
+
+  test('OCR failure summaries are localized in English', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsEn());
+  });
+
+  test('OCR failure summaries are localized in Chinese', () async {
+    await expectLocalizedFailureSummaries(
+        localizations: AppLocalizationsZhCn());
+  });
+
+  test('OCR failure summaries are localized in Spanish', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsEs());
+  });
+
+  test('OCR failure summaries are localized in Japanese', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsJa());
+  });
+
+  test('localized OCR fallback never echoes a colliding API key', () async {
+    final localizations = AppLocalizationsEn();
+    final apiKey = localizations.bgTaskOcrErrorDetailsHidden;
+    final source = await File('${directory.path}/localized_key_collision.png')
+        .writeAsBytes(_validPng());
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        localizations: localizations,
+        requestOcr: (_, _) async => throw StateError('private provider data'),
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(failure!.message, isNot(contains(apiKey)));
+    expect(background.state.single.error, isNot(contains(apiKey)));
+    executions.failExecution(execId, error: failure.toString());
+    expect(
+      executions.execution(execId)!.error,
+      isNot(contains(apiKey)),
+    );
+  });
+
+  test('known-safe OCR parser errors use the selected locale', () async {
+    final localizations = AppLocalizationsEn();
+    final source = await File('${directory.path}/localized_parser_error.png')
+        .writeAsBytes(_validPng());
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async =>
+            throw Exception('API 返回中的 finish_reason 格式异常'),
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(failure!.message, localizations.bgTaskOcrErrorDetailsHidden);
+    expect(failure.message, isNot(contains('格式异常')));
+  });
+
+  test('localized safe HTTP metadata is preserved during relocalization',
+      () async {
+    final localizations = AppLocalizationsEn();
+    final source = await File('${directory.path}/localized_http_status.png')
+        .writeAsBytes(_validPng());
+    BlockExecutionException? failure;
+
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async =>
+            throw StateError('Error details were hidden（HTTP 429）'),
+      );
+    } on BlockExecutionException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(
+      failure!.message,
+      '${localizations.bgTaskOcrErrorDetailsHidden}（HTTP 429）',
+    );
+  });
+
+  test('OCR failure prefix credentials are not restored into task errors',
+      () async {
+    final source =
+        await File('${directory.path}/prefix_credential.png').writeAsBytes(
+      _validPng(),
+    );
+    final sourceLocalizations = AppLocalizationsEn();
+    final restoreLocalizations = AppLocalizationsZhCn();
+    final apiKey = sourceLocalizations.unifiedTaskOcrFailed;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          key: apiKey,
+          modelTypeConfig: {'userInstruction': 42},
+        ),
+        localizations: sourceLocalizations,
+      ),
+      throwsA(isA<BlockExecutionException>()),
     );
 
-    final result = await executeOcrBlock(
-      block: block,
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.hasOcrErrorLocalizationCredentialCollision, isTrue);
+    expect(task.error, isNot(contains(apiKey)));
+    await background.pendingPersistence;
+
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedTask = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .singleWhere((row) => row['id'] == task.id);
+    expect(jsonEncode(persistedTask), isNot(contains(apiKey)));
+    expect(persistedTask['error'], isNot(contains(apiKey)));
+    expect(
+      persistedTask['hasOcrErrorLocalizationCredentialCollision'],
+      isTrue,
+    );
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => restoreLocalizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    final restoredTask = restored.taskById(task.id)!;
+    expect(restoredTask.error, isNot(contains(apiKey)));
+    expect(restoredTask.hasOcrErrorLocalizationCredentialCollision, isTrue);
+  });
+
+  test('OCR status metadata never echoes an API key matching the status',
+      () async {
+    final source =
+        await File('${directory.path}/status_credential.png').writeAsBytes(
+      _validPng(),
+    );
+    const apiKey = '429';
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        localizations: AppLocalizationsEn(),
+        requestOcr: (_, _) async =>
+            throw StateError('HTTP 429 finish_reason=test-key'),
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.error, isNot(contains(apiKey)));
+    expect(task.error, isNot(contains('HTTP 429')));
+    await background.pendingPersistence;
+
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedTask = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .singleWhere((row) => row['id'] == task.id);
+    expect(persistedTask['error'], isNot(contains(apiKey)));
+    expect(persistedTask['error'], isNot(contains('HTTP 429')));
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => AppLocalizationsZhCn(),
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(task.id)?.error, isNot(contains(apiKey)));
+    expect(
+      restored.taskById(task.id)?.error,
+      isNot(contains('HTTP 429')),
+    );
+  });
+
+  test('OCR rejects oversized WebFileStore input before request dispatch',
+      () async {
+    const key = 'attachments/oversized_taskflow_image.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+    var requested = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'unexpected request';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('OCR request size budget (1.00 MiB)'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+  });
+
+  test('cancellation during oversized WebFileStore input removes the task',
+      () async {
+    const key = 'attachments/cancelled_oversized_taskflow_image.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+    executions.cancelExecution(execId);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during missing WebFileStore read removes the task',
+      () async {
+    const key = 'attachments/cancelled_missing_taskflow_image.png';
+    await WebFileStore.write(key, _validPng());
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<Uint8List?>();
+    var failedTaskObserved = false;
+    final removeListener = background.addListener((tasks) {
+      failedTaskObserved |=
+          tasks.any((task) => task.status == TaskStatus.failed);
+    }, fireImmediately: false);
+    addTearDown(removeListener);
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      readWebFileBytes: (_, {maxBytes}) {
+        readStarted.complete();
+        return releaseRead.future;
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await readStarted.future;
+    executions.cancelExecution(execId);
+    releaseRead.complete(null);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(failedTaskObserved, isFalse);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('missing WebFileStore read reports the localized input error', () async {
+    const key = 'attachments/missing_taskflow_image.png';
+    await WebFileStore.write(key, _validPng());
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        readWebFileBytes: (_, {maxBytes}) async => null,
+        requestOcr: (_, _) async => 'must not be sent',
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        'The image file could not be found. Select the image again.',
+      )),
+    );
+
+    expect(background.state.single.status, TaskStatus.failed);
+  });
+
+  test(
+    'cancellation during OCR input read prevents request dispatch',
+    () async {
+      final source = await File('${directory.path}/cancelled.png')
+          .writeAsBytes(_validPng());
+      final readStarted = Completer<void>();
+      final releaseRead = Completer<void>();
+      var requested = false;
+
+      final execution = executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        readInputBytes: (_, _) async {
+          readStarted.complete();
+          await releaseRead.future;
+          return _validPng();
+        },
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'must not be sent';
+        },
+      );
+
+      await readStarted.future;
+      executions.cancelExecution(execId);
+      releaseRead.complete();
+
+      await expectLater(
+        execution,
+        throwsA(isA<BlockExecutionException>().having(
+          (error) => error.message,
+          'message',
+          '任务流已结束或删除',
+        )),
+      );
+
+      expect(requested, isFalse);
+      expect(background.state, isEmpty);
+      expect(
+        executions.execution(execId)?.status,
+        FlowExecutionStatus.cancelled,
+      );
+      expect(
+        executions.execution(execId)?.subTasks.single.outcome,
+        FlowStepOutcome.cancelled,
+      );
+    },
+  );
+
+  test('cancellation during a failing OCR input read removes the task',
+      () async {
+    final source = await File('${directory.path}/cancelled_read_error.png')
+        .writeAsBytes(_validPng());
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
       def: BlockTypeDefinition.ocr,
       input: source.path,
       execId: execId,
       execNotifier: executions,
       flowSubTask: subTask,
       bgNotifier: background,
-      providerEntries: providerEntries,
-      routingRuntime: Future.value(runtime),
+      providerEntries: providerForOcr(),
+      readInputBytes: (_, _) async {
+        readStarted.complete();
+        await releaseRead.future;
+        throw StateError('read failed after cancellation');
+      },
+      requestOcr: (_, _) async => 'must not be sent',
     );
 
-    expect(result, 'task flow recognized');
-    expect(connector.requestedAccountId, 'task-flow-anthropic-account');
-    expect(connector.requestedModelId, upstreamModelId);
-    expect(connector.requestedNativeFormat, 'anthropic');
-    expect(connector.requestBody?['model'], upstreamModelId);
-    final content = connector.requestBody?['messages'][0]['content'] as List;
-    expect(content.single, {
-      'type': 'image',
-      'source': {
-        'type': 'base64',
-        'media_type': 'image/png',
-        'data': base64Encode(bytes),
+    await readStarted.future;
+    executions.cancelExecution(execId);
+    releaseRead.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during missing OCR input check removes the task',
+      () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<bool>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/missing_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) {
+        checkStarted.complete();
+        return releaseCheck.future;
       },
-    });
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete(false);
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during failing OCR input check removes the task',
+      () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/check_error_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) async {
+        checkStarted.complete();
+        await releaseCheck.future;
+        throw StateError('existence check failed after cancellation');
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation overrides failing OCR input check exception', () async {
+    final checkStarted = Completer<void>();
+    final releaseCheck = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: '${directory.path}/check_block_error_during_cancel.png',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      checkInputExists: (_) async {
+        checkStarted.complete();
+        await releaseCheck.future;
+        throw BlockExecutionException(
+          'preflight check failed',
+          blockType: BlockType.ocr.name,
+          blockTitle: BlockTypeDefinition.ocr.label,
+        );
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await checkStarted.future;
+    executions.cancelExecution(execId);
+    releaseCheck.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during failing OCR payload preparation removes the task',
+      () async {
+    final source = await File('${directory.path}/cancelled_payload.png')
+        .writeAsBytes(_validPng());
+    final preparationStarted = Completer<void>();
+    final releasePreparation = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      prepareImagePayload: (_) async {
+        preparationStarted.complete();
+        await releasePreparation.future;
+        throw const OcrImagePayloadException(
+          OcrImagePayloadFailure.decodeFailed,
+          'decode failed after cancellation',
+        );
+      },
+      requestOcr: (_, _) async => 'must not be sent',
+    );
+
+    await preparationStarted.future;
+    executions.cancelExecution(execId);
+    releasePreparation.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        '任务流已结束或删除',
+      )),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during OCR request removes the background task', () async {
+    final source = await File('${directory.path}/cancelled_request.png')
+        .writeAsBytes(_validPng());
+    final requestStarted = Completer<void>();
+    final releaseRequest = Completer<void>();
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (_, _) async {
+        requestStarted.complete();
+        await releaseRequest.future;
+        throw DioException(
+          requestOptions: RequestOptions(path: '/recognize'),
+          type: DioExceptionType.cancel,
+        );
+      },
+    );
+
+    await requestStarted.future;
+    executions.cancelExecution(execId);
+    releaseRequest.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+  });
+
+  test('cancellation during OCR text saving removes the background task',
+      () async {
+    final source = await File('${directory.path}/cancelled_save.png')
+        .writeAsBytes(_validPng());
+    final manifestReadStarted = Completer<void>();
+    final releaseManifestRead = Completer<void>();
+    ManifestDatabase.beforeWebDataSaveForTesting = () async {
+      if (!manifestReadStarted.isCompleted) {
+        manifestReadStarted.complete();
+        await releaseManifestRead.future;
+      }
+    };
+
+    final execution = executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (_, _) async => 'recognized text',
+    );
+
+    await manifestReadStarted.future;
+    executions.cancelExecution(execId);
+    releaseManifestRead.complete();
+
+    await expectLater(
+      execution,
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(background.state, isEmpty);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
   });
 
   test('OCR rejects corrupt bytes before invoking its request', () async {
-    final source = await File(
-      '${directory.path}/corrupt.png',
-    ).writeAsBytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    final source = await File('${directory.path}/corrupt.png').writeAsBytes(
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00],
+    );
     var requested = false;
 
     await expectLater(
@@ -345,102 +1404,625 @@ void main() {
         flowSubTask: subTask,
         bgNotifier: background,
         providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZh(),
         requestOcr: (_, format) async {
           requested = true;
           return format;
         },
       ),
-      throwsA(
-        isA<BlockExecutionException>().having(
-          (error) => error.message,
-          'message',
-          contains('损坏'),
-        ),
-      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('损坏'),
+      )),
     );
 
     expect(requested, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
     expect(background.state.single.error, contains('损坏'));
   });
-}
 
-class _ExecutorFakeConnector extends LlmConnectorHttpClient {
-  _ExecutorFakeConnector(
-    LlmAccountConnectorService accountService, {
-    this.responseBody = const {
-      'choices': [
-        {
-          'finish_reason': 'stop',
-          'message': {'content': 'task flow recognized'},
-        },
-      ],
-    },
-  }) : super(accountService: accountService);
+  test('OCR localizes unsupported image payload errors in English', () async {
+    final source = await File('${directory.path}/unsupported.tiff')
+        .writeAsBytes([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00]);
+    final localizations = AppLocalizationsEn();
+    final expectedError = localizations.ocrImageUnsupportedSpecialFormat;
 
-  final Object responseBody;
-  String? requestedAccountId;
-  String? requestedModelId;
-  String? requestedNativeFormat;
-  Map<String, dynamic>? requestBody;
-
-  @override
-  Future<LlmConnectorResponse> request({
-    required LlmAccount account,
-    required String modelId,
-    required Object? body,
-    String? conversationId,
-    bool stream = false,
-    String? nativeFormat,
-    CancelToken? cancelToken,
-    ProgressCallback? onSendProgress,
-    Future<void> Function()? onRequestSent,
-    Duration? connectTimeout,
-    Duration? sendTimeout,
-    Duration? receiveTimeout,
-  }) async {
-    requestedAccountId = account.id;
-    requestedModelId = modelId;
-    requestedNativeFormat = nativeFormat;
-    requestBody = Map<String, dynamic>.from(body! as Map);
-    await onRequestSent?.call();
-    return LlmConnectorResponse(
-      statusCode: 200,
-      body: responseBody,
-      observation: LlmConnectorObservation(),
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+      ),
     );
-  }
-}
+  });
 
-class _MemoryPreferences implements LlmAccountPreferences {
-  final values = <String, String>{};
+  test('OCR payload conversion failure redacts the active provider key',
+      () async {
+    final localizations = AppLocalizationsEn();
+    final key = localizations.ocrImageDecodeFailed;
+    final source = await File('${directory.path}/credential_corrupt.png')
+        .writeAsBytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
-  @override
-  Future<String?> getString(String key) async => values[key];
+    BlockExecutionException? thrown;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: key),
+        localizations: localizations,
+      );
+    } on BlockExecutionException catch (error) {
+      thrown = error;
+    }
 
-  @override
-  Future<bool> remove(String key) async => values.remove(key) != null;
+    expect(thrown, isNotNull);
+    expect(thrown!.message, isNot(contains(key)));
+    final taskId = executions.execution(execId)!.subTasks.single.subTaskId;
+    expect(background.taskById(taskId)!.error, isNot(contains(key)));
+    await background.pendingPersistence;
 
-  @override
-  Future<bool> setString(String key, String value) async {
-    values[key] = value;
-    return true;
-  }
-}
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(taskId)!.error, isNot(contains(key)));
+  });
 
-class _MemoryCredentialStore implements LlmCredentialStore {
-  final values = <String, String>{};
+  test('oversized OCR input failure redacts the active provider key', () async {
+    final localizations = AppLocalizationsEn();
+    const input = 'attachments/credential_oversized.png';
+    await WebFileStore.write(input, Uint8List(800 * 1024));
+    const limitLabel = 'OCR request size budget (1.00 MiB)';
+    final key = localizations.taskFlowOcrInputTooLarge(limitLabel);
 
-  @override
-  Future<void> delete(String reference) async {
-    values.remove(reference);
-  }
+    BlockExecutionException? thrown;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: input,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          key: key,
+          requestSizeBudgetBytes: 1024 * 1024,
+        ),
+        localizations: localizations,
+      );
+    } on BlockExecutionException catch (error) {
+      thrown = error;
+    }
 
-  @override
-  Future<String?> read(String reference) async => values[reference];
+    expect(thrown, isNotNull);
+    expect(thrown!.message, isNot(contains(key)));
+    final taskId = executions.execution(execId)!.subTasks.single.subTaskId;
+    expect(background.taskById(taskId)!.error, isNot(contains(key)));
+    await background.pendingPersistence;
 
-  @override
-  Future<void> write(String reference, String value) async {
-    values[reference] = value;
-  }
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(taskId)!.error, isNot(contains(key)));
+  });
+
+  test('OCR localizes corrupt image payload errors in Simplified Chinese',
+      () async {
+    final source = await File('${directory.path}/corrupt.png').writeAsBytes(
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00],
+    );
+    final localizations = AppLocalizationsZh();
+    final expectedError = localizations.ocrImageDecodeFailed;
+
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+      ),
+    );
+  });
+
+  test('OCR preserves Spanish payload failure summaries in task storage',
+      () async {
+    await expectPersistedPayloadFailure(localizations: AppLocalizationsEs());
+  });
+
+  test('OCR preserves Japanese payload failure summaries in task storage',
+      () async {
+    await expectPersistedPayloadFailure(localizations: AppLocalizationsJa());
+  });
+
+  test('OCR rejects files above the flow image limit before reading', () async {
+    final source = File('${directory.path}/oversized.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(20 * 1024 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    var requested = false;
+    var readAttempted = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries:
+            providerForOcr(requestSizeBudgetBytes: 40 * 1024 * 1024),
+        readInputBytes: (_, _) async {
+          readAttempted = true;
+          throw StateError('oversized file should not be read');
+        },
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'recognized text';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('20.00 MiB'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(readAttempted, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(
+      background.state.single.error,
+      contains('the task flow image input limit (20.00 MiB)'),
+    );
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+  });
+
+  test('OCR applies the selected model request budget before reading',
+      () async {
+    final source = File('${directory.path}/over_budget.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(800 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    var requested = false;
+    var readAttempted = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        readInputBytes: (_, _) async {
+          readAttempted = true;
+          throw StateError('over-budget file should not be read');
+        },
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'recognized text';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('OCR request size budget (1.00 MiB)'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(readAttempted, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(
+      background.state.single.error,
+      contains('OCR request size budget (1.00 MiB)'),
+    );
+  });
+
+  test('OCR rejects input that grows past the bounded read ceiling', () async {
+    final source =
+        await File('${directory.path}/growing.png').writeAsBytes([0]);
+    var requested = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024),
+        readInputBytes: (_, maxBytes) async => Uint8List(maxBytes + 1),
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'recognized text';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('OCR request size budget'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(
+      background.state.single.error,
+      contains('OCR request size budget (0.00097656 MiB)'),
+    );
+  });
+
+  test('OCR provider key echoes are removed from all failure surfaces',
+      () async {
+    const apiKey = 'configured-taskflow-ocr-secret-42';
+    final source = await File('${directory.path}/credential_echo.png')
+        .writeAsBytes(_validPng());
+    final dio = Dio()..httpClientAdapter = _EchoingErrorAdapter(apiKey);
+
+    BlockExecutionException? thrown;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        ocrDio: dio,
+      );
+    } on BlockExecutionException catch (error) {
+      thrown = error;
+    } finally {
+      dio.close(force: true);
+    }
+
+    expect(thrown, isNotNull);
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.error, isNot(contains(apiKey)));
+    expect(task.error, contains('HTTP 401'));
+    expect(task.steps.first.status, BgStepStatus.failed);
+    expect(task.steps.first.error, isNot(contains(apiKey)));
+    expect(task.steps.first.error, contains('HTTP 401'));
+    expect(thrown!.toString(), isNot(contains(apiKey)));
+    expect(thrown.toString(), contains('HTTP 401'));
+  });
+
+  test('missing OCR input failure is localized in English', () async {
+    const expectedError =
+        'The image file could not be found. Select the image again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: '${directory.path}/missing.png',
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('missing OCR input failure is localized in Chinese', () async {
+    const expectedError = '找不到图片文件，请重新选择图片。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: '${directory.path}/missing.png',
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
+
+  test('Spanish and Japanese TaskFlow OCR preflight errors survive restore',
+      () async {
+    for (final localizations in [AppLocalizationsEs(), AppLocalizationsJa()]) {
+      final missingError = localizations.taskFlowOcrInputMissing;
+      final missingTaskId = await expectPreflightFailure(
+        expectedError: missingError,
+        execute: () => executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: '${directory.path}/missing_${localizations.localeName}.png',
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(),
+          localizations: localizations,
+        ),
+      );
+
+      await background.pendingPersistence;
+      final restoredMissing = BackgroundTaskNotifier(
+        localizationsResolver: () => localizations,
+      );
+      addTearDown(restoredMissing.dispose);
+      expect(await restoredMissing.restoreFromPersistence(), isTrue);
+      expect(restoredMissing.taskById(missingTaskId)?.error, missingError);
+
+      final source = await File(
+        '${directory.path}/unreadable_${localizations.localeName}.png',
+      ).writeAsBytes(_validPng());
+      final unreadableError = localizations.taskFlowOcrInputReadFailed;
+      final unreadableTaskId = await expectPreflightFailure(
+        expectedError: unreadableError,
+        execute: () => executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: source.path,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(),
+          localizations: localizations,
+          readInputBytes: (_, _) => throw StateError('read failed'),
+        ),
+      );
+
+      await background.pendingPersistence;
+      final restoredUnreadable = BackgroundTaskNotifier(
+        localizationsResolver: () => localizations,
+      );
+      addTearDown(restoredUnreadable.dispose);
+      expect(await restoredUnreadable.restoreFromPersistence(), isTrue);
+      expect(
+        restoredUnreadable.taskById(unreadableTaskId)?.error,
+        unreadableError,
+      );
+
+      const inputKey = 'attachments/oversized_es_ja.png';
+      await WebFileStore.write(inputKey, Uint8List(800 * 1024));
+      final limitLabel = localizations.taskFlowOcrRequestSizeLimit('1.00');
+      final oversizedError = localizations.taskFlowOcrInputTooLarge(limitLabel);
+      final oversizedTaskId = await expectPreflightFailure(
+        expectedError: oversizedError,
+        execute: () => executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: inputKey,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+          localizations: localizations,
+        ),
+      );
+
+      await background.pendingPersistence;
+      final restoredOversized = BackgroundTaskNotifier(
+        localizationsResolver: () => localizations,
+      );
+      addTearDown(restoredOversized.dispose);
+      expect(await restoredOversized.restoreFromPersistence(), isTrue);
+      expect(
+        restoredOversized.taskById(oversizedTaskId)?.error,
+        oversizedError,
+      );
+    }
+  });
+
+  test('unreadable OCR input failure is localized in English', () async {
+    final source = await File('${directory.path}/unreadable.png')
+        .writeAsBytes(_validPng());
+    const expectedError =
+        'The image file could not be read. Check file access and try again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        readInputBytes: (_, _) => throw StateError('read failed'),
+      ),
+    );
+  });
+
+  test('unreadable OCR input failure is localized in Chinese', () async {
+    final source = await File('${directory.path}/unreadable.png')
+        .writeAsBytes(_validPng());
+    const expectedError = '无法读取图片文件，请检查文件访问权限后重试。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZhCn(),
+        readInputBytes: (_, _) => throw StateError('read failed'),
+      ),
+    );
+  });
+
+  test('unavailable OCR model failure is localized in English', () async {
+    final source = await File('${directory.path}/unused_model_en.png')
+        .writeAsBytes(_validPng());
+    const expectedError =
+        'No usable OCR model is configured. Choose an OCR provider and model in flow settings.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(modelId: 'unavailable'),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('unavailable OCR model failure is localized in Chinese', () async {
+    final source = await File('${directory.path}/unused_model_zh.png')
+        .writeAsBytes(_validPng());
+    const expectedError = '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(modelId: 'unavailable'),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
+
+  test('oversized OCR input failure is localized in English', () async {
+    const key = 'attachments/oversized_taskflow_image_en.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+    const expectedError =
+        'The image exceeds OCR request size budget (1.00 MiB). Choose a smaller image and try again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('oversized OCR input failure is localized in Chinese', () async {
+    const key = 'attachments/oversized_taskflow_image_zh.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+    const expectedError = '图片超过OCR 请求大小预算（1.00 MiB），请缩小图片后重试。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
+
+  test('task flow image limit error is localized in English', () async {
+    final source = File('${directory.path}/flow_limit_en.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(20 * 1024 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    const expectedError =
+        'The image exceeds the task flow image input limit (20.00 MiB). Choose a smaller image and try again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries:
+            providerForOcr(requestSizeBudgetBytes: 40 * 1024 * 1024),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('task flow image limit error is localized in Chinese', () async {
+    final source = File('${directory.path}/flow_limit_zh.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(20 * 1024 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    const expectedError = '图片超过任务流图片输入上限（20.00 MiB），请缩小图片后重试。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries:
+            providerForOcr(requestSizeBudgetBytes: 40 * 1024 * 1024),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
 }

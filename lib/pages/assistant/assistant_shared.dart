@@ -5,6 +5,8 @@ import '../../models/assistant.dart';
 import '../../utils/emojis.dart';
 import '../../widgets/llm/assistant_avatar.dart';
 
+import '../../widgets/constrained_text.dart';
+
 class AssistantCard extends StatelessWidget {
   final Assistant assistant;
   final VoidCallback onTap;
@@ -55,7 +57,7 @@ class AssistantCard extends StatelessWidget {
                 children: [
                   AssistantAvatar(assistant: assistant, size: 56),
                   const SizedBox(height: 12),
-                  Text(
+                  ConstrainedText(
                     assistant.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -68,7 +70,7 @@ class AssistantCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   if (assistant.description.isNotEmpty)
-                    Text(
+                    ConstrainedText(
                       assistant.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -106,7 +108,7 @@ class AssistantCard extends StatelessWidget {
 }
 
 /// A small square showing the current emoji. Tapping it opens the emoji
-/// picker panel ([CategorizedEmojiPicker] in a dialog). Replaces the
+/// picker panel ([CategorizedEmojiPicker]). Replaces the
 /// always-visible inline picker in the assistant editors so the dialog can
 /// give more space to the system prompt field.
 class EmojiAvatarButton extends StatelessWidget {
@@ -153,21 +155,95 @@ class EmojiAvatarButton extends StatelessWidget {
   }
 
   void _showPickerPanel(BuildContext context) {
+    final isPhone = MediaQuery.sizeOf(context).shortestSide < 600;
+    if (isPhone) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+        builder: (ctx) {
+          final height = (MediaQuery.sizeOf(ctx).height * 0.78)
+              .clamp(0.0, 600.0)
+              .toDouble();
+          return SizedBox(
+            height: height,
+            child: _EmojiPickerPanel(
+              selectedEmoji: selectedEmoji,
+              onClose: () => Navigator.pop(ctx),
+              onEmojiSelected: (emoji) {
+                onEmojiSelected(emoji);
+                Navigator.pop(ctx);
+              },
+            ),
+          );
+        },
+      );
+      return;
+    }
+
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.assistantChooseEmoji),
-        content: CategorizedEmojiPicker(
-          selectedEmoji: selectedEmoji,
-          onEmojiSelected: (e) {
-            onEmojiSelected(e);
-            Navigator.pop(ctx);
-          },
+      builder: (ctx) => Dialog(
+        child: SizedBox(
+          width: 400,
+          height: 360,
+          child: _EmojiPickerPanel(
+            selectedEmoji: selectedEmoji,
+            onClose: () => Navigator.pop(ctx),
+            onEmojiSelected: (emoji) {
+              onEmojiSelected(emoji);
+              Navigator.pop(ctx);
+            },
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+      ),
+    );
+  }
+}
+
+class _EmojiPickerPanel extends StatelessWidget {
+  final String selectedEmoji;
+  final VoidCallback onClose;
+  final ValueChanged<String> onEmojiSelected;
+
+  const _EmojiPickerPanel({
+    required this.selectedEmoji,
+    required this.onClose,
+    required this.onEmojiSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ConstrainedText(
+                  l10n.assistantChooseEmoji,
+                  style: theme.textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                tooltip: l10n.batchDlgCancel,
+                onPressed: onClose,
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: CategorizedEmojiPicker(
+              selectedEmoji: selectedEmoji,
+              onEmojiSelected: onEmojiSelected,
+            ),
           ),
         ],
       ),
@@ -214,7 +290,11 @@ class AssistantEditorFields extends StatelessWidget {
   Widget _promptField(AppLocalizations strings) => TextField(
         controller: promptController,
         decoration: InputDecoration(
-          labelText: strings.builtInPromptSystemPromptHeading,
+          label: ConstrainedText(
+            strings.builtInPromptSystemPromptHeading,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           border: OutlineInputBorder(),
           alignLabelWithHint: true,
         ),
@@ -243,7 +323,11 @@ class AssistantEditorFields extends StatelessWidget {
             child: TextField(
               controller: nameController,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.assistantNameLabel,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.assistantNameLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText: nameHint,
                 border: const OutlineInputBorder(),
               ),
@@ -256,7 +340,11 @@ class AssistantEditorFields extends StatelessWidget {
       TextField(
         controller: descriptionController,
         decoration: InputDecoration(
-          labelText: AppLocalizations.of(context)!.assistantDescriptionOptional,
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.assistantDescriptionOptional,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           hintText: descriptionHint,
           border: const OutlineInputBorder(),
         ),
@@ -302,80 +390,92 @@ class CategorizedEmojiPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final categories = EmojiCategories.categories;
 
-    return Center(
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: SizedBox(
-          width: 320,
-          child: DefaultTabController(
-            length: categories.length,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 36,
-                  child: TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    indicatorSize: TabBarIndicatorSize.label,
-                    tabs: categories.map((cat) {
-                      return Tab(
-                        child: Text(
-                          cat.label,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      );
-                    }).toList(),
+    return DefaultTabController(
+      length: categories.length,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 44,
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 10),
+              indicatorSize: TabBarIndicatorSize.label,
+              tabs: categories.map((cat) {
+                return Tab(
+                  child: ConstrainedText(
+                    _emojiCategoryLabel(l10n, cat.type),
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                SizedBox(
-                  height: 180,
-                  child: TabBarView(
-                    children: categories.map((cat) {
-                      return GridView.builder(
-                        padding: const EdgeInsets.only(top: 4),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 8,
-                          mainAxisSpacing: 2,
-                          crossAxisSpacing: 2,
-                          childAspectRatio: 1,
-                        ),
-                        itemCount: cat.emojis.length,
-                        itemBuilder: (ctx, index) {
-                          final e = cat.emojis[index];
-                          final isSelected = e == selectedEmoji;
-                          return GestureDetector(
-                            onTap: () => onEmojiSelected(e),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isSelected ? cs.primaryContainer : null,
-                                borderRadius: BorderRadius.circular(8),
-                                border: isSelected
-                                    ? Border.all(color: cs.primary)
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  e,
-                                  style: const TextStyle(fontSize: 22),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
+                );
+              }).toList(),
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: TabBarView(
+              children: categories.map((cat) {
+                return GridView.builder(
+                  padding: const EdgeInsets.only(top: 4),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 8,
+                    mainAxisSpacing: 2,
+                    crossAxisSpacing: 2,
+                    childAspectRatio: 1,
+                  ),
+                  itemCount: cat.emojis.length,
+                  itemBuilder: (ctx, index) {
+                    final e = cat.emojis[index];
+                    final isSelected = e == selectedEmoji;
+                    return Semantics(
+                      button: true,
+                      selected: isSelected,
+                      label: e,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => onEmojiSelected(e),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected ? cs.primaryContainer : null,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isSelected
+                                ? Border.all(color: cs.primary)
+                                : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              e,
+                              style: const TextStyle(fontSize: 22),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
+String _emojiCategoryLabel(AppLocalizations l10n, EmojiCategoryType category) =>
+    switch (category) {
+      EmojiCategoryType.smileys => l10n.emojiCategorySmileys,
+      EmojiCategoryType.people => l10n.emojiCategoryPeople,
+      EmojiCategoryType.animals => l10n.emojiCategoryAnimals,
+      EmojiCategoryType.food => l10n.emojiCategoryFood,
+      EmojiCategoryType.activities => l10n.emojiCategoryActivities,
+      EmojiCategoryType.travel => l10n.emojiCategoryTravel,
+      EmojiCategoryType.objects => l10n.emojiCategoryObjects,
+      EmojiCategoryType.symbols => l10n.emojiCategorySymbols,
+      EmojiCategoryType.flags => l10n.emojiCategoryFlags,
+    };

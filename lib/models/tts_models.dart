@@ -389,6 +389,24 @@ class ReasoningParam {
   }
 }
 
+/// Convenience settings shown when creating an LLM provider. Existing
+/// provider configurations retain their explicitly saved reasoning options.
+List<ReasoningParam> defaultLlmProviderReasoningParams() => [
+      ReasoningParam(
+        paramName: 'reasoning_effort',
+        isEffortParam: true,
+        options: const [
+          'none',
+          'minimal',
+          'low',
+          'medium',
+          'high',
+          'xhigh',
+          'max',
+        ],
+      ),
+    ];
+
 /// Finds the reasoning effort param (推理力度) in [params].
 ///
 /// Resolution order:

@@ -1,3 +1,5 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/audio_source_text_saver.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 // ============================================================================
@@ -93,6 +96,73 @@ void main() {
   });
 
   group('AudioPlayerPage - source text upload: companion file flow', () {
+    test(
+      'restores the previous sidecar when the record update fails',
+      () async {
+        const hash = 'source_text_rollback_existing';
+        const originalText = 'previous source';
+        const replacementText = 'new source';
+        final record = AudioRecord(
+          name: 'test',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: 100,
+          sourceText: originalText,
+        );
+        await FileManifest.addRecord(record);
+        await FileManifest.writeFile(
+          '$hash.txt',
+          Uint8List.fromList(utf8.encode(originalText)),
+        );
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw StateError('simulated manifest update failure');
+        };
+
+        await expectLater(
+          saveAudioSourceText('/audio/$hash.wav', replacementText),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(
+          utf8.decode((await FileManifest.readFile('$hash.txt'))!),
+          originalText,
+        );
+        expect(
+          (await FileManifest.getRecordByHash(hash))!.sourceText,
+          originalText,
+        );
+      },
+    );
+
+    test(
+      'removes the sidecar when record update fails without a prior file',
+      () async {
+        const hash = 'source_text_rollback_new';
+        final record = AudioRecord(
+          name: 'test',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: 100,
+        );
+        await FileManifest.addRecord(record);
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw StateError('simulated manifest update failure');
+        };
+
+        await expectLater(
+          saveAudioSourceText('/audio/$hash.wav', 'new source'),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(await FileManifest.readFile('$hash.txt'), isNull);
+        expect((await FileManifest.getRecordByHash(hash))!.sourceText, isEmpty);
+      },
+    );
+
     test('source text saved as companion .txt file is retrievable', () async {
       const hash = 'test_hash_companion';
       const sourceText = '伴生文本文件内容';

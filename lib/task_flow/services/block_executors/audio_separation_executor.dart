@@ -443,6 +443,10 @@ Future<String> executeAudioSeparationBlock({
     );
     final hash = meta.$1;
     final format = meta.$2;
+    final storageName = AudioRecord.storageFileNameFor(
+      hash: hash,
+      format: format,
+    );
     if (temporaryOutput) {
       if (!isFlowExecutionActive(execNotifier, execId)) {
         throw BlockExecutionException(
@@ -454,7 +458,7 @@ Future<String> executeAudioSeparationBlock({
       final filePath = await FlowTemporaryArtifactStorage.writeBytes(
         executionId: execId,
         blockId: block.id,
-        fileName: '$hash.$format',
+        fileName: storageName,
         bytes: audioBytes,
       );
       await onAudioFileWritten?.call();
@@ -484,7 +488,7 @@ Future<String> executeAudioSeparationBlock({
       return filePath;
     }
     return await FileManifest.withStorageFileSaveLock(
-      '$hash.$format',
+      storageName,
       () async {
         // The flow may have ended while the separation isolate ran — don't
         // write an orphaned audio file + gallery record.
@@ -495,7 +499,7 @@ Future<String> executeAudioSeparationBlock({
             blockTitle: def.label,
           );
         }
-        await FileManifest.writeFile('$hash.$format', audioBytes);
+        await FileManifest.writeFile(storageName, audioBytes);
         await onAudioFileWritten?.call();
 
         final saveFolder = asStringParam(block.params, 'saveFolder', '');
@@ -532,7 +536,6 @@ Future<String> executeAudioSeparationBlock({
               // Re-check before committing; cancellation can land while this
               // flow waits for another same-folder name allocation.
               if (!isFlowExecutionActive(execNotifier, execId)) {
-                final storageName = '$hash.$format';
                 await _deleteAudioFileIfUnreferenced(
                   storageName,
                   loadRecords: loadAudioRecordsForCleanup,
@@ -566,7 +569,7 @@ Future<String> executeAudioSeparationBlock({
         } catch (_) {
           if (!isFlowExecutionActive(execNotifier, execId)) {
             await _deleteAudioFileIfUnreferenced(
-              '$hash.$format',
+              storageName,
               loadRecords: loadAudioRecordsForCleanup,
             );
           }
@@ -588,7 +591,9 @@ Future<String> executeAudioSeparationBlock({
         }
 
         await ensureRecordStillActive();
-        final filePath = await FileManifest.readFilePath('$hash.$format');
+        final filePath = await FileManifest.readFilePath(
+          record.storageFileName,
+        );
         await ensureRecordStillActive();
 
         if (filePath == null) {

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/connectivity_test_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 class ConnectivityTestDialog extends StatefulWidget {
   final String title;
   final String initialContent;
@@ -111,7 +113,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
     final colorScheme = Theme.of(context).colorScheme;
     final localizations = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text(localizations.connectivityTestTitle(widget.title)),
+      title: ConstrainedText(
+        localizations.connectivityTestTitle(widget.title),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
@@ -129,10 +135,21 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                 keyboardType: TextInputType.multiline,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 decoration: InputDecoration(
-                  labelText: localizations.connectivityTestJsonLabel,
+                  label: ConstrainedText(
+                    localizations.connectivityTestJsonLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
-                  helperText: localizations.connectivityTestJsonHelp,
+                  helper: Text(
+                    localizations.connectivityTestJsonHelp,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    softWrap: true,
+                  ),
                 ),
                 onChanged: (_) => setState(() {
                   _isSaved = false;
@@ -157,9 +174,13 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                       color: colorScheme.primary,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      localizations.connectivityTestSaved,
-                      style: TextStyle(color: colorScheme.primary),
+                    Expanded(
+                      child: ConstrainedText(
+                        localizations.connectivityTestSaved,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: colorScheme.primary),
+                      ),
                     ),
                   ],
                 ),
@@ -179,7 +200,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
         TextButton(
           onPressed:
               _isRunning || _isSaving ? null : () => Navigator.pop(context),
-          child: Text(localizations.connectivityTestClose),
+          child: ConstrainedText(
+            localizations.connectivityTestClose,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         OutlinedButton.icon(
           onPressed: _isRunning || _isSaving ? null : _save,
@@ -189,7 +214,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save_outlined, size: 18),
-          label: Text(localizations.connectivityTestSaveContent),
+          label: ConstrainedText(
+            localizations.connectivityTestSaveContent,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton.icon(
           onPressed: _isRunning || _isSaving ? null : _run,
@@ -199,10 +228,12 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.network_check, size: 18),
-          label: Text(
+          label: ConstrainedText(
             _isRunning
                 ? localizations.connectivityTestTesting
                 : localizations.connectivityTestRun,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

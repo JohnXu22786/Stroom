@@ -16,7 +16,6 @@ import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_kind.dart';
 import '../models/media_resource.dart';
-import '../../task_flow/models/flow_payload.dart';
 import '../../task_flow/services/flow_temporary_artifact_storage.dart';
 import 'ev1_decoder.dart';
 import 'executor_utils.dart';
@@ -95,20 +94,9 @@ Future<String> executeSave({
         executionId: temporaryExecutionId,
         blockId: temporaryBlockId,
         cancelled: cancelled,
+        afterPublish: () async => finishStep(),
       );
-      try {
-        finishStep();
-        return temporaryPath;
-      } catch (_) {
-        await FlowTemporaryArtifactStorage.deleteArtifact(
-          FlowTemporaryArtifact(
-            executionId: temporaryExecutionId,
-            blockId: temporaryBlockId,
-            reference: temporaryPath,
-          ),
-        );
-        rethrow;
-      }
+      return temporaryPath;
     }
 
     final appDirPath = await AppStorage.directory;
@@ -203,20 +191,61 @@ void _throwIfCancelled(bool Function() cancelled) {
 }
 
 class _RegisteredVideo {
-  _RegisteredVideo(this.record);
+  _RegisteredVideo(this.record, {required this.publishedBlob});
   final VideoRecord record;
+  final bool publishedBlob;
 
-  Future<void> rollback() => _withStorageLock('video:${record.storageFileName}',
-      () => VideoManifest.deleteRecord(record.id, preserveFiles: true));
+  Future<void> rollback() => VideoManifest.withFilePublicationLock(
+        record.hash,
+        record.folder,
+        () => _rollbackVideoRecord(record, publishedBlob: publishedBlob),
+      );
 }
 
 class _RegisteredAudio {
-  _RegisteredAudio(this.record);
+  _RegisteredAudio(this.record, {required this.publishedBlob});
   final AudioRecord record;
+  final bool publishedBlob;
 
   Future<void> rollback() => FileManifest.withStorageFileSaveLock(
       record.storageFileName,
-      () => FileManifest.deleteRecord(record.id, preserveFiles: true));
+      () => _rollbackAudioRecord(record, publishedBlob: publishedBlob));
+}
+
+Future<void> _rollbackVideoRecord(VideoRecord record,
+    {required bool publishedBlob}) async {
+  await VideoManifest.deleteRecord(record.id, preserveFiles: true);
+  if (!publishedBlob) return;
+  late final List<VideoRecord> records;
+  try {
+    records = await VideoManifest.loadRecordsStrict();
+  } catch (_) {
+    // A failed refresh cannot establish that this blob has no other owners.
+    return;
+  }
+  if (records.any(
+      (candidate) => candidate.storageFileName == record.storageFileName)) {
+    return;
+  }
+  await VideoManifest.deleteFile(record.storageFileName);
+}
+
+Future<void> _rollbackAudioRecord(AudioRecord record,
+    {required bool publishedBlob}) async {
+  await FileManifest.deleteRecord(record.id, preserveFiles: true);
+  if (!publishedBlob) return;
+  late final List<AudioRecord> records;
+  try {
+    records = await FileManifest.loadRecordsStrict();
+  } catch (_) {
+    // A failed refresh cannot establish that this blob has no other owners.
+    return;
+  }
+  if (records.any(
+      (candidate) => candidate.storageFileName == record.storageFileName)) {
+    return;
+  }
+  await FileManifest.deleteFile(record.storageFileName);
 }
 
 // Serialize CatCatch saves that target the same content-addressed name.
@@ -347,61 +376,70 @@ Future<_RegisteredVideo?> _registerCompletedVideo(
   final size = await file.length();
   _throwIfCancelled(cancelled);
   final storageName = '$hash.$ext';
-  return _withStorageLock('video:$storageName', () async {
-    _throwIfCancelled(cancelled);
-    final records = await VideoManifest.loadRecords();
-    _throwIfCancelled(cancelled);
-    final hadRecordOwner =
-        records.any((record) => record.storageFileName == storageName);
-    if (skipIfRegistered && hadRecordOwner) {
-      return null;
-    }
-    final folder = task.metadata['videoFolder'] ?? '';
-    final recordName = _uniqueRecordName(filePath, folder,
-        records.map((record) => (record.name, record.folder)));
-    final record = VideoRecord(
-      name: recordName,
-      hash: hash,
-      format: ext,
-      createdAt: DateTime.now(),
-      size: size,
-      duration: task.expectedDurationSec * 1000,
-      folder: folder,
-    );
-    try {
-      final storageDir = await VideoManifest.videoDir;
+  final folder = task.metadata['videoFolder'] ?? '';
+  return VideoManifest.withFilePublicationLock(
+    hash,
+    folder,
+    () => _withStorageLock('video:$storageName', () async {
       _throwIfCancelled(cancelled);
-      if (!await _storageBlobMatches(storageName, storageDir, hash,
-          readTestFile: VideoManifest.readFile)) {
+      final records = await VideoManifest.loadRecords();
+      _throwIfCancelled(cancelled);
+      final hadRecordOwner =
+          records.any((record) => record.storageFileName == storageName);
+      if (skipIfRegistered && hadRecordOwner) {
+        return null;
+      }
+      final recordName = _uniqueRecordName(filePath, folder,
+          records.map((record) => (record.name, record.folder)));
+      final record = VideoRecord(
+        name: recordName,
+        hash: hash,
+        format: ext,
+        createdAt: DateTime.now(),
+        size: size,
+        duration: task.expectedDurationSec * 1000,
+        folder: folder,
+      );
+      var publishedBlob = false;
+      try {
+        final storageDir = await VideoManifest.videoDir;
         _throwIfCancelled(cancelled);
-        await _copyToStorage(file, storageName, storageDir, hash,
-            writeTestFile: VideoManifest.writeFile, cancelled: cancelled);
+        if (!await _storageBlobMatches(storageName, storageDir, hash,
+            readTestFile: VideoManifest.readFile)) {
+          _throwIfCancelled(cancelled);
+          await _copyToStorage(file, storageName, storageDir, hash,
+              writeTestFile: VideoManifest.writeFile,
+              cancelled: cancelled,
+              onPublished: () => publishedBlob = true);
+        }
+        _throwIfCancelled(cancelled);
+        await beforeRecordAdded?.call();
+        _throwIfCancelled(cancelled);
+        await VideoManifest.addRecord(record);
+        await afterRecordAdded?.call();
+        _throwIfCancelled(cancelled);
+        // A gallery delete can remove the last previous owner and its blob
+        // between our lookup and insert. Repair it now that our record owns it.
+        if (!await _storageBlobMatches(storageName, storageDir, hash,
+            readTestFile: VideoManifest.readFile)) {
+          await _copyToStorage(file, storageName, storageDir, hash,
+              writeTestFile: VideoManifest.writeFile,
+              cancelled: cancelled,
+              onPublished: () => publishedBlob = true);
+          await _verifyStorageBlob(storageName, storageDir, hash,
+              readTestFile: VideoManifest.readFile);
+        }
+        _throwIfCancelled(cancelled);
+        AppLogService.info('CatCatch', '视频已保存: $recordName.$ext ($size bytes)');
+        debugPrint('[TaskExecutor] Registered video to gallery: '
+            '$recordName.$ext (folder: $folder)');
+        return _RegisteredVideo(record, publishedBlob: publishedBlob);
+      } catch (_) {
+        await _rollbackVideoRecord(record, publishedBlob: publishedBlob);
+        rethrow;
       }
-      _throwIfCancelled(cancelled);
-      await beforeRecordAdded?.call();
-      _throwIfCancelled(cancelled);
-      await VideoManifest.addRecord(record);
-      await afterRecordAdded?.call();
-      _throwIfCancelled(cancelled);
-      // A gallery delete can remove the last previous owner and its blob
-      // between our lookup and insert. Repair it now that our record owns it.
-      if (!await _storageBlobMatches(storageName, storageDir, hash,
-          readTestFile: VideoManifest.readFile)) {
-        await _copyToStorage(file, storageName, storageDir, hash,
-            writeTestFile: VideoManifest.writeFile, cancelled: cancelled);
-        await _verifyStorageBlob(storageName, storageDir, hash,
-            readTestFile: VideoManifest.readFile);
-      }
-      _throwIfCancelled(cancelled);
-      AppLogService.info('CatCatch', '视频已保存: $recordName.$ext ($size bytes)');
-      debugPrint('[TaskExecutor] Registered video to gallery: '
-          '$recordName.$ext (folder: $folder)');
-      return _RegisteredVideo(record);
-    } catch (_) {
-      await VideoManifest.deleteRecord(record.id, preserveFiles: true);
-      rethrow;
-    }
-  });
+    }),
+  );
 }
 
 Future<_RegisteredAudio?> _registerCompletedAudio(
@@ -468,6 +506,7 @@ Future<_RegisteredAudio?> _registerCompletedAudio(
       duration: task.expectedDurationSec,
       folder: folder,
     );
+    var publishedBlob = false;
     try {
       final storageDir = await FileManifest.ttsAudioDir;
       _throwIfCancelled(cancelled);
@@ -475,7 +514,9 @@ Future<_RegisteredAudio?> _registerCompletedAudio(
           readTestFile: FileManifest.readFile)) {
         _throwIfCancelled(cancelled);
         await _copyToStorage(file, storageName, storageDir, hash,
-            writeTestFile: FileManifest.writeFile, cancelled: cancelled);
+            writeTestFile: FileManifest.writeFile,
+            cancelled: cancelled,
+            onPublished: () => publishedBlob = true);
       }
       _throwIfCancelled(cancelled);
       await beforeRecordAdded?.call();
@@ -486,7 +527,9 @@ Future<_RegisteredAudio?> _registerCompletedAudio(
       if (!await _storageBlobMatches(storageName, storageDir, hash,
           readTestFile: FileManifest.readFile)) {
         await _copyToStorage(file, storageName, storageDir, hash,
-            writeTestFile: FileManifest.writeFile, cancelled: cancelled);
+            writeTestFile: FileManifest.writeFile,
+            cancelled: cancelled,
+            onPublished: () => publishedBlob = true);
         await _verifyStorageBlob(storageName, storageDir, hash,
             readTestFile: FileManifest.readFile);
       }
@@ -494,9 +537,9 @@ Future<_RegisteredAudio?> _registerCompletedAudio(
       AppLogService.info('CatCatch', '音频已保存: $recordName.$ext ($size bytes)');
       debugPrint('[TaskExecutor] Registered audio to gallery: '
           '$recordName.$ext (folder: $folder)');
-      return _RegisteredAudio(record);
+      return _RegisteredAudio(record, publishedBlob: publishedBlob);
     } catch (_) {
-      await FileManifest.deleteRecord(record.id, preserveFiles: true);
+      await _rollbackAudioRecord(record, publishedBlob: publishedBlob);
       rethrow;
     }
   });
@@ -524,6 +567,7 @@ Future<void> _copyToStorage(
   String expectedHash, {
   required Future<String> Function(String, Uint8List) writeTestFile,
   required bool Function() cancelled,
+  required void Function() onPublished,
 }) async {
   if (storageDir.isEmpty) {
     // Manifest test mode stores files in memory. Native saves remain streamed.
@@ -533,10 +577,11 @@ Future<void> _copyToStorage(
       throw StateError('Completed file changed during save: $storageName');
     }
     await writeTestFile(storageName, bytes);
+    onPublished();
     return;
   }
   await publishCompletedBlob(source, storageName, storageDir, expectedHash,
-      cancelled: cancelled);
+      cancelled: cancelled, onPublished: onPublished);
 }
 
 /// Publishes a fully copied native hash blob. The optional staging hook lets
@@ -551,6 +596,7 @@ Future<void> publishCompletedBlob(
   @visibleForTesting Future<void> Function()? afterStaged,
   @visibleForTesting Future<File> Function(File, String)? renameStaged,
   @visibleForTesting Future<bool> Function(String, String)? replaceExisting,
+  void Function()? onPublished,
 }) async {
   if (await _storageBlobMatches(storageName, storageDir, expectedHash,
       readTestFile: (_) async => null)) {
@@ -576,6 +622,7 @@ Future<void> publishCompletedBlob(
     try {
       await (renameStaged ?? (file, path) => file.rename(path))(
           staged, target.path);
+      onPublished?.call();
     } on FileSystemException {
       // On platforms where rename cannot replace a concurrently published
       // file, retain it if valid. Windows needs an explicit atomic replace
@@ -585,6 +632,7 @@ Future<void> publishCompletedBlob(
         _throwIfCancelled(cancelled);
         final replace = replaceExisting ?? native_blob.replaceExistingBlob;
         if (!await replace(staged.path, target.path)) rethrow;
+        onPublished?.call();
         if (!await _storageBlobMatches(storageName, storageDir, expectedHash,
             readTestFile: (_) async => null)) {
           throw StateError(

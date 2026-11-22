@@ -8,6 +8,8 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/text_storage_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 
 import '../../fake_file_picker.dart';
 
@@ -52,12 +54,53 @@ class _EmptyTextPicker extends FilePickerPlatform {
   }
 }
 
-Widget _buildApp() => const ProviderScope(
+class _TextFilesPicker extends FilePickerPlatform {
+  _TextFilesPicker(this.inputs);
+
+  final List<PlatformFile> inputs;
+
+  @override
+  Future<List<PlatformFile>> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async =>
+      inputs;
+}
+
+Widget _buildApp({
+  Locale locale = const Locale('zh', 'CN'),
+  double textScaleFactor = 1,
+  ThemeMode themeMode = ThemeMode.light,
+  bool allowMotion = false,
+}) =>
+    ProviderScope(
       child: MaterialApp(
-        locale: Locale('zh', 'CN'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: TextStoragePage(),
+        theme: ThemeData(colorSchemeSeed: Colors.blue),
+        darkTheme: ThemeData(
+          colorSchemeSeed: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        themeMode: themeMode,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            disableAnimations: !allowMotion,
+            textScaler: TextScaler.linear(textScaleFactor),
+          ),
+          child: child!,
+        ),
+        home: const TextStoragePage(),
       ),
     );
 
@@ -70,11 +113,13 @@ void main() {
     originalPicker = FilePickerPlatform.instance;
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     TextManifest.invalidateCache();
   });
 
   tearDown(() {
     FilePickerPlatform.instance = originalPicker;
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
   });
 
   testWidgets('imports a zero-byte text file', (tester) async {
@@ -95,6 +140,113 @@ void main() {
     expect(records.single.size, 0);
     expect(records.single.textLength, 0);
     expect(await TextManifest.readText(records.single.storagePath), '');
+  });
+
+  testWidgets('file format label uses the shared bounded text behavior', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final record = TextRecord(
+      id: 'format-label',
+      name: 'format-label',
+      hash: 'format-label-hash',
+      format: 'mmd',
+      createdAt: DateTime.utc(2024),
+      size: 0,
+    );
+    await TextManifest.addRecord(record);
+
+    await tester.pumpWidget(
+      _buildApp(),
+    );
+    await tester.pumpAndSettle();
+
+    final label = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == 'MMD',
+    );
+    expect(label, findsOneWidget);
+    expect(tester.getSize(label).width, lessThan(44));
+    expect(find.text('MMD'), findsOneWidget);
+    expect(find.byType(FittedBox), findsNothing);
+    final start = tester.getTopLeft(find.text('MMD'));
+    await tester.pump(const Duration(seconds: 3));
+    expect(tester.getTopLeft(find.text('MMD')), start);
+
+    for (final locale in [const Locale('en'), const Locale('de')]) {
+      for (final themeMode in [ThemeMode.light, ThemeMode.dark]) {
+        for (final scale in [1.0, 2.0]) {
+          await tester.pumpWidget(
+            _buildApp(
+              locale: locale,
+              textScaleFactor: scale,
+              themeMode: themeMode,
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(label, findsOneWidget);
+          expect(find.text('MMD'), findsOneWidget);
+        }
+      }
+    }
+  });
+
+  testWidgets('captures the clipped format reveal at 2x text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final record = TextRecord(
+      id: 'format-label-reveal',
+      name: 'format-label-reveal',
+      hash: 'format-label-reveal-hash',
+      format: 'yaml',
+      createdAt: DateTime.utc(2024),
+      size: 0,
+    );
+    await TextManifest.addRecord(record);
+
+    await tester.pumpWidget(
+      _buildApp(
+        textScaleFactor: 2,
+        themeMode: ThemeMode.dark,
+        allowMotion: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('YAML'), findsOneWidget);
+    final text = find.text('YAML');
+    expect(tester.widget<Text>(text).style?.fontSize, 12);
+    final start = tester.getTopLeft(text);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(start.dx - tester.getTopLeft(text).dx, closeTo(7.2, 1.5));
+  });
+
+  testWidgets('shows saved files after a later import item fails',
+      (tester) async {
+    final picker = _TextFilesPicker([
+      FakePlatformFile(name: 'first.txt', bytes: Uint8List.fromList([65])),
+      FakePlatformFile(name: 'invalid.txt', bytes: Uint8List.fromList([0xff])),
+    ]);
+    FilePickerPlatform.instance = picker;
+    await tester.pumpWidget(_buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('导入'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('导入失败：'), findsOneWidget);
+    expect(find.text('first.txt'), findsOneWidget);
+    final records = await TextManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(await TextManifest.readText(records.single.storagePath), 'A');
   });
 
   testWidgets('exports an empty text record as zero bytes', (tester) async {
@@ -132,5 +284,44 @@ void main() {
     expect(picker.savedBytes, isNotNull);
     expect(picker.savedBytes, isEmpty);
     expect(find.textContaining('读取失败'), findsNothing);
+  });
+
+  testWidgets('keeps batch copy selection when text record registration fails',
+      (tester) async {
+    await TextManifest.saveTextRecord(
+      TextRecord(
+        id: 'source',
+        name: 'source',
+        hash: 'source-hash',
+        format: 'txt',
+        createdAt: DateTime.utc(2024),
+        size: 1,
+      ),
+      'x',
+    );
+    await TextManifest.addFolder('destination');
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+      throw StateError('disk error');
+    };
+
+    await tester.pumpWidget(_buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const Key('fm_file_source')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_selection_copy_btn')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FolderPickerDialog),
+        matching: find.text('destination'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('批量复制失败: Bad state: disk error'), findsOneWidget);
+    expect(find.text('已选择 1 项'), findsOneWidget);
   });
 }

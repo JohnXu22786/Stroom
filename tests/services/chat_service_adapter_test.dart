@@ -4,47 +4,15 @@
 //
 // No naming conflicts between sources for this file.
 
-import 'dart:async';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
-import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
-import 'package:stroom/providers/llm_routed_chat_provider.dart';
-import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/http_tool_service.dart';
-import 'package:stroom/services/llm_chat_runtime.dart';
-import 'package:stroom/services/llm_model_group_provider.dart';
-
-class _FakeGatewayFacade implements AiGatewayFacade {
-  @override
-  final AiGatewayAccountManagement accountManagement;
-
-  _FakeGatewayFacade(this.accountManagement);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeAccountManagement implements AiGatewayAccountManagement {
-  final List<AiGatewayAccount> accounts;
-  final List<AiGatewayModelGroup> groups;
-
-  _FakeAccountManagement({required this.accounts, required this.groups});
-
-  @override
-  Future<List<AiGatewayAccount>> listAccounts() async => accounts;
-
-  @override
-  Future<List<AiGatewayModelGroup>> listModelGroups() async => groups;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
 
 void main() {
   test('missing provider stream error follows the selected locale', () async {
@@ -160,109 +128,6 @@ void main() {
   });
 
   group('ChatAdapter model selection', () {
-    test('legacy models keep their direct provider with routing available', () {
-      final runtime = Completer<LlmChatRoutingRuntime>().future;
-      final runtimeAdapter = ChatAdapter(routingRuntime: runtime);
-      addTearDown(runtimeAdapter.dispose);
-
-      runtimeAdapter.configure(entriesState);
-
-      expect(
-        runtimeAdapter.getOrCreateService('legacy')!.provider,
-        isNot(isA<LlmRoutedChatProvider>()),
-      );
-    });
-
-    test('conversation service carries an explicit account override', () {
-      final runtime = Completer<LlmChatRoutingRuntime>().future;
-      final runtimeAdapter = ChatAdapter(routingRuntime: runtime);
-      addTearDown(runtimeAdapter.dispose);
-      final routedEntries = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'group-entry',
-            type: 'llm',
-            name: 'Group',
-            configs: [
-              ProviderConfigItem(
-                id: 'group-config',
-                providerName: 'Group',
-                legacyFields: {kLlmModelGroupConfigField: 'group-id'},
-                models: [
-                  ModelConfig(
-                    name: 'Model',
-                    modelId: 'local-model',
-                    legacyFields: {
-                      kLlmModelCapabilitiesConfigField: {'streaming': true},
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      );
-      runtimeAdapter.configure(routedEntries);
-
-      final service = runtimeAdapter.getOrCreateService(
-        'conversation-a',
-        selectedAccountId: 'account-b',
-      );
-
-      expect(service?.provider, isA<LlmRoutedChatProvider>());
-      expect(
-        (service!.provider as LlmRoutedChatProvider).selectedAccountId,
-        'account-b',
-      );
-
-      runtimeAdapter.getOrCreateService('conversation-a');
-
-      expect(
-        (service.provider as LlmRoutedChatProvider).selectedAccountId,
-        'account-b',
-      );
-    });
-
-    test('routed provider keeps a legacy model protocol override', () {
-      final runtimeAdapter = ChatAdapter(
-        routingRuntime: Completer<LlmChatRoutingRuntime>().future,
-      );
-      addTearDown(runtimeAdapter.dispose);
-      runtimeAdapter.configure(ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'group-entry',
-            type: 'llm',
-            name: 'Group',
-            configs: [
-              ProviderConfigItem(
-                id: 'group-config',
-                providerName: 'Group',
-                apiProtocol: 'openai.responses',
-                legacyFields: {kLlmModelGroupConfigField: 'group-id'},
-                models: [
-                  ModelConfig(
-                    name: 'Model',
-                    modelId: 'local-model',
-                    endpointType: 'anthropic',
-                    legacyFields: {
-                      kLlmModelCapabilitiesConfigField: {'streaming': true},
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ));
-
-      final service = runtimeAdapter.getOrCreateService('legacy-override')!;
-      // ignore: invalid_use_of_visible_for_testing_member
-      final provider = service.provider as LlmRoutedChatProvider;
-
-      expect(provider.apiProtocolOverride, 'anthropic.messages');
-    });
-
     test('configure sets adapter to first config, first model (0,0)', () {
       adapter.configure(entriesState);
 
@@ -866,28 +731,26 @@ void main() {
       expect(adapter.mcpToolDefinitions, isEmpty);
     });
 
-    test(
-      'initializeMcpServers is no-op when MCP entry has no configs',
-      () async {
-        final stateWithEmptyMcp = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'empty_mcp',
-              type: 'mcp',
-              name: '空MCP',
-              configs: [],
-            ),
-          ],
-        );
+    test('initializeMcpServers is no-op when MCP entry has no configs',
+        () async {
+      final stateWithEmptyMcp = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'empty_mcp',
+            type: 'mcp',
+            name: '空MCP',
+            configs: [],
+          ),
+        ],
+      );
 
-        await expectLater(
-          () => adapter.initializeMcpServers(stateWithEmptyMcp),
-          returnsNormally,
-        );
+      await expectLater(
+        () => adapter.initializeMcpServers(stateWithEmptyMcp),
+        returnsNormally,
+      );
 
-        expect(adapter.mcpToolDefinitions, isEmpty);
-      },
-    );
+      expect(adapter.mcpToolDefinitions, isEmpty);
+    });
 
     test('initializeBuiltinTools handles empty MCP entry gracefully', () {
       // First call with empty state (simulating load not yet completed)
@@ -915,12 +778,15 @@ void main() {
         isEmpty,
       );
       expect(
-        HttpToolService.extractHttpToolApiKey('Brave Search', {
-          'headers': {
-            'X-Subscription-Token': 'legacy-provider-key',
-            'X-Custom-Metadata': unrelatedHeaderKey,
+        HttpToolService.extractHttpToolApiKey(
+          'Brave Search',
+          {
+            'headers': {
+              'X-Subscription-Token': 'legacy-provider-key',
+              'X-Custom-Metadata': unrelatedHeaderKey,
+            },
           },
-        }),
+        ),
         'legacy-provider-key',
       );
 
@@ -948,8 +814,11 @@ void main() {
           ],
         ),
       );
-      final result = await HttpToolService.handleBraveSearch({'query': 'test'});
-      expect(result, contains('Brave Search API Key 未配置'));
+      final result = await HttpToolService.handleBraveSearch(
+        {'query': 'test'},
+        locale: const Locale('en', 'US'),
+      );
+      expect(result, contains('Brave Search API key is not configured'));
     });
 
     test(
@@ -959,18 +828,14 @@ void main() {
       // completes (the snapshot is empty), then the provider-change listener
       // re-initializing with the loaded state. The empty-state call must not
       // record a hash that blocks the later real-state discovery.
-      await adapter.initializeMcpServers(
-        const ProviderEntriesState(entries: []),
-      );
+      await adapter
+          .initializeMcpServers(const ProviderEntriesState(entries: []));
       expect(adapter.mcpToolDefinitions, isEmpty);
 
       await adapter.initializeMcpServers(_vendorState());
-      expect(
-        adapter.mcpToolDefinitions,
-        isNotEmpty,
-        reason: 'MCP tools must be discovered once the real entries state '
-            'arrives, even if an earlier call saw empty entries',
-      );
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'MCP tools must be discovered once the real entries state '
+              'arrives, even if an earlier call saw empty entries');
     });
 
     test(
@@ -978,11 +843,8 @@ void main() {
         '(hash match must not skip an empty cache)', () async {
       final state = _vendorState();
       await adapter.initializeMcpServers(state);
-      expect(
-        adapter.mcpToolDefinitions,
-        isNotEmpty,
-        reason: 'sanity: discovery populates the cache',
-      );
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'sanity: discovery populates the cache');
 
       // Simulate the cache being cleared (e.g. disposeMcp) while the entries
       // state hash stays unchanged — re-init must re-discover, not
@@ -992,12 +854,9 @@ void main() {
       expect(adapter.mcpToolDefinitions, isEmpty);
 
       await adapter.initializeMcpServers(state);
-      expect(
-        adapter.mcpToolDefinitions,
-        isNotEmpty,
-        reason: 'an unchanged config hash must not skip discovery when the '
-            'cached tool list is empty',
-      );
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'an unchanged config hash must not skip discovery when the '
+              'cached tool list is empty');
     });
 
     test(
@@ -1021,19 +880,13 @@ void main() {
         ],
       );
       await adapter.initializeMcpServers(disabledState);
-      expect(
-        adapter.mcpToolDefinitions,
-        isEmpty,
-        reason: '总开关关闭后 MCP 工具不应再发布（助手页面与对话页都不显示）',
-      );
+      expect(adapter.mcpToolDefinitions, isEmpty,
+          reason: '总开关关闭后 MCP 工具不应再发布（助手页面与对话页都不显示）');
 
       // 重新开启：再次发布占位工具
       await adapter.initializeMcpServers(_vendorState());
-      expect(
-        adapter.mcpToolDefinitions,
-        isNotEmpty,
-        reason: '总开关重新开启后 MCP 工具应恢复发布',
-      );
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: '总开关重新开启后 MCP 工具应恢复发布');
     });
 
     test(
@@ -1049,11 +902,8 @@ void main() {
         adapter.initializeMcpServers(state),
       ]);
       expect(results, hasLength(2));
-      expect(
-        adapter.mcpToolDefinitions,
-        isNotEmpty,
-        reason: 'concurrent same-state init must not lose discovered tools',
-      );
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'concurrent same-state init must not lose discovered tools');
     });
 
     test(
@@ -1178,94 +1028,81 @@ void main() {
 
       // All 5 vendor SSE providers should have tool definitions even though
       // the servers are unreachable.
-      expect(
-        names,
-        contains('exa_mcp'),
-        reason: 'Exa should have a placeholder tool definition',
-      );
-      expect(
-        names,
-        contains('tavily_mcp'),
-        reason: 'Tavily should have a placeholder tool definition',
-      );
-      expect(
-        names,
-        contains('jina_ai_mcp'),
-        reason: 'Jina AI should have a placeholder tool definition',
-      );
-      expect(
-        names,
-        contains('firecrawl_mcp'),
-        reason: 'Firecrawl should have a placeholder tool definition',
-      );
-      expect(
-        names,
-        contains('zhipu_mcp'),
-        reason: 'Zhipu should have a placeholder tool definition',
-      );
+      expect(names, contains('exa_mcp'),
+          reason: 'Exa should have a placeholder tool definition');
+      expect(names, contains('tavily_mcp'),
+          reason: 'Tavily should have a placeholder tool definition');
+      expect(names, contains('jina_ai_mcp'),
+          reason: 'Jina AI should have a placeholder tool definition');
+      expect(names, contains('firecrawl_mcp'),
+          reason: 'Firecrawl should have a placeholder tool definition');
+      expect(names, contains('zhipu_mcp'),
+          reason: 'Zhipu should have a placeholder tool definition');
     });
 
     test(
-      'getAllToolDefinitions includes HTTP tools after initializeBuiltinTools',
-      () {
-        // Register HTTP tools
-        final mcpEntryState = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'test_mcp',
-              type: 'mcp',
-              name: 'MCP供应商',
-              configs: [
-                ProviderConfigItem(
-                  providerName: 'Brave Search',
-                  host: 'https://api.search.brave.com',
-                  key: '',
-                  models: [
-                    ModelConfig(
-                      name: 'Brave Search',
-                      modelId: 'http',
-                      typeConfig: {'transport': 'http', 'isHttpTool': true},
-                    ),
-                  ],
-                ),
-                // Also include a vendor SSE config to test mixing
-                ProviderConfigItem(
-                  providerName: 'Exa',
-                  host: 'https://mcp.exa.ai/mcp',
-                  key: '',
-                  models: [
-                    ModelConfig(
-                      name: 'Exa',
-                      modelId: 'sse',
-                      typeConfig: {
-                        'transport': 'sse',
-                        'url': 'https://mcp.exa.ai/mcp',
-                        'isVendor': true,
-                        'description': 'Exa MCP search tool',
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        );
+        'getAllToolDefinitions includes HTTP tools after initializeBuiltinTools',
+        () {
+      // Register HTTP tools
+      final mcpEntryState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Brave Search',
+                host: 'https://api.search.brave.com',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Brave Search',
+                    modelId: 'http',
+                    typeConfig: {
+                      'transport': 'http',
+                      'isHttpTool': true,
+                    },
+                  ),
+                ],
+              ),
+              // Also include a vendor SSE config to test mixing
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.exa.ai/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.exa.ai/mcp',
+                      'isVendor': true,
+                      'description': 'Exa MCP search tool',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
 
-        adapter.initializeBuiltinTools(mcpEntryState);
-        // Don't call initializeMcpServers to avoid real network connections.
-        // This test verifies that getAllToolDefinitions returns HTTP tools,
-        // while MCP tools come from initializeMcpServers separately.
+      adapter.initializeBuiltinTools(mcpEntryState);
+      // Don't call initializeMcpServers to avoid real network connections.
+      // This test verifies that getAllToolDefinitions returns HTTP tools,
+      // while MCP tools come from initializeMcpServers separately.
 
-        final defs = adapter.getAllToolDefinitions();
-        final names = defs.map((d) => d.name).toSet();
+      final defs = adapter.getAllToolDefinitions();
+      final names = defs.map((d) => d.name).toSet();
 
-        // HTTP tools are registered
-        expect(names, contains('brave_web_search'));
-        expect(names, contains('bocha_web_search'));
-        expect(names, contains('querit_search'));
-        expect(names, contains('searxng_search'));
-      },
-    );
+      // HTTP tools are registered
+      expect(names, contains('brave_web_search'));
+      expect(names, contains('bocha_web_search'));
+      expect(names, contains('querit_search'));
+      expect(names, contains('searxng_search'));
+    });
 
     test('MCP master switch filters all search tool definitions', () {
       const searchToolNames = {
@@ -1323,61 +1160,49 @@ void main() {
       );
     });
 
-    test(
-      'vendor SSE placeholder tools are visible via mcpToolDefinitions',
-      () async {
-        // Single vendor SSE config (Exa)
-        final state = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'test_mcp',
-              type: 'mcp',
-              name: 'MCP供应商',
-              configs: [
-                ProviderConfigItem(
-                  providerName: 'Exa',
-                  host: 'https://mcp.exa.ai/mcp',
-                  key: '',
-                  models: [
-                    ModelConfig(
-                      name: 'Exa',
-                      modelId: 'sse',
-                      typeConfig: {
-                        'transport': 'sse',
-                        'url': 'https://mcp.exa.ai/mcp',
-                        'isVendor': true,
-                        'description': '通过 Exa MCP 接口进行网络搜索',
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        );
+    test('vendor SSE placeholder tools are visible via mcpToolDefinitions',
+        () async {
+      // Single vendor SSE config (Exa)
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.exa.ai/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.exa.ai/mcp',
+                      'isVendor': true,
+                      'description': '通过 Exa MCP 接口进行网络搜索',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
 
-        await adapter.initializeMcpServers(state);
+      await adapter.initializeMcpServers(state);
 
-        expect(
-          adapter.mcpToolDefinitions,
-          isNotEmpty,
-          reason: 'Exa should have a placeholder tool definition',
-        );
-        final exaTools = adapter.mcpToolDefinitions.where(
-          (t) => t.name == 'exa_mcp',
-        );
-        expect(
-          exaTools,
-          isNotEmpty,
-          reason: 'exa_mcp placeholder should exist',
-        );
-        expect(
-          exaTools.first.description,
-          contains('Exa MCP'),
-          reason: 'Description should be preserved from config',
-        );
-      },
-    );
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'Exa should have a placeholder tool definition');
+      final exaTools = adapter.mcpToolDefinitions.where(
+        (t) => t.name == 'exa_mcp',
+      );
+      expect(exaTools, isNotEmpty, reason: 'exa_mcp placeholder should exist');
+      expect(exaTools.first.description, contains('Exa MCP'),
+          reason: 'Description should be preserved from config');
+    });
 
     test(
         'placeholder tools are published synchronously without any network '
@@ -1387,16 +1212,11 @@ void main() {
       final state = _vendorState();
       final future = adapter.initializeMcpServers(state);
 
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'placeholders must be visible synchronously — no network '
+              'attempt happens on page entry (lazy MCP)');
       expect(
-        adapter.mcpToolDefinitions,
-        isNotEmpty,
-        reason: 'placeholders must be visible synchronously — no network '
-            'attempt happens on page entry (lazy MCP)',
-      );
-      expect(
-        adapter.mcpToolDefinitions.map((t) => t.name),
-        contains('exa_mcp'),
-      );
+          adapter.mcpToolDefinitions.map((t) => t.name), contains('exa_mcp'));
 
       await future;
       expect(adapter.mcpToolDefinitions, isNotEmpty);
@@ -1439,66 +1259,54 @@ void main() {
       await adapter.initializeMcpServers(state);
 
       final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
-      expect(
-        names,
-        contains('my_files_mcp'),
-        reason: 'user-added stdio MCP server must get a placeholder tool '
-            'even without isVendor/description',
-      );
-      final placeholder = adapter.mcpToolDefinitions.firstWhere(
-        (t) => t.name == 'my_files_mcp',
-      );
-      expect(
-        placeholder.description,
-        isNotEmpty,
-        reason: 'placeholder falls back to a generic description so the '
-            'tool list entry is meaningful',
-      );
+      expect(names, contains('my_files_mcp'),
+          reason: 'user-added stdio MCP server must get a placeholder tool '
+              'even without isVendor/description');
+      final placeholder = adapter.mcpToolDefinitions
+          .firstWhere((t) => t.name == 'my_files_mcp');
+      expect(placeholder.description, isNotEmpty,
+          reason: 'placeholder falls back to a generic description so the '
+              'tool list entry is meaningful');
     });
 
-    test(
-      'vendor MCP servers without a description still get placeholder tools',
-      () async {
-        final state = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'test_mcp',
-              type: 'mcp',
-              name: 'MCP供应商',
-              configs: [
-                ProviderConfigItem(
-                  providerName: 'Exa',
-                  host: 'https://mcp.example.com/mcp',
-                  key: '',
-                  models: [
-                    ModelConfig(
-                      name: 'Exa',
-                      modelId: 'sse',
-                      typeConfig: {
-                        'transport': 'sse',
-                        'url': 'https://mcp.example.com/mcp',
-                        'isVendor': true,
-                        // Note: no 'description' key.
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        );
+    test('vendor MCP servers without a description still get placeholder tools',
+        () async {
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.example.com/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.example.com/mcp',
+                      'isVendor': true,
+                      // Note: no 'description' key.
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
 
-        await adapter.initializeMcpServers(state);
+      await adapter.initializeMcpServers(state);
 
-        final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
-        expect(
-          names,
-          contains('exa_mcp'),
+      final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
+      expect(names, contains('exa_mcp'),
           reason: 'a vendor server without a description must still appear '
-              'in the tool list',
-        );
-      },
-    );
+              'in the tool list');
+    });
 
     test(
         'initializeMcpServers with no MCP configs clears previously cached '
@@ -1519,101 +1327,82 @@ void main() {
       );
       await adapter.initializeMcpServers(emptyConfigsState);
 
-      expect(
-        adapter.mcpToolDefinitions,
-        isEmpty,
-        reason: 'tools from a removed MCP config must not leak into the '
-            'tool list',
-      );
+      expect(adapter.mcpToolDefinitions, isEmpty,
+          reason: 'tools from a removed MCP config must not leak into the '
+              'tool list');
     });
 
-    test(
-      'a same-config re-entry is skipped (no placeholder/client churn)',
-      () async {
-        // 懒连接模式下同配置的页面重复进入不应重建任何东西：占位工具
-        // 保持同一实例（可观察：identical），客户端也保持未连接状态。
-        final state = _vendorState();
-        await adapter.initializeMcpServers(state);
-        final firstDefs = adapter.mcpToolDefinitions;
-        expect(firstDefs, isNotEmpty);
+    test('a same-config re-entry is skipped (no placeholder/client churn)',
+        () async {
+      // 懒连接模式下同配置的页面重复进入不应重建任何东西：占位工具
+      // 保持同一实例（可观察：identical），客户端也保持未连接状态。
+      final state = _vendorState();
+      await adapter.initializeMcpServers(state);
+      final firstDefs = adapter.mcpToolDefinitions;
+      expect(firstDefs, isNotEmpty);
 
-        await adapter.initializeMcpServers(state);
-        final secondDefs = adapter.mcpToolDefinitions;
-        expect(
-          identical(firstDefs.first, secondDefs.first),
-          isTrue,
+      await adapter.initializeMcpServers(state);
+      final secondDefs = adapter.mcpToolDefinitions;
+      expect(identical(firstDefs.first, secondDefs.first), isTrue,
           reason: 'same-config re-entry must be a no-op (no re-publish, no '
-              'client recreation) — connections happen only on tool calls',
-        );
-      },
-    );
+              'client recreation) — connections happen only on tool calls');
+    });
 
-    test(
-      'an MCP config change recreates the lazy clients (new URL/command)',
-      () async {
-        // 配置变化（如 URL 修改）后，旧客户端必须被释放并重建，否则按需
-        // 执行会命中旧配置的客户端。
-        final state = _vendorState();
-        adapter.initializeBuiltinTools(state);
-        await adapter.initializeMcpServers(state);
-        final manager = ChatService.mcpClientManager;
-        expect(manager, isNotNull);
-        final firstClient = manager!.clients['Exa'];
-        expect(
-          firstClient,
-          isNotNull,
-          reason: 'clients are pre-created (unconnected) at placeholder time',
-        );
+    test('an MCP config change recreates the lazy clients (new URL/command)',
+        () async {
+      // 配置变化（如 URL 修改）后，旧客户端必须被释放并重建，否则按需
+      // 执行会命中旧配置的客户端。
+      final state = _vendorState();
+      adapter.initializeBuiltinTools(state);
+      await adapter.initializeMcpServers(state);
+      final manager = ChatService.mcpClientManager;
+      expect(manager, isNotNull);
+      final firstClient = manager!.clients['Exa'];
+      expect(firstClient, isNotNull,
+          reason: 'clients are pre-created (unconnected) at placeholder time');
 
-        // 同一 state 实例再次初始化（模拟页面重复进入）→ 客户端保持不变。
-        await adapter.initializeMcpServers(state);
-        expect(
-          identical(manager.clients['Exa'], firstClient),
-          isTrue,
-          reason: 'same-config re-entry must not recreate clients',
-        );
+      // 同一 state 实例再次初始化（模拟页面重复进入）→ 客户端保持不变。
+      await adapter.initializeMcpServers(state);
+      expect(identical(manager.clients['Exa'], firstClient), isTrue,
+          reason: 'same-config re-entry must not recreate clients');
 
-        // 配置变化（同名的不同实例）→ 客户端重建。
-        final changedState = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'test_mcp',
-              type: 'mcp',
-              name: 'MCP供应商',
-              configs: [
-                ProviderConfigItem(
-                  providerName: 'Exa',
-                  host: 'https://mcp.new-host.com/mcp',
-                  key: '',
-                  models: [
-                    ModelConfig(
-                      name: 'Exa',
-                      modelId: 'sse',
-                      typeConfig: {
-                        'transport': 'sse',
-                        'url': 'https://mcp.new-host.com/mcp',
-                        'isVendor': true,
-                        'description': 'Exa MCP search tool',
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        );
-        await adapter.initializeMcpServers(changedState);
-        final secondClient = manager.clients['Exa'];
-        expect(secondClient, isNotNull);
-        expect(
-          identical(secondClient, firstClient),
-          isFalse,
+      // 配置变化（同名的不同实例）→ 客户端重建。
+      final changedState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.new-host.com/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.new-host.com/mcp',
+                      'isVendor': true,
+                      'description': 'Exa MCP search tool',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      await adapter.initializeMcpServers(changedState);
+      final secondClient = manager.clients['Exa'];
+      expect(secondClient, isNotNull);
+      expect(identical(secondClient, firstClient), isFalse,
           reason: 'a config change must recreate the client so on-demand '
-              'execution uses the new URL/command',
-        );
-        expect(secondClient!.config.url, 'https://mcp.new-host.com/mcp');
-      },
-    );
+              'execution uses the new URL/command');
+      expect(secondClient!.config.url, 'https://mcp.new-host.com/mcp');
+    });
   });
 
   // ====================================================================
@@ -1662,48 +1451,41 @@ void main() {
       );
 
       expect(
-        resolved,
-        equals({'brave_web_search', 'tavily_search', 'exa_search'}),
-        reason: 'New conversation with no saved preferences should default '
-            'to all available tools enabled so built-in MCPs are visible.',
-      );
+          resolved, equals({'brave_web_search', 'tavily_search', 'exa_search'}),
+          reason: 'New conversation with no saved preferences should default '
+              'to all available tools enabled so built-in MCPs are visible.');
     });
 
-    test(
-      'resolver respects saved preferences when user has toggled tools off',
-      () {
-        final allTools = <ToolDefinition>[
-          const ToolDefinition(
-            name: 'brave_web_search',
-            description: 'Brave',
-            parameters: {'type': 'object'},
-          ),
-          const ToolDefinition(
-            name: 'tavily_search',
-            description: 'Tavily',
-            parameters: {'type': 'object'},
-          ),
-          const ToolDefinition(
-            name: 'exa_search',
-            description: 'Exa',
-            parameters: {'type': 'object'},
-          ),
-        ];
+    test('resolver respects saved preferences when user has toggled tools off',
+        () {
+      final allTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'brave_web_search',
+          description: 'Brave',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'tavily_search',
+          description: 'Tavily',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'exa_search',
+          description: 'Exa',
+          parameters: {'type': 'object'},
+        ),
+      ];
 
-        // User previously toggled tavily off; explicit flag is true.
-        final resolved = resolveEnabledToolNames(
-          allTools: allTools,
-          savedEnabledNames: {'brave_web_search', 'exa_search'},
-          hasExplicitSavedPrefs: true,
-        );
+      // User previously toggled tavily off; explicit flag is true.
+      final resolved = resolveEnabledToolNames(
+        allTools: allTools,
+        savedEnabledNames: {'brave_web_search', 'exa_search'},
+        hasExplicitSavedPrefs: true,
+      );
 
-        expect(
-          resolved,
-          equals({'brave_web_search', 'exa_search'}),
-          reason: 'Saved preferences must override the "enable all" default.',
-        );
-      },
-    );
+      expect(resolved, equals({'brave_web_search', 'exa_search'}),
+          reason: 'Saved preferences must override the "enable all" default.');
+    });
 
     test(
         'resolver returns empty set when user explicitly toggled every tool '
@@ -1730,13 +1512,10 @@ void main() {
         hasExplicitSavedPrefs: true,
       );
 
-      expect(
-        resolved,
-        isEmpty,
-        reason: 'When the user has explicitly cleared all toggles, the '
-            'resolver must return an empty set, not silently re-enable '
-            'every tool.',
-      );
+      expect(resolved, isEmpty,
+          reason: 'When the user has explicitly cleared all toggles, the '
+              'resolver must return an empty set, not silently re-enable '
+              'every tool.');
     });
 
     test('resolver returns empty set when no tools are available', () {
@@ -1775,12 +1554,9 @@ void main() {
         hasExplicitSavedPrefs: false,
       );
 
-      expect(
-        resolved,
-        equals({'exa_mcp', 'tavily_mcp'}),
-        reason: 'Newly discovered MCP tools should be auto-enabled when '
-            'the conversation has no explicit saved preferences.',
-      );
+      expect(resolved, equals({'exa_mcp', 'tavily_mcp'}),
+          reason: 'Newly discovered MCP tools should be auto-enabled when '
+              'the conversation has no explicit saved preferences.');
     });
 
     test(
@@ -1813,12 +1589,9 @@ void main() {
         hasExplicitSavedPrefs: true,
       );
 
-      expect(
-        resolved,
-        equals({'brave_web_search'}),
-        reason: 'When user has explicit prefs, newly discovered MCP tools '
-            'should NOT be auto-enabled — they must be explicitly toggled.',
-      );
+      expect(resolved, equals({'brave_web_search'}),
+          reason: 'When user has explicit prefs, newly discovered MCP tools '
+              'should NOT be auto-enabled — they must be explicitly toggled.');
     });
   });
 
@@ -1826,431 +1599,6 @@ void main() {
     setUp(() {
       adapter.configure(entriesState);
     });
-
-    test('matching upstream IDs are disambiguated by the saved model name', () {
-      const providerName = 'Shared provider';
-      const upstreamModelId = 'shared-upstream-model';
-      final groupA = stableLlmModelGroupId('account-a', 'local-model-a');
-      final groupB = stableLlmModelGroupId('account-b', 'local-model-b');
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'group-backed-llm',
-            type: 'llm',
-            name: 'LLM',
-            configs: [
-              ProviderConfigItem(
-                id: groupA,
-                providerName: providerName,
-                models: [
-                  ModelConfig(
-                    id: 'local-model-a',
-                    name: 'Model A',
-                    modelId: upstreamModelId,
-                  ),
-                ],
-                legacyFields: {kLlmModelGroupConfigField: groupA},
-              ),
-              ProviderConfigItem(
-                id: groupB,
-                providerName: providerName,
-                models: [
-                  ModelConfig(
-                    id: 'local-model-b',
-                    name: 'Model B',
-                    modelId: upstreamModelId,
-                  ),
-                ],
-                legacyFields: {kLlmModelGroupConfigField: groupB},
-              ),
-            ],
-          ),
-        ],
-      );
-
-      final service = adapter.createTransientServiceForModel(
-        entriesState: providers,
-        modelId: upstreamModelId,
-        providerName: providerName,
-        modelDisplayName: 'Model B | $providerName',
-      );
-
-      expect(service?.providerConfig?.id, groupB);
-      expect(service?.modelConfig?.id, 'local-model-b');
-    });
-
-    test(
-      'assistant default display name disambiguates matching group refs',
-      () {
-        const providerName = 'Shared provider';
-        const upstreamModelId = 'shared-upstream-model';
-        final groupA = stableLlmModelGroupId('account-a', 'local-model-a');
-        final groupB = stableLlmModelGroupId('account-b', 'local-model-b');
-        final providers = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'group-backed-llm',
-              type: 'llm',
-              name: 'LLM',
-              configs: [
-                ProviderConfigItem(
-                  id: groupA,
-                  providerName: providerName,
-                  models: [
-                    ModelConfig(
-                      id: 'local-model-a',
-                      name: 'Model A',
-                      modelId: upstreamModelId,
-                    ),
-                  ],
-                  legacyFields: {kLlmModelGroupConfigField: groupA},
-                ),
-                ProviderConfigItem(
-                  id: groupB,
-                  providerName: providerName,
-                  models: [
-                    ModelConfig(
-                      id: 'local-model-b',
-                      name: 'Model B',
-                      modelId: upstreamModelId,
-                    ),
-                  ],
-                  legacyFields: {kLlmModelGroupConfigField: groupB},
-                ),
-              ],
-            ),
-          ],
-        );
-
-        final service = adapter.getOrCreateService(
-          'assistant-default-model',
-          assistant: Assistant(
-            id: 'assistant',
-            name: 'Assistant',
-            prompt: '',
-            defaultModelId: upstreamModelId,
-            defaultProviderName: providerName,
-            defaultModelName: 'Model B | $providerName',
-          ),
-          entriesState: providers,
-        );
-
-        expect(service?.providerConfig?.id, groupB);
-        expect(service?.modelConfig?.id, 'local-model-b');
-      },
-    );
-
-    test(
-      'assistant default does not switch provider when its saved provider is missing',
-      () {
-        const upstreamModelId = 'shared-upstream-model';
-        final providers = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'group-backed-llm',
-              type: 'llm',
-              name: 'LLM',
-              configs: [
-                ProviderConfigItem(
-                  id: 'other-provider-group',
-                  providerName: 'Other provider',
-                  host: 'https://other.example.test/v1',
-                  key: 'test-key',
-                  models: [
-                    ModelConfig(
-                      id: 'other-local-model',
-                      name: 'Other model',
-                      modelId: upstreamModelId,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        );
-
-        final service = adapter.getOrCreateService(
-          'missing-default-provider',
-          assistant: Assistant(
-            id: 'assistant',
-            name: 'Assistant',
-            prompt: '',
-            defaultModelId: upstreamModelId,
-            defaultProviderName: 'Removed provider',
-            defaultModelName: 'Saved model | Removed provider',
-          ),
-          entriesState: providers,
-        );
-
-        expect(
-          service,
-          isNull,
-          reason:
-              'a removed saved provider must not route through another group',
-        );
-      },
-    );
-
-    test(
-      'assistant default does not replace a missing stable ID with a same-provider display match',
-      () {
-        const providerName = 'Saved provider';
-        final groupId = stableLlmModelGroupId('saved-account', 'other-local');
-        final providers = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'group-backed-llm',
-              type: 'llm',
-              name: 'LLM',
-              configs: [
-                ProviderConfigItem(
-                  id: groupId,
-                  providerName: providerName,
-                  models: [
-                    ModelConfig(
-                      id: 'other-local',
-                      name: 'Saved model',
-                      modelId: 'different-stable-id',
-                    ),
-                  ],
-                  legacyFields: {kLlmModelGroupConfigField: groupId},
-                ),
-              ],
-            ),
-          ],
-        );
-
-        final service = adapter.getOrCreateService(
-          'missing-stable-id-same-provider',
-          assistant: Assistant(
-            id: 'assistant',
-            name: 'Assistant',
-            prompt: '',
-            defaultModelId: 'missing-stable-id',
-            defaultProviderName: providerName,
-            defaultModelName: 'Saved model | $providerName',
-          ),
-          entriesState: providers,
-        );
-
-        expect(
-          service,
-          isNull,
-          reason:
-              'a stable reference must not bind another group by display name',
-        );
-      },
-    );
-
-    test(
-      'migrated assistant references prefer their generated stable group row',
-      () {
-        const providerName = 'Migrated account';
-        const localModelId = 'legacy-local-model';
-        const upstreamModelId = 'legacy-upstream-model';
-        const modelName = 'Legacy model';
-        final groupId = stableLlmModelGroupId('legacy-account', localModelId);
-        final providers = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'llm',
-              type: 'llm',
-              name: 'LLM',
-              configs: [
-                ProviderConfigItem(
-                  id: 'legacy-account',
-                  providerName: providerName,
-                  host: 'https://legacy.example.test/v1',
-                  key: 'legacy-key',
-                  models: [
-                    ModelConfig(
-                      id: localModelId,
-                      name: modelName,
-                      modelId: upstreamModelId,
-                    ),
-                  ],
-                ),
-                ProviderConfigItem(
-                  id: groupId,
-                  providerName: providerName,
-                  models: [
-                    ModelConfig(
-                      id: localModelId,
-                      name: modelName,
-                      modelId: upstreamModelId,
-                      legacyFields: {
-                        kLlmModelCapabilitiesConfigField: {
-                          'streaming': true,
-                        },
-                      },
-                    ),
-                  ],
-                  legacyFields: {kLlmModelGroupConfigField: groupId},
-                ),
-              ],
-            ),
-          ],
-        );
-
-        final service = adapter.getOrCreateService(
-          'migrated-assistant-reference',
-          assistant: Assistant(
-            id: 'legacy-assistant',
-            name: 'Legacy assistant',
-            prompt: '',
-            defaultModelId: upstreamModelId,
-            defaultProviderName: providerName,
-            defaultModelName: '$modelName | $providerName',
-          ),
-          entriesState: providers,
-        );
-
-        expect(service?.providerConfig?.id, groupId);
-        expect(service?.modelConfig?.id, localModelId);
-      },
-    );
-
-    test('assistant reference survives a custom group rename', () {
-      const groupId = 'renamed-custom-group';
-      const localModelId = 'custom-local-model';
-      const upstreamModelId = 'custom-upstream-model';
-      const oldProviderName = 'Original group name';
-      final account = LlmAccount(
-        id: 'renamed-group-account',
-        connectorType: 'openai-compatibility',
-        authType: 'none',
-        displayName: 'Renamed group account',
-        models: const [
-          LlmUpstreamModel(
-            id: localModelId,
-            upstreamModelId: upstreamModelId,
-            displayName: 'Custom model',
-            capabilities: {'streaming': true},
-          ),
-        ],
-      );
-      final originalGroup = LlmModelGroup(
-        id: groupId,
-        displayName: oldProviderName,
-        members: const [
-          LlmModelGroupMember(
-            accountId: 'renamed-group-account',
-            localModelId: localModelId,
-            upstreamModelId: upstreamModelId,
-          ),
-        ],
-      );
-      final originalConfig = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [originalGroup],
-      ).single;
-      final renamedConfig = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [
-          LlmModelGroup(
-            id: groupId,
-            displayName: 'Renamed group',
-            members: originalGroup.members,
-          ),
-        ],
-      ).single;
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'llm',
-            type: 'llm',
-            name: 'LLM',
-            configs: [renamedConfig],
-          ),
-        ],
-      );
-      final savedModelId = originalConfig.models.single.modelId;
-      final assistant = Assistant(
-        id: 'renamed-group-assistant',
-        name: 'Renamed group assistant',
-        prompt: '',
-        defaultModelId: savedModelId,
-        defaultProviderName: oldProviderName,
-        defaultModelName: 'Custom model | $oldProviderName',
-      );
-
-      final service = adapter.getOrCreateService(
-        'renamed-group-assistant-reference',
-        assistant: assistant,
-        entriesState: providers,
-      );
-      expect(service?.modelConfig?.modelId, savedModelId);
-    });
-
-    test(
-      'conversation restoration resolves a renamed custom group reference',
-      () {
-        const groupId = 'renamed-conversation-group';
-        const localModelId = 'conversation-local-model';
-        const upstreamModelId = 'conversation-upstream-model';
-        const oldProviderName = 'Original conversation group';
-        final account = LlmAccount(
-          id: 'renamed-conversation-account',
-          connectorType: 'openai-compatibility',
-          authType: 'none',
-          displayName: 'Conversation group account',
-          models: const [
-            LlmUpstreamModel(
-              id: localModelId,
-              upstreamModelId: upstreamModelId,
-              displayName: 'Conversation model',
-              capabilities: {'streaming': true},
-            ),
-          ],
-        );
-        final originalGroup = LlmModelGroup(
-          id: groupId,
-          displayName: oldProviderName,
-          members: const [
-            LlmModelGroupMember(
-              accountId: 'renamed-conversation-account',
-              localModelId: localModelId,
-              upstreamModelId: upstreamModelId,
-            ),
-          ],
-        );
-        final originalConfig = buildLlmModelGroupProviderConfigs(
-          accounts: [account],
-          groups: [originalGroup],
-        ).single;
-        final renamedConfig = buildLlmModelGroupProviderConfigs(
-          accounts: [account],
-          groups: [
-            LlmModelGroup(
-              id: groupId,
-              displayName: 'Renamed conversation group',
-              members: originalGroup.members,
-            ),
-          ],
-        ).single;
-        final providers = ProviderEntriesState(
-          entries: [
-            ProviderEntry(
-              id: 'llm',
-              type: 'llm',
-              name: 'LLM',
-              configs: [renamedConfig],
-            ),
-          ],
-        );
-        final savedModelId = originalConfig.models.single.modelId;
-
-        final restored = resolveModelRef(
-          models: adapter.availableModels(providers),
-          modelId: savedModelId,
-          providerName: oldProviderName,
-          displayName: 'Conversation model | $oldProviderName',
-        );
-
-        expect(restored?.modelId, savedModelId);
-        expect(restored?.providerName, 'Renamed conversation group');
-      },
-    );
 
     test('按 (providerName, modelId) 绝对身份解析并使用该模型', () {
       final svc = adapter.createTransientServiceForModel(
@@ -2272,13 +1620,14 @@ void main() {
       expect(svc!.modelConfig!.modelId, 'claude-3-haiku');
     });
 
-    test('已配置但无法解析的引用不会回退到对话页当前模型', () {
+    test('引用无法解析时回退到对话页当前（全局缓存）模型', () {
       final svc = adapter.createTransientServiceForModel(
         entriesState: entriesState,
         modelId: 'missing-model',
         modelDisplayName: '不存在 | 任意供应商',
       );
-      expect(svc, isNull);
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'gpt-4o', reason: '未命中时回到全局缓存的第一个模型');
     });
 
     test('无引用时直接跟随对话页当前模型', () {
@@ -2303,7 +1652,7 @@ void main() {
       expect(adapter.modelConfig!.modelId, 'claude-3-haiku');
     });
 
-    test('unavailable legacy model references do not fall back globally', () {
+    test('供应商未填充 host/key 的配置被跳过', () {
       final partialState = ProviderEntriesState(
         entries: [
           ProviderEntry(
@@ -2323,7 +1672,9 @@ void main() {
                 providerName: 'OpenAI',
                 host: 'https://api.openai.com/v1',
                 key: 'sk-test',
-                models: [ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o')],
+                models: [
+                  ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
+                ],
               ),
             ],
           ),
@@ -2333,12 +1684,8 @@ void main() {
         entriesState: partialState,
         modelId: 'empty-model',
       );
-      expect(
-        svc,
-        isNull,
-        reason:
-            'an unavailable configured model must not route to another model',
-      );
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'gpt-4o', reason: '空配置不参与匹配，回退到全局模型');
     });
 
     test('availableLlmModels 过滤 host/key 为空的配置（显示与请求一致）', () {
@@ -2361,18 +1708,16 @@ void main() {
                 providerName: 'OpenAI',
                 host: 'https://api.openai.com/v1',
                 key: 'sk-test',
-                models: [ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o')],
+                models: [
+                  ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
+                ],
               ),
             ],
           ),
         ],
       );
       final models = availableLlmModels(partialState);
-      expect(
-          models.map((m) => m.displayName),
-          [
-            'GPT-4o | OpenAI',
-          ],
+      expect(models.map((m) => m.displayName), ['GPT-4o | OpenAI'],
           reason: '空配置的模型不可用，不应出现在可选列表中');
     });
   });
@@ -2407,10 +1752,10 @@ void main() {
     });
 
     test('service with assistant resolves its modelId and applies prompt', () {
-      // Assistant bound to 'claude-3-opus' (config 1, model 0).
+      // Assistant bound to 'claude-3' (config 1, model 0).
       final svc = adapter.getOrCreateService(
         'conv-assistant',
-        assistant: _assistant(modelId: 'claude-3-opus'),
+        assistant: _assistant(modelId: 'claude-3'),
         entriesState: entriesState,
       );
       expect(svc, isNotNull);
@@ -2420,181 +1765,6 @@ void main() {
       expect(adapter.currentModelIndex, equals(0));
       adapter.cancelService('conv-assistant');
     });
-
-    test(
-      'assistant account choices use its group with a non-routed global model',
-      () async {
-        const globalGroupId = 'global-group';
-        const assistantGroupId = 'assistant-group';
-        final globalModel = ModelConfig(
-          id: 'global-local-model',
-          name: 'Global',
-          modelId: 'global',
-          legacyFields: {
-            kLlmModelCapabilitiesConfigField: {'streaming': true},
-          },
-        );
-        final assistantModel = ModelConfig(
-          id: 'assistant-local-model',
-          name: 'Assistant',
-          modelId: 'assistant-model',
-          legacyFields: {
-            kLlmModelCapabilitiesConfigField: {'streaming': true},
-          },
-        );
-        final routedEntries = ProviderEntriesState(entries: [
-          ProviderEntry(
-            id: 'routed',
-            name: 'Routed',
-            type: 'llm',
-            configs: [
-              ProviderConfigItem(
-                id: 'global-config',
-                providerName: 'Global',
-                host: 'https://global.example.invalid',
-                key: 'global-test-key',
-                models: [globalModel],
-              ),
-              ProviderConfigItem(
-                id: 'assistant-config',
-                providerName: 'Assistant',
-                legacyFields: {kLlmModelGroupConfigField: assistantGroupId},
-                models: [assistantModel],
-              ),
-            ],
-          ),
-        ]);
-        final gateway = _FakeGatewayFacade(
-          _FakeAccountManagement(
-            accounts: [
-              AiGatewayAccount(
-                id: 'global-account',
-                connectorType: 'openai-api',
-                authType: 'apiKey',
-                displayName: 'Global account',
-              ),
-              AiGatewayAccount(
-                id: 'assistant-account',
-                connectorType: 'openai-api',
-                authType: 'apiKey',
-                displayName: 'Assistant account',
-              ),
-              AiGatewayAccount(
-                id: 'assistant-anthropic-account',
-                connectorType: 'claude',
-                authType: 'apiKey',
-                displayName: 'Assistant Anthropic account',
-                endpointConfig: const {
-                  'apiProtocol': 'anthropic.messages',
-                },
-              ),
-            ],
-            groups: [
-              AiGatewayModelGroup(
-                id: globalGroupId,
-                displayName: 'Global group',
-                members: [
-                  AiGatewayModelGroupMember(
-                    accountId: 'global-account',
-                    upstreamModelId: 'upstream-global',
-                    localModelId: globalModel.id,
-                  ),
-                ],
-              ),
-              AiGatewayModelGroup(
-                id: assistantGroupId,
-                displayName: 'Assistant group',
-                members: [
-                  AiGatewayModelGroupMember(
-                    accountId: 'assistant-account',
-                    upstreamModelId: 'upstream-assistant',
-                    localModelId: assistantModel.id,
-                  ),
-                  AiGatewayModelGroupMember(
-                    accountId: 'assistant-anthropic-account',
-                    upstreamModelId: 'claude-assistant',
-                    localModelId: assistantModel.id,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-        final assistantAdapter = ChatAdapter(
-          routingRuntime: Future.value(gateway),
-        );
-        addTearDown(assistantAdapter.dispose);
-        assistantAdapter.configure(routedEntries);
-        final assistant = _assistant(modelId: 'assistant-model');
-
-        final choices = await assistantAdapter.routedAccountChoicesForAssistant(
-            assistant, routedEntries);
-        final identity = assistantAdapter.routedModelIdentityForAssistant(
-          assistant,
-          routedEntries,
-        );
-        final service = assistantAdapter.getOrCreateService(
-          'conv-assistant-group',
-          assistant: assistant,
-          entriesState: routedEntries,
-          selectedAccountId: choices.first.id,
-        );
-
-        expect(
-          choices.map((account) => account.id),
-          ['assistant-account', 'assistant-anthropic-account'],
-        );
-        expect(assistantAdapter.hasSelectedRoutedModel, isFalse);
-        expect(identity, isNotNull);
-        expect(
-          identity,
-          (assistantGroupId, assistantModel.id, 'openai.chat_completions'),
-        );
-        expect(
-          routedAccountChoiceMatches(
-            accountId: 'assistant-account',
-            selectedConversationId: 'conv-assistant-group',
-            conversationId: 'conv-assistant-group',
-            selectedModelIdentity: identity,
-            modelIdentity: identity,
-          ),
-          isTrue,
-        );
-        expect(
-          routedAccountChoiceMatches(
-            accountId: 'assistant-account',
-            selectedConversationId: 'conv-assistant-group',
-            conversationId: 'conv-assistant-group',
-            selectedModelIdentity: identity,
-            modelIdentity: assistantAdapter.routedModelIdentityForAssistant(
-              null,
-              routedEntries,
-            ),
-          ),
-          isFalse,
-          reason: 'a model switch must invalidate a stale one-turn choice',
-        );
-        expect(
-          routedAccountChoiceMatches(
-            accountId: 'assistant-account',
-            selectedConversationId: 'conv-assistant-group',
-            conversationId: 'another-conversation',
-            selectedModelIdentity: identity,
-            modelIdentity: identity,
-          ),
-          isFalse,
-          reason: 'a conversation switch must invalidate a stale choice',
-        );
-        expect(service?.modelConfig?.id, assistantModel.id);
-        expect(
-          (service?.provider as LlmRoutedChatProvider).selectedAccountId,
-          'assistant-account',
-        );
-        expect(assistantAdapter.currentConfigIndex, 0);
-        expect(assistantAdapter.currentModelIndex, 0);
-        assistantAdapter.cancelService('conv-assistant-group');
-      },
-    );
 
     test(
         'assistant with a display-name default model (no modelId set) '
@@ -2607,20 +1777,16 @@ void main() {
       // 聊天 API 未配置.
       final svc = adapter.getOrCreateService(
         'conv-displayname',
-        assistant: _assistant(modelId: '', defaultModelName: 'GPT-4o | OpenAI'),
+        assistant: _assistant(
+          defaultModelName: 'GPT-4o | OpenAI',
+        ),
         entriesState: entriesState,
       );
-      expect(
-        svc,
-        isNotNull,
-        reason: 'display-name bound assistant must resolve to a service',
-      );
+      expect(svc, isNotNull,
+          reason: 'display-name bound assistant must resolve to a service');
       expect(svc!.assistantPrompt, '你是测试助手');
-      expect(
-        adapter.currentConfigIndex,
-        equals(0),
-        reason: 'global selection untouched',
-      );
+      expect(adapter.currentConfigIndex, equals(0),
+          reason: 'global selection untouched');
       adapter.cancelService('conv-displayname');
     });
 
@@ -2639,56 +1805,26 @@ void main() {
         ),
         entriesState: entriesState,
       );
-      expect(
-        svc,
-        isNotNull,
-        reason: 'absolute model identity must resolve to a service',
-      );
+      expect(svc, isNotNull,
+          reason: 'absolute model identity must resolve to a service');
       expect(svc!.assistantPrompt, '你是测试助手');
-      expect(
-        adapter.currentConfigIndex,
-        equals(0),
-        reason: 'global selection untouched',
-      );
+      expect(adapter.currentConfigIndex, equals(0),
+          reason: 'global selection untouched');
       adapter.cancelService('conv-absid');
     });
 
     test(
-        'service with an unresolvable configured assistant model does not '
-        'fall back to the global model', () async {
+        'service with unresolvable assistant model falls back to global '
+        'config but still applies the prompt', () {
       final svc = adapter.getOrCreateService(
         'conv-fallback',
         assistant: _assistant(modelId: 'does-not-exist'),
         entriesState: entriesState,
       );
-      expect(svc, isNull);
-      await expectLater(
-        adapter.sendStreamWithTools(
-          'hello',
-          history: const [],
-          convId: 'conv-missing-assistant-model',
-          assistant: _assistant(modelId: 'does-not-exist'),
-          entriesState: entriesState,
-        ),
-        emitsError('助手配置的模型不可用，请检查助手模型选择。'),
-      );
+      expect(svc, isNotNull);
+      expect(svc!.assistantPrompt, '你是测试助手');
       adapter.cancelService('conv-fallback');
     });
-
-    test(
-      'unresolvable assistant model cannot reuse an existing chat service',
-      () {
-        expect(adapter.getOrCreateService('conv-existing'), isNotNull);
-
-        final svc = adapter.getOrCreateService(
-          'conv-existing',
-          assistant: _assistant(modelId: 'does-not-exist'),
-          entriesState: entriesState,
-        );
-        expect(svc, isNull);
-        adapter.cancelService('conv-existing');
-      },
-    );
     test('per-conversation services are independent (concurrent flows)', () {
       final svcA = adapter.getOrCreateService(
         'flow_conv_a',
@@ -2697,7 +1833,7 @@ void main() {
       );
       final svcB = adapter.getOrCreateService(
         'flow_conv_b',
-        assistant: _assistant(modelId: 'claude-3-opus', prompt: '助手B'),
+        assistant: _assistant(modelId: 'claude-3', prompt: '助手B'),
         entriesState: entriesState,
       );
       expect(svcA, isNotNull);
@@ -2720,18 +1856,12 @@ void main() {
         assistant: _assistant(modelId: 'claude-3-opus', prompt: '你是测试助手'),
         entriesState: entriesState,
       );
-      expect(
-        svc,
-        isNotNull,
-        reason: 'a resolvable assistant must not depend on the global '
-            'cache (fresh session)',
-      );
+      expect(svc, isNotNull,
+          reason: 'a resolvable assistant must not depend on the global '
+              'cache (fresh session)');
       expect(svc!.assistantPrompt, '你是测试助手');
-      expect(
-        fresh.isConfigured,
-        isFalse,
-        reason: 'the fresh adapter must remain unconfigured',
-      );
+      expect(fresh.isConfigured, isFalse,
+          reason: 'the fresh adapter must remain unconfigured');
       fresh.cancelService('flow_conv_fresh');
     });
 
@@ -2744,12 +1874,9 @@ void main() {
         assistant: _assistant(modelId: 'does-not-exist'),
         entriesState: entriesState,
       );
-      expect(
-        svc,
-        isNull,
-        reason: 'without a global cache AND an unresolvable assistant '
-            'model there is nothing to build the service from',
-      );
+      expect(svc, isNull,
+          reason: 'without a global cache AND an unresolvable assistant '
+              'model there is nothing to build the service from');
     });
   });
 
@@ -2872,13 +1999,13 @@ void main() {
           modelIndex: 0,
         ),
       ];
-      // Without a provider discriminator, duplicate model IDs are ambiguous.
+      // Without a provider discriminator, the first match wins.
       expect(
         perConversationModelToRestore(
           lastUsedModelId: 'gpt-4o',
           availableModels: twoProviders,
         ),
-        isNull,
+        'gpt-4o | OpenAI',
       );
       // With the provider name, the exact provider wins.
       expect(
@@ -2919,111 +2046,6 @@ void main() {
       expect(m?.displayName, 'claude-3.5 | Anthropic');
     });
 
-    test('does not fall back to another provider when a provider is saved', () {
-      const otherProvider = [
-        AvailableModel(
-          displayName: 'GPT-4o | Proxy',
-          modelId: 'gpt-4o',
-          providerName: 'Proxy',
-          configIndex: 2,
-          modelIndex: 0,
-        ),
-      ];
-
-      expect(
-        resolveModelRef(
-          models: otherProvider,
-          modelId: 'gpt-4o',
-          providerName: 'OpenAI',
-          displayName: 'GPT-4o | OpenAI',
-        ),
-        isNull,
-      );
-      expect(
-        perConversationModelToRestore(
-          lastUsedModelId: 'gpt-4o',
-          lastUsedProviderName: 'OpenAI',
-          lastUsedModelName: 'GPT-4o | OpenAI',
-          availableModels: otherProvider,
-        ),
-        isNull,
-      );
-    });
-
-    test(
-      'does not replace a missing stable ID with a same-provider display match',
-      () {
-        const sameProviderDifferentModel = [
-          AvailableModel(
-            displayName: 'Saved model | OpenAI',
-            modelId: 'different-stable-id',
-            providerName: 'OpenAI',
-            configIndex: 0,
-            modelIndex: 0,
-          ),
-        ];
-
-        expect(
-          resolveModelRef(
-            models: sameProviderDifferentModel,
-            modelId: 'missing-stable-id',
-            providerName: 'OpenAI',
-            displayName: 'Saved model | OpenAI',
-          ),
-          isNull,
-        );
-        expect(
-          perConversationModelToRestore(
-            lastUsedModelId: 'missing-stable-id',
-            lastUsedProviderName: 'OpenAI',
-            lastUsedModelName: 'Saved model | OpenAI',
-            availableModels: sameProviderDifferentModel,
-          ),
-          isNull,
-        );
-      },
-    );
-
-    test(
-      'uses saved display name to disambiguate colliding group identities',
-      () {
-        const collidingModels = [
-          AvailableModel(
-            displayName: 'Model A | Shared provider',
-            modelId: 'shared-upstream-model',
-            providerName: 'Shared provider',
-            configIndex: 0,
-            modelIndex: 0,
-          ),
-          AvailableModel(
-            displayName: 'Model B | Shared provider',
-            modelId: 'shared-upstream-model',
-            providerName: 'Shared provider',
-            configIndex: 1,
-            modelIndex: 0,
-          ),
-        ];
-
-        final selected = resolveModelRef(
-          models: collidingModels,
-          modelId: 'shared-upstream-model',
-          providerName: 'Shared provider',
-          displayName: 'Model B | Shared provider',
-        );
-
-        expect(selected?.configIndex, 1);
-        expect(
-          resolveModelRef(
-            models: collidingModels,
-            modelId: 'shared-upstream-model',
-            providerName: 'Shared provider',
-            displayName: 'Renamed model | Shared provider',
-          ),
-          isNull,
-        );
-      },
-    );
-
     test('matches by modelId alone', () {
       final m = resolveModelRef(models: models, modelId: 'gpt-4o');
       expect(m?.displayName, 'gpt-4o | OpenAI');
@@ -3038,7 +2060,10 @@ void main() {
     });
 
     test('returns null when nothing matches', () {
-      expect(resolveModelRef(models: models, modelId: 'missing'), isNull);
+      expect(
+        resolveModelRef(models: models, modelId: 'missing'),
+        isNull,
+      );
       expect(
         resolveModelRef(models: models, displayName: 'missing | X'),
         isNull,

@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/natural_sort.dart';
 
+import 'constrained_text.dart';
+
 // ============================================================================
 // MediaPickerConfig — configuration for the unified media picker
 // ============================================================================
@@ -138,6 +140,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   List<T> _records = [];
   Set<String> _folders = {};
   bool _loading = true;
+  String? _loadError;
   String _currentFolder = '';
 
   // Multi-selection state: key = recordId, value = (fileName, bytes)
@@ -151,6 +154,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   /// Guard flag to prevent double [Navigator.pop] calls (e.g., rapid taps).
   bool _resultDelivered = false;
 
+  /// Pending read token per record. Removing/replacing a token invalidates its
+  /// completion, such as when the user clears or toggles a selection.
+  final Map<String, int> _pendingSelectionReads = {};
+  int _nextSelectionReadToken = 0;
+
   @override
   void initState() {
     super.initState();
@@ -158,6 +166,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   }
 
   Future<void> _loadData() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
       final records = await widget.config.loadRecords();
       final folders = await widget.config.loadFolders();
@@ -166,11 +180,15 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
           _records = List<T>.from(records);
           _folders = Set<String>.from(folders);
           _loading = false;
+          _loadError = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadError = e.toString();
+        });
       }
     }
   }
@@ -231,6 +249,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       });
       return;
     }
+    if (_pendingSelectionReads.containsKey(key)) {
+      if (widget.config.multiSelect) {
+        setState(() => _pendingSelectionReads.remove(key));
+      }
+      return;
+    }
 
     // Read the file data (skipped entirely in path-only mode — the caller
     // provided no readFile, so single-select resolves via onRecordPicked
@@ -238,17 +262,19 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     Uint8List? readData;
     final readFile = widget.config.readFile;
     if (readFile != null) {
+      final readToken = ++_nextSelectionReadToken;
+      setState(() => _pendingSelectionReads[key] = readToken);
       try {
         readData = await readFile(record);
       } catch (_) {}
+      if (!mounted || _pendingSelectionReads[key] != readToken) return;
+      setState(() => _pendingSelectionReads.remove(key));
       if (readData == null || readData.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+          ),
+        );
         return;
       }
     }
@@ -295,6 +321,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     setState(() {
       _selectedItems.clear();
       _selectedRecords.clear();
+      _pendingSelectionReads.clear();
     });
   }
 
@@ -313,7 +340,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: Text(widget.config.title),
+          title: ConstrainedText(
+            widget.config.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -329,10 +360,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
               TextButton(
                 key: const Key('media_picker_clear_btn'),
                 onPressed: _clearSelection,
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!
                       .appMediaClearSelection(_selectedItems.length),
                   style: TextStyle(color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
@@ -355,8 +388,9 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                     ),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         _currentFolder,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 12,
                           color: cs.onSurfaceVariant,
@@ -389,32 +423,36 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                   ),
                   child: FilledButton.icon(
                     key: const Key('media_picker_confirm_btn'),
-                    onPressed: _resultDelivered
-                        ? null
-                        : () async {
-                            // Guard re-entrancy synchronously BEFORE the
-                            // await: a second tap while the resolver runs
-                            // must not re-enter and double-pop.
-                            if (_resultDelivered) return;
-                            _resultDelivered = true;
-                            // Path resolution (onRecordsPicked) runs before
-                            // the pop; a throwing resolver must not leave
-                            // the dialog hanging open.
-                            try {
-                              await widget.config.onRecordsPicked?.call(
-                                _selectedRecords.values.toList(),
-                              );
-                            } catch (e) {
-                              debugPrint(
-                                '[MediaPicker] onRecordsPicked failed: $e',
-                              );
-                            }
-                            if (!context.mounted) return;
-                            Navigator.of(context)
-                                .pop(_selectedItems.values.toList());
-                          },
+                    onPressed:
+                        _resultDelivered || _pendingSelectionReads.isNotEmpty
+                            ? null
+                            : () async {
+                                // Guard re-entrancy synchronously BEFORE the
+                                // await: a second tap while the resolver runs
+                                // must not re-enter and double-pop.
+                                if (_resultDelivered ||
+                                    _pendingSelectionReads.isNotEmpty) {
+                                  return;
+                                }
+                                _resultDelivered = true;
+                                // Path resolution (onRecordsPicked) runs before
+                                // the pop; a throwing resolver must not leave
+                                // the dialog hanging open.
+                                try {
+                                  await widget.config.onRecordsPicked?.call(
+                                    _selectedRecords.values.toList(),
+                                  );
+                                } catch (e) {
+                                  debugPrint(
+                                    '[MediaPicker] onRecordsPicked failed: $e',
+                                  );
+                                }
+                                if (!context.mounted) return;
+                                Navigator.of(context)
+                                    .pop(_selectedItems.values.toList());
+                              },
                     icon: const Icon(Icons.check, size: 18),
-                    label: Text(
+                    label: ConstrainedText(
                       hasSelection
                           ? AppLocalizations.of(context)!
                               .appMediaConfirmSelectionCount(
@@ -422,6 +460,8 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                             )
                           : AppLocalizations.of(context)!
                               .appMediaConfirmSelection,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -435,6 +475,35 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   Widget _buildContent(ColorScheme cs) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadError case final error?) {
+      final l10n = AppLocalizations.of(context)!;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                l10n.appMediaLoadError(error),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.error),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh),
+                label: ConstrainedText(
+                  l10n.actionRetry,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     final subFolders = _subFolders;
@@ -491,18 +560,30 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
             children: [
               Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
-              Text(
-                parent.isEmpty
-                    ? AppLocalizations.of(context)!.appMediaRoot
-                    : AppLocalizations.of(context)!.appMediaParentFolder(
-                        FolderPathUtils.getFolderBaseName(parent),
-                      ),
-                style: TextStyle(fontSize: 15, color: cs.primary),
+              Expanded(
+                child: ConstrainedText(
+                  parent.isEmpty
+                      ? AppLocalizations.of(context)!.appMediaRoot
+                      : AppLocalizations.of(context)!.appMediaParentFolder(
+                          FolderPathUtils.getFolderBaseName(parent),
+                        ),
+                  style: TextStyle(fontSize: 15, color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              Text(
-                FolderPathUtils.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: ConstrainedText(
+                    FolderPathUtils.getFolderBaseName(_currentFolder),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ],
           ),
@@ -538,7 +619,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 ),
               ),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   baseName,
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
@@ -610,7 +691,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ConstrainedText(
                       widget.config.displayName(record),
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
@@ -721,7 +802,7 @@ class _PreviewChip extends StatelessWidget {
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(4),
-                child: Text(
+                child: ConstrainedText(
                   label,
                   style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
                   maxLines: 3,

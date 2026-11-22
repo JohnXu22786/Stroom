@@ -154,26 +154,29 @@ class OpenAIProtocol implements ChatProtocol {
               // OpenRouter supports the `file` content type for PDFs and other
               // documents. Format: { type: "file", file: { filename: "...",
               // file_data: "data:application/pdf;base64,..." } }
-              if (att.fileSize > maxAttachmentBytes) {
+              final outcome = await readRawAttachmentBytesBounded(
+                att,
+                maxBytes: maxAttachmentBytes,
+              );
+              if (outcome.status == AttachmentReadStatus.tooLarge) {
                 parts.add({
                   'type': 'text',
                   'text': '[文件过大已跳过: ${att.fileName}]',
                 });
+              } else if (outcome.status == AttachmentReadStatus.ok &&
+                  outcome.bytes != null &&
+                  outcome.bytes!.isNotEmpty) {
+                final b64 = base64Encode(outcome.bytes!);
+                final dataUri = 'data:${att.mimeType};base64,$b64';
+                parts.add({
+                  'type': 'file',
+                  'file': {'filename': att.fileName, 'file_data': dataUri},
+                });
               } else {
-                final bytes = await readRawAttachmentBytes(att);
-                if (bytes != null && bytes.isNotEmpty) {
-                  final b64 = base64Encode(bytes);
-                  final dataUri = 'data:${att.mimeType};base64,$b64';
-                  parts.add({
-                    'type': 'file',
-                    'file': {'filename': att.fileName, 'file_data': dataUri},
-                  });
-                } else {
-                  parts.add({
-                    'type': 'text',
-                    'text': '[${att.fileName} - 无法读取文件内容]',
-                  });
-                }
+                parts.add({
+                  'type': 'text',
+                  'text': '[${att.fileName} - 无法读取文件内容]',
+                });
               }
             }
           }

@@ -52,6 +52,9 @@ final class _FailingReplacementFile extends Fake implements File {
   }
 
   @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+
+  @override
   Future<File> rename(String newPath) => file.rename(newPath);
 }
 
@@ -62,6 +65,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ManifestDatabase.beforeFolderInsertForTesting = null;
+    ManifestDatabase.beforeFolderDeleteForTesting = null;
     ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
@@ -74,8 +78,385 @@ void main() {
   });
 
   tearDown(() {
+    ManifestDatabase.beforeFolderDeleteForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
+  });
+
+  test(
+    'failed folder metadata persistence preserves cached folder paths',
+    () async {
+      final tables = [
+        ManifestTables.audioRecords,
+        ManifestTables.imageRecords,
+        ManifestTables.textRecords,
+        ManifestTables.videoRecords,
+      ];
+
+      for (final tableName in tables) {
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_${tableName}_folder_metadata_delete_failure',
+          storageDirName: tableName,
+          fromMap: AudioRecord.fromMap,
+          tableName: tableName,
+          toMap: (record) => record.toMap(),
+        );
+        const folderPath = 'persisted_folder';
+        await operations.addFolderPath(folderPath);
+        final failure = StateError('injected folder metadata delete failure');
+        ManifestDatabase.beforeFolderDeleteForTesting = (path) {
+          if (path == folderPath) throw failure;
+        };
+
+        await expectLater(
+          operations.removeFolderMetadataFromCache(folderPath),
+          throwsA(same(failure)),
+        );
+        expect(
+          await operations.getAllFolders(),
+          contains(folderPath),
+          reason: 'failed persistence must leave the folder in the cache',
+        );
+        expect(
+          await ManifestDatabase.getAllFolders(recordTable: tableName),
+          contains(folderPath),
+          reason: 'failed persistence must leave the folder in storage',
+        );
+
+        operations.invalidateCache();
+        expect(
+          await operations.getAllFolders(),
+          contains(folderPath),
+          reason: 'a later read must reload the persisted folder metadata',
+        );
+        ManifestDatabase.beforeFolderDeleteForTesting = null;
+      }
+    },
+  );
+
+  test('a transient manifest load failure is retried on the next load',
+      () async {
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'transient_load_failure',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: ManifestTables.audioRecords,
+      toMap: (record) => record.toMap(),
+    );
+    final record = AudioRecord(
+      id: 'transient_load_failure',
+      name: 'recover after read failure',
+      hash: 'transient_load_hash',
+      format: 'wav',
+      createdAt: DateTime(2024),
+      size: 1,
+      folder: 'kept_folder',
+    );
+    await operations.addRecord(record);
+    operations.invalidateCache();
+
+    operations.beforeFolderLoadForTesting = () async {
+      operations.beforeFolderLoadForTesting = null;
+      throw StateError('injected transient folder read failure');
+    };
+
+    expect(await operations.loadRecords(), isEmpty);
+    expect(
+      (await operations.loadRecords()).map((item) => item.id),
+      [record.id],
+    );
+    expect(await operations.getAllFolders(), contains(record.folder));
+  });
+
+  test('audio writes reject Windows-invalid filename characters', () async {
+    await expectLater(
+      FileManifest.writeFile('hash?.wav', Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+  });
+
+  test(
+    'non-audio file APIs reject traversal names',
+    () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'non_audio_path_validation',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+
+      await expectLater(
+        operations.writeFile('../outside.png', Uint8List.fromList([1])),
+        throwsArgumentError,
+      );
+      await expectLater(
+        operations.fileExists(r'..\outside.png'),
+        throwsArgumentError,
+      );
+      expect(await operations.readFilePath('/outside.png'), isNull);
+      expect(await operations.deleteFile('../outside.png'), isFalse);
+    },
+  );
+
+  test('native non-audio paths reject symbolic links outside storage',
+      () async {
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'manifest-path-containment-test-',
+    );
+    final storage = Directory('${directory.path}/pictures')
+      ..createSync(recursive: true);
+    final outside = Directory('${directory.path}/outside')
+      ..createSync(recursive: true);
+    final outsideFile = File('${outside.path}/payload.png')
+      ..writeAsBytesSync([9]);
+    await Link('${storage.path}/escape').create(outside.path);
+    await Link('${storage.path}/file-link.png').create(outsideFile.path);
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final operations = ManifestOperations<ImageRecord>(
+      manifestKey: 'native_non_audio_path_validation',
+      storageDirName: 'pictures',
+      fromMap: ImageRecord.fromMap,
+      tableName: ManifestTables.imageRecords,
+      toMap: (record) => record.toMap(),
+    );
+
+    await expectLater(
+      operations.writeFile('escape/payload.png', Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+    await expectLater(
+      operations.writeFile('file-link.png', Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+    expect(await outsideFile.readAsBytes(), [9]);
+  });
+
+  test('non-audio records reject path traversal storage names', () async {
+    final operations = ManifestOperations<ImageRecord>(
+      manifestKey: 'non_audio_record_path_validation',
+      storageDirName: 'pictures',
+      fromMap: ImageRecord.fromMap,
+      tableName: ManifestTables.imageRecords,
+      toMap: (record) => record.toMap(),
+    );
+    final record = ImageRecord(
+      id: 'unsafe_storage_path',
+      name: 'unsafe',
+      hash: '../outside',
+      format: 'png',
+      createdAt: DateTime(2024),
+      size: 1,
+    );
+
+    await expectLater(operations.addRecord(record), throwsArgumentError);
+    expect(await operations.loadRecords(), isEmpty);
+  });
+
+  test('audio records write using their safe storage filename', () async {
+    final record = AudioRecord(
+      id: 'audio_safe_format_path',
+      name: 'imported',
+      hash: 'safe_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 2,
+    );
+    final bytes = Uint8List.fromList([1, 2]);
+
+    await FileManifest.withStorageFileSaveLock(record.storageFileName,
+        () async {
+      await FileManifest.writeFile(record.storageFileName, bytes);
+      await FileManifest.addRecord(record);
+    });
+
+    expect(await FileManifest.readFile(record.storagePath), bytes);
+  });
+
+  test('audio manifest rows remain available if migration setup fails',
+      () async {
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'manifest-audio-migration-test-',
+    );
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'audio_manifest',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: 'audio_records',
+      toMap: (record) => record.toMap(),
+      legacyStorageNameOf: (record) => '${record.hash}.${record.format}',
+    );
+    final record = AudioRecord(
+      id: 'audio_migration_dir_failure',
+      name: 'imported',
+      hash: 'migration_dir_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    await operations.addRecord(record);
+
+    final blocker = File('${directory.path}/not-a-directory');
+    await blocker.writeAsString('block directory creation');
+    PathProviderPlatform.instance = _DocumentsDirectory(blocker.path);
+
+    final records = await operations.loadRecords(forceRefresh: true);
+
+    expect(records.map((record) => record.id), contains(record.id));
+  });
+
+  test('loading empty audio manifest does not create storage directory',
+      () async {
+    await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'manifest-empty-audio-test-',
+    );
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'audio_manifest',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: 'audio_records',
+      toMap: (record) => record.toMap(),
+      legacyStorageNameOf: (record) => '${record.hash}.${record.format}',
+    );
+
+    expect(await operations.loadRecords(forceRefresh: true), isEmpty);
+    expect(await Directory('${directory.path}/audio').exists(), isFalse);
+  });
+
+  test('legacy migration preserves a Windows-normalized sibling file',
+      () async {
+    final wav = AudioRecord(
+      id: 'audio_normalized_wav',
+      name: 'wav',
+      hash: 'shared_legacy_hash',
+      format: 'wav',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final wavDot = AudioRecord(
+      id: 'audio_normalized_wav_dot',
+      name: 'wav dot',
+      hash: 'shared_legacy_hash',
+      format: 'wav.',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final wavBytes = Uint8List.fromList([1]);
+    final wavDotBytes = Uint8List.fromList([2]);
+    await FileManifest.writeFile(wav.storageFileName, wavBytes);
+    await WebFileStore.write(
+      'tts_audio/shared_legacy_hash.wav.',
+      wavDotBytes,
+    );
+    await FileManifest.addRecord(wav);
+    await FileManifest.addRecord(wavDot);
+    FileManifest.invalidateCache();
+
+    await FileManifest.loadRecords();
+
+    expect(await FileManifest.readFile(wav.storageFileName), wavBytes);
+    expect(await FileManifest.readFile(wavDot.storageFileName), wavDotBytes);
+
+    final questionFormat = AudioRecord(
+      id: 'audio_percent_collision_question',
+      name: 'question',
+      hash: 'shared_percent_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final percentFormat = AudioRecord(
+      id: 'audio_percent_collision_literal',
+      name: 'literal percent sequence',
+      hash: 'shared_percent_hash',
+      format: 'wa%003fv',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final questionBytes = Uint8List.fromList([3]);
+    final percentBytes = Uint8List.fromList([4]);
+    await WebFileStore.write(
+      'tts_audio/shared_percent_hash.wa?v',
+      questionBytes,
+    );
+    await WebFileStore.write(
+      'tts_audio/shared_percent_hash.wa%003fv',
+      percentBytes,
+    );
+    await FileManifest.addRecord(questionFormat);
+    await FileManifest.addRecord(percentFormat);
+    FileManifest.invalidateCache();
+    await FileManifest.loadRecords();
+
+    expect(
+      await FileManifest.readFile(questionFormat.storageFileName),
+      questionBytes,
+    );
+    expect(
+      await FileManifest.readFile(percentFormat.storageFileName),
+      percentBytes,
+    );
+
+    FileManifest.invalidateCache();
+    await FileManifest.loadRecords();
+    expect(
+      await FileManifest.readFile(questionFormat.storageFileName),
+      questionBytes,
+    );
+    expect(
+      await FileManifest.readFile(percentFormat.storageFileName),
+      percentBytes,
+    );
+  });
+
+  test('legacy audio files migrate to escaped storage names', () async {
+    final record = AudioRecord(
+      id: 'audio_legacy_invalid_format',
+      name: 'imported',
+      hash: 'legacy_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 2,
+    );
+    await FileManifest.addRecord(record);
+    const legacyPath = 'tts_audio/legacy_hash.wa?v';
+    const storagePath = 'tts_audio/legacy_hash.wa%003fv';
+    final bytes = Uint8List.fromList([1, 2]);
+    await WebFileStore.write(legacyPath, bytes);
+    FileManifest.invalidateCache();
+
+    final records = await FileManifest.loadRecords();
+
+    expect(records.single.storagePath, 'legacy_hash.wa%003fv');
+    expect(await WebFileStore.read(storagePath), bytes);
+    expect(await WebFileStore.exists(legacyPath), isFalse);
   });
 
   test(
@@ -164,6 +545,521 @@ void main() {
   // ====================================================================
 
   group('entity file lifecycle (test mode)', () {
+    test('image publication waits for same-hash record deletion', () async {
+      final original = ImageRecord(
+        id: 'img_race_original',
+        name: 'original',
+        hash: 'hash_image_save_delete_race',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final imported = ImageRecord(
+        id: 'img_race_imported',
+        name: 'imported',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final bytes = Uint8List.fromList([7]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      final fileWritten = Completer<void>();
+      final resumePublication = Completer<void>();
+      final publish = ImageManifest.withFilePublicationLock(
+          original.hash, original.folder, () async {
+        await ImageManifest.writeFile(imported.storagePath, bytes);
+        fileWritten.complete();
+        await resumePublication.future; // models thumbnail generation
+        await ImageManifest.addRecord(imported);
+      });
+      await fileWritten.future;
+
+      var deleteCompleted = false;
+      final delete = ImageManifest.deleteRecord(original.id);
+      unawaited(delete.then((_) => deleteCompleted = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(deleteCompleted, isFalse);
+      resumePublication.complete();
+      await Future.wait([publish, delete]);
+
+      expect(
+        (await ImageManifest.loadRecords()).map((record) => record.id),
+        contains(imported.id),
+      );
+      expect(
+        await WebFileStore.exists('pictures/${imported.storagePath}'),
+        isTrue,
+        reason: 'a published image record must keep its bytes available',
+      );
+    });
+
+    test('image overwrite preserves bytes published for a shared old hash',
+        () async {
+      final original = ImageRecord(
+        id: 'img_overwrite_original',
+        name: 'original',
+        hash: 'hash_image_overwrite_race',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final imported = ImageRecord(
+        id: 'img_overwrite_imported',
+        name: 'imported',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final edited = ImageRecord(
+        id: 'img_overwrite_edited',
+        name: 'edited',
+        hash: 'hash_image_overwrite_result',
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final bytes = Uint8List.fromList([9]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      final fileWritten = Completer<void>();
+      final resumePublication = Completer<void>();
+      final publish = ImageManifest.withFilePublicationLock(
+          original.hash, original.folder, () async {
+        await ImageManifest.writeFile(imported.storagePath, bytes);
+        fileWritten.complete();
+        await resumePublication.future;
+        await ImageManifest.addRecord(imported);
+      });
+      await fileWritten.future;
+
+      final overwrite = ImageManifest.withFolderReadLock(
+        original.folder,
+        () => ImageManifest.withSaveLocks(
+          [edited.hash, original.hash],
+          () async {
+            await ImageManifest.writeFile(edited.storagePath, bytes);
+            await ImageManifest.deleteRecord(original.id);
+            await ImageManifest.addRecord(edited);
+          },
+        ),
+      );
+      resumePublication.complete();
+      await Future.wait([publish, overwrite]);
+
+      expect(
+        (await ImageManifest.loadRecords()).map((record) => record.id),
+        containsAll([imported.id, edited.id]),
+      );
+      expect(
+        await WebFileStore.exists('pictures/${imported.storagePath}'),
+        isTrue,
+        reason: 'overwriting one reference must retain the shared old bytes',
+      );
+    });
+
+    test('saving unchanged image bytes keeps the replacement record usable',
+        () async {
+      final original = ImageRecord(
+        id: 'img_unchanged_original',
+        name: 'original',
+        hash: 'hash_unchanged_image_save',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final replacement = ImageRecord(
+        id: 'img_unchanged_replacement',
+        name: 'replacement',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final bytes = Uint8List.fromList([10]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      await ImageManifest.withFolderReadLock(
+        original.folder,
+        () => ImageManifest.withSaveLocks([original.hash], () async {
+          await ImageManifest.writeFile(replacement.storagePath, bytes);
+          await ImageManifest.addRecord(replacement);
+          await ImageManifest.deleteRecord(original.id);
+        }),
+      );
+
+      expect(
+        (await ImageManifest.loadRecords()).map((record) => record.id),
+        [replacement.id],
+      );
+      expect(
+        await WebFileStore.exists('pictures/${replacement.storagePath}'),
+        isTrue,
+        reason: 'the replacement record must retain the same-hash image file',
+      );
+    });
+
+    test('video publication waits for same-hash record deletion', () async {
+      final original = VideoRecord(
+        id: 'video_race_original',
+        name: 'original',
+        hash: 'hash_video_save_delete_race',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      final imported = VideoRecord(
+        id: 'video_race_imported',
+        name: 'imported',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      final bytes = Uint8List.fromList([8]);
+      await VideoManifest.writeFile(original.storagePath, bytes);
+      await VideoManifest.addRecord(original);
+
+      final fileWritten = Completer<void>();
+      final resumePublication = Completer<void>();
+      final publish = VideoManifest.withFilePublicationLock(
+          original.hash, original.folder, () async {
+        await VideoManifest.writeFile(imported.storagePath, bytes);
+        fileWritten.complete();
+        await resumePublication.future; // models thumbnail generation
+        await VideoManifest.addRecord(imported);
+      });
+      await fileWritten.future;
+
+      var deleteCompleted = false;
+      final delete = VideoManifest.deleteRecord(original.id);
+      unawaited(delete.then((_) => deleteCompleted = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(deleteCompleted, isFalse);
+      resumePublication.complete();
+      await Future.wait([publish, delete]);
+
+      expect(
+        (await VideoManifest.loadRecords()).map((record) => record.id),
+        contains(imported.id),
+      );
+      expect(
+        await WebFileStore.exists('videos/${imported.storagePath}'),
+        isTrue,
+        reason: 'a published video record must keep its bytes available',
+      );
+    });
+
+    test('image deletion retries after a record hash changes', () async {
+      const originalHash = 'hash_image_delete_snapshot';
+      const updatedHash = 'hash_image_delete_updated';
+      const originalId = 'image_delete_hash_update';
+      final original = ImageRecord(
+        id: originalId,
+        name: 'original',
+        hash: originalHash,
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final updated = ImageRecord(
+        id: originalId,
+        name: 'updated',
+        hash: updatedHash,
+        format: original.format,
+        createdAt: original.createdAt,
+        size: original.size,
+      );
+      final bytes = Uint8List.fromList([12]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      final originalHashHeld = Completer<void>();
+      final releaseOriginalHash = Completer<void>();
+      final updateEnteredSave = Completer<void>();
+      final releaseUpdate = Completer<void>();
+      final publicationEntered = Completer<void>();
+      final releasePublication = Completer<void>();
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (!updateEnteredSave.isCompleted) {
+          updateEnteredSave.complete();
+          await releaseUpdate.future;
+        }
+      };
+      var deletionCompleted = false;
+      try {
+        final holdOriginalHash = ImageManifest.withSaveLock(
+          originalHash,
+          () async {
+            originalHashHeld.complete();
+            await releaseOriginalHash.future;
+          },
+        );
+        await originalHashHeld.future;
+
+        final update = ImageManifest.updateRecord(updated);
+        await Future<void>.delayed(Duration.zero);
+        final deletion = ImageManifest.deleteRecord(originalId).then((_) {
+          deletionCompleted = true;
+        });
+        await Future<void>.delayed(Duration.zero);
+        releaseOriginalHash.complete();
+        await updateEnteredSave.future.timeout(const Duration(seconds: 5));
+
+        final publication = ImageManifest.withSaveLock(updatedHash, () async {
+          await ImageManifest.writeFile(updated.storagePath, bytes);
+          publicationEntered.complete();
+          await releasePublication.future;
+        });
+        releaseUpdate.complete();
+        await publicationEntered.future.timeout(const Duration(seconds: 5));
+        await Future<void>.delayed(Duration.zero);
+        expect(deletionCompleted, isFalse);
+        expect(await ImageManifest.readFile(updated.storagePath), bytes);
+
+        releasePublication.complete();
+        await Future.wait([holdOriginalHash, update, deletion, publication]);
+      } finally {
+        if (!releaseOriginalHash.isCompleted) releaseOriginalHash.complete();
+        if (!releaseUpdate.isCompleted) releaseUpdate.complete();
+        if (!releasePublication.isCompleted) releasePublication.complete();
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
+      expect(await ImageManifest.loadRecords(), isEmpty);
+      expect(await ImageManifest.readFile(updated.storagePath), isNull);
+    });
+
+    test('video deletion retries after a record hash changes', () async {
+      const originalHash = 'hash_video_delete_snapshot';
+      const updatedHash = 'hash_video_delete_updated';
+      const originalId = 'video_delete_hash_update';
+      final original = VideoRecord(
+        id: originalId,
+        name: 'original',
+        hash: originalHash,
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      final updated = VideoRecord(
+        id: originalId,
+        name: 'updated',
+        hash: updatedHash,
+        format: 'mp4',
+        createdAt: original.createdAt,
+        size: 1,
+        duration: 1,
+      );
+      final bytes = Uint8List.fromList([13]);
+      await VideoManifest.writeFile(original.storagePath, bytes);
+      await VideoManifest.addRecord(original);
+
+      final originalHashHeld = Completer<void>();
+      final releaseOriginalHash = Completer<void>();
+      final updateEnteredSave = Completer<void>();
+      final releaseUpdate = Completer<void>();
+      final publicationEntered = Completer<void>();
+      final releasePublication = Completer<void>();
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (!updateEnteredSave.isCompleted) {
+          updateEnteredSave.complete();
+          await releaseUpdate.future;
+        }
+      };
+      var deletionCompleted = false;
+      try {
+        final holdOriginalHash = VideoManifest.withSaveLock(
+          originalHash,
+          () async {
+            originalHashHeld.complete();
+            await releaseOriginalHash.future;
+          },
+        );
+        await originalHashHeld.future;
+
+        final update = VideoManifest.updateRecord(updated);
+        await Future<void>.delayed(Duration.zero);
+        final deletion = VideoManifest.deleteRecord(originalId).then((_) {
+          deletionCompleted = true;
+        });
+        await Future<void>.delayed(Duration.zero);
+        releaseOriginalHash.complete();
+        await updateEnteredSave.future.timeout(const Duration(seconds: 5));
+
+        final publication = VideoManifest.withSaveLock(updatedHash, () async {
+          await VideoManifest.writeFile(updated.storagePath, bytes);
+          publicationEntered.complete();
+          await releasePublication.future;
+        });
+        releaseUpdate.complete();
+        await publicationEntered.future.timeout(const Duration(seconds: 5));
+        await Future<void>.delayed(Duration.zero);
+        expect(deletionCompleted, isFalse);
+        expect(await VideoManifest.readFile(updated.storagePath), bytes);
+
+        releasePublication.complete();
+        await Future.wait([holdOriginalHash, update, deletion, publication]);
+      } finally {
+        if (!releaseOriginalHash.isCompleted) releaseOriginalHash.complete();
+        if (!releaseUpdate.isCompleted) releaseUpdate.complete();
+        if (!releasePublication.isCompleted) releasePublication.complete();
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
+      expect(await VideoManifest.loadRecords(), isEmpty);
+      expect(await VideoManifest.readFile(updated.storagePath), isNull);
+    });
+
+    test('video folder removal waits for a record move into that folder',
+        () async {
+      const hash = 'hash_video_folder_move_delete_race';
+      final original = VideoRecord(
+        id: 'video_folder_move_delete',
+        name: 'moving',
+        hash: hash,
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      await VideoManifest.writeFile(
+        original.storagePath,
+        Uint8List.fromList([11]),
+      );
+      await VideoManifest.addRecord(original);
+      await VideoManifest.addFolder('race-folder');
+
+      final moveEntered = Completer<void>();
+      final resumeMove = Completer<void>();
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (!moveEntered.isCompleted) {
+          moveEntered.complete();
+          await resumeMove.future;
+        }
+      };
+      final move = VideoManifest.moveRecord(original.id, 'race-folder');
+      await moveEntered.future.timeout(const Duration(seconds: 5));
+
+      var deletionCompleted = false;
+      final deletion = VideoManifest.removeFolder('race-folder').then((_) {
+        deletionCompleted = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deletionCompleted, isFalse);
+      resumeMove.complete();
+      await Future.wait([move, deletion]);
+      ManifestDatabase.beforeWebDataSaveForTesting = null;
+
+      expect(await VideoManifest.loadRecords(), isEmpty);
+      expect(
+          await WebFileStore.exists('videos/${original.storagePath}'), isFalse);
+    });
+
+    test('video parent-folder removal waits for descendant folder creation',
+        () async {
+      await VideoManifest.addFolder('Trips');
+      final insertEntered = Completer<void>();
+      final resumeInsert = Completer<void>();
+      var pauseNextSave = true;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (pauseNextSave) {
+          pauseNextSave = false;
+          insertEntered.complete();
+          await resumeInsert.future;
+        }
+      };
+
+      final creation = VideoManifest.addFolder('Trips/New');
+      await insertEntered.future.timeout(const Duration(seconds: 5));
+      var deletionCompleted = false;
+      final deletion = VideoManifest.removeFolder('Trips').then((_) {
+        deletionCompleted = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deletionCompleted, isFalse);
+      resumeInsert.complete();
+      await Future.wait([creation, deletion]);
+      ManifestDatabase.beforeWebDataSaveForTesting = null;
+
+      expect(await VideoManifest.getAllFolders(), isEmpty);
+    });
+
+    test('different video hashes publish concurrently within folder paths',
+        () async {
+      final firstEntered = Completer<void>();
+      final releaseFirst = Completer<void>();
+      final secondEntered = Completer<void>();
+      final releaseSecond = Completer<void>();
+      final siblingEntered = Completer<void>();
+      final releaseSibling = Completer<void>();
+      final first = VideoManifest.withFilePublicationLock(
+        'first_hash',
+        'Trips/2024',
+        () async {
+          firstEntered.complete();
+          await releaseFirst.future;
+        },
+      );
+      await firstEntered.future.timeout(const Duration(seconds: 5));
+
+      final second = VideoManifest.withFilePublicationLock(
+        'second_hash',
+        'Trips/2024',
+        () async {
+          secondEntered.complete();
+          await releaseSecond.future;
+        },
+      );
+      final sibling = VideoManifest.withFilePublicationLock(
+        'sibling_hash',
+        'Trips/2025',
+        () async {
+          siblingEntered.complete();
+          await releaseSibling.future;
+        },
+      );
+      try {
+        await secondEntered.future.timeout(const Duration(seconds: 5));
+        await siblingEntered.future.timeout(const Duration(seconds: 5));
+      } finally {
+        if (!releaseFirst.isCompleted) releaseFirst.complete();
+        if (!releaseSecond.isCompleted) releaseSecond.complete();
+        if (!releaseSibling.isCompleted) releaseSibling.complete();
+      }
+      await Future.wait([first, second, sibling]);
+    });
+
+    test('video moves between a folder and its child do not upgrade a lock',
+        () async {
+      final record = VideoRecord(
+        id: 'video_parent_child_move',
+        name: 'moving',
+        hash: 'hash_video_parent_child_move',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+        folder: 'parent',
+      );
+      await VideoManifest.writeFile(
+        record.storagePath,
+        Uint8List.fromList([12]),
+      );
+      await VideoManifest.addRecord(record);
+
+      await VideoManifest.moveRecord(record.id, 'parent/child');
+      expect((await VideoManifest.loadRecords()).single.folder, 'parent/child');
+      await VideoManifest.moveRecord(record.id, 'parent');
+      expect((await VideoManifest.loadRecords()).single.folder, 'parent');
+    });
+
     testWidgets('write/read/exists/delete roundtrip', (WidgetTester t) async {
       final data = Uint8List.fromList([1, 2, 3, 4]);
 
@@ -2211,6 +3107,433 @@ void main() {
 
   // ====================================================================
   // non-audio deletion cleanup errors
+  group('interrupted non-audio deletion recovery', () {
+    test('interrupted backup write keeps the intact original', () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_missing_backup',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_missing_backup',
+        name: 'intact original',
+        hash: 'delete_missing_backup_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([3, 4]));
+      await operations.addRecord(record);
+
+      operations.beforeNonAudioBackupWriteForTesting = (_) async {
+        throw StateError('simulated interruption before backup commit');
+      };
+      await expectLater(
+        operations.deleteRecord(record.id),
+        throwsA(isA<StateError>()),
+      );
+      final journalKeys = await WebFileStore.keysWithPrefix(
+        'pictures/.manifest-delete-journal-',
+      );
+      expect(journalKeys, hasLength(1));
+      expect(
+        await WebFileStore.keysWithPrefix('pictures/.manifest-delete-backup-'),
+        isEmpty,
+      );
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_missing_backup',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(
+          (await restarted.loadRecords()).map((item) => item.id), [record.id]);
+      expect(await restarted.readFile(record.storagePath), [3, 4]);
+      expect(
+        await restarted.fileExists(
+          journalKeys.single.substring('pictures/'.length),
+        ),
+        isFalse,
+      );
+      await restarted.deleteRecord(record.id);
+    });
+
+    test('concurrent journal recovery retries after a failed attempt',
+        () async {
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_concurrent_recovery',
+        name: 'concurrent recovery',
+        hash: 'delete_concurrent_recovery_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      final originalBytes = Uint8List.fromList([8, 9]);
+      await operations.writeFile(record.storagePath, originalBytes);
+      await operations.addRecord(record);
+
+      const backupName = '.manifest-delete-backup-concurrent';
+      const journalName = '.manifest-delete-journal-concurrent.json';
+      await operations.writeFile(backupName, originalBytes);
+      await operations.deleteFile(record.storagePath);
+      await operations.writeFile(
+        journalName,
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({
+              'files': {record.storagePath: backupName},
+            }),
+          ),
+        ),
+      );
+
+      final firstReload = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final secondReload = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_concurrent_recovery',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final backupRead = Completer<void>();
+      final finishRecovery = Completer<void>();
+      firstReload.beforeNonAudioRecoveryBackupReadForTesting = (_) async {
+        backupRead.complete();
+        await finishRecovery.future;
+        throw StateError('injected backup read failure');
+      };
+
+      final firstLoad = firstReload.loadRecords();
+      await backupRead.future;
+      var secondLoadCompleted = false;
+      final secondLoad = secondReload.loadRecords().then((records) {
+        secondLoadCompleted = true;
+        return records;
+      });
+      await Future<void>.delayed(Duration.zero);
+      try {
+        expect(secondLoadCompleted, isFalse);
+      } finally {
+        finishRecovery.complete();
+      }
+
+      expect(await firstLoad, isEmpty);
+      expect((await secondLoad).map((item) => item.id), [record.id]);
+      expect(await secondReload.readFile(record.storagePath), [8, 9]);
+      expect(await secondReload.fileExists(journalName), isFalse);
+      expect(await secondReload.fileExists(backupName), isFalse);
+      await secondReload.deleteRecord(record.id);
+    });
+
+    test('concurrent reload does not finalize an active delete journal',
+        () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'manifest-delete-active-journal-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
+
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_active_journal',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_active_journal',
+        name: 'active journal',
+        hash: 'delete_active_journal_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([6, 7]));
+      await operations.addRecord(record);
+
+      final backupWritten = Completer<String>();
+      final finishSnapshot = Completer<void>();
+      operations.afterNonAudioBackupWriteForTesting = (name) async {
+        backupWritten.complete(name);
+        await finishSnapshot.future;
+      };
+      final deleting = operations.deleteRecord(record.id);
+      final backupName = await backupWritten.future;
+      final journalNames = await Directory(await operations.storageDirPath)
+          .list()
+          .map((entry) => entry.uri.pathSegments.last)
+          .where((name) => name.startsWith('.manifest-delete-journal-'))
+          .toList();
+      try {
+        expect(journalNames, hasLength(1));
+
+        final reloader = ManifestOperations<ImageRecord>(
+          manifestKey: 'delete_active_journal',
+          storageDirName: 'pictures',
+          fromMap: ImageRecord.fromMap,
+          tableName: ManifestTables.imageRecords,
+          toMap: (record) => record.toMap(),
+        );
+        expect(
+          (await reloader.loadRecords(forceRefresh: true))
+              .map((item) => item.id),
+          [record.id],
+        );
+        expect(await reloader.fileExists(journalNames.single), isTrue);
+        expect(await reloader.fileExists(backupName), isTrue);
+      } finally {
+        if (!finishSnapshot.isCompleted) finishSnapshot.complete();
+        await deleting;
+      }
+      expect(await operations.loadRecords(forceRefresh: true), isEmpty);
+      expect(await operations.fileExists(journalNames.single), isFalse);
+      expect(await operations.fileExists(backupName), isFalse);
+    });
+
+    test('journal tracks backups created during snapshot preparation',
+        () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'manifest-delete-snapshot-crash-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
+
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_snapshot_crash',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_snapshot_crash',
+        name: 'snapshot crash',
+        hash: 'delete_snapshot_crash_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([4, 5]));
+      await operations.addRecord(record);
+
+      String? backupName;
+      operations.afterNonAudioBackupWriteForTesting = (name) async {
+        backupName = name;
+        throw StateError('simulated interruption after backup write');
+      };
+      operations.beforeNonAudioBackupDeleteForTesting = (_) async {
+        throw FileSystemException('injected backup cleanup failure');
+      };
+      await expectLater(
+        operations.deleteRecord(record.id),
+        throwsA(isA<StateError>()),
+      );
+
+      final journalNames = await Directory(await operations.storageDirPath)
+          .list()
+          .map((entry) => entry.uri.pathSegments.last)
+          .where((name) => name.startsWith('.manifest-delete-journal-'))
+          .toList();
+      expect(backupName, isNotNull);
+      expect(journalNames, hasLength(1));
+      expect(await operations.fileExists(backupName!), isTrue);
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_snapshot_crash',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(
+          (await restarted.loadRecords()).map((item) => item.id), [record.id]);
+      expect(await restarted.readFile(record.storagePath), [4, 5]);
+      expect(await restarted.fileExists(journalNames.single), isFalse);
+      expect(await restarted.fileExists(backupName!), isFalse);
+      await restarted.deleteRecord(record.id);
+    });
+
+    test('backup cleanup failure leaves journal for restart cleanup', () async {
+      WebFileStore.enableTestMode();
+
+      final operations = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_backup_cleanup_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final record = ImageRecord(
+        id: 'delete_backup_cleanup_failure',
+        name: 'cleanup retry',
+        hash: 'delete_backup_cleanup_failure_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await operations.writeFile(
+          record.storagePath, Uint8List.fromList([1, 2]));
+      await operations.addRecord(record);
+
+      String? backupName;
+      operations.beforeNonAudioBackupDeleteForTesting = (name) async {
+        backupName = name;
+        throw FileSystemException('injected backup cleanup failure', name);
+      };
+      await operations.deleteRecord(record.id);
+
+      final journalNames = (await WebFileStore.keysWithPrefix(
+        'pictures/.manifest-delete-journal-',
+      ))
+          .map((key) => key.substring('pictures/'.length))
+          .toList();
+      expect(backupName, isNotNull);
+      expect(journalNames, hasLength(1));
+      expect(await operations.fileExists(backupName!), isTrue);
+
+      final restarted = ManifestOperations<ImageRecord>(
+        manifestKey: 'delete_backup_cleanup_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (record) => record.toMap(),
+      );
+      expect(await restarted.loadRecords(), isEmpty);
+      expect(await restarted.fileExists(journalNames.single), isFalse);
+      expect(await restarted.fileExists(backupName!), isFalse);
+    });
+
+    test('restores single and batch media from durable journals', () async {
+      Future<void> verifyRecovery({required bool useWebFileStore}) async {
+        final originalPathProvider = PathProviderPlatform.instance;
+        final directory = useWebFileStore
+            ? null
+            : await Directory.systemTemp.createTemp(
+                'manifest-delete-recovery-test-',
+              );
+        if (useWebFileStore) {
+          WebFileStore.enableTestMode();
+        } else {
+          PathProviderPlatform.instance = _DocumentsDirectory(directory!.path);
+          WebFileStore.disableTestMode();
+        }
+
+        try {
+          for (final count in [1, 2]) {
+            final operations = ManifestOperations<ImageRecord>(
+              manifestKey: 'delete_recovery_${useWebFileStore}_$count',
+              storageDirName: 'pictures',
+              fromMap: ImageRecord.fromMap,
+              tableName: ManifestTables.imageRecords,
+              toMap: (record) => record.toMap(),
+            );
+            final records = [
+              for (var i = 0; i < count; i++)
+                ImageRecord(
+                  id: 'delete_recovery_${useWebFileStore}_${count}_$i',
+                  name: 'media $i',
+                  hash: 'delete_recovery_hash_${useWebFileStore}_${count}_$i',
+                  format: 'jpg',
+                  createdAt: DateTime(2024),
+                  size: i + 1,
+                ),
+            ];
+            final backups = <String, String>{};
+            for (var i = 0; i < records.length; i++) {
+              final record = records[i];
+              final originalName = record.storagePath;
+              final originalBytes = Uint8List.fromList([i + 10, i + 20]);
+              await operations.writeFile(originalName, originalBytes);
+              await operations.addRecord(record);
+              final backupName = '.manifest-delete-backup-recovery-$i';
+              await operations.writeFile(backupName, originalBytes);
+              backups[originalName] = backupName;
+              await operations.deleteFile(originalName);
+              if (i == 0) {
+                // Simulate a partial destination left by an interrupted
+                // restore. Recovery must verify contents, not just existence.
+                await operations.writeFile(
+                  originalName,
+                  Uint8List.fromList([0]),
+                );
+              }
+            }
+            final journalName = '.manifest-delete-journal-recovery-$count.json';
+            await operations.writeFile(
+              journalName,
+              Uint8List.fromList(utf8.encode(jsonEncode({'files': backups}))),
+            );
+
+            final restarted = ManifestOperations<ImageRecord>(
+              manifestKey: 'delete_recovery_${useWebFileStore}_$count',
+              storageDirName: 'pictures',
+              fromMap: ImageRecord.fromMap,
+              tableName: ManifestTables.imageRecords,
+              toMap: (record) => record.toMap(),
+            );
+            final loaded = await restarted.loadRecords();
+            expect(
+              loaded.map((record) => record.id),
+              unorderedEquals(records.map((record) => record.id)),
+            );
+            for (var i = 0; i < records.length; i++) {
+              expect(
+                await restarted.readFile(records[i].storagePath),
+                [i + 10, i + 20],
+              );
+            }
+            expect(await restarted.fileExists(journalName), isFalse);
+            for (final backupName in backups.values) {
+              expect(await restarted.fileExists(backupName), isFalse);
+            }
+            await restarted.deleteRecords(
+              records.map((record) => record.id).toList(),
+            );
+          }
+        } finally {
+          PathProviderPlatform.instance = originalPathProvider;
+          if (directory != null) await directory.delete(recursive: true);
+          WebFileStore.enableTestMode();
+        }
+      }
+
+      await verifyRecovery(useWebFileStore: false);
+      await verifyRecovery(useWebFileStore: true);
+    });
+  });
+
   group('non-audio cleanup failure', () {
     testWidgets('single deletion keeps row and file for retry', (t) async {
       final op = ManifestOperations<ImageRecord>(

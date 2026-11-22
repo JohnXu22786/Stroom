@@ -2703,9 +2703,17 @@ void main() {
         final secondArtifact = File(
           '${downloadDir.path}/second.mp4.catcatch_tmp',
         )..writeAsStringSync('second partial');
-        final firstPartial = File('${directory.path}/first.partial')
+        final taskSuffix =
+            base64Url.encode(utf8.encode('duplicate')).replaceAll('=', '');
+        final firstTaskPartial = File(
+          '${downloadDir.path}/first.mp4.$taskSuffix.catcatch_tmp',
+        )..writeAsStringSync('first task partial');
+        final secondTaskPartial = File(
+          '${downloadDir.path}/second.mp4.$taskSuffix.catcatch_tmp',
+        )..writeAsStringSync('second task partial');
+        final firstPartial = File('${downloadDir.path}/first.partial')
           ..writeAsStringSync('first recorded partial');
-        final secondPartial = File('${directory.path}/second.partial')
+        final secondPartial = File('${downloadDir.path}/second.partial')
           ..writeAsStringSync('second recorded partial');
         final sharedArtifact = File('${downloadDir.path}/second.mp4')
           ..writeAsStringSync('remaining owner');
@@ -2727,6 +2735,8 @@ void main() {
         final removedArtifacts = [
           firstArtifact,
           secondArtifact,
+          firstTaskPartial,
+          secondTaskPartial,
           firstPartial,
           secondPartial,
         ];
@@ -2740,6 +2750,87 @@ void main() {
       },
     );
 
+    test('cleanup removes task artifacts under reserved output names',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      const taskId = 'reserved-output-cleanup';
+      final downloadDir = Directory('${directory.path}/catcatch/downloads')
+        ..createSync(recursive: true);
+      final taskSuffix =
+          base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
+      final reservedPartial = File(
+        '${downloadDir.path}/video (2).mp4.$taskSuffix.catcatch_tmp',
+      )..writeAsStringSync('interrupted download');
+      final reservedParts = Directory(
+        '${downloadDir.path}/.video_merged (1).ts_parts',
+      )..createSync(recursive: true);
+      File('${reservedParts.path}/part_0').writeAsStringSync('playlist part');
+      final unrelatedOutput = File('${downloadDir.path}/video (2).mp4')
+        ..writeAsStringSync('user file');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        task(taskId).copyWith(selectedMedia: media),
+        appDirPath: directory.path,
+      );
+
+      expect(await reservedPartial.exists(), isFalse);
+      expect(await reservedParts.exists(), isFalse);
+      expect(await unrelatedOutput.readAsString(), 'user file');
+    });
+
+    test('cleanup removes reserved conversion artifacts and preserves owners',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      final convertedDir = Directory('${directory.path}/catcatch/converted')
+        ..createSync(recursive: true);
+      final removedArtifacts = [
+        File('${convertedDir.path}/video (2).mp4.tmp'),
+        File('${convertedDir.path}/video (3).mp4.spool.tmp'),
+        File('${convertedDir.path}/video (4).mp4.ev1_tmp.flv'),
+        File('${convertedDir.path}/video (5).mp4.reserve'),
+        File('${convertedDir.path}/video (2) (2).mp4.tmp'),
+      ];
+      for (final artifact in removedArtifacts) {
+        artifact.writeAsStringSync('interrupted conversion');
+      }
+      final ownedArtifact = File(
+        '${convertedDir.path}/video (6).mp4.spool.tmp',
+      )..writeAsStringSync('remaining conversion');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        task('removed-conversion').copyWith(selectedMedia: media),
+        appDirPath: directory.path,
+        remainingTasks: [
+          task('remaining-conversion').copyWith(
+            selectedMedia: media,
+            status: TaskStatus.running,
+          ),
+        ],
+      );
+
+      for (final artifact in removedArtifacts) {
+        expect(await artifact.exists(), isTrue, reason: artifact.path);
+      }
+      expect(await ownedArtifact.readAsString(), 'remaining conversion');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        task('removed-conversion').copyWith(selectedMedia: media),
+        appDirPath: directory.path,
+      );
+
+      for (final artifact in [...removedArtifacts, ownedArtifact]) {
+        expect(await artifact.exists(), isFalse, reason: artifact.path);
+      }
+    });
+
     test('removal cleanup rechecks owners selected during its async gap',
         () async {
       const media = MediaResource(
@@ -2752,7 +2843,7 @@ void main() {
       final tempDownload = File(
         '${downloadDir.path}/video.mp4.catcatch_tmp',
       )..writeAsStringSync('partial download');
-      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+      final unsharedDownload = File('${downloadDir.path}/unshared-download.tmp')
         ..writeAsStringSync('removed task artifact');
       final progressFile = File(
         '${directory.path}/catcatch/.progress/removed_dl_progress.json',
@@ -2813,7 +2904,7 @@ void main() {
       final tempDownload = File(
         '${downloadDir.path}/video.mp4.catcatch_tmp',
       )..writeAsStringSync('partial download');
-      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+      final unsharedDownload = File('${downloadDir.path}/unshared-download.tmp')
         ..writeAsStringSync('removed task artifact');
       final progressFile = File(
         '${directory.path}/catcatch/.progress/removed_dl_progress.json',

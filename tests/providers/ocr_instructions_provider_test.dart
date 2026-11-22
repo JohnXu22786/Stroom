@@ -390,6 +390,38 @@ void main() {
       );
     });
 
+    test('does not duplicate a matching add while provider entries load',
+        () async {
+      await SharedPreferences.getInstance();
+      final providerEntriesNotifier = _DelayedProviderEntriesNotifier();
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith((ref) {
+            return providerEntriesNotifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(ocrInstructionsProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+      const matching = OcrInstruction(name: '已迁移', content: '旧版指令');
+      await notifier.add(matching.name, matching.content);
+      providerEntriesNotifier.completeWithEntries([
+        _ocrEntryWithInstructions([
+          {'name': matching.name, 'content': matching.content},
+        ]),
+      ]);
+      await notifier.load();
+
+      expect(container.read(ocrInstructionsProvider), [matching]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('ocr_instructions'),
+        jsonEncode([matching.toMap()]),
+      );
+    });
+
     test('does not re-migrate once the store has been written', () async {
       final container = _containerWithEntries([
         _ocrEntryWithInstructions([

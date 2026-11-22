@@ -850,7 +850,8 @@ abstract final class LlmConnectorRegistry {
         'clova-studio' => 'clova.studio.chat',
         'oneminai' => kOneMinAiProtocolId,
         'amazon-q' => 'amazon-q.chat',
-        'antigravity' => 'google.antigravity.generate_content',
+        // Legacy accounts remain visible, but no supported public inference path exists.
+        'antigravity' => null,
         'xai' ||
         'grok-cli' ||
         'xai-oauth' ||
@@ -929,6 +930,7 @@ abstract final class LlmConnectorRegistry {
       'zcode-cli' => authType == 'none',
       'xai' || 'meta' => authType == 'api_key',
       'muse-code' => authType == 'oauth',
+      'antigravity' => false,
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
       'devin-cli-agentic' => authType == 'cli_session',
       'cursor' => {'oauth', 'api_key'}.contains(authType),
@@ -6346,6 +6348,10 @@ class LlmNativeRequestBuilder {
       } on CursorConnectRpcException {
         rethrow;
       }
+    }
+    if (account.connectorType == 'antigravity') {
+      // Block legacy/imported CLI OAuth credentials from private inference APIs.
+      throw const LlmAccountConnectorException();
     }
     if (connector == null ||
         connector.id != account.connectorType ||

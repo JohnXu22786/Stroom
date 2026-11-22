@@ -5,10 +5,38 @@ import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/folder_path_utils.dart';
 import '../utils/text_manifest.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
 const List<String> kTextFileFormats = ['txt', 'md', 'mmd'];
+
+/// Generates a text-record name not already used by the same format in folder.
+String uniqueTextRecordName(
+  String baseName,
+  String format,
+  String folder,
+  List<TextRecord> records,
+  Set<String> usedInBatch,
+) {
+  bool taken(String name) =>
+      usedInBatch.contains('$name\u0000$format') ||
+      records.any(
+        (record) =>
+            record.name == name &&
+            record.format == format &&
+            record.folder == folder,
+      );
+
+  if (!taken(baseName)) return baseName;
+  var index = 2;
+  while (taken('$baseName ($index)')) {
+    index++;
+  }
+  return '$baseName ($index)';
+}
 
 class TextCreatePage extends StatefulWidget {
   final String initialFolder;
@@ -39,22 +67,30 @@ class TextCreatePageState extends State<TextCreatePage> {
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(AppLocalizations.of(context)!.textCreateEnterTitle)),
+          content: Text(AppLocalizations.of(context)!.textCreateEnterTitle),
+        ),
       );
       return;
     }
 
+    final nameError = FolderPathUtils.validateFileName(title);
+    if (nameError != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(nameError)));
+      return;
+    }
+
+    final format = _selectedFormat;
     setState(() => _isSaving = true);
 
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-
-      await TextManifest.saveTextRecord(
+      final saved = await TextManifest.saveTextRecordIfUnique(
         TextRecord(
           name: title,
           hash: hash,
-          format: _selectedFormat,
+          format: format,
           createdAt: DateTime.now(),
           size: bytes.length,
           folder: widget.initialFolder,
@@ -62,6 +98,19 @@ class TextCreatePageState extends State<TextCreatePage> {
         ),
         content,
       );
+      if (!mounted) return;
+      if (!saved) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .fileManagerFileExists(format, title),
+            ),
+          ),
+        );
+        return;
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -72,8 +121,9 @@ class TextCreatePageState extends State<TextCreatePage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .textCreateSaveFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.textCreateSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -85,7 +135,11 @@ class TextCreatePageState extends State<TextCreatePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.textCreateNewTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.textCreateNewTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -109,8 +163,11 @@ class TextCreatePageState extends State<TextCreatePage> {
                   child: TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
-                      labelText:
-                          AppLocalizations.of(context)!.textCreateTitleLabel,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.textCreateTitleLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       hintText:
                           AppLocalizations.of(context)!.textCreateTitleHint,
                       border: OutlineInputBorder(),
@@ -123,16 +180,31 @@ class TextCreatePageState extends State<TextCreatePage> {
                   child: DropdownButtonFormField<String>(
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
+                    isExpanded: true,
                     initialValue: _selectedFormat,
                     decoration: InputDecoration(
-                      labelText:
-                          AppLocalizations.of(context)!.textCreateFormatLabel,
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.textCreateFormatLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
                     ),
                     items: kTextFileFormats
-                        .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                        .map(
+                          (f) => DropdownMenuItem(
+                            value: f,
+                            child: ConstrainedText(
+                              f,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
                       if (value != null) {
@@ -150,8 +222,11 @@ class TextCreatePageState extends State<TextCreatePage> {
               child: TextField(
                 controller: _contentController,
                 decoration: InputDecoration(
-                  labelText:
-                      AppLocalizations.of(context)!.textCreateContentLabel,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.textCreateContentLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   hintText: AppLocalizations.of(context)!.textCreateContentHint,
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,

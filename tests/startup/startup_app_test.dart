@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -10,11 +11,15 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/application.dart';
 import 'package:stroom/startup/startup_app.dart';
+import 'package:stroom/startup/startup_data_safety_block_page.dart';
 import 'package:stroom/startup/startup_check_service.dart';
 import 'package:stroom/startup/startup_page.dart';
+import 'package:stroom/startup/startup_sequence_controller.dart';
+import 'package:stroom/startup/startup_update_recovery.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/providers/update_provider.dart';
 
 class _DocumentsDirectory extends PathProviderPlatform {
   _DocumentsDirectory(this.path);
@@ -32,6 +37,25 @@ Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
     );
     await tester.pump(const Duration(milliseconds: 50));
   }
+}
+
+class _RollbackUpdateNotifier extends UpdateNotifier {
+  _RollbackUpdateNotifier({this.hasCandidate = true}) : super(dio: Dio());
+
+  final bool hasCandidate;
+
+  @override
+  Future<StartupRollbackCandidate?> findStartupRollbackCandidate(
+    String sourceVersion,
+  ) async =>
+      !hasCandidate
+          ? null
+          : StartupRollbackCandidate(
+              version: sourceVersion,
+              releaseNotes: 'Known stable release notes',
+              downloadUrl:
+                  'https://github.com/JohnXu22786/Stroom/releases/download/v$sourceVersion/Stroom-linux.AppImage',
+            );
 }
 
 void main() {
@@ -154,6 +178,150 @@ void main() {
   });
 
   group('StartupApp - restart dialog flow', () {
+    testWidgets(
+        'offers recorded exact previous version only for readable migration failure',
+        (tester) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            updateProvider.overrideWith(
+              (ref) => _RollbackUpdateNotifier(),
+            ),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const StartupDataSafetyBlockPage(
+              block: StartupBlock(
+                reason: StartupBlockReason.migrationFailedRestored,
+                message: 'Migration failed and data was restored.',
+                migrationDescription: 'chat v1→v2',
+                recoverySourceVersion: '0.2.12',
+              ),
+            ),
+          ),
+        ),
+      );
+      final l10n = appLocalizationsForLocale(const Locale('en', 'US'));
+      await _pumpUntilVisible(
+        tester,
+        find.text(l10n.startupSafetyRollbackButton),
+      );
+      expect(find.text(l10n.startupSafetyRollbackButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyExportButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyExitButton), findsOneWidget);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton).first).onPressed,
+        isNotNull,
+      );
+
+      await tester.tap(find.text(l10n.startupSafetyRollbackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('0.2.12'), findsOneWidget);
+      expect(find.text('Known stable release notes'), findsOneWidget);
+      await tester.tap(find.text(l10n.startupSafetyRollbackContinue));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.startupSafetyRollbackConfirmTitle), findsOneWidget);
+      expect(
+        find.text(l10n.startupSafetyRollbackConfirmMessage('0.2.12')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text(MaterialLocalizations.of(
+        tester.element(find.byType(AlertDialog)),
+      ).cancelButtonLabel));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.startupSafetyExportButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyExitButton), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'no-candidate copy and recovery actions fit narrow large-text view',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final l10n = appLocalizationsForLocale(const Locale('en', 'US'));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            updateProvider.overrideWith(
+              (ref) => _RollbackUpdateNotifier(hasCandidate: false),
+            ),
+          ],
+          child: MediaQuery(
+            data: const MediaQueryData(
+              textScaler: TextScaler.linear(1.8),
+            ),
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const StartupDataSafetyBlockPage(
+                block: StartupBlock(
+                  reason: StartupBlockReason.migrationFailedNoChanges,
+                  message: 'The migration failed without changing data.',
+                  migrationDescription: 'chat v1→v2',
+                  recoverySourceVersion: '0.2.12',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.startupSafetyRollbackNoCandidate), findsOneWidget);
+      expect(find.text(l10n.startupSafetyExportButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyExitButton), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('recovery release sheet fits a wide dark display',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final l10n = appLocalizationsForLocale(const Locale('en', 'US'));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            updateProvider.overrideWith((ref) => _RollbackUpdateNotifier()),
+          ],
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const StartupDataSafetyBlockPage(
+              block: StartupBlock(
+                reason: StartupBlockReason.migrationFailedRestored,
+                message: 'The migration failed and data was restored.',
+                migrationDescription: 'chat v1→v2',
+                recoverySourceVersion: '0.2.12',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.startupSafetyRollbackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('0.2.12'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('safety block copy follows the saved app locale', (
       tester,
     ) async {
@@ -183,6 +351,7 @@ void main() {
       expect(find.text(l10n.startupSafetyExportButton), findsOneWidget);
       expect(find.text(l10n.startupSafetyExitButton), findsOneWidget);
       expect(find.text(l10n.startupSafetyUpdateButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyRollbackButton), findsNothing);
       expect(
         find.text(l10n.startupSafetyNewerDataVersion(newerVersion)),
         findsOneWidget,
@@ -239,7 +408,7 @@ void main() {
         });
         AppStorage.resetCache();
 
-        // 移动端视口（HomePage 的 NavigationBar 仅在宽度 < 600 时渲染，
+        // 移动端视口（HomePage 的底部导航仅在宽度 < 600 时渲染，
         // 便于断言主应用接管界面）。
         tester.view.physicalSize = const Size(400, 800);
         tester.view.devicePixelRatio = 1.0;
@@ -305,7 +474,7 @@ void main() {
         // 启动页（含 tagline）已从树中移除 → 主应用可见。
         expect(find.text('你的学习助理'), findsNothing);
         expect(
-          find.byType(NavigationBar),
+          find.byKey(const ValueKey('home-bottom-navigation')),
           findsOneWidget,
           reason: '主应用（HomePage）应已接管界面',
         );

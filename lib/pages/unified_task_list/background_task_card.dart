@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,8 @@ import '../audio_separation_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
 import '../../widgets/running_elapsed_label.dart';
+
+import '../../widgets/constrained_text.dart';
 
 String _localizedBackgroundStepLabel(String label, AppLocalizations strings) =>
     switch (label) {
@@ -110,6 +113,25 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     final strings = AppLocalizations.of(context)!;
     final hasRawData =
         widget.task.rawRequest != null || widget.task.rawResponse != null;
+    double lineHeight(double fontSize) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: 'Hg',
+          style:
+              DefaultTextStyle.of(context).style.copyWith(fontSize: fontSize),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      return painter.height;
+    }
+
+    final titleRowHeight = math.max(
+      lineHeight(14),
+      math.max(lineHeight(10) + 2, 14),
+    );
+    final metadataRowHeight = math.max(lineHeight(12), lineHeight(11) + 4);
+    final leadingAnchorHeight = titleRowHeight + 4 + metadataRowHeight;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -135,19 +157,30 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.isUnread)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        shape: BoxShape.circle,
+                  SizedBox(
+                    height: leadingAnchorHeight,
+                    child: Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.isUnread)
+                            Container(
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.only(right: 4),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          _buildStatusIcon(widget.task.status, colorScheme),
+                          const SizedBox(width: 12),
+                        ],
                       ),
                     ),
-                  _buildStatusIcon(widget.task.status, colorScheme),
-                  const SizedBox(width: 12),
+                  ),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,7 +194,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
+                              child: ConstrainedText(
                                 _localizedBackgroundTaskTitle(
                                   widget.task,
                                   strings,
@@ -178,10 +211,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             buildStatusChip(widget.task.status, strings),
-                            const SizedBox(width: 8),
                             Text(
                               formatRelativeTime(
                                 widget.task.createdAt,
@@ -193,7 +228,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                               ),
                             ),
                             if (widget.task.status == TaskStatus.running) ...[
-                              const SizedBox(width: 8),
                               // Live elapsed time — lets the user see a
                               // slow-but-working task is still alive.
                               RunningElapsedLabel(
@@ -209,14 +243,19 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.expand_more,
-                      color: colorScheme.onSurfaceVariant,
-                      size: 24,
+                  SizedBox(
+                    width: 32,
+                    height: leadingAnchorHeight,
+                    child: Center(
+                      child: AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(
+                          Icons.expand_more,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 24,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -326,30 +365,41 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                       color: Colors.red,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      strings.unifiedTaskErrorDetails,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red[700],
+                    Expanded(
+                      child: ConstrainedText(
+                        strings.unifiedTaskErrorDetails,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red[700],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(),
-                    if (hasRawData)
-                      TextButton.icon(
-                        onPressed: () => _showErrorDetailDialog(context, task),
-                        icon: const Icon(Icons.preview, size: 14),
-                        label: Text(
-                          strings.unifiedTaskViewErrorDetails,
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    if (hasRawData) ...[
+                      const SizedBox(width: 4),
+                      Flexible(
+                        flex: 2,
+                        child: TextButton.icon(
+                          onPressed: () =>
+                              _showErrorDetailDialog(context, task),
+                          icon: const Icon(Icons.preview, size: 14),
+                          label: ConstrainedText(
+                            strings.unifiedTaskViewErrorDetails,
+                            style: TextStyle(fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -684,9 +734,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
               ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
             },
             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-            label: Text(
+            label: ConstrainedText(
               strings.unifiedTaskDelete,
               style: TextStyle(fontSize: 13, color: Colors.red),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -763,7 +815,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       child: TextButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 13)),
+        label: ConstrainedText(
+          label,
+          style: const TextStyle(fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         style: TextButton.styleFrom(
           foregroundColor: color,
           padding: const EdgeInsets.symmetric(horizontal: 8),

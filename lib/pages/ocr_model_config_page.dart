@@ -10,6 +10,47 @@ import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
+String _requestSizeBudgetMibText(int bytes) {
+  final absoluteBytes = BigInt.from(bytes).abs();
+  final bytesPerMib = BigInt.from(1024 * 1024);
+  final whole = absoluteBytes ~/ bytesPerMib;
+  final remainder = absoluteBytes % bytesPerMib;
+  final sign = bytes < 0 ? '-' : '';
+  if (remainder == BigInt.zero) return '$sign$whole';
+
+  // 1 / 2^20 is exactly 95367431640625 / 10^20. Formatting the
+  // remainder this way preserves every byte without exposing double noise.
+  final fraction = (remainder * BigInt.from(95367431640625))
+      .toString()
+      .padLeft(20, '0')
+      .replaceFirst(RegExp(r'0+$'), '');
+  return '$sign$whole.$fraction';
+}
+
+double _storedSliderValue(
+    Object? value, double fallback, double min, double max) {
+  if (value is! num) return fallback;
+  final number = value.toDouble();
+  if (!number.isFinite) return fallback;
+  return number.clamp(min, max).toDouble();
+}
+
+bool _isInvalidStoredSliderValue(Object? value, double min, double max) {
+  if (value == null) return false;
+  if (value is! num) return true;
+  final number = value.toDouble();
+  return !number.isFinite || number < min || number > max;
+}
+
+bool _storedSliderValueChanged(
+    Object? stored, double current, double fallback) {
+  if (stored == null) return current != fallback;
+  if (stored is! num) return true;
+  return stored.toDouble() != current;
+}
+
 /// OCR 模型配置编辑页面
 /// 包含基本设置、OCR 参数（temperature/topP/maxTokens）
 /// 和自定义参数；所有参数均为可选，未开启/未填写则不发送。
@@ -42,6 +83,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   // Slider values
   double _temperature = 0.0;
   double _topP = 1.0;
+  bool _temperatureNeedsRepair = false;
+  bool _topPNeedsRepair = false;
 
   // Toggle flags
   bool _enableTemperature = false;
@@ -60,7 +103,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
       if (_customParams.any(
-        (p) => p.paramName.isNotEmpty || p.defaultValue.isNotEmpty,
+        (p) =>
+            p.paramName.isNotEmpty ||
+            p.defaultValue.isNotEmpty ||
+            p.type != ParamType.string.value,
       )) {
         return true;
       }
@@ -78,11 +124,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (_modelIdController.text != m.modelId) return true;
 
     // OCR params
-    if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0) !=
-        _temperature) {
+    if (!_temperatureNeedsRepair &&
+        _storedSliderValueChanged(
+          m.typeConfig['temperature'],
+          _temperature,
+          0.0,
+        )) {
       return true;
     }
-    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
+    if (!_topPNeedsRepair &&
+        _storedSliderValueChanged(m.typeConfig['topP'], _topP, 1.0)) {
       return true;
     }
     if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
@@ -102,10 +153,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
     final originalRequestBudget = m.typeConfig['requestSizeBudgetBytes'];
     final originalRequestBudgetText = originalRequestBudget is num
-        ? (originalRequestBudget / (1024 * 1024)).toString().replaceFirst(
-              RegExp(r'\.0$'),
-              '',
-            )
+        ? _requestSizeBudgetMibText(originalRequestBudget.toInt())
         : '';
     if (originalRequestBudgetText != _requestSizeBudgetController.text) {
       return true;
@@ -127,8 +175,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _modelIdController.addListener(_handleControllerChanged);
 
     // Initialize OCR-specific params from typeConfig
-    _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
-    _topP = (m?.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
+    final temperature = m?.typeConfig['temperature'];
+    _temperatureNeedsRepair = _isInvalidStoredSliderValue(
+      temperature,
+      0.0,
+      2.0,
+    );
+    _temperature = _storedSliderValue(temperature, 0.0, 0.0, 2.0);
+    final topP = m?.typeConfig['topP'];
+    _topPNeedsRepair = _isInvalidStoredSliderValue(topP, 0.0, 1.0);
+    _topP = _storedSliderValue(topP, 1.0, 0.0, 1.0);
 
     // Read enable flags from typeConfig
     _enableTemperature = m?.typeConfig['enableTemperature'] as bool? ?? false;
@@ -143,10 +199,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final requestSizeBudgetBytes = m?.typeConfig['requestSizeBudgetBytes'];
     _requestSizeBudgetController = TextEditingController(
       text: requestSizeBudgetBytes is num
-          ? (requestSizeBudgetBytes / (1024 * 1024)).toString().replaceFirst(
-                RegExp(r'\.0$'),
-                '',
-              )
+          ? _requestSizeBudgetMibText(requestSizeBudgetBytes.toInt())
           : '',
     )..addListener(_handleControllerChanged);
 
@@ -258,6 +311,19 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       return;
     }
 
+    if ((_enableTemperature && _temperatureNeedsRepair) ||
+        (_enableTopP && _topPNeedsRepair)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.ocrSamplingSliderRepairRequired,
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     // 验证参数名唯一且非空；缺少默认值时需有非空的有效选项，
     // 并校验请求实际使用的参数值。
     final seenNames = <String>{};
@@ -265,11 +331,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final param = _customParams[i];
       final name = param.paramName.trim();
       // OCR requests use the first option for non-JSON parameters.
-      final value = param.type != 'json' && param.options.isNotEmpty
-          ? param.options.first.trim()
-          : param.defaultValue.trim();
-      final hasEffectiveOption =
-          param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
+      final rawValue = param.type != 'json' && param.options.isNotEmpty
+          ? param.options.first
+          : param.defaultValue;
+      final value = rawValue.trim();
+      final hasRequiredValue =
+          param.type == 'string' && param.options.isNotEmpty
+              ? rawValue.isNotEmpty
+              : value.isNotEmpty;
+      final hasImplicitTrueBoolean = param.type == 'boolean' &&
+          param.options.isEmpty &&
+          param.defaultValue.trim().isEmpty;
+      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
+          param.options.any((option) => option.trim().isNotEmpty);
+      final hasUnsupportedStoredType = hasStoredValue &&
+          ParamType.values.every((type) => type.value != param.type);
       if (name == 'stream') {
         var isNonStreaming = false;
         if (param.type == 'boolean') {
@@ -285,9 +361,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                AppLocalizations.of(context)!.modelParamReserved(
-                  '$name=true',
-                ),
+                AppLocalizations.of(context)!.modelParamReserved('$name=true'),
               ),
               behavior: SnackBarBehavior.floating,
             ),
@@ -313,7 +387,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         return;
       }
       if (name.isEmpty ||
-          (param.defaultValue.trim().isEmpty && !hasEffectiveOption)) {
+          (!hasRequiredValue &&
+              !hasImplicitTrueBoolean &&
+              !hasUnsupportedStoredType)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -329,6 +405,18 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           SnackBar(
             content: Text(
               AppLocalizations.of(context)!.modelParamDuplicate(name),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (hasUnsupportedStoredType) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .ocrConfigUnsupportedParamSaveError(name, param.type),
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -464,7 +552,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (originalTypeConfig != null) {
       if (originalTypeConfig['userInstructions'] is List) {
         typeConfig['userInstructions'] = originalTypeConfig['userInstructions'];
-      } else if (originalTypeConfig['userInstruction'] is String) {
+      }
+      if (originalTypeConfig['userInstruction'] is String) {
         typeConfig['userInstruction'] = originalTypeConfig['userInstruction'];
       }
     }
@@ -500,17 +589,29 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -521,11 +622,19 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -590,10 +699,22 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               max: 2.0,
               divisions: 40,
               enabled: _enableTemperature,
-              onChanged: (v) => setState(() => _temperature = v),
+              onChanged: (v) => setState(() {
+                _temperature = v;
+                _temperatureNeedsRepair = false;
+              }),
               onToggle: (v) => setState(() => _enableTemperature = v),
               description: AppLocalizations.of(context)!.modelTemperatureHelp,
             ),
+            if (_temperatureNeedsRepair)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  AppLocalizations.of(context)!
+                      .ocrSamplingTemperatureOutOfRange,
+                  style: TextStyle(color: cs.error),
+                ),
+              ),
 
             // Top P
             LlmToggleSlider(
@@ -603,10 +724,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               max: 1.0,
               divisions: 20,
               enabled: _enableTopP,
-              onChanged: (v) => setState(() => _topP = v),
+              onChanged: (v) => setState(() {
+                _topP = v;
+                _topPNeedsRepair = false;
+              }),
               onToggle: (v) => setState(() => _enableTopP = v),
               description: AppLocalizations.of(context)!.llmTopPHelp,
             ),
+            if (_topPNeedsRepair)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  AppLocalizations.of(context)!.ocrSamplingTopPOutOfRange,
+                  style: TextStyle(color: cs.error),
+                ),
+              ),
 
             // Max Tokens
             LlmToggleTextField(
@@ -627,7 +759,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText: AppLocalizations.of(context)!.ocrInheritProvider,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
@@ -652,17 +788,26 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                Text(
-                  AppLocalizations.of(context)!.chatCustomParameters,
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Flexible(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.chatCustomParameters,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
-                TextButton.icon(
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(
-                    AppLocalizations.of(context)!.assistantAddParameter,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 148),
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add, size: 18),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.assistantAddParameter,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: _addCustomParam,
                   ),
-                  onPressed: _addCustomParam,
                 ),
               ],
             ),
@@ -681,6 +826,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             else
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
+                final isUnsupportedType = ParamType.values.every(
+                  (type) => type.value != param.type,
+                );
                 final name = param.paramName.trim();
                 final isDuplicate = name.isNotEmpty &&
                     _customParams.indexWhere(
@@ -700,8 +848,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: AppLocalizations.of(context)!
-                                      .assistantParameterName,
+                                  label: ConstrainedText(
+                                    AppLocalizations.of(context)!
+                                        .assistantParameterName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                   errorText: isDuplicate
@@ -733,23 +885,35 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     context,
                                   ),
                                   borderRadius: StroomMenuStyle.borderRadius,
-                                  value: param.paramType.value,
+                                  value: param.type,
                                   isDense: true,
-                                  items: ParamType.values
-                                      .map(
-                                        (t) => DropdownMenuItem(
-                                          value: t.value,
-                                          child: Text(
-                                            localizedParamTypeLabel(
-                                                AppLocalizations.of(context)!,
-                                                t),
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                            ),
-                                          ),
+                                  isExpanded: true,
+                                  items: [
+                                    if (isUnsupportedType)
+                                      DropdownMenuItem(
+                                        value: param.type,
+                                        child: ConstrainedText(
+                                          param.type,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 13),
                                         ),
-                                      )
-                                      .toList(),
+                                      ),
+                                    ...ParamType.values.map(
+                                      (t) => DropdownMenuItem<String>(
+                                        value: t.value,
+                                        child: ConstrainedText(
+                                          localizedParamTypeLabel(
+                                            AppLocalizations.of(context)!,
+                                            t,
+                                          ),
+                                          style: const TextStyle(fontSize: 13),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   onChanged: (v) {
                                     if (v != null) {
                                       setState(() {
@@ -774,6 +938,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                             ),
                           ],
                         ),
+                        if (isUnsupportedType)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .ocrConfigUnsupportedParamType(param.type),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 8),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -797,11 +976,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   CodeSmartInputFormatter(),
                                 ],
                                 decoration: InputDecoration(
-                                  labelText: AppLocalizations.of(context)!
-                                      .modelParamDefaultValue,
+                                  label: ConstrainedText(
+                                    AppLocalizations.of(context)!
+                                        .modelParamDefaultValue,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   hintText: localizedParamTypeDefaultValueHint(
-                                      AppLocalizations.of(context)!,
-                                      param.paramType),
+                                    AppLocalizations.of(context)!,
+                                    param.paramType,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -834,11 +1018,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               onPressed: () {
                                 showJsonValueEditorDialog(
                                   context,
-                                  initialValue:
-                                      _effectiveCustomParamValue(param),
+                                  initialValue: _effectiveCustomParamValue(
+                                    param,
+                                  ),
                                   hintText: localizedParamTypeDefaultValueHint(
-                                      AppLocalizations.of(context)!,
-                                      param.paramType),
+                                    AppLocalizations.of(context)!,
+                                    param.paramType,
+                                  ),
                                   type: param.type,
                                   onSave: (result) {
                                     _setEffectiveCustomParamValue(

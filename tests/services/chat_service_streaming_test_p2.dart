@@ -228,7 +228,7 @@ void chatServiceStreamingGroup2() {
       expect(fileObj['file_data'], 'data:application/pdf;base64,$b64');
     });
 
-    test('non-text document with large file (>10MB) gets skip message',
+    test('non-text document with stale large metadata sends small actual bytes',
         () async {
       final docBytes = Uint8List.fromList([0x50, 0x4B, 0x03, 0x04]);
       final b64 = base64Encode(docBytes);
@@ -259,10 +259,10 @@ void chatServiceStreamingGroup2() {
       final parts = userMsg['content'] as List;
 
       expect(parts.length, 2);
-      expect(parts[1]['type'], 'text');
+      expect(parts[1]['type'], 'file');
       expect(
-        (parts[1]['text'] as String).contains('big_doc.bin'),
-        true,
+        (parts[1]['file'] as Map)['file_data'],
+        'data:application/octet-stream;base64,$b64',
       );
     });
 

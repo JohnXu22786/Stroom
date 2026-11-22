@@ -17,6 +17,14 @@ import '../utils/audio_utils.dart';
 import 'model_config_shared.dart';
 import 'voice_editor_page.dart';
 
+import '../widgets/constrained_text.dart';
+
+Widget _boundedFieldLabel(String text) => ConstrainedText(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+
 class ModelConfigPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex;
@@ -101,6 +109,87 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       if (_customParams[i].type != _initialCustomParams[i].type) return true;
     }
     return false;
+  }
+
+  Widget _buildBooleanSettingCard({
+    required IconData icon,
+    required String title,
+    required String help,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final compact = constraints.maxWidth < 260 * textScale;
+            final description = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title),
+                Text(
+                  help,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.grey),
+                ),
+              ],
+            );
+            final choices = Wrap(
+              spacing: 8,
+              children: [
+                ToggleButton(
+                  label: AppLocalizations.of(context)!.taskFlowUiYes,
+                  value: true,
+                  currentValue: value,
+                  onChanged: onChanged,
+                ),
+                ToggleButton(
+                  label: AppLocalizations.of(context)!.taskFlowUiNo,
+                  value: false,
+                  currentValue: value,
+                  onChanged: onChanged,
+                ),
+              ],
+            );
+
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(icon, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(child: description),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerRight, child: choices),
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: description),
+                const SizedBox(width: 12),
+                choices,
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 
   ProviderEntry? get _entry {
@@ -241,14 +330,20 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.modelAddTrimPreset),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.modelAddTrimPreset,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimNameLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimNameLabel,
+                  ),
                   hintText: AppLocalizations.of(context)!.trimNameHint,
                   border: OutlineInputBorder(),
                 ),
@@ -258,7 +353,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               TextField(
                 controller: durationCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimDurationLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimDurationLabel,
+                  ),
                   hintText: AppLocalizations.of(context)!.trimDurationHint,
                   border: OutlineInputBorder(),
                 ),
@@ -270,15 +367,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               Row(
                 children: [
                   ChoiceChip(
-                    label: Text(
+                    label: ConstrainedText(
                       AppLocalizations.of(context)!.batchRuleBeginning,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     selected: direction == 'head',
                     onSelected: (_) => setDlgState(() => direction = 'head'),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: Text(AppLocalizations.of(context)!.batchRuleEnd),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.batchRuleEnd,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     selected: direction == 'tail',
                     onSelected: (_) => setDlgState(() => direction = 'tail'),
                   ),
@@ -289,7 +392,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.batchDlgCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -328,7 +435,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
-              child: Text(AppLocalizations.of(context)!.builtInPromptAdd),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.builtInPromptAdd,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -347,14 +458,20 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.ttsEditTrimTitle),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.ttsEditTrimTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimNameLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimNameLabel,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 autofocus: true,
@@ -363,7 +480,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               TextField(
                 controller: durationCtrl,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!.trimDurationLabel,
+                  label: _boundedFieldLabel(
+                    AppLocalizations.of(context)!.trimDurationLabel,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(
@@ -374,15 +493,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               Row(
                 children: [
                   ChoiceChip(
-                    label: Text(
+                    label: ConstrainedText(
                       AppLocalizations.of(context)!.batchRuleBeginning,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     selected: direction == 'head',
                     onSelected: (_) => setDlgState(() => direction = 'head'),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: Text(AppLocalizations.of(context)!.batchRuleEnd),
+                    label: ConstrainedText(
+                      AppLocalizations.of(context)!.batchRuleEnd,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     selected: direction == 'tail',
                     onSelected: (_) => setDlgState(() => direction = 'tail'),
                   ),
@@ -393,7 +518,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.batchDlgCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -435,7 +564,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
-              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -640,12 +773,20 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(ctx)!.batchDlgHelpDismiss),
+            child: ConstrainedText(
+              AppLocalizations.of(ctx)!.batchDlgHelpDismiss,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -812,6 +953,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (_isEditing &&
         widget.modelIndex >= 0 &&
         widget.modelIndex < models.length) {
+      final connectivityTest =
+          models[widget.modelIndex].typeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        modelConfig.typeConfig = Map<String, dynamic>.from(
+          modelConfig.typeConfig,
+        )..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
+      }
       models[widget.modelIndex] = modelConfig;
     } else {
       models.insert(0, modelConfig);
@@ -869,17 +1017,29 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.batchDlgCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUiDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -890,7 +1050,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: [
             TextButton.icon(
               onPressed: _isSaving ? null : _save,
@@ -901,10 +1065,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save, size: 20),
-              label: Text(
+              label: ConstrainedText(
                 _isSaving
                     ? AppLocalizations.of(context)!.modelSaving
                     : AppLocalizations.of(context)!.mermaidSaveButton,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -917,9 +1083,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                Text(
-                  AppLocalizations.of(context)!.modelNameLabel,
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Flexible(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.modelNameLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
@@ -948,9 +1118,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                Text(
-                  '${AppLocalizations.of(context)!.modelIdLabel} *',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Flexible(
+                  child: ConstrainedText(
+                    '${AppLocalizations.of(context)!.modelIdLabel} *',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
@@ -988,7 +1162,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _volumeMinController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMinVolume,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMinVolume,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1001,7 +1177,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _volumeMaxController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMaxVolume,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMaxVolume,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1025,7 +1203,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _speedMinController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMinSpeed,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMinSpeed,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1038,7 +1218,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   child: TextField(
                     controller: _speedMaxController,
                     decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!.ttsMaxSpeed,
+                      label: _boundedFieldLabel(
+                        AppLocalizations.of(context)!.ttsMaxSpeed,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1054,7 +1236,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             TextField(
               controller: _maxWordsController,
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.ttsMaxAudioLength,
+                label: _boundedFieldLabel(
+                  AppLocalizations.of(context)!.ttsMaxAudioLength,
+                ),
                 hintText: AppLocalizations.of(context)!.ttsAudioLengthHint,
                 border: OutlineInputBorder(),
               ),
@@ -1100,21 +1284,76 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // 自定义参数
             // ==========================================================
-            Row(
-              children: [
-                Text(
-                  AppLocalizations.of(context)!.chatCustomParameters,
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                TextButton.icon(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final title =
+                    AppLocalizations.of(context)!.chatCustomParameters;
+                final addLabel =
+                    AppLocalizations.of(context)!.assistantAddParameter;
+                final direction = Directionality.of(context);
+                final scaler = MediaQuery.textScalerOf(context);
+                final titleStyle = DefaultTextStyle.of(context)
+                    .style
+                    .copyWith(fontWeight: FontWeight.w600);
+                final buttonStyle = Theme.of(context).textTheme.labelLarge ??
+                    const TextStyle(fontSize: 14);
+                final titleWidth = TextPainter(
+                  text: TextSpan(text: title, style: titleStyle),
+                  textDirection: direction,
+                  textScaler: scaler,
+                  locale: Localizations.localeOf(context),
+                )..layout();
+                final actionTextWidth = TextPainter(
+                  text: TextSpan(text: addLabel, style: buttonStyle),
+                  textDirection: direction,
+                  textScaler: scaler,
+                  locale: Localizations.localeOf(context),
+                )..layout();
+                final actionWidth = actionTextWidth.width + 18 + 8 + 24;
+                final fitsSideBySide =
+                    constraints.maxWidth >= titleWidth.width + actionWidth;
+                final action = TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(
-                    AppLocalizations.of(context)!.assistantAddParameter,
+                  label: ConstrainedText(
+                    addLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   onPressed: _addCustomParam,
-                ),
-              ],
+                );
+                final heading = ConstrainedText(
+                  title,
+                  style: titleStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                );
+
+                if (!fitsSideBySide) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      heading,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: constraints.maxWidth,
+                          ),
+                          child: action,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Flexible(child: heading),
+                    const Spacer(),
+                    action,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
 
@@ -1150,8 +1389,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: AppLocalizations.of(context)!
-                                      .assistantParameterName,
+                                  label: _boundedFieldLabel(
+                                    AppLocalizations.of(context)!
+                                        .assistantParameterName,
+                                  ),
                                   border: const OutlineInputBorder(),
                                   isDense: true,
                                   errorText: isDuplicate
@@ -1187,17 +1428,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                   borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
+                                  isExpanded: true,
                                   items: ParamType.values
                                       .map(
                                         (t) => DropdownMenuItem(
                                           value: t.value,
-                                          child: Text(
+                                          child: ConstrainedText(
                                             localizedParamTypeLabel(
-                                                AppLocalizations.of(context)!,
-                                                t),
+                                              AppLocalizations.of(context)!,
+                                              t,
+                                            ),
                                             style: const TextStyle(
                                               fontSize: 13,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       )
@@ -1227,10 +1472,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         TextFormField(
                           initialValue: param.defaultValue,
                           decoration: InputDecoration(
-                            labelText: AppLocalizations.of(context)!
-                                .modelParamDefaultValue,
+                            label: _boundedFieldLabel(
+                              AppLocalizations.of(context)!
+                                  .modelParamDefaultValue,
+                            ),
                             hintText: localizedParamTypeDefaultValueHint(
-                                AppLocalizations.of(context)!, param.paramType),
+                              AppLocalizations.of(context)!,
+                              param.paramType,
+                            ),
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -1267,105 +1516,24 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // instruction 参数开关
             // ==========================================================
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.description, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)!
-                                .ttsInstructionSupported,
-                          ),
-                          Text(
-                            AppLocalizations.of(context)!.ttsInstructionHelp,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiYes,
-                      value: true,
-                      currentValue: _supportInstruction,
-                      onChanged: (v) => setState(() => _supportInstruction = v),
-                    ),
-                    const SizedBox(width: 8),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiNo,
-                      value: false,
-                      currentValue: _supportInstruction,
-                      onChanged: (v) => setState(() => _supportInstruction = v),
-                    ),
-                  ],
-                ),
-              ),
+            _buildBooleanSettingCard(
+              icon: Icons.description,
+              title: AppLocalizations.of(context)!.ttsInstructionSupported,
+              help: AppLocalizations.of(context)!.ttsInstructionHelp,
+              value: _supportInstruction,
+              onChanged: (v) => setState(() => _supportInstruction = v),
             ),
             const SizedBox(height: 8),
 
             // ==========================================================
             // 流式输出开关
             // ==========================================================
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.stream, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)!.ttsStreamSupported,
-                          ),
-                          Text(
-                            AppLocalizations.of(context)!.ttsStreamHelp,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiYes,
-                      value: true,
-                      currentValue: _supportStream,
-                      onChanged: (v) => setState(() => _supportStream = v),
-                    ),
-                    const SizedBox(width: 8),
-                    ToggleButton(
-                      label: AppLocalizations.of(context)!.taskFlowUiNo,
-                      value: false,
-                      currentValue: _supportStream,
-                      onChanged: (v) => setState(() => _supportStream = v),
-                    ),
-                  ],
-                ),
-              ),
+            _buildBooleanSettingCard(
+              icon: Icons.stream,
+              title: AppLocalizations.of(context)!.ttsStreamSupported,
+              help: AppLocalizations.of(context)!.ttsStreamHelp,
+              value: _supportStream,
+              onChanged: (v) => setState(() => _supportStream = v),
             ),
             const SizedBox(height: 8),
 

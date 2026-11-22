@@ -27,10 +27,53 @@ const localeNameCatalog = <String, LocaleNameInfo>{
     nativeName: '简体中文',
     id: 'zh-cn',
   ),
+  'es_ES': LocaleNameInfo(
+    displayName: _spanishName,
+    nativeName: 'Español',
+    id: 'es-es',
+  ),
+  'ja_JP': LocaleNameInfo(
+    displayName: _japaneseName,
+    nativeName: '日本語',
+    id: 'ja-jp',
+  ),
+  'ko_KR': LocaleNameInfo(
+    displayName: _koreanName,
+    nativeName: '한국어',
+    id: 'ko-kr',
+  ),
+  'pt_BR': LocaleNameInfo(
+    displayName: _portugueseName,
+    nativeName: 'Português (Brasil)',
+    id: 'pt-br',
+  ),
+  'fr_FR': LocaleNameInfo(
+    displayName: _frenchName,
+    nativeName: 'Français',
+    id: 'fr-fr',
+  ),
+  'de_DE': LocaleNameInfo(
+    displayName: _germanName,
+    nativeName: 'Deutsch',
+    id: 'de-de',
+  ),
+  'ar_SA': LocaleNameInfo(
+    displayName: _arabicName,
+    nativeName: 'العربية',
+    id: 'ar-sa',
+  ),
 };
 
 String _englishName(AppLocalizations strings) => strings.languageNameEnglish;
 String _chineseName(AppLocalizations strings) => strings.languageNameChinese;
+String _spanishName(AppLocalizations strings) => strings.languageNameSpanish;
+String _japaneseName(AppLocalizations strings) => strings.languageNameJapanese;
+String _koreanName(AppLocalizations strings) => strings.languageNameKorean;
+String _portugueseName(AppLocalizations strings) =>
+    strings.languageNamePortuguese;
+String _frenchName(AppLocalizations strings) => strings.languageNameFrench;
+String _germanName(AppLocalizations strings) => strings.languageNameGerman;
+String _arabicName(AppLocalizations strings) => strings.languageNameArabic;
 
 String localeDisplayName(AppLocalizations strings, Locale locale) =>
     localeNameCatalog[localeCodeForCatalog(locale)]?.displayName(strings) ??

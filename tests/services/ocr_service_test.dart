@@ -63,6 +63,7 @@ class _InterceptorWithCallback extends Interceptor {
 
 class _CountingAdapter implements HttpClientAdapter {
   int requestCount = 0;
+  int closeCount = 0;
 
   @override
   Future<ResponseBody> fetch(
@@ -75,7 +76,9 @@ class _CountingAdapter implements HttpClientAdapter {
   }
 
   @override
-  void close({bool force = false}) {}
+  void close({bool force = false}) {
+    closeCount++;
+  }
 }
 
 const _testOcrConfig = OcrConfig(
@@ -212,6 +215,21 @@ void main() {
           expect(requests.single.headers['X-Client-Option'], 'kept');
         },
       );
+
+      test('close leaves an injected Dio usable by its caller', () async {
+        final adapter = _CountingAdapter();
+        final dio = Dio()..httpClientAdapter = adapter;
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        service.close();
+
+        expect(adapter.closeCount, 0);
+        await dio.get<void>('https://example.test');
+        expect(adapter.requestCount, 1);
+
+        dio.close();
+        expect(adapter.closeCount, 1);
+      });
 
       test('injected Dio request uses its configured send timeout', () async {
         final requests = <RequestOptions>[];
@@ -517,6 +535,117 @@ void main() {
           reason: 'oversized JSON must be rejected preflight',
         );
       });
+
+      test(
+        'encodedRequestSizeBytes matches and accepts a batch at its exact boundary',
+        () async {
+          final bytesList = <(Uint8List, String)>[
+            (Uint8List.fromList([1, 2, 3, 4]), 'png'),
+            (Uint8List.fromList([5, 6, 7, 8, 9]), 'webp'),
+          ];
+          final config = _testOcrConfig.copyWith(
+            typeConfig: {'userInstruction': '识别 café — 第三页'},
+            customParams: [
+              CustomParam(
+                paramName: 'metadata',
+                type: 'string',
+                defaultValue: '章节：第二章 📖',
+              ),
+            ],
+          );
+          final measuredService = OcrService(config: config);
+          final estimatedBytes = measuredService.encodedRequestSizeBytes(
+            imageBytesList: bytesList,
+          );
+          measuredService.close();
+
+          late RequestOptions sentRequest;
+          final service = OcrService(
+            config: config.copyWith(requestSizeBudgetBytes: estimatedBytes),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    sentRequest = options;
+                    handler.resolve(
+                      Response(
+                        requestOptions: options,
+                        statusCode: 200,
+                        data: {
+                          'choices': [
+                            {
+                              'message': {'content': 'recognized'}
+                            },
+                          ],
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+          );
+
+          await service.recognizeBatch(imageBytesList: bytesList);
+
+          expect(
+            estimatedBytes,
+            utf8.encode(jsonEncode(sentRequest.data)).length,
+          );
+        },
+      );
+
+      test('recognize rejects over-budget bytes before base64 encoding',
+          () async {
+        var encodings = 0;
+        final adapter = _CountingAdapter();
+        final service = OcrService(
+          config: _testOcrConfig.copyWith(requestSizeBudgetBytes: 1),
+          dio: Dio()..httpClientAdapter = adapter,
+          encodeImageBytes: (bytes) {
+            encodings++;
+            return base64Encode(bytes);
+          },
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3, 4])),
+          throwsA(isA<OcrRequestTooLargeException>()),
+        );
+
+        expect(encodings, 0);
+        expect(adapter.requestCount, 0);
+        service.close();
+      });
+
+      test(
+        'recognizeBatch rejects over-budget bytes before base64 encoding',
+        () async {
+          var encodings = 0;
+          final adapter = _CountingAdapter();
+          final service = OcrService(
+            config: _testOcrConfig.copyWith(requestSizeBudgetBytes: 1),
+            dio: Dio()..httpClientAdapter = adapter,
+            encodeImageBytes: (bytes) {
+              encodings++;
+              return base64Encode(bytes);
+            },
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'png'),
+                (Uint8List.fromList([4, 5, 6]), 'jpeg'),
+              ],
+            ),
+            throwsA(isA<OcrRequestTooLargeException>()),
+          );
+
+          expect(encodings, 0);
+          expect(adapter.requestCount, 0);
+          service.close();
+        },
+      );
     });
 
     group('OcrService response parsing', () {
@@ -2346,6 +2475,603 @@ void main() {
         );
       });
 
+      test('recognize redacts configured API key echoed in HTTP errors',
+          () async {
+        const credential = 'configured-ocr-secret-credential-101';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: credential,
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 401,
+                      data: {
+                        'error': {'message': 'invalid key: $credential'},
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 401'), isNot(contains(credential))),
+            ),
+          ),
+        );
+      });
+
+      test('recognize redacts credentials disclosed only by failed response',
+          () async {
+        const bodyCredential = 'response-only-secret-r78-01';
+        const headerCredential = 'response-header-secret-r78-01';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 403,
+                      data: {
+                        'api_key': bodyCredential,
+                        'error': {
+                          'message':
+                              'denied: $bodyCredential $headerCredential',
+                        },
+                      },
+                      headers: Headers.fromMap({
+                        'x-api-key': [headerCredential],
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(
+                contains('HTTP 403'),
+                isNot(contains(bodyCredential)),
+                isNot(contains(headerCredential)),
+              ),
+            ),
+          ),
+        );
+
+        final diagnostics = jsonEncode(service.diagnosticResponse());
+        expect(diagnostics, isNot(contains(bodyCredential)));
+        expect(diagnostics, isNot(contains(headerCredential)));
+      });
+
+      test('recognize redacts response-only credentials from success snapshots',
+          () async {
+        const bodyCredential = 'opaque-success-body-secret-r85';
+        const headerCredential = 'opaque-success-header-secret-r85';
+        final service = OcrService(
+          config: _testOcrConfig,
+          dio: _mockDioWithSuccess(
+            {
+              'api_key': bodyCredential,
+              'choices': [
+                {
+                  'message': {'content': 'recognized text'},
+                },
+              ],
+            },
+            headers: {
+              'x-api-key': [headerCredential],
+              'x-safe-diagnostic': ['safe-value'],
+            },
+          ),
+        );
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+        );
+
+        expect(result.text, 'recognized text');
+        final responseData = jsonEncode(service.lastResponseData);
+        final responseHeaders = jsonEncode(service.lastResponseHeaders);
+        expect(responseData, isNot(contains(bodyCredential)));
+        expect(responseData, isNot(contains(headerCredential)));
+        expect(responseHeaders, isNot(contains(bodyCredential)));
+        expect(responseHeaders, isNot(contains(headerCredential)));
+        expect(responseData, contains('recognized text'));
+        expect(responseHeaders, contains('safe-value'));
+      });
+
+      test(
+        'recognizeBatch redacts response-only credentials from success snapshots',
+        () async {
+          const bodyCredential = 'opaque-batch-success-body-secret-r85';
+          const headerCredential = 'opaque-batch-success-header-secret-r85';
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: _mockDioWithSuccess(
+              {
+                'api_key': bodyCredential,
+                'choices': [
+                  {
+                    'message': {'content': 'recognized batch text'},
+                  },
+                ],
+              },
+              headers: {
+                'x-api-key': [headerCredential],
+                'x-safe-diagnostic': ['safe-batch-value'],
+              },
+            ),
+          );
+
+          final result = await service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg')
+            ],
+          );
+
+          expect(result.text, 'recognized batch text');
+          final responseData = jsonEncode(service.lastResponseData);
+          final responseHeaders = jsonEncode(service.lastResponseHeaders);
+          expect(responseData, isNot(contains(bodyCredential)));
+          expect(responseData, isNot(contains(headerCredential)));
+          expect(responseHeaders, isNot(contains(bodyCredential)));
+          expect(responseHeaders, isNot(contains(headerCredential)));
+          expect(responseData, contains('recognized batch text'));
+          expect(responseHeaders, contains('safe-batch-value'));
+        },
+      );
+
+      test('recognize redacts recognizable key echoed only in error text',
+          () async {
+        const credential = 'sk-proj-r79-response-text-secret-7654321';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 403,
+                      data: {
+                        'error': {'message': 'invalid key $credential'},
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 403'), isNot(contains(credential))),
+            ),
+          ),
+        );
+      });
+
+      test(
+        'recognize redacts labeled credentials in plain-text HTTP errors',
+        () async {
+          const credential = 'opaque-plaintext-response-secret-r90';
+          const safeDetail =
+              'upstream unavailable; api_key: $credential retry later';
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 403,
+                        data: safeDetail,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(
+                  contains('HTTP 403'),
+                  contains('upstream unavailable'),
+                  contains('retry later'),
+                  isNot(contains(credential)),
+                ),
+              ),
+            ),
+          );
+
+          expect(
+            service.lastResponseData?['raw'],
+            contains('upstream unavailable'),
+          );
+          expect(service.lastResponseData?['raw'], contains('retry later'));
+          expect(service.lastResponseData?['raw'], isNot(contains(credential)));
+          expect(
+            jsonEncode(service.diagnosticResponse()),
+            isNot(contains(credential)),
+          );
+        },
+      );
+
+      test('recognize redacts credentials from failed response diagnostics',
+          () async {
+        const bodyCredential = 'response-body-secret-r79-001';
+        const headerCredential = 'response-header-secret-r79-001';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 403,
+                      data: {
+                        'api_key': bodyCredential,
+                        'error': {'message': 'invalid API key'},
+                        'request_id': 'req-safe-r79-response-diagnostic',
+                      },
+                      headers: Headers.fromMap({
+                        'x-api-key': [headerCredential],
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(jsonEncode(service.lastResponseData),
+            isNot(contains(bodyCredential)));
+        expect(jsonEncode(service.lastResponseHeaders),
+            isNot(contains(headerCredential)));
+        expect(
+          service.lastResponseData?['error'],
+          {'message': 'invalid API key'},
+        );
+        expect(service.diagnosticResponse()['statusCode'], 403);
+        expect(service.diagnosticResponse()['requestId'],
+            'req-safe-r79-response-diagnostic');
+        final diagnostics = jsonEncode(service.diagnosticResponse());
+        expect(diagnostics, isNot(contains(bodyCredential)));
+        expect(diagnostics, isNot(contains(headerCredential)));
+      });
+
+      test(
+        'recognize redacts credentials from final intercepted request options',
+        () async {
+          const bodyCredential = 'interceptor-body-secret-opaque-2026';
+          const urlCredential = 'interceptor/url-secret-opaque-2026';
+          const percentEncodedCredential = 'paque-url-percent-secret-2026';
+          const userInfoCredential = 'paque-userinfo-secret-2026';
+          String? interceptedUrl;
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    (options.data as Map)['api_key'] = bodyCredential;
+                    options.queryParameters['api_key'] = urlCredential;
+                    options.path = options.path.replaceFirst(
+                      'https://',
+                      'HTTPS://%6f$userInfoCredential@',
+                    );
+                    options.path =
+                        '${options.path}?access_token=%6f$percentEncodedCredential';
+                    interceptedUrl = options.path;
+                    final echoedUrl = options.path.replaceAll('%2F', '%2f');
+                    handler.reject(
+                      DioException(
+                        requestOptions: options,
+                        type: DioExceptionType.badResponse,
+                        response: Response(
+                          requestOptions: options,
+                          statusCode: 403,
+                          data: {
+                            'error': {
+                              'message': 'denied: $bodyCredential $echoedUrl',
+                            },
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(
+                  contains('HTTP 403'),
+                  isNot(contains(bodyCredential)),
+                  isNot(contains(urlCredential)),
+                  isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                      .replaceAll('%2F', '%2f'))),
+                  allOf(
+                    isNot(contains('o$percentEncodedCredential')),
+                    isNot(contains('%6f$percentEncodedCredential')),
+                    isNot(contains('o$userInfoCredential')),
+                    isNot(contains('%6f$userInfoCredential@')),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          expect(
+            interceptedUrl,
+            contains('access_token=%6f$percentEncodedCredential'),
+          );
+          expect(interceptedUrl, contains('HTTPS://%6f$userInfoCredential@'));
+          final responseData = jsonEncode(service.lastResponseData);
+          expect(responseData, isNot(contains(bodyCredential)));
+          expect(responseData, isNot(contains(urlCredential)));
+          expect(responseData, isNot(contains('o$percentEncodedCredential')));
+          expect(responseData, isNot(contains('%6f$percentEncodedCredential')));
+          expect(responseData, isNot(contains('o$userInfoCredential')));
+          expect(responseData, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            responseData,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(diagnostics, isNot(contains(bodyCredential)));
+          expect(diagnostics, isNot(contains(urlCredential)));
+          expect(diagnostics, isNot(contains('o$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('%6f$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('o$userInfoCredential')));
+          expect(diagnostics, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            diagnostics,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+        },
+      );
+
+      test(
+        'recognizeBatch redacts credentials from final intercepted request options',
+        () async {
+          const bodyCredential = 'batch-interceptor-body-secret-opaque-2026';
+          const urlCredential = 'batch/interceptor-url-secret-opaque-2026';
+          const percentEncodedCredential =
+              'batch-paque-url-percent-secret-2026';
+          const userInfoCredential = 'batch-paque-userinfo-secret-2026';
+          String? interceptedUrl;
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    (options.data as Map)['api_key'] = bodyCredential;
+                    options.queryParameters['api_key'] = urlCredential;
+                    options.path = options.path.replaceFirst(
+                      'https://',
+                      'HTTPS://%6f$userInfoCredential@',
+                    );
+                    options.path =
+                        '${options.path}?access_token=%6f$percentEncodedCredential';
+                    interceptedUrl = options.path;
+                    final echoedUrl = options.path.replaceAll('%2F', '%2f');
+                    handler.reject(
+                      DioException(
+                        requestOptions: options,
+                        type: DioExceptionType.badResponse,
+                        response: Response(
+                          requestOptions: options,
+                          statusCode: 403,
+                          data: {
+                            'error': {
+                              'message': 'denied: $bodyCredential $echoedUrl',
+                            },
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg')
+              ],
+            ),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(
+                  contains('HTTP 403'),
+                  isNot(contains(bodyCredential)),
+                  isNot(contains(urlCredential)),
+                  isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                      .replaceAll('%2F', '%2f'))),
+                  allOf(
+                    isNot(contains('o$percentEncodedCredential')),
+                    isNot(contains('%6f$percentEncodedCredential')),
+                    isNot(contains('o$userInfoCredential')),
+                    isNot(contains('%6f$userInfoCredential@')),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          expect(
+            interceptedUrl,
+            contains('access_token=%6f$percentEncodedCredential'),
+          );
+          expect(interceptedUrl, contains('HTTPS://%6f$userInfoCredential@'));
+          final responseData = jsonEncode(service.lastResponseData);
+          expect(responseData, isNot(contains(bodyCredential)));
+          expect(responseData, isNot(contains(urlCredential)));
+          expect(responseData, isNot(contains('o$percentEncodedCredential')));
+          expect(responseData, isNot(contains('%6f$percentEncodedCredential')));
+          expect(responseData, isNot(contains('o$userInfoCredential')));
+          expect(responseData, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            responseData,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(diagnostics, isNot(contains(bodyCredential)));
+          expect(diagnostics, isNot(contains(urlCredential)));
+          expect(diagnostics, isNot(contains('o$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('%6f$percentEncodedCredential')));
+          expect(diagnostics, isNot(contains('o$userInfoCredential')));
+          expect(diagnostics, isNot(contains('%6f$userInfoCredential@')));
+          expect(
+            diagnostics,
+            isNot(contains(Uri.encodeQueryComponent(urlCredential)
+                .replaceAll('%2F', '%2f'))),
+          );
+        },
+      );
+
+      test('recognizeBatch redacts interceptor Authorization credentials',
+          () async {
+        const credential = 'interceptor-ocr-secret-credential-102';
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: '',
+            host: 'https://api.test.com/v1',
+          ),
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  options.headers['Authorization'] = 'Bearer $credential';
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 403,
+                        data: {
+                          'error': {'message': 'denied: $credential'},
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg')
+            ],
+          ),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 403'), isNot(contains(credential))),
+            ),
+          ),
+        );
+      });
+
       test(
         'error diagnostics exclude credentials in JSON string response bodies',
         () async {
@@ -2926,6 +3652,109 @@ void main() {
             service.diagnosticResponse()['requestId'],
             'req-safe-after-key',
           );
+        },
+      );
+
+      test(
+        'success diagnostics exclude request IDs echoed from client key headers',
+        () async {
+          const clientKey = 'opaque-client-value-123';
+          final dio = Dio(BaseOptions(
+            headers: {'X-Client-Key': clientKey},
+          ))
+            ..interceptors.add(
+              _SuccessInterceptor(
+                {
+                  'choices': [
+                    {
+                      'message': {'content': 'test text'},
+                    },
+                  ],
+                },
+                headers: {
+                  'x-request-id': [clientKey],
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], isNull);
+          expect(
+            jsonEncode(service.diagnosticResponse()),
+            isNot(contains(clientKey)),
+          );
+        },
+      );
+
+      test(
+        'success diagnostics exclude request IDs echoed from camelCase URL secrets',
+        () async {
+          const secret = 'opaque-api-secret-url-r85';
+          const safeRequestId = 'req-safe-after-camel-case-url-secret';
+          final dio = _mockDioWithSuccess({
+            'request_id': secret,
+            'requestId': safeRequestId,
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          });
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'test-key',
+              host: 'https://api.test.com/v1?apiSecret=$secret',
+            ),
+            dio: dio,
+          );
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          final diagnostics = jsonEncode({
+            'request': service.diagnosticRequest,
+            'response': service.diagnosticResponse(),
+          });
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(secret)));
+        },
+      );
+
+      test(
+        'success diagnostics retain request IDs beside token expiry metadata',
+        () async {
+          const requestId = '3600';
+          final dio = _mockDioWithSuccess({
+            'request_id': requestId,
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          });
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'test-key',
+              host: 'https://api.test.com/v1?accessTokenExpiresIn=$requestId',
+            ),
+            dio: dio,
+          );
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], requestId);
         },
       );
 

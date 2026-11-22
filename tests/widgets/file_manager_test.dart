@@ -17,6 +17,7 @@ import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/manifest_bridge.dart';
 import 'package:stroom/utils/sort_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/file_manager_view.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -143,11 +144,21 @@ final fileManagerNavManifestBridge = ManifestBridge(
   getAllDescendantFolderPaths: (parentPath, allPaths) => [],
 );
 
+Widget _disableTestAnimations(BuildContext context, Widget? child) =>
+    MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    );
+
 /// Simple helper from file_manager_view_test.dart — wraps a widget in
 /// MaterialApp + Scaffold.
-Widget _buildTestApp(Widget body) {
+Widget _buildTestApp(
+  Widget body, {
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   return MaterialApp(
-    locale: const Locale('zh', 'CN'),
+    builder: _disableTestAnimations,
+    locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -165,6 +176,8 @@ Widget _buildFileManagerApp({
   List<_TestFileRecord> records = const [],
   GlobalKey<NavigatorState>? navigatorKey,
   bool wrapInHomeStylePopScope = false,
+  Locale locale = const Locale('zh', 'CN'),
+  ThemeData? theme,
 }) {
   final navKey = navigatorKey ?? GlobalKey<NavigatorState>();
 
@@ -201,7 +214,9 @@ Widget _buildFileManagerApp({
 
   return ProviderScope(
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      builder: _disableTestAnimations,
+      locale: locale,
+      theme: theme,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Navigator(
         key: navKey,
@@ -241,6 +256,35 @@ class _HomeStylePopScopeWrapper extends ConsumerWidget {
 }
 
 void main() {
+  group('FileManagerView file menu', () {
+    testWidgets('uses Open for the file action', (tester) async {
+      var openedFile = false;
+      await tester.pumpWidget(
+        _buildFileManagerApp(
+          config: FileManagerConfig<_TestFileRecord>(
+            title: 'Test',
+            fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
+            onFileTap: (_) => openedFile = true,
+          ),
+          folders: {},
+          manifestBridge: testManifestBridge,
+          records: [testFiles.first],
+          locale: const Locale('en'),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('fm_file_popup_file_1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Preview'), findsNothing);
+      expect(find.text('Open'), findsOneWidget);
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(openedFile, isTrue);
+    });
+  });
+
   // ===========================================================================
   // 1. file_manager_view_test.dart
   // ===========================================================================
@@ -927,6 +971,47 @@ void main() {
       expect(tester.getTopLeft(backItem).dy, closeTo(backYBefore, 0.1));
     });
 
+    testWidgets('back label and long folder path stay within narrow row', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const longFolder =
+          'very-long-folder-name-with-multiple-segments-and-details';
+      await tester.pumpWidget(
+        _buildTestApp(build(records: [], folders: {longFolder})),
+      );
+      await tester.tap(find.text(longFolder));
+      await tester.pumpAndSettle();
+
+      final backItem = find.byKey(const Key('fm_back_item'));
+      final constrainedLabels = find.descendant(
+        of: backItem,
+        matching: find.byType(ConstrainedText),
+      );
+      expect(constrainedLabels, findsNWidgets(2));
+      final labels = constrainedLabels.evaluate().map(
+            (element) => element.widget as ConstrainedText,
+          );
+      final pathLabel = labels.singleWhere((label) => label.data == longFolder);
+      expect(pathLabel.textAlign, TextAlign.end);
+      expect(pathLabel.maxLines, 1);
+      expect(pathLabel.overflow, TextOverflow.clip);
+
+      final labelRects = constrainedLabels
+          .evaluate()
+          .map(
+            (element) => tester.getRect(find.byWidget(element.widget)),
+          )
+          .toList();
+      expect(labelRects[0].right, lessThanOrEqualTo(labelRects[1].left));
+      expect(labelRects[1].right,
+          lessThanOrEqualTo(tester.getRect(backItem).right));
+    });
+
     testWidgets('back item shows even when the subfolder is empty', (
       tester,
     ) async {
@@ -1121,6 +1206,7 @@ void main() {
       ManifestBridge? bridge,
     }) {
       return MaterialApp(
+        builder: _disableTestAnimations,
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
@@ -1312,6 +1398,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              builder: _disableTestAnimations,
               locale: const Locale('zh', 'CN'),
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
@@ -1467,6 +1554,8 @@ void main() {
       Future<void> Function(List<String>, String)? onMoveFiles,
       Future<void> Function(List<String>, String)? onMoveFolders,
       Future<String?> Function(List<String>, String)? onExportFiles,
+      Future<String?> Function(List<String>, String, List<String>)?
+          onExportFilesWithFolders,
       Future<String?> Function(List<String>, String)? onExportFolders,
       Future<void> Function(String)? onDeleteFolder,
       Future<void> Function(String, String)? onMoveFolder,
@@ -1504,6 +1593,7 @@ void main() {
         onMoveFolders: onMoveFolders ?? (_, __) async {},
         onExportFile: (_) async {},
         onExportFiles: onExportFiles,
+        onExportFilesWithFolders: onExportFilesWithFolders,
         onExportFolders: onExportFolders,
         onRenameFolder: onRenameFolder ?? (_, __) async {},
         onMoveFolder: onMoveFolder ?? (_, __) async {},
@@ -1519,6 +1609,75 @@ void main() {
           of: find.byType(FolderPickerDialog),
           matching: matching,
         );
+
+    testWidgets(
+      'empty folder deletion warns that nested folders will also be deleted',
+      (tester) async {
+        final deletedFolders = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: {'a', 'a/b', 'a/b/c'},
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_folder_popup_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('2 个子文件夹'), findsOneWidget);
+        expect(deletedFolders, isEmpty);
+
+        await tester.tap(find.byKey(const Key('fm_delete_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(deletedFolders, ['a']);
+      },
+    );
+
+    testWidgets(
+      'empty folder deletion warning pluralizes English descendant counts',
+      (tester) async {
+        final scenarios = [
+          (
+            folders: {'a', 'a/b'},
+            warning: '1 nested folder will also be deleted'
+          ),
+          (
+            folders: {'a', 'a/b', 'a/b/c'},
+            warning: '2 nested folders will also be deleted',
+          ),
+        ];
+
+        for (final scenario in scenarios) {
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: const [],
+                folders: scenario.folders,
+              ),
+              locale: const Locale('en', 'US'),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_folder_popup_a')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+          await tester.pumpAndSettle();
+
+          expect(find.textContaining(scenario.warning), findsOneWidget);
+
+          await tester.tap(
+            find.byKey(const Key('fm_delete_folder_cancel_btn')),
+          );
+          await tester.pumpAndSettle();
+        }
+      },
+    );
 
     testWidgets(
       'single-file move allows same name with a different format',
@@ -1796,12 +1955,16 @@ void main() {
       (tester) async {
         String? folderCallbackTarget;
         final exportedFolders = <String>[];
+        final reservedFolders = <String>[];
         await tester.pumpWidget(
           _buildTestApp(
             buildBatchFM(
               records: [_TestFileRecord(id: 'f1', name: 'one')],
               folders: {'a'},
-              onExportFiles: (ids, t) async => 'D:\\picked',
+              onExportFilesWithFolders: (ids, t, folders) async {
+                reservedFolders.addAll(folders);
+                return 'D:\\picked';
+              },
               onExportFolders: (names, t) async {
                 folderCallbackTarget = t;
                 exportedFolders.addAll(names);
@@ -1822,22 +1985,27 @@ void main() {
         // 文件夹导出必须复用文件导出选定的目录，不再弹出第二次目录选择
         expect(folderCallbackTarget, 'D:\\picked');
         expect(exportedFolders, ['a']);
+        expect(reservedFolders, ['a']);
         // 导出成功后退出选择模式
         expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
       },
     );
 
-    testWidgets('cancelling batch export keeps the selection mode', (
+    testWidgets(
+        'cancelling file export skips folder export and keeps selection', (
       tester,
     ) async {
+      var folderExportCalls = 0;
       await tester.pumpWidget(
         _buildTestApp(
           buildBatchFM(
             records: [_TestFileRecord(id: 'f1', name: 'one')],
             folders: {'a'},
-            // 两次导出都被用户取消（返回 null）
             onExportFiles: (ids, t) async => null,
-            onExportFolders: (names, t) async => null,
+            onExportFolders: (names, t) async {
+              folderExportCalls++;
+              return 'D:\\out';
+            },
           ),
         ),
       );
@@ -1850,6 +2018,7 @@ void main() {
       await tester.tap(find.byKey(const Key('fm_selection_export_btn')));
       await tester.pumpAndSettle();
 
+      expect(folderExportCalls, 0);
       // 取消后选择模式保留
       expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
     });
@@ -2454,6 +2623,13 @@ void main() {
             find.byKey(const Key('fm_rename_file_format_dropdown')),
             findsOneWidget,
           );
+          final formatLabel = find.descendant(
+            of: find.byKey(const Key('fm_rename_file_format_dropdown')),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is ConstrainedText && widget.data == '格式',
+            ),
+          );
+          expect(formatLabel, findsOneWidget);
         },
       );
 
@@ -2935,6 +3111,7 @@ void main() {
       VoidCallback? onTap,
     }) {
       return MaterialApp(
+        builder: _disableTestAnimations,
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -2965,7 +3142,8 @@ void main() {
       expect(removed, isTrue);
     });
 
-    testWidgets('truncates long file names', (tester) async {
+    testWidgets('passes complete long file name to bounded display',
+        (tester) async {
       final longName = 'a' * 30 + '.png';
       final att = Attachment(
         fileName: longName,
@@ -2983,7 +3161,11 @@ void main() {
 
       await tester.pump();
 
-      expect(find.text('aaaaaaaaaaaaaa…'), findsOneWidget);
+      final nameLabel = tester.widget<ConstrainedText>(
+        find.byType(ConstrainedText).first,
+      );
+      expect(nameLabel.data, longName);
+      expect(tester.getSize(find.byType(ConstrainedText).first).width, 64);
     });
 
     testWidgets('onTap is called when chip is tapped', (tester) async {
@@ -3026,7 +3208,7 @@ void main() {
 
   // ===========================================================================
   // Current-folder breadcrumb title (basename + ancestor dropdown) and the
-  // full-path label (front-truncated) on the fixed back item header.
+  // full-path label (clipped and revealed when needed) on the fixed back row.
   // ===========================================================================
 
   /// True when [value] contains no lone surrogates — every high surrogate is
@@ -3268,15 +3450,11 @@ void main() {
     );
 
     testWidgets(
-      'back item grey path truncates from the front when it does not fit',
+      'back item keeps the complete path available when it is clipped',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(340, 640));
         addTearDown(() => tester.binding.setSurfaceSize(null));
 
-        // 5 levels deep with a long deepest name — the full path cannot fit
-        // on a 340px-wide screen next to the blue "返回:" label. Short
-        // intermediate names keep the blue label short so the kept tail is
-        // comfortably large (the test must not sit at the keep==0 boundary).
         const fullPath = 'a/b/c/d/eeeeeeeeeeeeeeee';
         await tester.pumpWidget(
           buildBreadcrumbFM(
@@ -3298,43 +3476,25 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        // The full path is not shown as a single text inside the back item
-        expect(
-          find.descendant(
-            of: find.byKey(const Key('fm_back_item')),
-            matching: find.text(fullPath),
-          ),
-          findsNothing,
-        );
-        // Instead a front-truncated variant is shown: starts with "…" and
-        // keeps a tail of the path so the deepest folder stays readable.
-        final truncated = find.descendant(
+        final path = find.descendant(
           of: find.byKey(const Key('fm_back_item')),
-          matching: find.textContaining('…'),
+          matching: find.byType(ConstrainedText),
         );
-        expect(truncated, findsOneWidget);
-        final data = tester.widget<Text>(truncated).data!;
-        expect(data.startsWith('…'), isTrue);
-        // The visible tail is a non-empty suffix of the full path
-        // (front-truncation keeps the end, not the start)
-        expect(data.length, greaterThan(1));
-        expect(fullPath.endsWith(data.substring(1)), isTrue);
+        final pathText = tester.widget<ConstrainedText>(path.last);
+        expect(pathText.data, fullPath);
+        expect(pathText.textAlign, TextAlign.end);
+        expect(pathText.maxLines, 1);
+        expect(pathText.overflow, TextOverflow.clip);
       },
     );
 
     testWidgets(
-      'truncation never splits surrogate pairs (emoji folder names stay intact)',
+      'emoji folder path remains complete when clipped',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(340, 640));
         addTearDown(() => tester.binding.setSurfaceSize(null));
 
-        // The deepest folder name is a run of emoji (surrogate pairs).
-        // When the grey path is front-truncated, the cut must never land
-        // in the middle of a pair: a rendered lone surrogate shows as a
-        // garbled U+FFFD, and measuring a half pair is rejected by the
-        // text engine. `hasNoLoneSurrogates` below is the load-bearing
-        // check — it fails if the tail starts with a lone low surrogate.
-        const deepest = '😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀'; // 16 emoji
+        const deepest = '😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀';
         const fullPath = 'a/b/c/d/$deepest';
         await tester.pumpWidget(
           buildBreadcrumbFM(
@@ -3356,24 +3516,14 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        final truncated = find.descendant(
+        final path = find.descendant(
           of: find.byKey(const Key('fm_back_item')),
-          matching: find.textContaining('…'),
+          matching: find.byType(ConstrainedText),
         );
-        expect(truncated, findsOneWidget);
-        final data = tester.widget<Text>(truncated).data!;
-        expect(data.startsWith('…'), isTrue);
-        // The rendered tail is valid UTF-16 — no lone surrogates anywhere
-        expect(hasNoLoneSurrogates(data), isTrue, reason: 'data=$data');
-        // The deepest folder (the emoji run) is fully preserved at the end
-        expect(data.endsWith('😀'), isTrue, reason: 'data=$data');
-        // The cut is aligned to a surrogate-pair boundary: the first unit
-        // of the kept tail is never a lone low surrogate
-        expect(data.length, greaterThan(1));
-        final cut = fullPath.length - (data.length - 1);
-        final cutUnit = fullPath.codeUnitAt(cut);
-        expect(cutUnit < 0xDC00 || cutUnit > 0xDFFF, isTrue,
-            reason: 'data=$data cut=$cut');
+        final pathText = tester.widget<ConstrainedText>(path.last);
+        expect(pathText.data, fullPath);
+        expect(hasNoLoneSurrogates(pathText.data), isTrue);
+        expect(pathText.data.endsWith(deepest), isTrue);
       },
     );
 
@@ -3407,5 +3557,120 @@ void main() {
         expect(find.byKey(const Key('fm_folder_breadcrumb_btn')), findsNothing);
       },
     );
+  });
+
+  group('FileManagerView localized narrow-layout audit', () {
+    for (final locale in [const Locale('de'), const Locale('pt', 'BR')]) {
+      for (final theme in [ThemeData.light(), ThemeData.dark()]) {
+        for (final grid in [false, true]) {
+          for (final scale in [1.0, 1.6]) {
+            testWidgets(
+                '${locale.toLanguageTag()} ${theme.brightness.name} '
+                '${grid ? 'grid' : 'list'} at scale $scale', (tester) async {
+              final narrow = scale > 1;
+              await tester.binding.setSurfaceSize(
+                narrow ? const Size(320, 640) : const Size(800, 640),
+              );
+              addTearDown(() => tester.binding.setSurfaceSize(null));
+              tester.platformDispatcher.textScaleFactorTestValue = scale;
+              addTearDown(
+                tester.platformDispatcher.clearTextScaleFactorTestValue,
+              );
+
+              final config = FileManagerConfig<_TestFileRecord>(
+                title: 'Files',
+                showThumbnailToggle: true,
+                initialGridView: grid,
+                fileThumbnailBuilder: (_) => const ColoredBox(
+                  color: Colors.amber,
+                  child: SizedBox.expand(),
+                ),
+                fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
+                onFileTap: (_) {},
+              );
+              const alternateFolder =
+                  'alternate-folder-path-with-a-long-label-for-audit';
+              await tester.pumpWidget(
+                _buildFileManagerApp(
+                  config: config,
+                  folders: const {
+                    'very long folder title that exercises wrapping',
+                    alternateFolder,
+                  },
+                  manifestBridge: testManifestBridge,
+                  records: [
+                    _TestFileRecord(
+                      id: 'audit_file',
+                      name:
+                          'very long file title for constrained display labels',
+                      format: 'mmd',
+                      folder: '',
+                      size: 123456789,
+                      createdAt: DateTime.now(),
+                    ),
+                  ],
+                  locale: locale,
+                  theme: theme,
+                ),
+              );
+              await tester.pumpAndSettle();
+              expect(
+                tester.takeException(),
+                isNull,
+                reason:
+                    'locale=$locale theme=${theme.brightness} grid=$grid scale=$scale',
+              );
+              if (scale == 1.6) {
+                await tester.tap(
+                  find.byKey(
+                    Key(
+                      grid
+                          ? 'fm_grid_file_popup_audit_file'
+                          : 'fm_file_popup_audit_file',
+                    ),
+                  ),
+                );
+                await tester.pumpAndSettle();
+                expect(
+                  tester.takeException(),
+                  isNull,
+                  reason: 'file menu locale=$locale grid=$grid',
+                );
+                await tester.tapAt(const Offset(5, 400));
+                await tester.pumpAndSettle();
+
+                const folderName =
+                    'very long folder title that exercises wrapping';
+                await tester.tap(
+                  find.byKey(
+                    Key(
+                      grid
+                          ? 'fm_grid_folder_popup_$folderName'
+                          : 'fm_folder_popup_$folderName',
+                    ),
+                  ),
+                );
+                await tester.pumpAndSettle();
+                expect(
+                  tester.takeException(),
+                  isNull,
+                  reason: 'folder menu locale=$locale grid=$grid',
+                );
+                await tester.tapAt(const Offset(5, 400));
+                await tester.pumpAndSettle();
+
+                await tester.tap(find.byKey(const Key('fm_sort_btn')));
+                await tester.pumpAndSettle();
+                expect(
+                  tester.takeException(),
+                  isNull,
+                  reason: 'sort menu locale=$locale grid=$grid',
+                );
+              }
+            });
+          }
+        }
+      }
+    }
   });
 }

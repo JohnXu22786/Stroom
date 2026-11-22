@@ -915,7 +915,7 @@ class TaskExecutor {
         if (!await tempDir.exists()) await tempDir.create(recursive: true);
         final tempPath = p.join(
           downloadDir,
-          '.$fileName${DefaultRules.tempFileSuffix}',
+          '$fileName${DefaultRules.tempFileSuffix}',
         );
 
         final downloadedFilePath = await DownloadManager.downloadFile(
@@ -975,19 +975,31 @@ class TaskExecutor {
     }
     final appDirPath = await AppStorage.directory;
     final outputDir = p.join(appDirPath, 'catcatch', 'converted');
-    final outputName = '${p.basenameWithoutExtension(inputPath)}.mp4';
-    final outputPath = p.join(outputDir, outputName);
-    final result = await FFmpegConverter.convertToMp4(
-      inputPath: inputPath,
-      outputPath: outputPath,
-      onProgress: (progress) {
-        markExecutorStep(steps, 6, running: true, progress: progress);
-        onUpdate(
-          task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),
-        );
-      },
-      cancelToken: cancelToken,
+    final outputReservation = await reserveConvertedOutputPath(
+      outputDir,
+      inputPath,
     );
+    final outputPath = outputReservation.outputPath;
+    late final String result;
+    try {
+      result = await FFmpegConverter.convertToMp4(
+        inputPath: inputPath,
+        outputPath: outputPath,
+        onProgress: (progress) {
+          markExecutorStep(steps, 6, running: true, progress: progress);
+          onUpdate(
+            task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),
+          );
+        },
+        cancelToken: cancelToken,
+      );
+    } catch (_) {
+      final reservedFile = File(outputPath);
+      if (await reservedFile.exists()) await reservedFile.delete();
+      rethrow;
+    } finally {
+      await outputReservation.release();
+    }
     markExecutorStep(steps, 6, done: true);
     onUpdate(
       task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),

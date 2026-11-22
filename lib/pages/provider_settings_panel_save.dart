@@ -16,6 +16,17 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       return false;
     }
 
+    if (_isAsrType && _uploadMethod != AudioUploadMethod.url) {
+      final maxFileSizeMb = double.tryParse(_maxFileSizeController.text.trim());
+      if (maxFileSizeMb == null ||
+          !maxFileSizeMb.isFinite ||
+          maxFileSizeMb <= 0) {
+        _showMaxFileSizeError();
+        return false;
+      }
+      _maxFileSizeMb = maxFileSizeMb;
+    }
+
     if (_isOcrType &&
         _ocrRequestSizeBudgetController.text.trim().isNotEmpty &&
         ocrRequestSizeBudgetBytesFromMib(
@@ -218,6 +229,13 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
 
   ProviderConfigItem _buildConfig() {
     final typeConfig = <String, dynamic>{};
+    if (widget.config.models.isEmpty) {
+      final connectivityTest = widget.config.typeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        typeConfig['connectivityTest'] =
+            Map<String, dynamic>.from(connectivityTest);
+      }
+    }
 
     if (_enableTemperature) {
       typeConfig['temperature'] = _temperature;

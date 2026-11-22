@@ -1,18 +1,90 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../utils/image_send_compressor.dart' show CompressedImage;
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
-import 'storage_service.dart';
+
+class AttachmentDeleteRollbackException implements Exception {
+  const AttachmentDeleteRollbackException(
+      this.deleteError, this.rollbackErrors);
+
+  final Object deleteError;
+  final List<Object> rollbackErrors;
+
+  @override
+  String toString() =>
+      'Attachment deletion failed and ${rollbackErrors.length} file restore(s) failed: '
+      '$deleteError';
+}
+
+class AttachmentTooLargeException implements Exception {
+  const AttachmentTooLargeException(this.maxBytes);
+
+  final int maxBytes;
+}
 
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
   static const _uuid = Uuid();
   static DateTime Function() _now = DateTime.now;
+  static final Map<({String conversationId, String hash}), Future<void>>
+      _compressedCacheOperations = {};
+
+  @visibleForTesting
+  static Future<String> Function(String, Uint8List)? saveFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<String> Function(String, Uint8List)?
+      saveEditedFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<bool> Function(String)? deleteFileOverrideForTesting;
+
+  @visibleForTesting
+  static Future<bool> Function({
+    required String? conversationId,
+    required String hash,
+  })? deleteCompressedImageOverrideForTesting;
+
+  @visibleForTesting
+  static Future<String?> Function({
+    required String conversationId,
+    required String hash,
+    required Uint8List bytes,
+    required String mimeType,
+  })? saveCompressedImageOverrideForTesting;
+
+  @visibleForTesting
+  static Future<Uint8List?> Function(String)? readFileOverrideForTesting;
+
+  static Future<Uint8List?> Function(String, {required int? maxBytes})?
+      readFileBoundedOverrideForTesting;
+
+  @visibleForTesting
+  static Future<void> Function(String, Uint8List)?
+      restoreFileOverrideForTesting;
+
+  @visibleForTesting
+  static Set<String> Function(String)? deletionIdentitiesOverrideForTesting;
+
+  @visibleForTesting
+  static void resetOverridesForTesting() {
+    saveFileOverrideForTesting = null;
+    saveEditedFileOverrideForTesting = null;
+    deleteFileOverrideForTesting = null;
+    deleteCompressedImageOverrideForTesting = null;
+    saveCompressedImageOverrideForTesting = null;
+    readFileOverrideForTesting = null;
+    readFileBoundedOverrideForTesting = null;
+    restoreFileOverrideForTesting = null;
+    deletionIdentitiesOverrideForTesting = null;
+  }
 
   @visibleForTesting
   static set nowForTesting(DateTime Function() now) => _now = now;
@@ -25,8 +97,7 @@ class AttachmentStorage {
     String extension, {
     String? stableId,
   }) {
-    final uniqueId =
-        stableId ?? '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
+    final uniqueId = stableId ?? '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
     return '${hash}_$uniqueId.$extension';
   }
 
@@ -43,11 +114,41 @@ class AttachmentStorage {
 
   static String _webKey(String storagePath) => storagePath;
 
+  /// Returns the storage identities removed when [storagePath] is deleted.
+  /// Native storage resolves paths by basename; web edited files are aliased
+  /// with their original `attachments/` key.
+  static Set<String> deletionIdentities(String storagePath) {
+    final override = deletionIdentitiesOverrideForTesting;
+    if (override != null) return override(storagePath);
+    final name = p.basename(storagePath);
+    if (!kIsWeb) return {name};
+    final identities = <String>{storagePath};
+    if (storagePath.startsWith('temp_edited/')) {
+      identities.add('attachments/$name');
+    }
+    return identities;
+  }
+
+  static Uint8List? _checkMaxBytes(Uint8List? bytes, int? maxBytes) {
+    if (maxBytes != null && bytes != null && bytes.length > maxBytes) {
+      throw AttachmentTooLargeException(maxBytes);
+    }
+    return bytes;
+  }
+
+  static Future<Uint8List?> _readWebFile(String key, int? maxBytes) async {
+    try {
+      return await WebFileStore.read(key, maxBytes: maxBytes);
+    } on WebFileStoreReadLimitExceededException catch (e) {
+      throw AttachmentTooLargeException(e.maxBytes);
+    }
+  }
+
   static Future<String> get _storageDir async {
     if (kIsWeb) return '';
     try {
-      final appDir = await AppStorage.directory;
-      final dir = p.join(appDir, _storageDirName);
+      final appDir = await getApplicationDocumentsDirectory();
+      final dir = p.join(appDir.path, _storageDirName);
       final d = Directory(dir);
       if (!await d.exists()) {
         await d.create(recursive: true);
@@ -64,10 +165,11 @@ class AttachmentStorage {
     Uint8List bytes, {
     String? stableId,
   }) async {
+    final override = saveFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     await AppLogService.info(
-      'AttachmentStorage',
-      '保存文件: $fileName, 大小: ${bytes.length} 字节',
-    );
+        'AttachmentStorage', '保存文件: $fileName, 大小: ${bytes.length} 字节');
     try {
       final ext = _extractExtension(fileName);
       final hash = computeHash(bytes);
@@ -101,6 +203,9 @@ class AttachmentStorage {
   /// readFile/deleteFile 通过 basename 即可正确解析（Web 端则因键名
   /// 本身就是 storagePath 而天然一致），标记仍保留用于移除/删除语义。
   static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
+    final override = saveEditedFileOverrideForTesting;
+    if (override != null) return override(fileName, bytes);
+
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
     final storageName = _createStorageName(hash, ext);
@@ -115,25 +220,61 @@ class AttachmentStorage {
     return storagePath;
   }
 
-  static Future<Uint8List?> readFile(String storagePath) async {
+  static Future<Uint8List?> readFile(
+    String storagePath, {
+    int? maxBytes,
+  }) async {
+    final boundedOverride = readFileBoundedOverrideForTesting;
+    if (maxBytes != null && boundedOverride != null) {
+      return _checkMaxBytes(
+        await boundedOverride(storagePath, maxBytes: maxBytes),
+        maxBytes,
+      );
+    }
+    final override = readFileOverrideForTesting;
+    if (override != null) {
+      return _checkMaxBytes(await override(storagePath), maxBytes);
+    }
+
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {
-        final data = await WebFileStore.read(_webKey(storagePath));
+        final data = await _readWebFile(_webKey(storagePath), maxBytes);
         if (data != null || !storagePath.startsWith('temp_edited/')) {
-          return data;
+          return _checkMaxBytes(data, maxBytes);
         }
         // Cross-device backups normalize edited files into attachments/.
-        return await WebFileStore.read(
+        final fallback = await _readWebFile(
           'attachments/${p.basename(storagePath)}',
+          maxBytes,
         );
+        return _checkMaxBytes(fallback, maxBytes);
       }
       final dir = await _storageDir;
       final name = p.basename(storagePath);
       final filePath = p.join(dir, name);
       final file = File(filePath);
-      if (await file.exists()) return await file.readAsBytes();
+      if (await file.exists()) {
+        if (maxBytes == null) return await file.readAsBytes();
+        final handle = await file.open();
+        try {
+          final bytes = BytesBuilder(copy: false);
+          while (bytes.length < maxBytes + 1) {
+            final chunk = await handle.read(maxBytes + 1 - bytes.length);
+            if (chunk.isEmpty) break;
+            bytes.add(chunk);
+          }
+          if (bytes.length > maxBytes) {
+            throw AttachmentTooLargeException(maxBytes);
+          }
+          return bytes.takeBytes();
+        } finally {
+          await handle.close();
+        }
+      }
       return null;
+    } on AttachmentTooLargeException {
+      rethrow;
     } catch (e) {
       await AppLogService.error('AttachmentStorage', '读取文件失败: $storagePath', e);
       rethrow;
@@ -141,6 +282,9 @@ class AttachmentStorage {
   }
 
   static Future<bool> deleteFile(String storagePath) async {
+    final override = deleteFileOverrideForTesting;
+    if (override != null) return override(storagePath);
+
     await AppLogService.info('AttachmentStorage', '删除文件: $storagePath');
     try {
       if (kIsWeb) {
@@ -164,6 +308,100 @@ class AttachmentStorage {
       rethrow;
     }
   }
+
+  /// Deletes a set of attachment files as one logical operation. If a delete
+  /// throws, bytes from files already deleted are restored at their original
+  /// storage paths before the error is rethrown.
+  static Future<void> deleteFilesWithRollback(
+    Iterable<String> storagePaths, {
+    bool Function(String storagePath)? shouldDelete,
+    void Function(String storagePath)? onCleanupFailure,
+  }) async {
+    final paths = storagePaths.toList();
+    final originals = <String, Map<String, Uint8List>>{};
+    for (final path in paths) {
+      final pathOriginals = <String, Uint8List>{};
+      for (final identity in deletionIdentities(path)) {
+        final bytes = await readFile(identity);
+        if (bytes != null) pathOriginals[identity] = bytes;
+      }
+      originals[path] = pathOriginals;
+    }
+
+    final deletedPaths = <String>[];
+    try {
+      for (final path in paths) {
+        if (shouldDelete != null && !shouldDelete(path)) continue;
+        // A storage delete can partially remove a file before throwing (for
+        // example, temp_edited files have two web keys). Include the current
+        // path in rollback before attempting deletion for that case.
+        deletedPaths.add(path);
+        try {
+          await deleteFile(path);
+        } catch (_) {
+          onCleanupFailure?.call(path);
+          rethrow;
+        }
+        if (shouldDelete != null && !shouldDelete(path)) {
+          try {
+            await _restoreDeletionIdentities(path, originals[path]!);
+          } catch (_) {
+            onCleanupFailure?.call(path);
+            rethrow;
+          }
+          deletedPaths.removeLast();
+        }
+      }
+    } catch (deleteError) {
+      final rollbackErrors = <Object>[];
+      for (final path in deletedPaths.reversed) {
+        try {
+          await _restoreDeletionIdentities(path, originals[path]!);
+        } catch (restoreError) {
+          rollbackErrors.add(restoreError);
+          onCleanupFailure?.call(path);
+          await AppLogService.error(
+            'AttachmentStorage',
+            '回滚附件删除失败: $path',
+            restoreError,
+          );
+        }
+      }
+      if (rollbackErrors.isNotEmpty) {
+        throw AttachmentDeleteRollbackException(deleteError, rollbackErrors);
+      }
+      rethrow;
+    }
+  }
+
+  static Future<void> _restoreDeletionIdentities(
+    String storagePath,
+    Map<String, Uint8List> originals,
+  ) async {
+    for (final identity in deletionIdentities(storagePath)) {
+      final bytes = originals[identity];
+      if (bytes != null) await _restoreFile(identity, bytes);
+    }
+  }
+
+  static Future<void> _restoreFile(String storagePath, Uint8List bytes) async {
+    final override = restoreFileOverrideForTesting;
+    if (override != null) {
+      await override(storagePath, bytes);
+      return;
+    }
+
+    if (kIsWeb) {
+      await WebFileStore.write(_webKey(storagePath), bytes);
+      return;
+    }
+    final dir = await _storageDir;
+    await File(p.join(dir, p.basename(storagePath))).writeAsBytes(bytes);
+  }
+
+  /// Restores a file after a draft cleanup raced with a newly queued reference.
+  static Future<void> restoreFile(String storagePath, Uint8List bytes) =>
+      _restoreFile(storagePath, bytes);
 
   static Future<String> getStorageDirPath() async {
     if (kIsWeb) return '';
@@ -197,12 +435,39 @@ class AttachmentStorage {
       !hash.contains('\\') &&
       !hash.contains('\u0000');
 
+  /// Serializes writes and deletes for one conversation/hash cache key.
+  /// A stale delete must finish before a later re-add writes its cache.
+  static Future<T> _runCompressedCacheOperation<T>(
+    String conversationId,
+    String hash,
+    Future<T> Function() operation,
+  ) async {
+    final key = (conversationId: conversationId, hash: hash);
+    final previous = _compressedCacheOperations[key] ?? Future<void>.value();
+    final result = Completer<T>();
+    late final Future<void> queued;
+    queued = previous.catchError((Object _) {}).then((_) async {
+      try {
+        result.complete(await operation());
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    });
+    _compressedCacheOperations[key] = queued;
+    try {
+      return await result.future;
+    } finally {
+      if (identical(_compressedCacheOperations[key], queued)) {
+        _compressedCacheOperations.remove(key);
+      }
+    }
+  }
+
   /// 图片压缩缓存目录：`<附件目录>/temp_compressed/<conversationId>/`
   static Future<Directory> _compressedCacheDir(String conversationId) async {
     final base = await _storageDir;
-    final dir = Directory(
-      p.join(base, _compressedCacheDirName, conversationId),
-    );
+    final dir =
+        Directory(p.join(base, _compressedCacheDirName, conversationId));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -229,17 +494,30 @@ class AttachmentStorage {
     final storageName = '$hash.$ext';
     final storagePath =
         '$_compressedCacheDirName/$safeConversationId/$storageName';
-    await AppLogService.info(
-      'AttachmentStorage',
-      '保存图片压缩缓存: $storagePath, ${bytes.length} 字节',
+    return _runCompressedCacheOperation(
+      safeConversationId,
+      hash,
+      () async {
+        final override = saveCompressedImageOverrideForTesting;
+        if (override != null) {
+          return override(
+            conversationId: safeConversationId,
+            hash: hash,
+            bytes: bytes,
+            mimeType: mimeType,
+          );
+        }
+        await AppLogService.info(
+            'AttachmentStorage', '保存图片压缩缓存: $storagePath, ${bytes.length} 字节');
+        if (kIsWeb) {
+          await WebFileStore.write(storagePath, bytes);
+        } else {
+          final dir = await _compressedCacheDir(safeConversationId);
+          await File(p.join(dir.path, storageName)).writeAsBytes(bytes);
+        }
+        return storagePath;
+      },
     );
-    if (kIsWeb) {
-      await WebFileStore.write(storagePath, bytes);
-    } else {
-      final dir = await _compressedCacheDir(safeConversationId);
-      await File(p.join(dir.path, storageName)).writeAsBytes(bytes);
-    }
-    return storagePath;
   }
 
   /// 读取图片发送压缩缓存；不存在/损坏返回 null。
@@ -300,51 +578,56 @@ class AttachmentStorage {
   }) async {
     if (!_isSafeConversationId(conversationId) ||
         !_isSafeCompressedCacheHash(hash)) {
+      final override = deleteCompressedImageOverrideForTesting;
+      if (override != null) {
+        return override(conversationId: conversationId, hash: hash);
+      }
       return false;
     }
     final safeConversationId = conversationId!;
-    var deleted = false;
-    for (final ext in ['jpg', 'png']) {
-      final storagePath =
-          '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
-      if (kIsWeb) {
-        // 与原生端语义一致：仅当文件真实存在才算删除
-        if (await WebFileStore.exists(storagePath)) {
-          await WebFileStore.delete(storagePath);
-          deleted = true;
-        }
-      } else {
-        final base = await _storageDir;
-        final file = File(p.join(
-            base, _compressedCacheDirName, safeConversationId, '$hash.$ext'));
-        if (await file.exists()) {
-          await file.delete();
-          deleted = true;
+    return _runCompressedCacheOperation(safeConversationId, hash, () async {
+      final override = deleteCompressedImageOverrideForTesting;
+      if (override != null) {
+        return override(conversationId: safeConversationId, hash: hash);
+      }
+      var deleted = false;
+      for (final ext in ['jpg', 'png']) {
+        final storagePath =
+            '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
+        if (kIsWeb) {
+          // 与原生端语义一致：仅当文件真实存在才算删除
+          if (await WebFileStore.exists(storagePath)) {
+            await WebFileStore.delete(storagePath);
+            deleted = true;
+          }
+        } else {
+          final base = await _storageDir;
+          final file = File(p.join(
+              base, _compressedCacheDirName, safeConversationId, '$hash.$ext'));
+          if (await file.exists()) {
+            await file.delete();
+            deleted = true;
+          }
         }
       }
-    }
-    return deleted;
+      return deleted;
+    });
   }
 
   /// 删除整个对话的图片压缩缓存目录（删除对话时调用）。
   static Future<void> deleteConversationCompressedImages(
       String conversationId) async {
     if (!_isSafeConversationId(conversationId)) return;
-    final safeConversationId = conversationId;
     await AppLogService.info(
-      'AttachmentStorage',
-      '删除对话图片压缩缓存: $safeConversationId',
-    );
-    if (kIsWeb || WebFileStore.isTestMode) {
+        'AttachmentStorage', '删除对话图片压缩缓存: $conversationId');
+    if (kIsWeb) {
       await WebFileStore.deleteByPrefix(
-        '$_compressedCacheDirName/$safeConversationId/',
-      );
+          '$_compressedCacheDirName/$conversationId/');
       return;
     }
     final base = await _storageDir;
-    final dir = Directory(
-      p.join(base, _compressedCacheDirName, safeConversationId),
-    );
+    final dir =
+        Directory(p.join(base, _compressedCacheDirName, conversationId));
     if (await dir.exists()) {
       await dir.delete(recursive: true);
     }

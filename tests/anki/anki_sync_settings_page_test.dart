@@ -15,9 +15,14 @@ import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 import 'package:stroom/pages/anki_sync_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
-Widget _localizedApp({required Widget home}) => MaterialApp(
-      locale: const Locale('zh', 'CN'),
+Widget _localizedApp({
+  required Widget home,
+  Locale locale = const Locale('zh', 'CN'),
+}) =>
+    MaterialApp(
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: home,
@@ -25,6 +30,133 @@ Widget _localizedApp({required Widget home}) => MaterialApp(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('constrains localized login labels according to measured fit', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => const _FakeSecureStorage(),
+          ),
+        ],
+        child: _localizedApp(
+          home: const AnkiSyncSettingsPage(),
+          locale: const Locale('de'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byIcon(Icons.login),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byIcon(Icons.login));
+    await tester.pumpAndSettle();
+
+    final usernameField = tester.widget<TextField>(
+      find.byType(TextField).at(0),
+    );
+    final passwordField = tester.widget<TextField>(
+      find.byType(TextField).at(1),
+    );
+    expect(usernameField.decoration!.label, isA<ConstrainedText>());
+    expect(passwordField.decoration!.label, isA<ConstrainedText>());
+    expect(
+      (usernameField.decoration!.label! as ConstrainedText).data,
+      'E-Mail-Adresse / Benutzername',
+    );
+    expect(
+      (passwordField.decoration!.label! as ConstrainedText).data,
+      'Passwort',
+    );
+    final usernameLabel = find.byWidget(usernameField.decoration!.label!);
+    final passwordLabel = find.byWidget(passwordField.decoration!.label!);
+    expect(
+      find.descendant(of: usernameLabel, matching: find.byType(Transform)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: passwordLabel, matching: find.byType(Transform)),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('login fields keep native editing state while labels reveal', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => const _FakeSecureStorage(),
+          ),
+        ],
+        child: _localizedApp(
+          home: const AnkiSyncSettingsPage(),
+          locale: const Locale('de'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byIcon(Icons.login),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byIcon(Icons.login));
+    await tester.pumpAndSettle();
+
+    final username = find.byType(TextFormField).at(0);
+    final password = find.byType(TextFormField).at(1);
+    await tester.tap(username);
+    await tester.enterText(username, 'fixture@example.invalid');
+    await tester.pump();
+    final usernameEditable = tester.widget<EditableText>(
+      find.descendant(of: username, matching: find.byType(EditableText)),
+    );
+    final usernameController = usernameEditable.controller;
+    usernameController.selection = const TextSelection.collapsed(offset: 7);
+    await tester.pump();
+
+    await tester.tap(password);
+    await tester.enterText(password, 'fixture-passphrase');
+    await tester.pump();
+    final passwordEditable = tester.widget<EditableText>(
+      find.descendant(of: password, matching: find.byType(EditableText)),
+    );
+    final passwordController = passwordEditable.controller;
+    passwordController.selection = const TextSelection.collapsed(offset: 8);
+    await tester.pump(const Duration(seconds: 3));
+
+    expect(usernameController.text, 'fixture@example.invalid');
+    expect(
+      usernameController.selection,
+      const TextSelection.collapsed(offset: 7),
+    );
+    expect(passwordController.text, 'fixture-passphrase');
+    expect(
+      passwordController.selection,
+      const TextSelection.collapsed(offset: 8),
+    );
+    expect(passwordEditable.focusNode.hasFocus, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('renders both sync modes in the settings page', (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -72,6 +204,162 @@ void main() {
 
     expect(find.text('登录 AnkiWeb'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('loads sync actions after a successful AnkiWeb login', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final requests = <Uri>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _StoredSecureStorage({}),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+              client: _LoginAndMetaHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('登录AnkiWeb'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'password');
+    await tester.tap(find.text('登录').last);
+    for (var frame = 0;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('检查服务器状态'), findsOneWidget);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('available remote status heading fits narrow French layout', (
+    tester,
+  ) async {
+    await _showRemoteStatus(tester);
+    expect(
+      find.text('La collection du serveur est disponible'),
+      findsOneWidget,
+    );
+    _expectRemoteMessageWraps(tester);
+  });
+
+  testWidgets('empty remote status heading fits narrow French layout', (
+    tester,
+  ) async {
+    await _showRemoteStatus(tester, isEmpty: true);
+    expect(find.text('La collection du serveur est vide'), findsOneWidget);
+    _expectRemoteMessageWraps(tester);
+  });
+
+  testWidgets('offers sync after login and keeps the sync button available', (
+    tester,
+  ) async {
+    final requests = await _loginUntilSyncPrompt(tester);
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('现在同步收藏集吗？'), findsOneWidget);
+    expect(find.text('立即同步'), findsOneWidget);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('accepting the login sync prompt starts two-way sync', (
+    tester,
+  ) async {
+    var databaseReads = 0;
+    final databaseOverride = ankiDatabaseProvider.overrideWith((ref) async {
+      databaseReads++;
+      throw StateError('Stop after confirming the sync path starts');
+    });
+    await _loginUntilSyncPrompt(
+      tester,
+      additionalOverrides: [databaseOverride],
+    );
+
+    await tester.tap(find.text('立即同步'));
+    await tester.pumpAndSettle();
+
+    expect(databaseReads, 1);
+  });
+
+  testWidgets('cancelling the login sync prompt does not start sync', (
+    tester,
+  ) async {
+    var databaseReads = 0;
+    final databaseOverride = ankiDatabaseProvider.overrideWith((ref) async {
+      databaseReads++;
+      throw StateError('Sync must not start after cancellation');
+    });
+    await _loginUntilSyncPrompt(
+      tester,
+      additionalOverrides: [databaseOverride],
+    );
+
+    await tester.tap(find.text('继续使用'));
+    await tester.pumpAndSettle();
+
+    expect(databaseReads, 0);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('keeps the key-save warning after checking server status', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final requests = <Uri>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _FailingWriteSecureStorage(),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+              client: _LoginAndMetaHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('登录AnkiWeb'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'password');
+    await tester.tap(find.text('登录').last);
+    for (var frame = 0;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('双向同步'), findsOneWidget);
+    expect(
+      find.textContaining('登录成功，但无法安全保存同步密钥'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('does not allow switching modes before settings load', (
@@ -503,6 +791,108 @@ void main() {
   });
 }
 
+Future<void> _showRemoteStatus(
+  WidgetTester tester, {
+  bool isEmpty = false,
+}) async {
+  tester.view.physicalSize = const Size(320, 640);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  SharedPreferences.setMockInitialValues({});
+  final requests = <Uri>[];
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ankiSyncSecureStorageProvider.overrideWith(
+          (_) => _StoredSecureStorage({}),
+        ),
+        ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+          (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+            client: _LoginAndMetaHttpClient(
+              requests,
+              isEmpty: isEmpty,
+              shouldContinue: false,
+              message:
+                  'Le serveur indique une information importante qui doit rester lisible sur plusieurs lignes.',
+            ),
+            hostKey: hostKey,
+          ),
+        ),
+      ],
+      child: _localizedApp(
+        home: const AnkiSyncSettingsPage(),
+        locale: const Locale('fr'),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(find.text('Se connecter à AnkiWeb'), 300);
+  await tester.tap(find.text('Se connecter à AnkiWeb'));
+  // The localized email label can be clipped at this width and keeps its
+  // reveal animation active, so settle the dialog transition with bounded
+  // frames instead of waiting for every ticker to stop.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
+  await tester.enterText(find.byType(TextFormField).at(1), 'password');
+  await tester.tap(find.text('Se connecter').last);
+  for (var frame = 0; frame < 20 && requests.length < 2; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pump(const Duration(milliseconds: 200));
+  expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+}
+
+void _expectRemoteMessageWraps(WidgetTester tester) {
+  final schemaStatus = find.textContaining(
+    'Version du schéma 1600000000000 · USN 7',
+  );
+  expect(schemaStatus, findsOneWidget);
+  expect(tester.getSize(schemaStatus).height, greaterThan(20));
+
+  final message = find.text(
+    'Le serveur indique une information importante qui doit rester lisible sur plusieurs lignes.',
+  );
+  expect(message, findsNWidgets(2));
+  expect(tester.getSize(message.at(0)).height, greaterThan(20));
+  expect(tester.getSize(message.at(1)).height, greaterThan(20));
+  expect(tester.takeException(), isNull);
+}
+
+Future<List<Uri>> _loginUntilSyncPrompt(
+  WidgetTester tester, {
+  List<dynamic> additionalOverrides = const [],
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final requests = <Uri>[];
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ankiSyncSecureStorageProvider.overrideWith(
+          (_) => _StoredSecureStorage({}),
+        ),
+        ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+          (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+            client: _LoginAndMetaHttpClient(requests),
+            hostKey: hostKey,
+          ),
+        ),
+        ...additionalOverrides,
+      ],
+      child: _localizedApp(home: const AnkiSyncSettingsPage()),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('登录AnkiWeb'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
+  await tester.enterText(find.byType(TextFormField).at(1), 'password');
+  await tester.tap(find.text('登录').last);
+  await tester.pumpAndSettle();
+  return requests;
+}
+
 class _FakeSecureStorage extends FlutterSecureStorage {
   const _FakeSecureStorage();
 
@@ -540,6 +930,52 @@ class _StoredSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) async =>
       values[key];
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
+  }
+}
+
+class _FailingWriteSecureStorage extends FlutterSecureStorage {
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async =>
+      null;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    throw StateError('secure storage write failed');
+  }
 }
 
 class _GatedAnkiSyncNotifier extends AnkiSyncNotifier {
@@ -619,6 +1055,43 @@ class _RecordingHttpClient extends http.BaseClient {
           }),
         ),
       ),
+      HttpStatus.ok,
+      request: request,
+    );
+  }
+}
+
+class _LoginAndMetaHttpClient extends http.BaseClient {
+  _LoginAndMetaHttpClient(
+    this.requests, {
+    this.isEmpty = false,
+    this.shouldContinue = true,
+    this.message = '',
+  });
+
+  final List<Uri> requests;
+  final bool isEmpty;
+  final bool shouldContinue;
+  final String message;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests.add(request.url);
+    final body = request.url.path.endsWith('/hostKey')
+        ? {'key': 'host-key'}
+        : {
+            'mod': 1700000000,
+            'scm': 1600000000000,
+            'usn': 7,
+            'ts': 1700000000,
+            'msg': message,
+            'cont': shouldContinue,
+            'hostNum': 1,
+            'empty': isEmpty,
+            'media_usn': 3,
+          };
+    return http.StreamedResponse(
+      Stream<List<int>>.value(utf8.encode(jsonEncode(body))),
       HttpStatus.ok,
       request: request,
     );

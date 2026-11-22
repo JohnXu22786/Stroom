@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tts_models.dart';
 import '../providers/tts_config.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// Localized presentation for custom-parameter types; persisted values stay
 /// in [ParamType.value].
 String localizedParamTypeLabel(AppLocalizations l10n, ParamType type) {
@@ -145,9 +147,16 @@ class TrimSection extends ConsumerWidget {
               children: [
                 const Icon(Icons.content_cut, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  AppLocalizations.of(context)!.modelAudioTrimTitle,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                Flexible(
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.modelAudioTrimTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
                 if (selectedPresetId != null &&
@@ -252,9 +261,11 @@ class TrimSection extends ConsumerWidget {
                           final confirm = await showDialog<bool>(
                             context: context,
                             builder: (ctx) => AlertDialog(
-                              title: Text(
+                              title: ConstrainedText(
                                 AppLocalizations.of(context)!
                                     .modelDeleteTrimPreset,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               content: Text(
                                 AppLocalizations.of(context)!
@@ -263,9 +274,11 @@ class TrimSection extends ConsumerWidget {
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(ctx, false),
-                                  child: Text(
+                                  child: ConstrainedText(
                                     AppLocalizations.of(context)!
                                         .batchDlgCancel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 TextButton(
@@ -273,9 +286,11 @@ class TrimSection extends ConsumerWidget {
                                   style: TextButton.styleFrom(
                                     foregroundColor: Colors.red,
                                   ),
-                                  child: Text(
+                                  child: ConstrainedText(
                                     AppLocalizations.of(context)!
                                         .fileManagerDelete,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -304,7 +319,11 @@ class TrimSection extends ConsumerWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: Text(AppLocalizations.of(context)!.modelAddTrimPreset),
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.modelAddTrimPreset,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 onPressed: onAddPreset,
               ),
             ),
@@ -322,10 +341,12 @@ class TrimSection extends ConsumerWidget {
                         ),
                       )
                     : const Icon(Icons.play_arrow, size: 18),
-                label: Text(
+                label: ConstrainedText(
                   isTestingAudio
                       ? AppLocalizations.of(context)!.modelPlayingTestAudio
                       : AppLocalizations.of(context)!.modelPlayTestAudio,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: isTestingAudio ? null : onPlayTestAudio,
                 style: ElevatedButton.styleFrom(

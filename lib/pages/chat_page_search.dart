@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -48,41 +49,34 @@ extension _ChatPageSearchExt on _ChatPageState {
           messageIndexById[liveMessage.id] = searchMessages.length;
           searchMessages.add(liveMessage);
         } else {
-          // The repository may hold a partial snapshot of the current stream.
-          // Keep the live history copy so search sees the visible response.
           searchMessages[existingIndex] = liveMessage;
         }
       }
-
       final lowerQuery = query.toLowerCase();
       final matches = <SearchMatch>[];
-      for (var messageIndex = 0;
-          messageIndex < searchMessages.length;
-          messageIndex++) {
-        final msg = searchMessages[messageIndex];
-        // AI messages are rendered as markdown: matches inside code blocks,
-        // inline code or math can never be highlighted (those are rendered
-        // as dedicated widgets), so strip them before matching — otherwise
-        // they would overstate the counter and shift the "current" match.
-        // User messages are plain text and keep raw offsets (used by the
-        // plain-text highlight).
-        final text = msg.role == 'user'
-            ? msg.content
-            : stripSearchIrrelevantMarkdown(msg.content);
+      for (
+        var messageIndex = 0;
+        messageIndex < searchMessages.length;
+        messageIndex++
+      ) {
+        final message = searchMessages[messageIndex];
+        final text = message.role == 'user'
+            ? message.content
+            : stripSearchIrrelevantMarkdown(message.content);
         final lowerContent = text.toLowerCase();
-        int start = 0;
+        var start = 0;
         while (true) {
-          final idx = lowerContent.indexOf(lowerQuery, start);
-          if (idx == -1) break;
+          final index = lowerContent.indexOf(lowerQuery, start);
+          if (index < 0) break;
           matches.add(
             SearchMatch(
-              msg.id,
-              idx,
-              idx + query.length,
+              message.id,
+              index,
+              index + query.length,
               messageOrder: messageIndex,
             ),
           );
-          start = idx + query.length;
+          start = index + query.length;
         }
       }
       final requestedMessageId = _pendingSearchMessageId;
@@ -95,27 +89,18 @@ extension _ChatPageSearchExt on _ChatPageState {
         _searchMatches
           ..clear()
           ..addAll(matches);
-        _currentMatchIndex = 0;
-        if (targetMatch >= 0) _currentMatchIndex = targetMatch;
+        _currentMatchIndex = targetMatch >= 0 ? targetMatch : 0;
         _pendingSearchMessageId = null;
         _rebuildSearchMatchFirstIndex();
       });
-      if (requestedMessageId != null && targetMatch < 0) {
-        // Global search can find text inside code or math that local search
-        // intentionally excludes because those widgets cannot highlight raw
-        // offsets. Still navigate to the selected message.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && generation == _searchGeneration) {
-            _scrollToMessageId(requestedMessageId, generation);
-          }
-        });
-      } else if (_searchMatches.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && generation == _searchGeneration) {
-            _scrollToCurrentMatch();
-          }
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || generation != _searchGeneration) return;
+        if (requestedMessageId != null && targetMatch < 0) {
+          _scrollToMessageId(requestedMessageId, generation);
+        } else if (_searchMatches.isNotEmpty) {
+          _scrollToCurrentMatch();
+        }
+      });
     } catch (error) {
       debugPrint('[ChatPage] failed to search conversation: $error');
       if (!mounted ||
@@ -125,25 +110,15 @@ extension _ChatPageSearchExt on _ChatPageState {
         return;
       }
       setState(
-          () => _searchError = AppLocalizations.of(context)!.chatSearchError);
-    }
-  }
-
-  void _rebuildSearchMatchFirstIndex() {
-    _searchMatchFirstIndexByMessageId.clear();
-    for (var i = 0; i < _searchMatches.length; i++) {
-      _searchMatchFirstIndexByMessageId.putIfAbsent(
-        _searchMatches[i].messageId,
-        () => i,
+        () => _searchError = AppLocalizations.of(context)!.chatSearchError,
       );
     }
   }
 
   Future<void> _scrollToMessageId(
-      String messageId, int searchGeneration) async {
-    // A selected repository page can contain more messages than the chat
-    // controller window when live stream messages were merged into history.
-    // Bring the target into the controller before asking it to scroll.
+    String messageId,
+    int searchGeneration,
+  ) async {
     final conversationId = _loadedConversationId;
     final conversationGeneration = _conversationLoadGeneration;
     var loadGuard = 0;
@@ -160,7 +135,6 @@ extension _ChatPageSearchExt on _ChatPageState {
       );
       if (historyIndex >= 0 && _loadedUpToIndex <= historyIndex) break;
       if (historyIndex < 0 && !_hasMoreMessages) break;
-
       final beforeLoadedUpToIndex = _loadedUpToIndex;
       final beforeHistoryLength = _history.length;
       await _loadMoreMessages(skipMinDisplayDelay: true);
@@ -183,7 +157,6 @@ extension _ChatPageSearchExt on _ChatPageState {
       }
       if (++loadGuard > 100) break;
     }
-
     if (!mounted || searchGeneration != _searchGeneration) return;
     final key = _messageKeys[messageId];
     if (key?.currentContext != null) {
@@ -194,38 +167,30 @@ extension _ChatPageSearchExt on _ChatPageState {
       );
       return;
     }
-
     final controller = _controller;
     if (controller == null) return;
     final wasSwallow = _chatScrollController.swallowScrolls;
     _chatScrollController.swallowScrolls = false;
     try {
-      final scrolled = Completer<void>();
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        try {
-          if (!mounted || searchGeneration != _searchGeneration) {
-            if (!scrolled.isCompleted) scrolled.complete();
-            return;
-          }
-          await controller.scrollToMessage(
-            messageId,
-            alignment: 0.3,
-            duration: const Duration(milliseconds: 250),
-          );
-        } catch (error, stackTrace) {
-          if (!scrolled.isCompleted) {
-            scrolled.completeError(error, stackTrace);
-          }
-        } finally {
-          if (!scrolled.isCompleted) scrolled.complete();
-        }
-      });
-      WidgetsBinding.instance.scheduleFrame();
-      await scrolled.future;
+      await controller.scrollToMessage(
+        messageId,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 250),
+      );
     } catch (_) {
-      // The target may have been removed while global search was open.
+      // The selected result can disappear while the conversation is loading.
     } finally {
       _chatScrollController.swallowScrolls = wasSwallow;
+    }
+  }
+
+  void _rebuildSearchMatchFirstIndex() {
+    _searchMatchFirstIndexByMessageId.clear();
+    for (var i = 0; i < _searchMatches.length; i++) {
+      _searchMatchFirstIndexByMessageId.putIfAbsent(
+        _searchMatches[i].messageId,
+        () => i,
+      );
     }
   }
 
@@ -248,44 +213,22 @@ extension _ChatPageSearchExt on _ChatPageState {
     final match = _searchMatches[targetIndex];
 
     Future<void> navigation() async {
-      // The target may still be unloaded: a global search can open a page
-      // around an older result. Load toward the target until it is present.
+      // The target may still be unloaded: lazy pagination keeps only the
+      // latest messages in the chat controller. Load older batches (without
+      // the spinner's minimum-display delay) until the message is present.
       var loadGuard = 0;
       var stalledRetries = 0;
       while (mounted) {
         final historyIdx = _history.indexWhere((m) => m.id == match.messageId);
         if (historyIdx >= 0 && _loadedUpToIndex <= historyIdx) break;
-        final conversationId = _loadedConversationId;
-        final repository = ref.read(conversationsProvider.notifier);
-        final pageDirection =
-            conversationId == null || match.messageOrder == null
-                ? null
-                : repository.repositoryMessagePageDirection(
-                    conversationId,
-                    match.messageOrder!,
-                  );
-        if (historyIdx < 0 && pageDirection == 0) break;
-        final loadNewer = historyIdx < 0 && pageDirection == 1;
-        final hasMoreInDirection = loadNewer
-            ? conversationId != null &&
-                repository.hasLaterRepositoryMessages(conversationId)
-            : _hasMoreMessages;
-        if (historyIdx < 0 && !hasMoreInDirection) break;
+        if (historyIdx < 0 && !_hasMoreMessages) break;
         final before = _loadedUpToIndex;
-        final beforeHistoryLength = _history.length;
-        if (loadNewer) {
-          await _loadNewerRepositoryMessages();
-        } else {
-          await _loadMoreMessages(skipMinDisplayDelay: true);
-        }
+        await _loadMoreMessages(skipMinDisplayDelay: true);
         if (!mounted) return;
-        final targetLoaded = _history.any((m) => m.id == match.messageId);
-        if (targetLoaded ||
-            _loadedUpToIndex < before ||
-            _history.length > beforeHistoryLength) {
+        if (_loadedUpToIndex < before) {
           // The batch loaded — keep going.
           stalledRetries = 0;
-        } else if (hasMoreInDirection && ++stalledRetries <= 10) {
+        } else if (_hasMoreMessages && ++stalledRetries <= 10) {
           // _loadMoreMessages refuses concurrent runs (e.g. the user's own
           // scroll already triggered onEndReached). Wait briefly and retry
           // instead of silently dropping the navigation.
@@ -384,7 +327,8 @@ extension _ChatPageSearchExt on _ChatPageState {
   void _previousMatch() {
     if (_searchMatches.isEmpty) return;
     setState(() {
-      _currentMatchIndex = (_currentMatchIndex - 1 + _searchMatches.length) %
+      _currentMatchIndex =
+          (_currentMatchIndex - 1 + _searchMatches.length) %
           _searchMatches.length;
     });
     _scrollToCurrentMatch();
@@ -400,14 +344,17 @@ extension _ChatPageSearchExt on _ChatPageState {
 
   void _closeSearch() {
     _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = null;
     _searchGeneration++;
     _pendingSearchMessageId = null;
+    _searchError = null;
+    _liveMarkdownSearchPreviews.clear();
     setState(() {
       _isSearching = false;
       _searchMode = SearchMode.current;
       _searchQuery = '';
-      _searchError = null;
       _searchMatches.clear();
+      _searchMatchFirstIndexByMessageId.clear();
       _currentMatchIndex = 0;
       _searchTextController.clear();
     });
@@ -431,8 +378,10 @@ extension _ChatPageSearchExt on _ChatPageState {
             width: selected ? 1.0 : 0.5,
           ),
         ),
-        child: Text(
+        child: ConstrainedText(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 11,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
@@ -446,84 +395,71 @@ extension _ChatPageSearchExt on _ChatPageState {
   void _openGlobalSearch() {
     Navigator.of(context, rootNavigator: true)
         .push<Map<String, dynamic>>(
-      MaterialPageRoute(builder: (_) => const MessageSearchPage()),
-    )
+          MaterialPageRoute(builder: (_) => const MessageSearchPage()),
+        )
         .then((result) async {
-      if (!mounted || result == null) return;
-      final conversationId = result['conversationId'] as String?;
-      final messageId = result['messageId'] as String?;
-      final query = result['query'] as String?;
-      if (conversationId == null || query == null || query.isEmpty) return;
+          if (!mounted || result == null) return;
+          final conversationId = result['conversationId'] as String?;
+          final query = result['query'] as String?;
+          final messageId = result['messageId'] as String?;
+          if (conversationId == null || query == null || query.isEmpty) return;
 
-      // Step 1: Save current conversation's messages first (before switching)
-      await _saveMessages();
-      if (!mounted) return;
+          // Step 1: Save current conversation's messages first (before switching)
+          await _saveMessages();
+          if (!mounted) return;
 
-      final conversationsNotifier = ref.read(
-        conversationsProvider.notifier,
-      );
-      if (messageId != null) {
-        await conversationsNotifier.loadMessagesAroundMessage(
-          conversationId,
-          messageId,
-        );
-        if (!mounted) return;
-      }
+          // Step 2: If switching to a different conversation, select it.
+          // The activeConversationIdProvider listener schedules
+          // _loadConversationMessages in a post-frame callback, which clears
+          // search state. Schedule search activation in a subsequent
+          // post-frame callback so it runs AFTER that load completes.
+          final activeId = ref.read(activeConversationIdProvider);
+          if (conversationId != activeId) {
+            ref
+                .read(conversationsProvider.notifier)
+                .selectConversation(conversationId);
+          }
+          // Step 2b: Sync the session assistant selection to the opened
+          // conversation's bound assistant. Global search can open ANY
+          // conversation (not only the session assistant's), so the session
+          // selection would otherwise drift from what the chat actually uses —
+          // the topic page (which filters by the session selection) would then
+          // hide this conversation when navigating back. The conversation's
+          // binding is the source of truth; the session selection follows it.
+          // Guard: only sync when the binding still resolves to an existing
+          // assistant. A conversation whose assistant was deleted must NOT
+          // clobber the user's current selection with a dead id (the send path
+          // already falls back gracefully for such bindings).
+          final openedConv = ref
+              .read(conversationsProvider)
+              .where((c) => c.id == conversationId)
+              .firstOrNull;
+          final openedAssistantId = openedConv?.assistantId;
+          if (openedAssistantId != null &&
+              openedAssistantId.isNotEmpty &&
+              ref
+                  .read(assistantProvider)
+                  .any((a) => a.id == openedAssistantId)) {
+            ref.read(selectedAssistantIdProvider.notifier).state =
+                openedAssistantId;
+          }
 
-      // Step 2: If switching to a different conversation, select it.
-      // The activeConversationIdProvider listener schedules
-      // _loadConversationMessages in a post-frame callback, which clears
-      // search state. Schedule search activation in a subsequent
-      // post-frame callback so it runs AFTER that load completes.
-      final activeId = ref.read(activeConversationIdProvider);
-      if (conversationId != activeId) {
-        conversationsNotifier.selectConversation(conversationId);
-      }
-      if (messageId != null) {
-        // Load the page selected above before activating local search. This
-        // also handles a result in the conversation already being viewed.
-        await _loadConversationMessages(force: true);
-        if (!mounted) return;
-      }
-      // Step 2b: Sync the session assistant selection to the opened
-      // conversation's bound assistant. Global search can open ANY
-      // conversation (not only the session assistant's), so the session
-      // selection would otherwise drift from what the chat actually uses —
-      // the topic page (which filters by the session selection) would then
-      // hide this conversation when navigating back. The conversation's
-      // binding is the source of truth; the session selection follows it.
-      // Guard: only sync when the binding still resolves to an existing
-      // assistant. A conversation whose assistant was deleted must NOT
-      // clobber the user's current selection with a dead id (the send path
-      // already falls back gracefully for such bindings).
-      final openedConv = ref
-          .read(conversationsProvider)
-          .where((c) => c.id == conversationId)
-          .firstOrNull;
-      final openedAssistantId = openedConv?.assistantId;
-      if (openedAssistantId != null &&
-          openedAssistantId.isNotEmpty &&
-          ref.read(assistantProvider).any((a) => a.id == openedAssistantId)) {
-        ref.read(selectedAssistantIdProvider.notifier).state =
-            openedAssistantId;
-      }
-
-      // Step 3: Schedule search activation for the next frame, after
-      // _loadConversationMessages has completed its synchronous part.
-      // Note: Setting _searchTextController.text triggers onChanged →
-      // _performSearch internally via the controller listener, so the
-      // explicit _performSearch call below is redundant but kept for
-      // safety in case the listener doesn't fire as expected.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _searchMode = SearchMode.current;
-          _searchTextController.text = query;
-          _isSearching = true;
+          // Step 3: Schedule search activation for the next frame, after
+          // _loadConversationMessages has completed its synchronous part.
+          // Note: Setting _searchTextController.text triggers onChanged →
+          // _performSearch internally via the controller listener, so the
+          // explicit _performSearch call below is redundant but kept for
+          // safety in case the listener doesn't fire as expected.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() {
+              _searchTextController.text = query;
+              _isSearching = true;
+              _searchMode = SearchMode.current;
+            });
+            _performSearch(query, targetMessageId: messageId);
+          });
         });
-        _performSearch(query, targetMessageId: messageId);
-      });
-    });
   }
 
   Widget _buildHighlightedText(
@@ -537,8 +473,9 @@ extension _ChatPageSearchExt on _ChatPageState {
         style: textColor != null ? TextStyle(color: textColor) : null,
       );
     }
-    final matches =
-        _searchMatches.where((m) => m.messageId == messageId).toList();
+    final matches = _searchMatches
+        .where((m) => m.messageId == messageId)
+        .toList();
     if (matches.isEmpty) {
       return SelectableText(
         text,
@@ -583,7 +520,6 @@ extension _ChatPageSearchExt on _ChatPageState {
   /// keyboard stays up while browsing results, matching the pre-fix
   /// behavior the chat page deliberately preserves.
   Widget _buildSearchBar() {
-    final strings = AppLocalizations.of(context)!;
     return TextFieldTapRegion(
       groupId: chatComposerTapRegionGroupId,
       child: Container(
@@ -629,8 +565,8 @@ extension _ChatPageSearchExt on _ChatPageState {
                       },
                       decoration: InputDecoration(
                         hintText: _searchMode == SearchMode.current
-                            ? strings.chatSearchCurrent
-                            : strings.chatSearchAll,
+                            ? AppLocalizations.of(context)!.chatSearchCurrent
+                            : AppLocalizations.of(context)!.chatSearchAll,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -650,31 +586,6 @@ extension _ChatPageSearchExt on _ChatPageState {
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                if (_searchMode == SearchMode.current &&
-                    _searchError != null) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    _searchError!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 18),
-                    tooltip: strings.chatSearchRetry,
-                    onPressed: () => _performSearch(
-                      _searchQuery,
-                      targetMessageId: _pendingSearchMessageId,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
                     ),
                   ),
                 ],
@@ -715,31 +626,68 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ),
               ],
             ),
+            if (_searchError != null)
+              Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 26),
+                      child: Text(
+                        _searchError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Tooltip(
+                    message: AppLocalizations.of(context)!.chatSearchRetry,
+                    child: TextButton.icon(
+                      onPressed: () => _performSearch(
+                        _searchQuery,
+                        targetMessageId: _pendingSearchMessageId,
+                      ),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: Text(
+                        AppLocalizations.of(context)!.chatSearchRetry,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             // Row 2: Mode toggle chips
             const SizedBox(height: 4),
             Row(
               children: [
-                _buildModeChip(
-                  label: strings.chatSearchCurrentMode,
-                  selected: _searchMode == SearchMode.current,
-                  onTap: () {
-                    if (_searchMode != SearchMode.current) {
-                      setState(() => _searchMode = SearchMode.current);
-                      _searchTextController.clear();
-                      _performSearch('');
-                    }
-                  },
+                Flexible(
+                  child: _buildModeChip(
+                    label: AppLocalizations.of(context)!
+                        .searchCurrentConversation,
+                    selected: _searchMode == SearchMode.current,
+                    onTap: () {
+                      if (_searchMode != SearchMode.current) {
+                        setState(() {
+                          _searchMode = SearchMode.current;
+                          _searchTextController.clear();
+                          _performSearch('');
+                        });
+                      }
+                    },
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _buildModeChip(
-                  label: strings.chatSearchAllMode,
-                  selected: _searchMode == SearchMode.global,
-                  onTap: () {
-                    if (_searchMode != SearchMode.global) {
-                      setState(() => _searchMode = SearchMode.global);
-                      _openGlobalSearch();
-                    }
-                  },
+                Flexible(
+                  child: _buildModeChip(
+                    label: AppLocalizations.of(context)!.searchAllConversations,
+                    selected: _searchMode == SearchMode.global,
+                    onTap: () {
+                      if (_searchMode != SearchMode.global) {
+                        setState(() => _searchMode = SearchMode.global);
+                        _openGlobalSearch();
+                      }
+                    },
+                  ),
                 ),
               ],
             ),

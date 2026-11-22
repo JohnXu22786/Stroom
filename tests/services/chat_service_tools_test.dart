@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/assistant.dart';
@@ -13,6 +14,8 @@ import 'package:stroom/models/chat_event.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
+import 'package:stroom/providers/locale_provider.dart'
+    show appLocalizationsForLocale;
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
@@ -112,6 +115,18 @@ void main() {
   // 请求（立即返回 400），懒连接测试里的按需连接才会快速失败而非
   // 依赖真实网络/超时。
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('MCP missing-tool guidance keeps a localized error prefix', () {
+    final english = appLocalizationsForLocale(const Locale('en', 'US'));
+    final chinese = appLocalizationsForLocale(const Locale('zh', 'CN'));
+
+    expect(english.toolResultMcpMissingTool('Server', 'search'),
+        startsWith('Error:'));
+    expect(
+        english.toolResultMcpAliasedConflict('search'), startsWith('Error:'));
+    expect(
+        chinese.toolResultMcpMissingTool('服务器', 'search'), startsWith('错误：'));
+    expect(chinese.toolResultMcpAliasedConflict('search'), startsWith('错误：'));
+  });
   chatServiceToolsGroup1();
   chatServiceToolsGroup2();
   chatServiceToolsGroup3();

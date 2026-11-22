@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image/image.dart' as img;
 
 /// Bound decoded OCR image memory to roughly 200 MiB of RGBA pixels.
@@ -27,6 +28,26 @@ class OcrImagePayload {
   });
 
   String get mimeType => 'image/$format';
+}
+
+/// Stable reason for rejecting an OCR payload, independent of its message.
+///
+/// [OcrImagePayloadException] remains a [FormatException] so existing OCR page
+/// callers keep their current error handling and user-facing message.
+enum OcrImagePayloadFailure {
+  empty,
+  unsupportedFormat,
+  unsupportedSpecialFormat,
+  decodeFailed,
+  dimensionsTooLarge,
+  orientationPngTooLarge,
+  orientationFailed,
+}
+
+class OcrImagePayloadException extends FormatException {
+  const OcrImagePayloadException(this.failure, String message) : super(message);
+
+  final OcrImagePayloadFailure failure;
 }
 
 /// Validates and prepares OCR bytes away from the UI isolate where available.
@@ -151,12 +172,18 @@ OcrImagePayload prepareOcrImagePayloadSync(
   int? maxReencodedPngBytes,
 }) {
   if (bytes.isEmpty) {
-    throw const FormatException('图片为空，请重新选择。');
+    throw const OcrImagePayloadException(
+      OcrImagePayloadFailure.empty,
+      '图片为空，请重新选择。',
+    );
   }
 
   final format = _detectOcrImageFormat(bytes);
   if (format == null) {
-    throw FormatException(_unsupportedFormatMessage(bytes));
+    throw OcrImagePayloadException(
+      _unsupportedFormatFailure(bytes),
+      _unsupportedFormatMessage(bytes),
+    );
   }
 
   late final img.Decoder decoder;
@@ -169,14 +196,23 @@ OcrImagePayload prepareOcrImagePayloadSync(
     if (info == null) throw const FormatException('无法解码图片');
     decodeInfo = info;
   } catch (_) {
-    throw const FormatException(
+    throw const OcrImagePayloadException(
+      OcrImagePayloadFailure.decodeFailed,
       '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
     );
   }
 
   if (decodeInfo.width * decodeInfo.height > maxOcrImagePixels) {
-    throw const FormatException(
+    throw const OcrImagePayloadException(
+      OcrImagePayloadFailure.dimensionsTooLarge,
       '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。',
+    );
+  }
+
+  if (decoder.numFrames() > 1) {
+    throw OcrImagePayloadException(
+      OcrImagePayloadFailure.unsupportedFormat,
+      _unsupportedFormatMessage(bytes),
     );
   }
 
@@ -198,7 +234,8 @@ OcrImagePayload prepareOcrImagePayloadSync(
     final worstCasePngBytes =
         pixelCount * 4 + pixelCount ~/ 100 + decodeInfo.height + 1024;
     if (worstCasePngBytes > maxReencodedPngBytes) {
-      throw const FormatException(
+      throw const OcrImagePayloadException(
+        OcrImagePayloadFailure.orientationPngTooLarge,
         '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。',
       );
     }
@@ -206,13 +243,14 @@ OcrImagePayload prepareOcrImagePayloadSync(
 
   late final img.Image decoded;
   try {
-    // OCR sends the original encoded image, so validate only its first frame
-    // instead of allocating every frame of an animated image.
+    // Animated images were rejected above, so decode only frame zero while
+    // validating a static image.
     final image = decoder.decodeFrame(0);
     if (image == null) throw const FormatException('无法解码图片');
     decoded = image;
   } catch (_) {
-    throw const FormatException(
+    throw const OcrImagePayloadException(
+      OcrImagePayloadFailure.decodeFailed,
       '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
     );
   }
@@ -221,11 +259,11 @@ OcrImagePayload prepareOcrImagePayloadSync(
   if (orientation != null && orientation != 1) {
     try {
       // The JPEG decoder already applies EXIF orientation while decoding.
-      // Other supported decoders may leave it in metadata, so bake it here.
-      final decodedOrientation = decoded.exif.imageIfd.orientation;
-      final oriented = decodedOrientation != null && decodedOrientation != 1
-          ? img.bakeOrientation(decoded)
-          : decoded;
+      // Other supported decoders may leave it unapplied and omit it from the
+      // decoded frame metadata (as WebP does), so apply the source value here.
+      final oriented = decoder is img.JpegDecoder
+          ? decoded
+          : applyOcrImageSourceOrientation(decoded, orientation);
       // The image package has no lossless JPEG transform. PNG preserves the
       // decoded pixels and avoids another lossy encode, with no resize.
       final normalized = img.encodePng(oriented, level: 6);
@@ -236,7 +274,8 @@ OcrImagePayload prepareOcrImagePayloadSync(
         height: oriented.height,
       );
     } catch (_) {
-      throw const FormatException(
+      throw const OcrImagePayloadException(
+        OcrImagePayloadFailure.orientationFailed,
         '无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。',
       );
     }
@@ -248,6 +287,15 @@ OcrImagePayload prepareOcrImagePayloadSync(
     width: decoded.width,
     height: decoded.height,
   );
+}
+
+/// Applies an EXIF orientation parsed from the encoded source to decoded pixels.
+///
+/// Exposed for tests because some decoders omit source metadata on frames.
+@visibleForTesting
+img.Image applyOcrImageSourceOrientation(img.Image decoded, int orientation) {
+  decoded.exif.imageIfd.orientation = orientation;
+  return img.bakeOrientation(decoded);
 }
 
 String? _detectOcrImageFormat(Uint8List bytes) {
@@ -274,6 +322,11 @@ String _unsupportedFormatMessage(Uint8List bytes) {
   }
   return '不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。';
 }
+
+OcrImagePayloadFailure _unsupportedFormatFailure(Uint8List bytes) =>
+    _isTiff(bytes) || _isSvg(bytes) || _isHeic(bytes)
+        ? OcrImagePayloadFailure.unsupportedSpecialFormat
+        : OcrImagePayloadFailure.unsupportedFormat;
 
 bool _isTiff(Uint8List bytes) =>
     _startsWith(bytes, const [0x49, 0x49, 0x2a, 0x00]) ||

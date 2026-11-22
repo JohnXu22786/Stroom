@@ -51,6 +51,14 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+Finder _customParamDefaultValueField() {
+  final field = find.ancestor(
+    of: find.text('默认参数值'),
+    matching: find.byType(TextFormField),
+  );
+  return find.descendant(of: field, matching: find.byType(TextField));
+}
+
 /// Enters text into the [index]-th TextField of the page (0 = 模型名称,
 /// 1 = 模型 ID, then max tokens / min pixels / max pixels).
 Future<void> _enterField(WidgetTester tester, int index, String text) async {
@@ -74,7 +82,165 @@ Future<void> _simulateSystemBack(WidgetTester tester) async {
 }
 
 void main() {
+  group('OcrModelConfigPage legacy instruction preservation', () {
+    testWidgets(
+      'retains legacy instruction when modern instruction list is empty',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {
+            'userInstructions': <String>[],
+            'userInstruction': 'Keep this legacy OCR instruction',
+          },
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['userInstructions'], isEmpty);
+        expect(
+          saved!.typeConfig['userInstruction'],
+          'Keep this legacy OCR instruction',
+        );
+      },
+    );
+
+    testWidgets(
+      'retains populated modern instructions and the legacy key',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {
+            'userInstructions': <String>['Current OCR instruction'],
+            'userInstruction': 'Keep this legacy OCR instruction',
+          },
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(
+          saved!.typeConfig['userInstructions'],
+          ['Current OCR instruction'],
+        );
+        expect(
+          saved!.typeConfig['userInstruction'],
+          'Keep this legacy OCR instruction',
+        );
+      },
+    );
+  });
+
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
+    testWidgets(
+      'repairs an enabled temperature value outside the slider range',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {'enableTemperature': true, 'temperature': 3.0},
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _scrollTo(tester, find.text('温度'));
+        expect(
+          find.text(
+            '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('保存'));
+        await tester.pump();
+        expect(
+          find.text('保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。'),
+          findsOneWidget,
+        );
+        final slider = find.byType(Slider).first;
+        expect(tester.widget<Slider>(slider).value, 2.0);
+        await tester.drag(slider, const Offset(-60, 0));
+        await tester.pumpAndSettle();
+        final repairedValue = tester.widget<Slider>(slider).value;
+        expect(repairedValue, inInclusiveRange(0.0, 2.0));
+        expect(repairedValue, lessThan(2.0));
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['temperature'], repairedValue);
+      },
+    );
+
+    testWidgets(
+      'repairs an enabled top-P value outside the slider range',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {'enableTopP': true, 'topP': -0.5},
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _scrollTo(tester, find.text('Top P'));
+        expect(
+          find.text(
+            '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。',
+          ),
+          findsOneWidget,
+        );
+        final slider = find.byType(Slider).last;
+        expect(tester.widget<Slider>(slider).value, 0.0);
+        await tester.drag(slider, const Offset(60, 0));
+        await tester.pumpAndSettle();
+        final repairedValue = tester.widget<Slider>(slider).value;
+        expect(repairedValue, inInclusiveRange(0.0, 1.0));
+        expect(repairedValue, greaterThan(0.0));
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['topP'], repairedValue);
+      },
+    );
+
+    testWidgets(
+      'repairs a nonnumeric stored sampling value without crashing',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {'enableTemperature': true, 'temperature': 'legacy'},
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _scrollTo(tester, find.text('温度'));
+        final slider = find.byType(Slider).first;
+        expect(tester.widget<Slider>(slider).value, 0.0);
+        await tester.drag(slider, const Offset(60, 0));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<Slider>(slider).value,
+          inInclusiveRange(0.0, 2.0),
+        );
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['temperature'], isA<double>());
+      },
+    );
+
     testWidgets(
       'system Back prompts after a text edit and cancel keeps the edit',
       (tester) async {
@@ -172,6 +338,32 @@ void main() {
 
   group('OcrModelConfigPage unsaved custom params', () {
     testWidgets(
+      'system Back prompts when only a new blank-name param type changes',
+      (tester) async {
+        await _pumpConfigPage(tester);
+
+        await _scrollTo(tester, find.text('添加参数'));
+        await tester.tap(find.text('添加参数'));
+        await tester.pumpAndSettle();
+
+        final typeDropdown = find.byType(DropdownButton<String>);
+        await _scrollTo(tester, typeDropdown);
+        await tester.tap(typeDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('数字').last);
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.widget<DropdownButton<String>>(typeDropdown).value,
+          'number',
+        );
+        await _simulateSystemBack(tester);
+
+        expect(find.text('放弃修改？'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       'system Back prompts when a blank-name param default is edited and '
       'cancel keeps the edit',
       (tester) async {
@@ -181,10 +373,7 @@ void main() {
         await tester.tap(find.text('添加参数'));
         await tester.pumpAndSettle();
 
-        final defaultField = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField && widget.decoration?.labelText == '默认参数值',
-        );
+        final defaultField = _customParamDefaultValueField();
         await _scrollTo(tester, defaultField);
         await tester.enterText(defaultField, 'edited default');
         await tester.pump();
@@ -206,7 +395,83 @@ void main() {
 
   group('OcrModelConfigPage custom parameter validation', () {
     testWidgets(
-      'opens and saves a model with an unsupported stored parameter type',
+      'rejects saving a nonempty parameter with an unsupported stored type',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [
+            CustomParam(
+              paramName: 'legacy',
+              type: 'legacy_blob',
+              defaultValue: 'preserve me',
+              options: [''],
+            ),
+          ],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _enterField(tester, 0, 'Edited OCR模型');
+        final typeDropdown = find.byType(DropdownButton<String>);
+        await _scrollTo(tester, typeDropdown);
+        expect(
+          tester.widget<DropdownButton<String>>(typeDropdown).value,
+          'legacy_blob',
+        );
+        expect(find.text('不支持的类型：legacy_blob'), findsOneWidget);
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNull);
+        expect(
+          find.text(
+            '参数“legacy”使用了不支持的类型“legacy_blob”，请替换为支持的类型或删除该参数后再保存。',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('replacing an unsupported type saves a supported string type',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'legacy',
+            type: 'legacy_blob',
+            defaultValue: 'preserve me',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      final typeDropdown = find.byType(DropdownButton<String>);
+      await _scrollTo(tester, typeDropdown);
+      await tester.tap(typeDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('字符串').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<DropdownButton<String>>(typeDropdown).value,
+        'string',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.type, 'string');
+      expect(saved!.customParams.single.defaultValue, 'preserve me');
+    });
+
+    testWidgets(
+      'removing an unsupported parameter allows the model to save',
       (tester) async {
         ModelConfig? saved;
         final model = ModelConfig(
@@ -222,22 +487,15 @@ void main() {
         );
 
         await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-
-        await _enterField(tester, 0, 'Edited OCR模型');
-        final typeDropdown = find.byType(DropdownButton<String>);
-        await _scrollTo(tester, typeDropdown);
-        expect(
-          tester.widget<DropdownButton<String>>(typeDropdown).value,
-          'string',
-        );
-
+        final deleteButton = find.byIcon(Icons.delete);
+        await _scrollTo(tester, deleteButton);
+        await tester.tap(deleteButton);
+        await tester.pumpAndSettle();
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
 
         expect(saved, isNotNull);
-        expect(saved!.name, 'Edited OCR模型');
-        expect(saved!.customParams.single.type, 'legacy_blob');
-        expect(saved!.customParams.single.defaultValue, 'preserve me');
+        expect(saved!.customParams, isEmpty);
       },
     );
 
@@ -263,10 +521,7 @@ void main() {
       await tester.tap(find.text('JSON').last);
       await tester.pumpAndSettle();
 
-      final valueField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == '默认参数值',
-      );
+      final valueField = _customParamDefaultValueField();
       expect(
         tester.widget<TextField>(valueField).controller!.text,
         '{"fallback":true}',
@@ -291,10 +546,7 @@ void main() {
         );
 
         await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-        final valueField = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField && widget.decoration?.labelText == '默认参数值',
-        );
+        final valueField = _customParamDefaultValueField();
         await _scrollTo(tester, valueField);
         expect(tester.widget<TextField>(valueField).controller!.text, '1.0');
 
@@ -319,10 +571,7 @@ void main() {
         expect(saved!.customParams.single.options, ['1.5', '2.0']);
 
         await _pumpConfigPage(tester, model: saved);
-        final reopenedValueField = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField && widget.decoration?.labelText == '默认参数值',
-        );
+        final reopenedValueField = _customParamDefaultValueField();
         await _scrollTo(tester, reopenedValueField);
         expect(
           tester.widget<TextField>(reopenedValueField).controller!.text,
@@ -371,6 +620,81 @@ void main() {
       expect(saved!.customParams.single.paramName, 'scale');
     });
 
+    testWidgets('rejects an empty effective option despite a nonempty fallback',
+        (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: '0.5',
+            options: [''],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget);
+    });
+
+    testWidgets('saves a whitespace-only effective string option', (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'label',
+            type: 'string',
+            defaultValue: 'fallback',
+            options: ['   '],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['   ']);
+    });
+
+    testWidgets('rejects a whitespace-only optionless string fallback', (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'label',
+            type: 'string',
+            defaultValue: '   ',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget);
+    });
+
     testWidgets('rejects stream=true when saving', (tester) async {
       ModelConfig? saved;
       final model = ModelConfig(
@@ -417,6 +741,30 @@ void main() {
       expect(saved, isNotNull);
       expect(saved!.customParams.single.defaultValue, 'false');
     });
+
+    testWidgets(
+      'implicit-true boolean param does not block saving unrelated edits',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [CustomParam(paramName: 'enabled', type: 'boolean')],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await _enterField(tester, 0, 'Edited OCR模型');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNotNull);
+        expect(saved!.name, 'Edited OCR模型');
+        expect(saved!.customParams.single.paramName, 'enabled');
+        expect(saved!.customParams.single.type, 'boolean');
+        expect(saved!.customParams.single.defaultValue, '');
+        expect(saved!.customParams.single.options, isEmpty);
+      },
+    );
 
     testWidgets('rejects an invalid numeric default when saving', (
       tester,
@@ -660,6 +1008,86 @@ void main() {
 
       expect(saved, isNull);
       expect(find.text('最大输出 Token 数必须为正整数。'), findsOneWidget);
+    });
+  });
+
+  group('OcrModelConfigPage request size budget display', () {
+    for (final testCase in [
+      (bytes: 1153434, text: '1.1000003814697265625'),
+      (bytes: 1572864, text: '1.5'),
+    ]) {
+      testWidgets(
+        'reopening and editing ${testCase.text} MiB preserves the byte budget',
+        (tester) async {
+          ModelConfig? saved;
+          final model = ModelConfig(
+            name: 'OCR模型',
+            modelId: 'qwen-vl-ocr',
+            typeConfig: {'requestSizeBudgetBytes': testCase.bytes},
+          );
+
+          await _pumpConfigPage(
+            tester,
+            model: model,
+            onSaved: (m) => saved = m,
+          );
+          final budgetField = find.byKey(
+            const Key('ocr_model_request_size_budget_mib'),
+          );
+          final nameField = find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField && widget.controller?.text == model.name,
+          );
+          await tester.enterText(nameField, 'Edited OCR model');
+          await tester.pump();
+          await _scrollTo(tester, budgetField);
+          expect(
+            tester.widget<TextField>(budgetField).controller!.text,
+            testCase.text,
+          );
+          await tester.tap(find.text('保存'));
+          await tester.pumpAndSettle();
+
+          expect(saved, isNotNull);
+          expect(
+            saved!.typeConfig['requestSizeBudgetBytes'],
+            testCase.bytes,
+          );
+        },
+      );
+    }
+
+    testWidgets(
+        'negative stored bytes remain invalid instead of becoming a positive override',
+        (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'requestSizeBudgetBytes': -1},
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      final budgetField = find.byKey(
+        const Key('ocr_model_request_size_budget_mib'),
+      );
+      final nameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.controller?.text == model.name,
+      );
+      await tester.enterText(nameField, 'Edited OCR model');
+      await tester.pump();
+      await _scrollTo(tester, budgetField);
+      expect(
+        tester.widget<TextField>(budgetField).controller!.text,
+        '-0.00000095367431640625',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
     });
   });
 }

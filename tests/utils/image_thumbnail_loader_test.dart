@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -55,9 +56,12 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode(); // 同时启用 WebFileStore 内存模式
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     ImageManifest.invalidateCache();
     ImageThumbnailLoader.clear();
     ImageThumbnailLoader.generationCount = 0;
+    ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
+    ImageThumbnailLoader.afterExistingThumbnailReadForTesting = null;
   });
 
   group('ImageThumbnailLoader', () {
@@ -92,6 +96,7 @@ void main() {
           .runAsync(() => _createEnginePng(width: 512, height: 512));
       await tester.runAsync(() async {
         await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
       });
 
       final result = await tester.runAsync(
@@ -122,6 +127,7 @@ void main() {
       final png = await tester.runAsync(_createEnginePng);
       await tester.runAsync(() async {
         await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
         // 旧版（变形 256×256）缩略图仍躺在磁盘上 —— 新命名下必须被忽略
         await ImageManifest.writeFile(
             '${record.hash}_thumb.png', Uint8List.fromList([1, 2, 3]));
@@ -156,6 +162,7 @@ void main() {
       final png = await tester.runAsync(_createEnginePng);
       await tester.runAsync(() async {
         await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
       });
 
       final results = await tester.runAsync(() async {
@@ -203,6 +210,206 @@ void main() {
 
       expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
           reason: 'after invalidate the stale memory entry must not be used');
+    });
+
+    testWidgets(
+        'an existing-thumbnail read cannot repopulate the cache after '
+        'invalidation and deletion', (tester) async {
+      final record = _makeRecord(hash: 'delete_during_thumbnail_read');
+      final thumb = Uint8List.fromList([4, 3, 2, 1]);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
+        await ImageManifest.addRecord(record);
+      });
+
+      final result = await tester.runAsync(() async {
+        final readReady = Completer<void>();
+        final resumeRead = Completer<void>();
+        Future<void>? deletion;
+        Future<Uint8List?>? loading;
+        ImageThumbnailLoader.afterExistingThumbnailReadForTesting = () async {
+          readReady.complete();
+          await resumeRead.future;
+        };
+        try {
+          loading = ImageThumbnailLoader.loadThumbnail(record);
+          await readReady.future.timeout(const Duration(seconds: 5));
+
+          ImageThumbnailLoader.invalidate(record.hash);
+          deletion = ImageManifest.deleteRecord(record.id);
+          await deletion.timeout(const Duration(seconds: 5));
+          resumeRead.complete();
+          return await loading.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!resumeRead.isCompleted) resumeRead.complete();
+          ImageThumbnailLoader.afterExistingThumbnailReadForTesting = null;
+          try {
+            await Future.wait([
+              if (deletion != null) deletion,
+              if (loading != null) loading,
+            ]).timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
+      });
+
+      expect(result, isNull,
+          reason:
+              'invalidation must discard a thumbnail read already in flight');
+      expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
+          reason: 'stale bytes must not be restored to the memory cache');
+    });
+
+    testWidgets(
+        'thumbnail publication waits for deletion and cannot recreate an '
+        'orphan after invalidation', (tester) async {
+      final record = _makeRecord(hash: 'delete_during_thumbnail_write');
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 512, height: 512));
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
+      });
+
+      final completedBeforeDelete = await tester.runAsync(() async {
+        final hashHeld = Completer<void>();
+        final releaseHash = Completer<void>();
+        final persistReady = Completer<void>();
+        final resumePersist = Completer<void>();
+        Future<void>? heldLock;
+        Future<void>? deletion;
+        Future<Uint8List?>? loading;
+        try {
+          heldLock = ImageManifest.withSaveLock(record.hash, () async {
+            hashHeld.complete();
+            await releaseHash.future;
+          });
+          await hashHeld.future.timeout(const Duration(seconds: 5));
+          ImageThumbnailLoader.beforeThumbnailPersistForTesting = (hash) async {
+            persistReady.complete();
+            await resumePersist.future;
+          };
+          var loadCompletedWhileHashHeld = false;
+          loading = ImageThumbnailLoader.loadThumbnail(record).then((result) {
+            loadCompletedWhileHashHeld = true;
+            return result;
+          });
+          // Pause after generation has completed, while publication is staging.
+          await persistReady.future.timeout(const Duration(seconds: 5));
+
+          ImageThumbnailLoader.invalidate(record.hash);
+          deletion = ImageManifest.deleteRecord(record.id);
+          resumePersist.complete();
+          await Future<void>.delayed(Duration.zero);
+          final completedBeforeDelete = loadCompletedWhileHashHeld;
+          releaseHash.complete();
+          await Future.wait([heldLock, deletion, loading])
+              .timeout(const Duration(seconds: 5));
+          return completedBeforeDelete;
+        } finally {
+          if (!resumePersist.isCompleted) resumePersist.complete();
+          if (!releaseHash.isCompleted) releaseHash.complete();
+          ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
+          try {
+            await Future.wait([
+              if (heldLock != null) heldLock,
+              if (deletion != null) deletion,
+              if (loading != null) loading,
+            ]).timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
+      });
+
+      expect(
+        completedBeforeDelete,
+        isFalse,
+        reason: 'thumbnail publication must wait for the deletion lock',
+      );
+      await tester.runAsync(() async {
+        expect(await ImageManifest.loadRecords(), isEmpty);
+        expect(await ImageManifest.readFile(record.storagePath), isNull);
+        expect(
+          await ImageManifest.readFile(imageThumbFileName(record.hash)),
+          isNull,
+          reason: 'deletion must leave no late-published thumbnail file',
+        );
+      });
+      expect(
+        await ImageThumbnailLoader.loadThumbnail(record),
+        isNull,
+        reason: 'the deleted record must not leave a stale cached thumbnail',
+      );
+    });
+
+    testWidgets(
+        'a fresh thumbnail request cannot publish after its image is deleted',
+        (tester) async {
+      final record = _makeRecord(hash: 'fresh_load_after_invalidation');
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 512, height: 512));
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+        await ImageManifest.addRecord(record);
+      });
+
+      final result = await tester.runAsync(() async {
+        final persistReady = Completer<void>();
+        final resumePersist = Completer<void>();
+        final deletionEnteredSave = Completer<void>();
+        final resumeDeletion = Completer<void>();
+        Future<void>? deletion;
+        Future<Uint8List?>? loading;
+        ImageThumbnailLoader.beforeThumbnailPersistForTesting = (hash) async {
+          persistReady.complete();
+          await resumePersist.future;
+        };
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          if (!deletionEnteredSave.isCompleted) {
+            deletionEnteredSave.complete();
+            await resumeDeletion.future;
+          }
+        };
+        try {
+          // Start a new load after invalidation and pause it before publication.
+          ImageThumbnailLoader.invalidate(record.hash);
+          loading = ImageThumbnailLoader.loadThumbnail(record);
+          await persistReady.future.timeout(const Duration(seconds: 5));
+
+          deletion = ImageManifest.deleteRecord(record.id);
+          // This hook runs inside deletion's hash lock, making its priority
+          // over the staged thumbnail publication deterministic.
+          await deletionEnteredSave.future.timeout(
+            const Duration(seconds: 5),
+          );
+          resumePersist.complete();
+          await Future<void>.delayed(Duration.zero);
+          resumeDeletion.complete();
+          await deletion.timeout(const Duration(seconds: 5));
+          return await loading.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!resumePersist.isCompleted) resumePersist.complete();
+          if (!resumeDeletion.isCompleted) resumeDeletion.complete();
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          ImageThumbnailLoader.beforeThumbnailPersistForTesting = null;
+          try {
+            await Future.wait([
+              if (deletion != null) deletion,
+              if (loading != null) loading,
+            ]).timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
+      });
+
+      expect(result, isNull,
+          reason: 'a deleted record must not publish from a fresh load');
+      await tester.runAsync(() async {
+        expect(await ImageManifest.loadRecords(), isEmpty);
+        expect(await ImageManifest.readFile(record.storagePath), isNull);
+        expect(
+          await ImageManifest.readFile(imageThumbFileName(record.hash)),
+          isNull,
+          reason: 'no thumbnail may be written after record deletion',
+        );
+      });
     });
 
     testWidgets(

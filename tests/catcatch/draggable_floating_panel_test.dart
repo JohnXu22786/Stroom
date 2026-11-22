@@ -2,12 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
 
+Widget _disableTestAnimations(BuildContext context, Widget? child) =>
+    MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    );
+
 void main() {
   group('DraggableFloatingPanel', () {
     testWidgets('renders with empty state when no URLs provided',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const [],
@@ -31,6 +38,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: urls,
@@ -53,6 +61,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: urls,
@@ -66,11 +75,12 @@ void main() {
 
       // First, find and tap the first item to select it
       await tester.tap(find.textContaining('video.mp4'));
-      await tester.pumpAndSettle();
+      // The selected URL may marquee continuously, so settle one frame only.
+      await tester.pump();
 
       // Then tap the confirm button
       await tester.tap(find.text('确认捕获'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(capturedUrl, equals('https://cdn.example.com/video.mp4'));
     });
@@ -80,6 +90,7 @@ void main() {
       var captureCalled = false;
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const ['https://cdn.example.com/video.mp4'],
@@ -109,6 +120,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: urls,
@@ -122,10 +134,10 @@ void main() {
 
       // Select the second URL
       await tester.tap(find.textContaining('video2.mp4'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       await tester.tap(find.text('确认捕获'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(capturedUrl, equals('https://cdn.example.com/video2.mp4'));
     });
@@ -136,6 +148,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const [],
@@ -155,6 +168,7 @@ void main() {
     testWidgets('shows media type icon for each URL', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const ['https://cdn.example.com/video.mp4'],
@@ -171,6 +185,7 @@ void main() {
     testWidgets('shows audio icon for audio URLs', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const ['https://cdn.example.com/audio.mp3'],
@@ -198,6 +213,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const [],
@@ -225,6 +241,7 @@ void main() {
       // Rebuild with visible: false — panel should hide
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const [],
@@ -250,6 +267,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: StatefulBuilder(
               builder: (context, setLocalState) => Stack(
@@ -313,6 +331,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: _disableTestAnimations,
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: manyUrls,
@@ -359,6 +378,7 @@ void main() {
       Future<void> pump() {
         return tester.pumpWidget(
           MaterialApp(
+            builder: _disableTestAnimations,
             home: Scaffold(
               body: DraggableFloatingPanel(
                 detectedUrls: urls,
@@ -402,6 +422,7 @@ void main() {
       Future<void> pump({required int epoch, required List<String> urls}) {
         return tester.pumpWidget(
           MaterialApp(
+            builder: _disableTestAnimations,
             home: Scaffold(
               body: DraggableFloatingPanel(
                 detectionEpoch: epoch,
@@ -445,9 +466,9 @@ void main() {
 
       // Selecting the first new URL captures it correctly.
       await tester.tap(find.textContaining('audio1.mp3'));
-      await tester.pumpAndSettle();
+      await tester.pump();
       await tester.tap(find.text('确认捕获'));
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(capturedUrl, 'https://cdn.example.com/audio1.mp3');
     });
 
@@ -458,6 +479,7 @@ void main() {
       Future<void> pumpWith(bool visible) {
         return tester.pumpWidget(
           MaterialApp(
+            builder: _disableTestAnimations,
             home: Scaffold(
               body: DraggableFloatingPanel(
                 visible: visible,

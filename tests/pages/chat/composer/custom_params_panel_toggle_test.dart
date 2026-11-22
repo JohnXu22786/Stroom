@@ -225,7 +225,17 @@ void main() {
         (tester) async {
       await pumpComposer(
         tester,
-        createComposerTestApp(reasoningParams: [effortParam()]),
+        createComposerTestApp(
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+            effortParam(),
+          ],
+        ),
       );
 
       await tester.tap(find.text('推理'));
@@ -251,7 +261,17 @@ void main() {
         (tester) async {
       await pumpComposer(
         tester,
-        createComposerTestApp(reasoningParams: [effortParam()]),
+        createComposerTestApp(
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+            effortParam(),
+          ],
+        ),
       );
 
       await tester.tap(find.text('推理'));
@@ -312,7 +332,15 @@ void main() {
               selectedModelIndex: 0,
               onModelSelected: (idx) {},
               onEnabledToolsChanged: (tools) {},
-              reasoningParams: [effortParam()],
+              reasoningParams: [
+                ReasoningParam(
+                  paramName: 'thinking.type',
+                  isReasoningToggle: true,
+                  onValue: 'enabled',
+                  offValue: 'disabled',
+                ),
+                effortParam(),
+              ],
             ),
           ),
         ),

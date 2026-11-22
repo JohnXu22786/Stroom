@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/unified_task_list/task_utils.dart';
@@ -26,7 +28,11 @@ class TaskFlowListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.taskFlowPageTitle),
+        title: ConstrainedText(
+          strings.taskFlowPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           IconButton(
@@ -69,8 +75,10 @@ class TaskFlowListPage extends ConsumerWidget {
           FilledButton.icon(
             onPressed: () => _showTemplates(context),
             icon: const Icon(Icons.auto_awesome_outlined),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.taskFlowStartFromTemplate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -164,7 +172,7 @@ class TaskFlowListPage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        ConstrainedText(
                           flow.name,
                           style: TextStyle(
                             fontSize: 15,
@@ -175,7 +183,7 @@ class TaskFlowListPage extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (flow.description.isNotEmpty)
-                          Text(
+                          ConstrainedText(
                             flow.description,
                             style: TextStyle(
                               fontSize: 12,
@@ -214,30 +222,101 @@ class TaskFlowListPage extends ConsumerWidget {
                           color: cs.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          AppLocalizations.of(context)!
-                              .taskFlowBlockCount(flow.blocks.length),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          formatRelativeTime(
-                            flow.updatedAt,
-                            AppLocalizations.of(context)!,
-                          ),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final count = strings.taskFlowBlockCount(
+                                flow.blocks.length,
+                              );
+                              final updated = formatRelativeTime(
+                                flow.updatedAt,
+                                strings,
+                              );
+                              final defaultStyle =
+                                  DefaultTextStyle.of(context).style;
+                              final countStyle = defaultStyle.merge(
+                                TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              );
+                              final updatedStyle = defaultStyle.merge(
+                                TextStyle(
+                                  fontSize: 10,
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              );
+                              final direction = Directionality.of(context);
+                              final scaler = MediaQuery.textScalerOf(context);
+                              final locale = Localizations.maybeLocaleOf(
+                                context,
+                              );
+                              double measure(String text, TextStyle style) =>
+                                  (TextPainter(
+                                    text: TextSpan(text: text, style: style),
+                                    textDirection: direction,
+                                    textScaler: scaler,
+                                    locale: locale,
+                                  )..layout())
+                                      .width;
+
+                              final countWidth = measure(count, countStyle);
+                              final updatedWidth =
+                                  measure(updated, updatedStyle);
+                              final countLabel = ConstrainedText(
+                                count,
+                                style: countStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                              final updatedLabel = ConstrainedText(
+                                updated,
+                                style: updatedStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
+                              );
+
+                              if (countWidth + updatedWidth <=
+                                  constraints.maxWidth) {
+                                return Row(
+                                  children: [
+                                    countLabel,
+                                    const Spacer(),
+                                    updatedLabel,
+                                  ],
+                                );
+                              }
+
+                              final gap = constraints.maxWidth >= 8 ? 8.0 : 0.0;
+                              final labelWidth = constraints.maxWidth - gap;
+                              final updatedSlotWidth =
+                                  updatedWidth <= labelWidth / 2
+                                      ? updatedWidth
+                                      : labelWidth / 2;
+                              return Row(
+                                children: [
+                                  Expanded(child: countLabel),
+                                  SizedBox(width: gap),
+                                  SizedBox(
+                                    width: updatedSlotWidth,
+                                    child: Align(
+                                      alignment: AlignmentDirectional.centerEnd,
+                                      child: updatedLabel,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
                     if (defs.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
+                      ConstrainedText(
                         defs,
                         style: TextStyle(
                           fontSize: 11,
@@ -265,6 +344,7 @@ class TaskFlowListPage extends ConsumerWidget {
   ) {
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -326,8 +406,10 @@ class TaskFlowListPage extends ConsumerWidget {
                 showDialog(
                   context: context,
                   builder: (dCtx) => AlertDialog(
-                    title: Text(
+                    title: ConstrainedText(
                       AppLocalizations.of(context)!.taskFlowConfirmDelete,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     content: Text(
                       AppLocalizations.of(context)!
@@ -336,8 +418,10 @@ class TaskFlowListPage extends ConsumerWidget {
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dCtx),
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.systemAssistantCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       TextButton(
@@ -347,11 +431,13 @@ class TaskFlowListPage extends ConsumerWidget {
                               .read(taskFlowListProvider.notifier)
                               .removeFlow(flow.id);
                         },
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.taskFlowDelete,
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.error,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -375,9 +461,9 @@ class TaskFlowListPage extends ConsumerWidget {
   void _showTemplates(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: 640),
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -385,15 +471,17 @@ class TaskFlowListPage extends ConsumerWidget {
       builder: (sheetContext) {
         final colors = Theme.of(sheetContext).colorScheme;
         final height = MediaQuery.sizeOf(sheetContext).height;
+        final isPhone = MediaQuery.sizeOf(sheetContext).width < 600;
         final strings = AppLocalizations.of(sheetContext)!;
         final templates = localizedTaskFlowTemplates(strings);
 
         return SafeArea(
-          child: SizedBox(
-            height: height * 0.86,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: height * 0.86),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(
@@ -407,51 +495,94 @@ class TaskFlowListPage extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              strings.taskFlowChooseTemplate,
-                              style: Theme.of(sheetContext)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              strings.taskFlowTemplateIntroduction,
-                              style: Theme.of(sheetContext)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: colors.onSurfaceVariant),
-                            ),
-                          ],
+                  if (isPhone) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            strings.taskFlowChooseTemplate,
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        strings.taskFlowTemplateCount(templates.length),
-                        style: Theme.of(sheetContext)
-                            .textTheme
-                            .labelMedium
-                            ?.copyWith(color: colors.onSurfaceVariant),
-                      ),
-                      IconButton(
-                        tooltip: strings.builtInPromptClose,
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
+                        IconButton(
+                          tooltip: strings.builtInPromptClose,
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            strings.taskFlowTemplateIntroduction,
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          strings.taskFlowTemplateCount(templates.length),
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .labelMedium
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ] else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                strings.taskFlowChooseTemplate,
+                                style: Theme.of(sheetContext)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                strings.taskFlowTemplateIntroduction,
+                                style: Theme.of(sheetContext)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: colors.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          strings.taskFlowTemplateCount(templates.length),
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .labelMedium
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                        IconButton(
+                          tooltip: strings.builtInPromptClose,
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 12),
-                  Expanded(
+                  Flexible(
                     child: ListView.separated(
+                      shrinkWrap: true,
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       itemCount: templates.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (_, index) {
                         final template = templates[index];
                         return _buildTemplateCard(
@@ -524,6 +655,8 @@ class TaskFlowListPage extends ConsumerWidget {
       IOType.any => Icons.input_rounded,
     };
 
+    final isPhone = MediaQuery.sizeOf(context).width < 600;
+
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -532,66 +665,150 @@ class TaskFlowListPage extends ConsumerWidget {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colors.outlineVariant),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        onTap: onPressed,
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: colors.primaryContainer,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: colors.onPrimaryContainer),
-        ),
-        title: Text(
-          template.name,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                template.description,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: colors.onSurfaceVariant),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.tune_rounded,
-                    size: 16,
-                    color: colors.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      template.requirements,
+      child: isPhone
+          ? InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onPressed,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: colors.primaryContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(icon, color: colors.onPrimaryContainer),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            template.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      template.description,
                       style: Theme.of(context)
                           .textTheme
-                          .bodySmall
+                          .bodyMedium
                           ?.copyWith(color: colors.onSurfaceVariant),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          size: 16,
+                          color: colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            template.requirements,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.tonal(
+                        onPressed: onPressed,
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.taskFlowUseTemplate,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
-        trailing: FilledButton.tonal(
-          onPressed: onPressed,
-          child: Text(AppLocalizations.of(context)!.taskFlowUseTemplate),
-        ),
-      ),
+            )
+          : ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              onTap: onPressed,
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: colors.onPrimaryContainer),
+              ),
+              title: Text(
+                template.name,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      template.description,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: colors.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          size: 16,
+                          color: colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            template.requirements,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              trailing: FilledButton.tonal(
+                onPressed: onPressed,
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.taskFlowUseTemplate,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
     );
   }
 }

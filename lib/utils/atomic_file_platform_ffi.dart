@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+typedef _ChmodNative = Int32 Function(Pointer<Utf8>, Uint32);
+typedef _ChmodDart = int Function(Pointer<Utf8>, int);
+
 final class _FileCaseSensitiveInfo extends Struct {
   @Uint32()
   external int flags;
@@ -45,6 +48,11 @@ final DynamicLibrary? _kernel32 =
     Platform.isWindows ? DynamicLibrary.open('kernel32.dll') : null;
 final DynamicLibrary? _ntdll =
     Platform.isWindows ? DynamicLibrary.open('ntdll.dll') : null;
+
+final _ChmodDart? _chmod = Platform.isWindows
+    ? null
+    : DynamicLibrary.process()
+        .lookupFunction<_ChmodNative, _ChmodDart>('chmod');
 
 bool get isWindows => Platform.isWindows;
 
@@ -118,5 +126,22 @@ bool? isCaseSensitiveDirectory(String path) {
   } catch (_) {
     // Unknown directories must retain case to avoid merging distinct paths.
     return null;
+  }
+}
+
+Future<void> preservePermissions(File target, File replacement) async {
+  if (Platform.isWindows || !await target.exists()) return;
+
+  final mode = (await target.stat()).mode & 0xfff;
+  final nativePath = replacement.path.toNativeUtf8();
+  try {
+    if (_chmod!(nativePath, mode) != 0) {
+      throw FileSystemException(
+        'Could not preserve existing file permissions',
+        replacement.path,
+      );
+    }
+  } finally {
+    malloc.free(nativePath);
   }
 }

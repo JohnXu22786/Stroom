@@ -6,12 +6,64 @@ import 'package:flutter/foundation.dart'
 import '../l10n/app_localizations.dart';
 import '../providers/locale_provider.dart';
 import '../services/app_log_service.dart';
+import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
 import '../services/data_safety_manager.dart';
 import '../services/startup_data_validation_unavailable.dart';
 import '../services/startup_preferences.dart';
+import '../utils/app_version.dart';
 import '../providers/update_provider.dart';
+import 'startup_update_recovery.dart';
 import 'startup_check_service.dart';
+
+enum StartupBlockReason {
+  dataVersionAhead,
+  unreadableSafetyState,
+  migrationFailedNoChanges,
+  migrationFailedRestored,
+  dataCorrupted,
+  preferencesUnavailable,
+  validationUnavailable,
+  startupCheckFailed,
+}
+
+/// Typed startup block information consumed by the recovery screen.
+@immutable
+class StartupBlock {
+  final StartupBlockReason reason;
+  final String message;
+  final String? migrationDescription;
+  final String? recoverySourceVersion;
+
+  const StartupBlock({
+    required this.reason,
+    required this.message,
+    this.migrationDescription,
+    this.recoverySourceVersion,
+  });
+
+  bool get canOfferVersionRecovery => recoverySourceVersion != null;
+
+  static String? eligibleRecoverySourceVersion({
+    required DataSafetyStatus status,
+    required StartupUpdateAttempt? attempt,
+    required String runningVersion,
+  }) {
+    if (!status.isFrozen ||
+        status.isUnreadable ||
+        status.failedMigration == null ||
+        status.targetFormatVersion == null ||
+        status.preMigrationDataSafe != true ||
+        attempt == null ||
+        !attempt.matchesFrozenTarget(
+          frozenByVersion: status.frozenByVersion,
+          runningVersion: runningVersion,
+        )) {
+      return null;
+    }
+    return attempt.sourceVersion;
+  }
+}
 
 /// UI-facing progress emitted by the independent startup check controller.
 @immutable
@@ -20,12 +72,14 @@ class StartupCheckProgress {
   final String? detail;
   final bool isWorking;
   final String? blockedMessage;
+  final StartupBlock? block;
 
   const StartupCheckProgress({
     required this.message,
     this.detail,
     this.isWorking = true,
     this.blockedMessage,
+    this.block,
   });
 }
 
@@ -37,12 +91,14 @@ class StartupCheckOutcome {
   final String? warning;
   final String? failure;
   final String? blockedMessage;
+  final StartupBlock? block;
 
   const StartupCheckOutcome({
     this.didMigrate = false,
     this.warning,
     this.failure,
     this.blockedMessage,
+    this.block,
   });
 }
 
@@ -72,6 +128,7 @@ class StartupSequenceController {
     String detail, {
     bool isWorking = true,
     String? blockedMessage,
+    StartupBlock? block,
   }) {
     if (!_events.isClosed) {
       _events.add(
@@ -80,6 +137,7 @@ class StartupSequenceController {
           detail: detail,
           isWorking: isWorking,
           blockedMessage: blockedMessage,
+          block: block,
         ),
       );
     }
@@ -113,28 +171,60 @@ class StartupSequenceController {
       _publish(l10n.startupProgressDataSafety, '0/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
+      await BackupService.recoverInterruptedRestores();
+
       final versionAhead = await StartupCheckService.checkVersionAhead();
       if (versionAhead != null) {
         debugPrint(
           '[StartupSequenceController] Data version is ahead: $versionAhead',
         );
         final blocked = l10n.startupSafetyNewerDataVersion(versionAhead);
-        _publish('', '', isWorking: false, blockedMessage: blocked);
-        return StartupCheckOutcome(blockedMessage: blocked);
+        final block = StartupBlock(
+          reason: StartupBlockReason.dataVersionAhead,
+          message: blocked,
+        );
+        _publish(
+          '',
+          '',
+          isWorking: false,
+          blockedMessage: blocked,
+          block: block,
+        );
+        return StartupCheckOutcome(blockedMessage: blocked, block: block);
       }
 
       final repairResult = await DataSafetyManager.checkAndRepair();
       if (repairResult.skippedDueToFreeze || repairResult.frozen) {
         final status = await DataSafetyManager.loadStatus();
-        final blocked = repairResult.statusUnreadable || status.isUnreadable
+        final unreadable = repairResult.statusUnreadable || status.isUnreadable;
+        final migrationFailure = !unreadable &&
+            status.isFrozen &&
+            status.failedMigration != null &&
+            status.preMigrationDataSafe == true;
+        final blocked = unreadable
             ? l10n.startupSafetyStatusUnreadable
-            : (status.failedMigration != null)
+            : migrationFailure
                 ? l10n.startupSafetyMigrationFailedNoChanges(
                     status.failedMigration!,
                   )
                 : l10n.startupSafetyDataCorrupted;
-        _publish('', '', isWorking: false, blockedMessage: blocked);
-        return StartupCheckOutcome(blockedMessage: blocked);
+        final block = await _createBlock(
+          reason: unreadable
+              ? StartupBlockReason.unreadableSafetyState
+              : migrationFailure
+                  ? StartupBlockReason.migrationFailedNoChanges
+                  : StartupBlockReason.dataCorrupted,
+          message: blocked,
+          status: status,
+        );
+        _publish(
+          '',
+          '',
+          isWorking: false,
+          blockedMessage: blocked,
+          block: block,
+        );
+        return StartupCheckOutcome(blockedMessage: blocked, block: block);
       }
       if (repairResult.repaired) {
         debugPrint('[StartupSequenceController] Data restored from snapshot');
@@ -170,16 +260,34 @@ class StartupSequenceController {
 
       final postMigrationStatus = await DataSafetyManager.loadStatus();
       if (postMigrationStatus.isFrozen || postMigrationStatus.isUnreadable) {
+        final migrationFailure = postMigrationStatus.isFrozen &&
+            postMigrationStatus.failedMigration != null &&
+            postMigrationStatus.preMigrationDataSafe == true;
         final blocked = postMigrationStatus.isUnreadable
             ? l10n.startupSafetyStatusUnreadableAfterChecks
-            : (postMigrationStatus.failedMigration != null)
+            : migrationFailure
                 ? l10n.startupSafetyMigrationFailedRestored(
                     postMigrationStatus.failedMigration!,
                   )
                 : l10n.startupSafetyDataCorrupted;
+        final block = await _createBlock(
+          reason: postMigrationStatus.isUnreadable
+              ? StartupBlockReason.unreadableSafetyState
+              : migrationFailure
+                  ? StartupBlockReason.migrationFailedRestored
+                  : StartupBlockReason.dataCorrupted,
+          message: blocked,
+          status: postMigrationStatus,
+        );
         debugPrint('[StartupSequenceController] Migration left data frozen');
-        _publish('', '', isWorking: false, blockedMessage: blocked);
-        return StartupCheckOutcome(blockedMessage: blocked);
+        _publish(
+          '',
+          '',
+          isWorking: false,
+          blockedMessage: blocked,
+          block: block,
+        );
+        return StartupCheckOutcome(blockedMessage: blocked, block: block);
       }
       await Future<void>.delayed(
         const Duration(milliseconds: _statusVisibilityDelayMs),
@@ -293,6 +401,7 @@ class StartupSequenceController {
         '5/5',
         isWorking: false,
       );
+      await StartupUpdateAttempt.clear();
       return StartupCheckOutcome(
         didMigrate: migrationResult.needsMigration,
         warning: warning,
@@ -305,16 +414,62 @@ class StartupSequenceController {
         final blocked = error is StartupPreferencesUnavailable
             ? l10n.startupSafetyPreferencesUnavailable
             : l10n.startupSafetyValidationUnavailable;
-        _publish('', '', isWorking: false, blockedMessage: blocked);
-        return StartupCheckOutcome(blockedMessage: blocked);
+        final block = StartupBlock(
+          reason: error is StartupPreferencesUnavailable
+              ? StartupBlockReason.preferencesUnavailable
+              : StartupBlockReason.validationUnavailable,
+          message: blocked,
+        );
+        _publish(
+          '',
+          '',
+          isWorking: false,
+          blockedMessage: blocked,
+          block: block,
+        );
+        return StartupCheckOutcome(blockedMessage: blocked, block: block);
       }
       final message = l10n.startupSafetyCheckFailed(error.toString());
-      _publish(message, '', isWorking: false, blockedMessage: message);
+      final block = StartupBlock(
+        reason: StartupBlockReason.startupCheckFailed,
+        message: message,
+      );
+      _publish(
+        message,
+        '',
+        isWorking: false,
+        blockedMessage: message,
+        block: block,
+      );
       return StartupCheckOutcome(
         failure: error.toString(),
         blockedMessage: message,
+        block: block,
       );
     }
+  }
+
+  Future<StartupBlock> _createBlock({
+    required StartupBlockReason reason,
+    required String message,
+    required DataSafetyStatus status,
+  }) async {
+    String? recoverySourceVersion;
+    if (reason == StartupBlockReason.migrationFailedNoChanges ||
+        reason == StartupBlockReason.migrationFailedRestored) {
+      final attempt = await StartupUpdateAttempt.load();
+      recoverySourceVersion = StartupBlock.eligibleRecoverySourceVersion(
+        status: status,
+        attempt: attempt,
+        runningVersion: appVersion,
+      );
+    }
+    return StartupBlock(
+      reason: reason,
+      message: message,
+      migrationDescription: status.failedMigration,
+      recoverySourceVersion: recoverySourceVersion,
+    );
   }
 }
 
@@ -344,9 +499,8 @@ String startupIssueDisplayMessage(String message, AppLocalizations l10n) {
       _ => l10n.startupIssueProviderNameMissing(index),
     };
   }
-  final providerList = RegExp(
-    r'^provider_entries\[(\d+)\]\.([^:]+): 字段不是合法列表$',
-  ).firstMatch(message);
+  final providerList = RegExp(r'^provider_entries\[(\d+)\]\.([^:]+): 字段不是合法列表$')
+      .firstMatch(message);
   if (providerList != null) {
     return l10n.startupIssueProviderListInvalid(
       providerList[1]!,

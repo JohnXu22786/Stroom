@@ -4,6 +4,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_setting_panels.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Helper to open a panel in a test environment.
 Future<void> openPanel(WidgetTester tester) async {
@@ -14,6 +15,72 @@ Future<void> openPanel(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+      'localized reasoning sheet heading stays within its fixed icon row',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.8),
+          ),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () {
+                  showReasoningPanel(
+                    context: context,
+                    reasoningEnabled: false,
+                    reasoningEffortEnabled: false,
+                    reasoningParamSelections: const {},
+                    reasoningParams: const [],
+                    onReasoningToggle: (_) {},
+                    onReasoningEffortToggle: (_) {},
+                    onReasoningParamChanged: (_, _) {},
+                  );
+                },
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final heading = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText &&
+          widget.data == 'Einstellungen zum Denkprozess',
+    );
+    expect(heading, findsOneWidget);
+    final headingWidget = tester.widget<ConstrainedText>(heading);
+    final naturalText = TextPainter(
+      text: TextSpan(text: headingWidget.data, style: headingWidget.style),
+      textDirection: TextDirection.ltr,
+      textScaler: const TextScaler.linear(1.8),
+    )..layout();
+    expect(naturalText.width, greaterThan(tester.getSize(heading).width));
+    expect(tester.takeException(), isNull);
+  });
+
   group('ReasoningPanel with effort section', () {
     testWidgets(
         'reasoning panel shows effort section when effort param exists with isEffortParam=true',

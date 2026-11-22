@@ -7,6 +7,8 @@ import '../providers/provider_config.dart';
 import 'voice_batch_add_page.dart';
 import 'voice_editor_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 class VoiceEditorPage extends StatefulWidget {
   final List<VoiceEntry> initialVoices;
   const VoiceEditorPage({super.key, required this.initialVoices});
@@ -234,7 +236,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.voiceEditorTitle),
+        title: ConstrainedText(
+          l10n.voiceEditorTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -244,7 +250,11 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 _save();
               }
             },
-            child: Text(l10n.save),
+            child: ConstrainedText(
+              l10n.save,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -253,20 +263,46 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
           // 顶部操作栏
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                OutlinedButton.icon(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final addRowButton = OutlinedButton.icon(
                   onPressed: _addRow,
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(l10n.voiceAddRow),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
+                  label: ConstrainedText(
+                    l10n.voiceAddRow,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+                final batchAddButton = OutlinedButton.icon(
                   onPressed: _batchAdd,
                   icon: const Text('📋', style: TextStyle(fontSize: 16)),
-                  label: Text(l10n.voiceBatchAdd),
-                ),
-              ],
+                  label: ConstrainedText(
+                    l10n.voiceBatchAdd,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+                final stackActions = constraints.maxWidth < 480 ||
+                    MediaQuery.textScalerOf(context).scale(14) > 18;
+                if (stackActions) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      addRowButton,
+                      const SizedBox(height: 8),
+                      batchAddButton,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    addRowButton,
+                    const SizedBox(width: 8),
+                    batchAddButton,
+                  ],
+                );
+              },
             ),
           ),
           // 列表

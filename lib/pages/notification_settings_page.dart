@@ -10,6 +10,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/notification_provider.dart';
 import '../services/notification_service.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// A page that detects current system environment, checks notification
 /// permission status, and provides a switch to enable/disable task completion
 /// notifications. The switch is only enabled when the system permission is
@@ -145,12 +147,31 @@ class _NotificationSettingsPageState
       usageReason: _strings.notificationSettingsUsageReason,
     );
     await _checkPermission();
-    if (granted && mounted) {
-      ref.read(notificationSettingsProvider.notifier).setEnabled(true);
-      setState(() {
-        _notificationsEnabled = true;
-      });
+    if (!mounted) return;
+
+    try {
+      await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
+    } catch (_) {
+      _showNotificationSaveError();
+      return;
     }
+    setState(() {
+      _notificationsEnabled = granted;
+    });
+  }
+
+  void _showNotificationSaveError() {
+    if (!mounted) return;
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isChinese
+              ? '通知设置保存失败，请重试。'
+              : 'Could not save notification settings. Please try again.',
+        ),
+      ),
+    );
   }
 
   Future<void> _openSystemSettings() async {
@@ -248,7 +269,11 @@ class _NotificationSettingsPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_strings.notificationSettingsPageTitle),
+        title: ConstrainedText(
+          _strings.notificationSettingsPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -412,13 +437,17 @@ class _NotificationSettingsPageState
                     activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
-                            await ref
-                                .read(notificationSettingsProvider.notifier)
-                                .setEnabled(value);
-                            if (mounted) {
-                              setState(() {
-                                _notificationsEnabled = value;
-                              });
+                            try {
+                              await ref
+                                  .read(notificationSettingsProvider.notifier)
+                                  .setEnabled(value);
+                              if (mounted) {
+                                setState(() {
+                                  _notificationsEnabled = value;
+                                });
+                              }
+                            } catch (_) {
+                              _showNotificationSaveError();
                             }
                           }
                         : null,
@@ -435,7 +464,11 @@ class _NotificationSettingsPageState
                   child: OutlinedButton.icon(
                     onPressed: _isCheckingPermission ? null : _checkPermission,
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: Text(_strings.notificationSettingsCheckAgain),
+                    label: ConstrainedText(
+                      _strings.notificationSettingsCheckAgain,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
                 // Go to system settings button (only when permanently denied)
@@ -446,8 +479,10 @@ class _NotificationSettingsPageState
                     child: FilledButton.tonalIcon(
                       onPressed: _openSystemSettings,
                       icon: const Icon(Icons.settings, size: 18),
-                      label: Text(
+                      label: ConstrainedText(
                         _strings.notificationSettingsOpenSystemSettings,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -460,8 +495,10 @@ class _NotificationSettingsPageState
                       onPressed:
                           _isCheckingPermission ? null : _requestPermission,
                       icon: const Icon(Icons.notifications, size: 18),
-                      label: Text(
+                      label: ConstrainedText(
                         _strings.notificationSettingsRequestPermission,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),

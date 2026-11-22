@@ -1,10 +1,15 @@
 import 'dart:async';
 import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:idb_shim/idb_shim.dart'
-    show Database, idbModeReadOnly, idbModeReadWrite;
+    show Database, Transaction, idbModeReadOnly, idbModeReadWrite;
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
+
+import 'web_file_store_blob_stub.dart'
+    if (dart.library.js_interop) 'web_file_store_blob_web.dart'
+    as blob_store;
 
 class WebFileStoreReadLimitExceededException implements Exception {
   const WebFileStoreReadLimitExceededException(this.maxBytes);
@@ -18,6 +23,10 @@ class WebFileStoreReadLimitExceededException implements Exception {
 /// 也支持纯内存模式（测试用）：调用 [enableTestMode] 即可切换到
 /// [Map]-based 存储，无需依赖 IndexedDB/浏览器环境。
 class WebFileStore {
+  static const String _attachmentPrefix = 'attachments/';
+  static const String _editedAttachmentPrefix = 'temp_edited/';
+  static const String _formatMarkerKey = '__web_file_store_format__';
+  static const int _currentFormatVersion = 1;
   static Database? _db;
   static int _openCount = 0;
   static final List<Completer<void>> _pendingOpens = [];
@@ -26,6 +35,7 @@ class WebFileStore {
 
   static bool _testMode = false;
   static final Map<String, Uint8List> _inMemoryStore = {};
+  static Future<Uint8List?> Function(Object?)? readBlobOverrideForTesting;
 
   /// Enable in-memory test mode — all operations use a [Map] instead of
   /// IndexedDB.  Call before any read/write/delete/exists in tests.
@@ -47,8 +57,7 @@ class WebFileStore {
   static Future<Object?> waitForRequestAndTransactionCompletionForTesting(
     Future<Object?> request,
     Future<void> completed,
-  ) =>
-      _waitForRequestAndTransactionCompletion(request, completed);
+  ) => _waitForRequestAndTransactionCompletion(request, completed);
 
   static Future<Object?> _waitForRequestAndTransactionCompletion(
     Future<Object?> request,
@@ -121,7 +130,7 @@ class WebFileStore {
     final db = await _database;
     if (beforeCommit == null) {
       final txn = db.transaction('files', idbModeReadWrite);
-      await txn.objectStore('files').put(data, key);
+      await txn.objectStore('files').put(_storedValue(key, data), key);
       await txn.completed;
       return;
     }
@@ -130,8 +139,8 @@ class WebFileStore {
     // Observe abort errors before issuing the write.
     final completed = txn.completed;
     try {
-      await txn.objectStore('files').put(data, key);
-      beforeCommit?.call();
+      await txn.objectStore('files').put(_storedValue(key, data), key);
+      beforeCommit();
       await completed;
     } catch (_) {
       try {
@@ -190,6 +199,13 @@ class WebFileStore {
       rethrow;
     }
   }
+
+  static bool _isAttachmentKey(String key) =>
+      key.startsWith(_attachmentPrefix) ||
+      key.startsWith(_editedAttachmentPrefix);
+
+  static Object _storedValue(String key, Uint8List data) =>
+      _isAttachmentKey(key) && !_testMode ? blob_store.createBlob(data) : data;
 
   /// 将 IndexedDB 读回的任意类型尽量转为 Uint8List
   static Uint8List? _toUint8List(dynamic value, String key) {
@@ -258,6 +274,7 @@ class WebFileStore {
   static void _checkReadLimit(dynamic value, int? maxBytes) {
     if (maxBytes == null) return;
     final byteLength = switch (value) {
+      _ when blob_store.isBlob(value) => blob_store.blobByteLength(value),
       ByteBuffer buffer => buffer.lengthInBytes,
       TypedData data => data.lengthInBytes,
       List<int> bytes => bytes.length,
@@ -268,6 +285,21 @@ class WebFileStore {
     }
   }
 
+  static Future<Uint8List?> _readBlob(Object? value) =>
+      readBlobOverrideForTesting?.call(value) ?? blob_store.readBlob(value);
+
+  static Future<Uint8List?> _readBlobCancellable(
+    Object? value,
+    CancelToken cancelToken,
+  ) {
+    final override = readBlobOverrideForTesting;
+    if (override != null) return override(value);
+    return blob_store.readBlobCancellable(
+      value,
+      cancelToken.whenCancel.then<void>((_) {}),
+    );
+  }
+
   /// 读取文件
   static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
@@ -276,6 +308,16 @@ class WebFileStore {
       return val != null ? Uint8List.fromList(val) : null;
     }
     final db = await _database;
+    if (_isAttachmentKey(key)) {
+      final txn = db.transaction('files', idbModeReadWrite);
+      final result = await blob_store.migrateStoredValueToBlob(
+        txn.objectStore('files'),
+        key,
+      );
+      await txn.completed;
+      _checkReadLimit(result.value, maxBytes);
+      return await _readBlob(result.value);
+    }
     final txn = db.transaction('files', idbModeReadOnly);
     final result = await txn.objectStore('files').getObject(key);
     await txn.completed;
@@ -286,6 +328,13 @@ class WebFileStore {
     }
 
     _checkReadLimit(result, maxBytes);
+    if (_isAttachmentKey(key) && !blob_store.isBlob(result)) {
+      throw StateError(
+        'Attachment storage format migration has not completed for $key',
+      );
+    }
+    final blobBytes = await blob_store.readBlob(result);
+    if (blobBytes != null) return blobBytes;
     final converted = _toUint8List(result, key);
     _checkReadLimit(converted, maxBytes);
     if (converted == null) {
@@ -306,9 +355,16 @@ class WebFileStore {
     if (_testMode) return read(key);
     final db = await _database;
     if (cancelToken.isCancelled) throw cancelToken.cancelError!;
-    final transaction = db.transaction('files', idbModeReadOnly);
+    final transaction = db.transaction(
+      'files',
+      _isAttachmentKey(key) ? idbModeReadWrite : idbModeReadOnly,
+    );
     final completed = transaction.completed;
-    final request = transaction.objectStore('files').getObject(key);
+    final request = _isAttachmentKey(key)
+        ? blob_store
+              .migrateStoredValueToBlob(transaction.objectStore('files'), key)
+              .then<Object?>((result) => result.value)
+        : transaction.objectStore('files').getObject(key);
     unawaited(
       cancelToken.whenCancel.then<void>((_) {
         try {
@@ -324,11 +380,77 @@ class WebFileStore {
         completed,
       );
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+      if (_isAttachmentKey(key)) {
+        final bytes = await Future.any<Uint8List?>([
+          _readBlobCancellable(value, cancelToken),
+          cancelToken.whenCancel.then<Uint8List?>(
+            (_) => throw cancelToken.cancelError!,
+          ),
+        ]);
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        return bytes;
+      }
       return _toUint8List(value, key);
     } catch (_) {
       if (cancelToken.isCancelled) throw cancelToken.cancelError!;
       rethrow;
     }
+  }
+
+  /// Upgrades legacy attachment byte arrays to IndexedDB Blobs. Blob.size is
+  /// available without reading its payload, so later bounded reads can reject
+  /// oversized attachments before allocating their bytes in Dart memory.
+  /// Returns true when the format was migrated. Partial runs are safe to retry:
+  /// each converted value is committed independently and the marker is last.
+  static Future<bool> migrateAttachmentValuesToBlobs() async {
+    if (_testMode) return false;
+    final db = await _database;
+    final checkTxn = db.transaction('files', idbModeReadOnly);
+    final marker = await checkTxn
+        .objectStore('files')
+        .getObject(_formatMarkerKey);
+    await checkTxn.completed;
+    if (marker == _currentFormatVersion) return false;
+
+    final keyTxn = db.transaction('files', idbModeReadOnly);
+    final keys = <String>[];
+    await for (final cursor
+        in keyTxn.objectStore('files').openCursor(autoAdvance: true)) {
+      if (cursor.key is String && _isAttachmentKey(cursor.key as String)) {
+        keys.add(cursor.key as String);
+      }
+    }
+    await keyTxn.completed;
+
+    var convertedAny = false;
+    for (final key in keys) {
+      final txn = db.transaction('files', idbModeReadWrite);
+      final store = txn.objectStore('files');
+      try {
+        final result = await blob_store.migrateStoredValueToBlob(store, key);
+        convertedAny |= result.converted;
+        await txn.completed;
+      } catch (_) {
+        await _abortTransaction(txn);
+        rethrow;
+      }
+    }
+
+    final markerTxn = db.transaction('files', idbModeReadWrite);
+    await markerTxn
+        .objectStore('files')
+        .put(_currentFormatVersion, _formatMarkerKey);
+    await markerTxn.completed;
+    return convertedAny;
+  }
+
+  static Future<void> _abortTransaction(Transaction transaction) async {
+    try {
+      transaction.abort();
+    } catch (_) {}
+    try {
+      await transaction.completed;
+    } catch (_) {}
   }
 
   /// 删除文件

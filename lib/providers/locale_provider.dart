@@ -33,7 +33,32 @@ Locale resolveSystemLocale(Locale systemLocale) {
       return locale;
     }
   }
+  if (systemLocale.languageCode == 'es') {
+    return const Locale('es', 'ES');
+  }
+  if (systemLocale.languageCode == 'ja') {
+    return const Locale('ja', 'JP');
+  }
+  if (systemLocale.languageCode == 'pt') {
+    return const Locale('pt', 'BR');
+  }
+  if (systemLocale.languageCode == 'fr') {
+    return const Locale('fr', 'FR');
+  }
+  if (systemLocale.languageCode == 'de') {
+    return const Locale('de', 'DE');
+  }
+  if (systemLocale.languageCode == 'ar') {
+    return const Locale('ar', 'SA');
+  }
   return const Locale('en', 'US');
+}
+
+TextDirection textDirectionForLocale(Locale? locale) {
+  final effectiveLocale = locale ?? PlatformDispatcher.instance.locale;
+  return effectiveLocale.languageCode == 'ar'
+      ? TextDirection.rtl
+      : TextDirection.ltr;
 }
 
 /// Resolves localization resources with the same override/follow-system

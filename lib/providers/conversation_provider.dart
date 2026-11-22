@@ -1,25 +1,32 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
 import '../models/stroom_conversation.dart';
+import '../models/tool_call.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
 import '../services/conversation_migration_service.dart';
 import '../services/conversation_record_adapter.dart';
 import '../services/conversation_repository.dart';
 import '../services/conversation_media_storage.dart';
+import '../services/storage_service.dart';
+import '../utils/web_file_store.dart';
 import 'assistant_provider.dart';
 import 'locale_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
+part 'conversation_notifier_repository.dart';
 part 'conversation_notifier_mutations.dart';
 
 /// 临时对话的倒计时长度：最近一次消息（或开启时）起 1 小时，
@@ -91,31 +98,27 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   // Try from SharedPreferences first (safe across provider boundaries)
   final assistantsJson = prefs.getString('assistants');
   if (assistantsJson != null && assistantsJson.isNotEmpty) {
-    final list =
-        (jsonDecode(assistantsJson) as List).cast<Map<String, dynamic>>();
+    final list = (jsonDecode(assistantsJson) as List)
+        .cast<Map<String, dynamic>>();
     if (list.isNotEmpty) {
       return list.first['id'] as String;
     }
   }
 
   // No assistants exist yet - create a default one
-  final defaultAssistant = _newLocalizedDefaultAssistant(prefs);
+  final localizations = appLocalizationsForLocale(
+    localeFromCode(prefs.getString(localePreferenceKey)),
+  );
+  final defaultAssistant = Assistant(
+    name: localizations.builtInPromptGeneralName,
+    prompt: localizations.assistantDefaultPrompt,
+    emoji: '🤖',
+  );
   await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   debugPrint(
     'Created default assistant during migration (${defaultAssistant.id})',
   );
   return defaultAssistant.id;
-}
-
-Assistant _newLocalizedDefaultAssistant(SharedPreferences prefs) {
-  final strings = appLocalizationsForLocale(
-    localeFromCode(prefs.getString(localePreferenceKey)),
-  );
-  return Assistant(
-    name: strings.builtInPromptGeneralName,
-    prompt: strings.assistantDefaultPrompt,
-    emoji: '🤖',
-  );
 }
 
 // ============================================================================
@@ -193,8 +196,14 @@ class Conversation {
   /// 该对话记录模型的供应商名称（绝对身份的一部分）。
   String? lastUsedProviderName;
 
-  /// Last completed assistant message read by the user.
+  /// Most recently read assistant message, used to keep conversation previews
+  /// unread only until the user opens that conversation.
   String? lastReadMessageId;
+
+  /// Explicit unread state set from the conversation list. This is separate
+  /// from [lastReadMessageId] because legacy records without that marker are
+  /// interpreted as read during migration.
+  bool isManuallyUnread;
 
   /// 最近一次请求的实际输入 token 数（来自 API 返回的 usage，非估算）。
   /// 用于标题栏下方的上下文显示与压缩触发判断。null = 尚无计量。
@@ -214,13 +223,20 @@ class Conversation {
   /// [isTemporary] 为 true 时非空；关闭临时模式后置空。
   DateTime? temporaryExpiresAt;
 
+  /// Remaining countdown time captured while an assistant response is active.
+  /// A non-null value pauses expiry and is reconciled on process restart.
+  int? temporaryPausedRemainingMilliseconds;
+
   /// Stored expiry-duration version; older records omit this field.
   int temporaryExpiryVersion = kTemporaryConversationDurationVersion;
+
+  /// In-memory signal for the header's one-shot success/activation feedback.
+  int temporaryExpiryRevision = 0;
 
   /// Explicit neutral Stroom conversation schema version.
   int schemaVersion;
 
-  /// Fields unknown to this application version, preserved on save.
+  /// Unknown fields from newer or older records retained across saves.
   final Map<String, dynamic> legacyFields;
 
   /// Restarts the one-hour window from [startedAt] for a temporary conversation.
@@ -228,6 +244,31 @@ class Conversation {
     if (!isTemporary) return;
     temporaryExpiresAt = startedAt.add(kTemporaryConversationDuration);
     temporaryExpiryVersion = kTemporaryConversationDurationVersion;
+    temporaryPausedRemainingMilliseconds = null;
+    temporaryExpiryRevision++;
+  }
+
+  void pauseTemporaryExpiry(DateTime pausedAt) {
+    if (!isTemporary ||
+        temporaryExpiresAt == null ||
+        temporaryPausedRemainingMilliseconds != null) {
+      return;
+    }
+    temporaryPausedRemainingMilliseconds = temporaryExpiresAt!
+        .difference(pausedAt)
+        .inMilliseconds
+        .clamp(0, kTemporaryConversationDuration.inMilliseconds);
+  }
+
+  void resumeTemporaryExpiry(DateTime resumedAt, {required bool successful}) {
+    final remaining = temporaryPausedRemainingMilliseconds;
+    if (!isTemporary || remaining == null) return;
+    if (successful) {
+      resetTemporaryExpiry(resumedAt);
+    } else {
+      temporaryExpiresAt = resumedAt.add(Duration(milliseconds: remaining));
+      temporaryPausedRemainingMilliseconds = null;
+    }
   }
 
   Conversation({
@@ -250,66 +291,72 @@ class Conversation {
     this.lastUsedModelId,
     this.lastUsedProviderName,
     this.lastReadMessageId,
+    this.isManuallyUnread = false,
     this.lastInputTokens,
     this.lastOutputTokens,
     this.totalCost = 0,
     this.isTemporary = false,
     this.temporaryExpiresAt,
+    this.temporaryPausedRemainingMilliseconds,
     this.temporaryExpiryVersion = kTemporaryConversationDurationVersion,
     this.schemaVersion = currentSchemaVersion,
     this.legacyFields = const {},
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now(),
-        messages = messages ?? [],
-        enabledMcpToolNames = enabledMcpToolNames ?? {},
-        draftAttachments = draftAttachments ?? [];
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now(),
+       messages = messages ?? [],
+       enabledMcpToolNames = enabledMcpToolNames ?? {},
+       draftAttachments = draftAttachments ?? [];
 
   Map<String, dynamic> toMap() => {
-        ...legacyFields,
-        'schemaVersion': schemaVersion,
-        'id': id,
-        'title': title,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-        'messages': messages.map((m) => m.toMap()).toList(),
-        'isPinned': isPinned,
-        'sortOrder': sortOrder,
-        if (assistantId != null) 'assistantId': assistantId,
-        'draftText': draftText,
-        // 草稿附件序列化时携带 base64Data：快照在 composer 侧已过滤
-        // （仅图片的压缩产物），历史消息附件不走此路径不受影响。
-        if (draftAttachments.isNotEmpty)
-          'draftAttachments': draftAttachments
-              .map((a) => a.toMap(includeBase64Data: true))
-              .toList(),
-        if (contextSummary != null) 'contextSummary': contextSummary,
-        if (compactionTailStartId != null)
-          'compactionTailStartId': compactionTailStartId,
-        if (titleAutoGenerated) 'titleAutoGenerated': true,
-        // Persist the explicit-empty flag so a user who toggled every tool
-        // off doesn't accidentally get them all re-enabled next time.
-        if (hasExplicitEnabledMcpTools) 'hasExplicitEnabledMcpTools': true,
-        // Persist the set whenever the user has explicitly touched the toggles,
-        // even if it's empty. Otherwise omit it so new conversations fall back
-        // to the "auto-enable all" default.
-        if (hasExplicitEnabledMcpTools)
-          'enabledMcpToolNames': enabledMcpToolNames.toList(),
-        if (lastUsedModelName != null && lastUsedModelName!.isNotEmpty)
-          'lastUsedModelName': lastUsedModelName,
-        if (lastUsedModelId != null && lastUsedModelId!.isNotEmpty)
-          'lastUsedModelId': lastUsedModelId,
-        if (lastUsedProviderName != null && lastUsedProviderName!.isNotEmpty)
-          'lastUsedProviderName': lastUsedProviderName,
-        if (lastReadMessageId != null) 'lastReadMessageId': lastReadMessageId,
-        if (lastInputTokens != null) 'lastInputTokens': lastInputTokens,
-        if (lastOutputTokens != null) 'lastOutputTokens': lastOutputTokens,
-        if (totalCost > 0) 'totalCost': totalCost,
-        if (isTemporary) 'isTemporary': true,
-        if (temporaryExpiresAt != null)
-          'temporaryExpiresAt': temporaryExpiresAt!.toIso8601String(),
-        if (isTemporary) 'temporaryExpiryVersion': temporaryExpiryVersion,
-      };
+    ...legacyFields,
+    'schemaVersion': schemaVersion,
+    'id': id,
+    'title': title,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'messages': messages.map((m) => m.toMap()).toList(),
+    'isPinned': isPinned,
+    'sortOrder': sortOrder,
+    if (assistantId != null) 'assistantId': assistantId,
+    'draftText': draftText,
+    // 草稿附件序列化时携带 base64Data：快照在 composer 侧已过滤
+    // （仅图片的压缩产物），历史消息附件不走此路径不受影响。
+    if (draftAttachments.isNotEmpty)
+      'draftAttachments': draftAttachments
+          .map((a) => a.toMap(includeBase64Data: true))
+          .toList(),
+    if (contextSummary != null) 'contextSummary': contextSummary,
+    if (compactionTailStartId != null)
+      'compactionTailStartId': compactionTailStartId,
+    if (titleAutoGenerated) 'titleAutoGenerated': true,
+    // Persist the explicit-empty flag so a user who toggled every tool
+    // off doesn't accidentally get them all re-enabled next time.
+    if (hasExplicitEnabledMcpTools) 'hasExplicitEnabledMcpTools': true,
+    // Persist the set whenever the user has explicitly touched the toggles,
+    // even if it's empty. Otherwise omit it so new conversations fall back
+    // to the "auto-enable all" default.
+    if (hasExplicitEnabledMcpTools)
+      'enabledMcpToolNames': enabledMcpToolNames.toList(),
+    if (lastUsedModelName != null && lastUsedModelName!.isNotEmpty)
+      'lastUsedModelName': lastUsedModelName,
+    if (lastUsedModelId != null && lastUsedModelId!.isNotEmpty)
+      'lastUsedModelId': lastUsedModelId,
+    if (lastUsedProviderName != null && lastUsedProviderName!.isNotEmpty)
+      'lastUsedProviderName': lastUsedProviderName,
+    if (lastReadMessageId != null) 'lastReadMessageId': lastReadMessageId,
+    if (isManuallyUnread) 'isManuallyUnread': true,
+    if (lastInputTokens != null) 'lastInputTokens': lastInputTokens,
+    if (lastOutputTokens != null) 'lastOutputTokens': lastOutputTokens,
+    if (totalCost > 0) 'totalCost': totalCost,
+    if (isTemporary) 'isTemporary': true,
+    if (temporaryExpiresAt != null)
+      'temporaryExpiresAt': temporaryExpiresAt!.toIso8601String(),
+    if (isTemporary && temporaryPausedRemainingMilliseconds != null)
+      'temporaryPausedRemainingMilliseconds':
+          temporaryPausedRemainingMilliseconds,
+    if (isTemporary) 'temporaryExpiryVersion': temporaryExpiryVersion,
+  };
 
   factory Conversation.fromMap(Map<String, dynamic> map) {
     const knownKeys = {
@@ -333,11 +380,13 @@ class Conversation {
       'lastUsedModelId',
       'lastUsedProviderName',
       'lastReadMessageId',
+      'isManuallyUnread',
       'lastInputTokens',
       'lastOutputTokens',
       'totalCost',
       'isTemporary',
       'temporaryExpiresAt',
+      'temporaryPausedRemainingMilliseconds',
       'temporaryExpiryVersion',
     };
     // Defensive DateTime parsing for createdAt
@@ -399,8 +448,9 @@ class Conversation {
           try {
             final a = Attachment.fromMap(Map<String, dynamic>.from(e));
             if (a.fileName.isNotEmpty || a.storagePath.isNotEmpty) {
-              a.conversationId ??=
-                  backfillConvId is String ? backfillConvId : null;
+              a.conversationId ??= backfillConvId is String
+                  ? backfillConvId
+                  : null;
               draftAttachments.add(a);
             }
           } catch (_) {
@@ -433,10 +483,12 @@ class Conversation {
     final lastUsedModel = lastUsedRaw is String ? lastUsedRaw : null;
     final lastUsedIdRaw = map['lastUsedModelId'];
     final lastUsedProviderRaw = map['lastUsedProviderName'];
-    final lastReadMessageRaw = map['lastReadMessageId'];
-    var lastReadMessageId =
-        lastReadMessageRaw is String ? lastReadMessageRaw : null;
-    if (lastReadMessageRaw is! String) {
+    final lastReadMessageIdRaw = map['lastReadMessageId'];
+    final isManuallyUnreadRaw = map['isManuallyUnread'];
+    var lastReadMessageId = lastReadMessageIdRaw is String
+        ? lastReadMessageIdRaw
+        : null;
+    if (lastReadMessageIdRaw is! String) {
       for (final message in messages.reversed) {
         if (message.role == 'assistant' && !message.isStreaming) {
           lastReadMessageId = message.id;
@@ -475,11 +527,18 @@ class Conversation {
         temporaryExpiresAt = null;
       }
     }
-    final isTemporary = (isTemporaryRaw is bool && isTemporaryRaw) &&
+    final isTemporary =
+        (isTemporaryRaw is bool && isTemporaryRaw) &&
         temporaryExpiresAt != null;
     final temporaryExpiryVersionRaw = map['temporaryExpiryVersion'];
-    final temporaryExpiryVersion =
-        temporaryExpiryVersionRaw is int ? temporaryExpiryVersionRaw : 0;
+    final temporaryExpiryVersion = temporaryExpiryVersionRaw is int
+        ? temporaryExpiryVersionRaw
+        : 0;
+    final pausedRemainingRaw = map['temporaryPausedRemainingMilliseconds'];
+    final temporaryPausedRemainingMilliseconds =
+        pausedRemainingRaw is int && pausedRemainingRaw >= 0
+        ? pausedRemainingRaw
+        : null;
 
     return Conversation(
       id: idRaw is String ? idRaw : null,
@@ -499,15 +558,21 @@ class Conversation {
       titleAutoGenerated: titleAutoRaw is bool ? titleAutoRaw : false,
       lastUsedModelName: lastUsedModel,
       lastUsedModelId: lastUsedIdRaw is String ? lastUsedIdRaw : null,
-      lastUsedProviderName:
-          lastUsedProviderRaw is String ? lastUsedProviderRaw : null,
+      lastUsedProviderName: lastUsedProviderRaw is String
+          ? lastUsedProviderRaw
+          : null,
       lastReadMessageId: lastReadMessageId,
+      isManuallyUnread: isManuallyUnreadRaw is bool && isManuallyUnreadRaw,
       lastInputTokens: lastInputRaw is num ? lastInputRaw.toInt() : null,
       lastOutputTokens: lastOutputRaw is num ? lastOutputRaw.toInt() : null,
-      totalCost:
-          (map['totalCost'] is num) ? (map['totalCost'] as num).toDouble() : 0,
+      totalCost: (map['totalCost'] is num)
+          ? (map['totalCost'] as num).toDouble()
+          : 0,
       isTemporary: isTemporary,
       temporaryExpiresAt: temporaryExpiresAt,
+      temporaryPausedRemainingMilliseconds: isTemporary
+          ? temporaryPausedRemainingMilliseconds
+          : null,
       temporaryExpiryVersion: temporaryExpiryVersion,
       schemaVersion: map['schemaVersion'] is num
           ? (map['schemaVersion'] as num).toInt()
@@ -549,59 +614,6 @@ List<Conversation> pinnedFirstStable(List<Conversation> conversations) {
   return [...pinned, ...unpinned];
 }
 
-/// Restores optimistically removed conversations near their original
-/// neighbors after a failed write, while keeping changes made during the
-/// write attempt in the current list.
-List<Conversation> restoreConversationOrderAfterFailedWrite({
-  required List<Conversation> originalOrder,
-  required List<Conversation> current,
-  required List<Conversation> removed,
-}) {
-  final restored = List<Conversation>.from(current);
-  final originalIndex = {
-    for (var index = 0; index < originalOrder.length; index++)
-      originalOrder[index].id: index,
-  };
-  final orderedRemoved = List<Conversation>.from(removed)
-    ..sort(
-      (a, b) => (originalIndex[a.id] ?? originalOrder.length).compareTo(
-        originalIndex[b.id] ?? originalOrder.length,
-      ),
-    );
-
-  for (final conversation in orderedRemoved) {
-    if (restored.any((item) => item.id == conversation.id)) continue;
-    final index = originalIndex[conversation.id];
-    if (index == null) {
-      restored.add(conversation);
-      continue;
-    }
-    var insertAt = restored.length;
-    for (var next = index + 1; next < originalOrder.length; next++) {
-      final neighbor = restored.indexWhere(
-        (item) => item.id == originalOrder[next].id,
-      );
-      if (neighbor >= 0) {
-        insertAt = neighbor;
-        break;
-      }
-    }
-    if (insertAt == restored.length) {
-      for (var previous = index - 1; previous >= 0; previous--) {
-        final neighbor = restored.indexWhere(
-          (item) => item.id == originalOrder[previous].id,
-        );
-        if (neighbor >= 0) {
-          insertAt = neighbor + 1;
-          break;
-        }
-      }
-    }
-    restored.insert(insertAt, conversation);
-  }
-  return pinnedFirstStable(restored);
-}
-
 // ============================================================================
 // Providers
 // ============================================================================
@@ -615,15 +627,14 @@ final conversationSearchQueryProvider = StateProvider<String>((ref) => '');
 /// **周期性刷新**的 UI 监听它，避免按秒重建整个对话列表/聊天页。
 final temporaryCountdownTickProvider = StateProvider<int>((ref) => 0);
 
-/// One protocol-neutral conversation store shared by native and Web clients.
 class _ConversationRepositoryLifecycle {
   Future<void> pendingWrites = Future<void>.value();
 }
 
 final _conversationRepositoryLifecycleProvider =
     Provider<_ConversationRepositoryLifecycle>(
-  (ref) => _ConversationRepositoryLifecycle(),
-);
+      (ref) => _ConversationRepositoryLifecycle(),
+    );
 
 final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
   final repository = createConversationRepository();
@@ -637,18 +648,16 @@ final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
 /// Persistent list of all conversations.
 final conversationsProvider =
     StateNotifierProvider<ConversationsNotifier, List<Conversation>>((ref) {
-  // Register a real dependency so this notifier's final queued persistence is
-  // captured before the repository provider starts closing its database.
-  final repository = ref.watch(conversationRepositoryProvider);
-  final lifecycle = ref.watch(_conversationRepositoryLifecycleProvider);
-  final notifier = ConversationsNotifier(ref)
-    .._conversationRepository = repository
-    .._repositoryLifecycle = lifecycle;
-  notifier._initialLoad = notifier._load();
-  return notifier;
-});
+      final repository = ref.watch(conversationRepositoryProvider);
+      final lifecycle = ref.watch(_conversationRepositoryLifecycleProvider);
+      final notifier = ConversationsNotifier(ref)
+        .._conversationRepository = repository
+        .._repositoryLifecycle = lifecycle;
+      notifier._initialLoad = notifier._load();
+      return notifier;
+    });
 
-/// Completes after paged conversation data has loaded from persistence.
+/// Completes after conversations have been read from persistence.
 final conversationsInitialLoadProvider = FutureProvider<void>((ref) async {
   await ref.watch(conversationsProvider.notifier).ready;
 });
@@ -695,11 +704,67 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
   }
 
+  List<Conversation> get currentConversations => state;
+
+  bool hasEarlierRepositoryMessages(String conversationId) =>
+      _repositoryReady && (_repositoryMessageOffsets[conversationId] ?? 0) > 0;
+
+  bool hasLaterRepositoryMessages(String conversationId) {
+    if (!_repositoryReady) return false;
+    final conversation = state
+        .where((item) => item.id == conversationId)
+        .firstOrNull;
+    if (conversation == null) return false;
+    final offset = _repositoryMessageOffsets[conversationId] ?? 0;
+    final count = _repositoryMessageCounts[conversationId] ?? 0;
+    return offset + conversation.messages.length < count;
+  }
+
   Future<void> _initialLoad = Future<void>.value();
 
   /// Preserve write order when an immediate removal follows a pending create
   /// or message save. The later deletion must be the last value on disk.
   Future<void> _persistQueue = Future<void>.value();
+
+  /// Attachment paths to remove after a successful snapshot no longer refers to them.
+  final Set<String> _pendingDraftAttachmentFileDeletes = <String>{};
+
+  /// Compressed caches to remove after a successful snapshot no longer refers
+  /// to their hashes.
+  final Map<({String? conversationId, String hash}), Future<void>>
+  _pendingDraftAttachmentCacheDeletes = {};
+
+  /// A single queued periodic stream save may be updated until an explicit
+  /// persistence operation establishes an ordering barrier.
+  _CoalescedStreamPersist? _coalescedStreamPersist;
+
+  /// Identifies full snapshots in queue order so cleanup can protect paths
+  /// referenced by any later snapshot that has not completed yet.
+  int _persistRequestGeneration = 0;
+
+  /// References held by full snapshots that are queued but not completed.
+  final Map<int, Set<String>> _queuedDraftAttachmentPathsByPersistRequest = {};
+  final Map<int, Set<({String? conversationId, String hash})>>
+  _queuedDraftAttachmentCachesByPersistRequest = {};
+
+  /// Message IDs with checkpoint records that still need to be replayed or
+  /// invalidated by an explicit history edit.
+  final Set<String> _streamCheckpointKeys = <String>{};
+  bool _streamCheckpointKeyIndexIsCurrent = false;
+  bool _streamJournalPresent = false;
+  bool _streamCheckpointReplayInProgress = false;
+  final Map<String, Set<String>> _pendingMessageDeletionIds = {};
+  final Map<String, Set<String>> _pendingUnindexedMessageDeletionIds = {};
+  final Map<String, Set<String>> _pendingMessageRestorationIds = {};
+
+  /// Conversations whose deletion rollback marker could not be appended.
+  /// Persist their creation timestamps so replay can keep the matching
+  /// restored records until the journal is successfully cleared.
+  final Map<String, String> _pendingRestoredConversations = <String, String>{};
+  final Map<String, Map<String, dynamic>>
+  _pendingRestoredConversationSnapshots = <String, Map<String, dynamic>>{};
+  final Map<String, DateTime> _conversationDeletionTimestamps =
+      <String, DateTime>{};
 
   /// Resolves when saved conversations have been merged into memory. Producers
   /// using a deterministic ID must wait before replacing a prior attempt.
@@ -723,7 +788,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     final lifecycle = _repositoryLifecycle;
     if (lifecycle != null) {
       lifecycle.pendingWrites = _initialLoad
-          .then<void>((_) {}, onError: (Object error, StackTrace stackTrace) {})
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {})
           .then((_) => _persistQueue);
     }
     super.dispose();
@@ -753,57 +818,68 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   Future<void> _checkTemporaryExpiry() async {
     final now = DateTime.now();
-    final expired = state
+    final candidates = state
         .where(
           (c) =>
               c.isTemporary &&
+              c.temporaryPausedRemainingMilliseconds == null &&
               c.temporaryExpiresAt != null &&
               !c.temporaryExpiresAt!.isAfter(now),
         )
         .toList();
-    if (expired.isEmpty) {
+    if (candidates.isEmpty) {
       _syncTemporaryTimer();
       return;
     }
-    final removable = <Conversation>[];
-    for (final conversation in expired) {
+    final expired = <Conversation>[];
+    for (final candidate in candidates) {
       List<ChatMessage>? repositoryMessages;
       if (_repositoryReady) {
         try {
-          // Keep the conversation and its repository rows if cleanup cannot
-          // discover every attachment in its paged history.
-          repositoryMessages = await _readAllRepositoryMessages(
-            conversation.id,
-          );
+          repositoryMessages = await _readAllRepositoryMessages(candidate.id);
         } catch (error) {
           debugPrint('Failed to read expired conversation attachments: $error');
           continue;
         }
       }
-      final currentConversation =
-          state.where((item) => item.id == conversation.id).firstOrNull;
-      final currentExpiry = currentConversation?.temporaryExpiresAt;
-      if (currentConversation == null ||
-          !currentConversation.isTemporary ||
-          currentExpiry == null ||
-          currentExpiry.isAfter(DateTime.now())) {
+      final current = state
+          .where((conversation) => conversation.id == candidate.id)
+          .firstOrNull;
+      final expiry = current?.temporaryExpiresAt;
+      if (current == null ||
+          !current.isTemporary ||
+          current.temporaryPausedRemainingMilliseconds != null ||
+          expiry == null ||
+          expiry.isAfter(DateTime.now())) {
         continue;
       }
-      if (repositoryMessages != null) {
-        currentConversation.messages = repositoryMessages;
-      }
-      removable.add(currentConversation);
+      if (repositoryMessages != null) current.messages = repositoryMessages;
+      expired.add(current);
     }
-    if (removable.isEmpty) {
+    if (expired.isEmpty) {
       _syncTemporaryTimer();
       return;
     }
-    final expiredIds = removable.map((c) => c.id).toSet();
+    final original = List<Conversation>.from(state);
+    final expiredIds = expired.map((c) => c.id).toSet();
     final previousActiveId = _ref.read(activeConversationIdProvider);
-    final wasActive = expiredIds.contains(previousActiveId);
-    final originalOrder = List<Conversation>.from(state);
+    final removedActive = expiredIds.contains(previousActiveId);
     state = state.where((c) => !expiredIds.contains(c.id)).toList();
-    if (wasActive) {
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationsDeleted',
+        'conversationIds': expired
+            .map((conversation) => conversation.id)
+            .toList(),
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = _restoreDeletedConversationOrder(original, expired);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record expired conversation deletion: $error');
+      return;
+    }
+    if (removedActive && mounted) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     bool saved;
@@ -815,22 +891,22 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
     if (!saved) {
       if (mounted) {
-        state = restoreConversationOrderAfterFailedWrite(
-          originalOrder: originalOrder,
-          current: state,
-          removed: removable,
-        );
-        if (wasActive && _ref.read(activeConversationIdProvider) == null) {
+        state = _restoreDeletedConversationOrder(original, expired);
+        if (removedActive && _ref.read(activeConversationIdProvider) == null) {
           _ref.read(activeConversationIdProvider.notifier).state =
               previousActiveId;
         }
         _syncTemporaryTimer();
-        await _persistRestoredStateAfterFailedWrite();
+        await restoreDeletedConversations(
+          expired,
+          originalOrder: original,
+          previousActiveConversationId: removedActive ? previousActiveId : null,
+        );
       }
       return;
     }
-    if (wasActive && mounted) await _persistActiveId();
-    for (final conv in removable) {
+    if (removedActive && mounted) await _persistActiveId();
+    for (final conv in expired) {
       await _cleanupConversationFiles(conv);
     }
     if (mounted) _syncTemporaryTimer();
@@ -840,15 +916,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// image cache. Used by temporary expiry and replacement of a flow attempt.
   /// Failures are ignored: removing the stale record is the critical part.
   Future<void> _cleanupConversationFiles(Conversation conv) async {
-    final messagesById = {
-      for (final message in conv.messages) message.id: message,
-    };
+    final messages = {for (final message in conv.messages) message.id: message};
     if (_repositoryReady) {
       try {
-        // A repository-backed conversation keeps only the currently loaded
-        // page in memory. Expiry cleanup must also visit older message rows.
         for (final message in await _readAllRepositoryMessages(conv.id)) {
-          messagesById[message.id] = message;
+          messages[message.id] = message;
         }
       } catch (error) {
         debugPrint(
@@ -856,7 +928,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         );
       }
     }
-    for (final msg in messagesById.values) {
+    for (final msg in messages.values) {
       for (final att in msg.attachments) {
         try {
           await AttachmentStorage.deleteFile(att.storagePath);
@@ -896,7 +968,14 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
 
     final assistantsJson = prefs.getString('assistants');
     if (assistantsJson == null || assistantsJson.isEmpty) {
-      final defaultAssistant = _newLocalizedDefaultAssistant(prefs);
+      final localizations = appLocalizationsForLocale(
+        localeFromCode(prefs.getString(localePreferenceKey)),
+      );
+      final defaultAssistant = Assistant(
+        name: localizations.builtInPromptGeneralName,
+        prompt: localizations.assistantDefaultPrompt,
+        emoji: '🤖',
+      );
       await prefs.setString(
         'assistants',
         jsonEncode([defaultAssistant.toMap()]),

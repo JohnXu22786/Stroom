@@ -380,29 +380,30 @@ void conversationGroup1() {
       expect(notifier.state[0].updatedAt, originalUpdatedAt);
     });
 
-    testWidgets('selecting another conversation marks the previous reply read',
-        (tester) async {
-      final previous = Conversation(
-        id: 'previous',
-        title: 'Previous',
-        messages: [
-          ChatMessage(
-            id: 'latest-reply',
-            role: 'assistant',
-            content: 'Done',
-          ),
-        ],
+    test('selecting a conversation does not mark its error reply as read', () {
+      final previousReply = ChatMessage(
+        id: 'previous-reply',
+        role: 'assistant',
+        content: 'Earlier successful reply',
       );
-      final next = Conversation(id: 'next', title: 'Next');
-      final container = _createContainer(initialState: [previous, next]);
-      addTearDown(container.dispose);
-      container.read(activeConversationIdProvider.notifier).state = 'previous';
+      final errorReply = ChatMessage(
+        id: 'error-reply',
+        role: 'assistant',
+        content: 'Request failed',
+        isError: true,
+      );
+      final conv = Conversation(
+        id: 'error-conv',
+        title: 'Failed conversation',
+        messages: [previousReply, errorReply],
+      );
+      final container = _createContainer(initialState: [conv]);
+      final notifier = container.read(conversationsProvider.notifier);
 
-      container.read(conversationsProvider.notifier).selectConversation('next');
+      notifier.selectConversation('error-conv');
 
-      expect(previous.lastReadMessageId, 'latest-reply');
-      expect(container.read(activeConversationIdProvider), 'next');
-      await tester.pump(const Duration(milliseconds: 500));
+      expect(notifier.state.single.lastReadMessageId, isNull);
+      expect(notifier.state.single.messages.last.isError, isTrue);
     });
   });
 }

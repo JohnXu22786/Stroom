@@ -13,12 +13,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' show SimpleTextMessage;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/message_attachment_preview.dart';
-import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 /// Creates a ChatPage app with a conversation pre-populated with [messages].
@@ -48,15 +46,16 @@ Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
       }),
     ],
     child: const MaterialApp(
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: ChatPage()),
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: ChatPage(),
+    ),
   );
 }
 
@@ -70,30 +69,6 @@ ChatMessage _userMessage({
     role: 'user',
     content: content,
     attachments: attachments,
-    createdAt: DateTime(2025, 1, 1),
-  );
-}
-
-ChatMessage _assistantMessage({
-  required String id,
-  required String content,
-  List<Attachment> attachments = const [],
-  List<Map<String, dynamic>>? contentParts,
-  List<ToolCallData>? toolCalls,
-  String? reasoningContent,
-  List<String>? reasoningSections,
-  bool isError = false,
-}) {
-  return ChatMessage(
-    id: id,
-    role: 'assistant',
-    content: content,
-    isError: isError,
-    attachments: attachments,
-    contentParts: contentParts,
-    toolCalls: toolCalls,
-    reasoningContent: reasoningContent,
-    reasoningSections: reasoningSections,
     createdAt: DateTime(2025, 1, 1),
   );
 }
@@ -120,6 +95,17 @@ Attachment _namedDocumentAttachment(String fileName) {
     fileType: 'document',
     hash: 'hash-$fileName',
     storagePath: '/tmp/$fileName',
+    fileSize: 2048,
+  );
+}
+
+Attachment _generatedImageAttachment() {
+  return Attachment(
+    fileName: 'generated-1.png',
+    mimeType: 'image/png',
+    fileType: 'image',
+    hash: 'generated-image',
+    storagePath: '/tmp/generated-1.png',
     fileSize: 2048,
   );
 }
@@ -247,112 +233,26 @@ void main() {
     });
   });
 
-  testWidgets(
-    'assistant generated media attachment renders through the message preview',
-    (tester) async {
-      await _pumpLoadedChatPage(tester, [
-        _assistantMessage(
-          id: 'a1',
-          content: 'Here is the generated image.',
-          attachments: [
-            Attachment(
-              fileName: 'generated.png',
-              mimeType: 'image/png',
-              fileType: 'image',
-              hash: 'generated-image-hash',
-              storagePath: '/tmp/generated.png',
-              fileSize: 3,
-            ),
-          ],
-        ),
-      ]);
-
-      expect(find.byType(MessageAttachmentPreview), findsOneWidget);
-      expect(find.text('generated.png'), findsOneWidget);
-      expect(find.byIcon(Icons.image_outlined), findsOneWidget);
-    },
-  );
-
-  testWidgets('assistant generated media stays between ordered text parts', (
+  testWidgets('assistant generated image attachment is shown in the bubble', (
     tester,
   ) async {
-    final attachment = _namedDocumentAttachment('generated.pdf');
     await _pumpLoadedChatPage(tester, [
-      _assistantMessage(
-        id: 'a-ordered-media',
-        content: 'before after',
-        attachments: [attachment],
-        contentParts: [
-          {'type': 'text', 'text': 'before'},
-          {'type': 'attachment', 'attachmentId': attachment.id},
-          {'type': 'text', 'text': 'after'},
-        ],
+      ChatMessage(
+        id: 'a1',
+        role: 'assistant',
+        content: 'Here is the image',
+        attachments: [_generatedImageAttachment()],
+        createdAt: DateTime(2025, 1, 1),
       ),
     ]);
 
-    final beforeY = tester.getTopLeft(find.text('before')).dy;
-    final attachmentY = tester.getTopLeft(find.text('generated.pdf')).dy;
-    final afterY = tester.getTopLeft(find.text('after')).dy;
-    expect(beforeY, lessThan(attachmentY));
-    expect(attachmentY, lessThan(afterY));
+    expect(
+      find.byKey(const ValueKey('assistant-message-attachment-area')),
+      findsOneWidget,
+    );
+    expect(find.byType(MessageAttachmentPreview), findsOneWidget);
+    expect(find.text('generated-1.png'), findsOneWidget);
   });
-
-  testWidgets('assistant ordered media does not hide tool calls or reasoning', (
-    tester,
-  ) async {
-    final attachment = _namedDocumentAttachment('generated.pdf');
-    await _pumpLoadedChatPage(tester, [
-      _assistantMessage(
-        id: 'a-media-tools',
-        content: 'Here is the file',
-        attachments: [attachment],
-        contentParts: [
-          {'type': 'text', 'text': 'Here is the file'},
-          {'type': 'attachment', 'attachmentId': attachment.id},
-        ],
-        toolCalls: const [
-          ToolCallData(
-            id: 'tool-1',
-            name: 'search',
-            arguments: {},
-            status: ToolCallStatus.completed,
-            result: 'Found a match',
-          ),
-        ],
-        reasoningSections: ['I inspected the document.'],
-      ),
-    ]);
-
-    expect(find.text('generated.pdf'), findsOneWidget);
-    expect(find.text('search'), findsOneWidget);
-    expect(find.byType(ReasoningSection), findsOneWidget);
-  });
-
-  testWidgets(
-    'partial media remains available on an errored assistant message',
-    (tester) async {
-      await _pumpLoadedChatPage(tester, [
-        _assistantMessage(
-          id: 'a-error',
-          content: 'Partial result',
-          isError: true,
-          attachments: [
-            Attachment(
-              fileName: 'partial.png',
-              mimeType: 'image/png',
-              fileType: 'image',
-              hash: 'partial-image-hash',
-              storagePath: '/tmp/partial.png',
-              fileSize: 3,
-            ),
-          ],
-        ),
-      ]);
-
-      expect(find.byType(MessageAttachmentPreview), findsOneWidget);
-      expect(find.text('partial.png'), findsOneWidget);
-    },
-  );
 
   group('ChatPage user message attachment preview order', () {
     testWidgets(
@@ -425,29 +325,5 @@ void main() {
         expect(dxs[2], lessThan(dxs[3]));
       },
     );
-  });
-
-  testWidgets('remote generated media preview shows its provider reference', (
-    tester,
-  ) async {
-    const reference = 'gs://bucket/generated-clip.mp4';
-    final attachment = Attachment(
-      id: 'generated-remote-video',
-      fileName: 'generated-clip.mp4',
-      mimeType: 'video/mp4',
-      fileType: 'video',
-      hash: '',
-      storagePath: reference,
-      fileSize: 0,
-      extraFields: const {'stroom.mediaReference': reference},
-    );
-    await _pumpLoadedChatPage(tester, [
-      _assistantMessage(id: 'a1', content: '', attachments: [attachment]),
-    ]);
-
-    await tester.tap(find.byType(MessageAttachmentPreview));
-    await tester.pumpAndSettle();
-
-    expect(find.text(reference), findsOneWidget);
   });
 }

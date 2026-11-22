@@ -1,5 +1,9 @@
 {
   "@@locale": "zh",
+  "galleryPermissionTitle": "需要访问相册",
+  "galleryPermissionMessage": "请在系统设置中允许 Stroom 访问照片和视频。",
+  "galleryPermissionCancel": "取消",
+  "galleryPermissionOpenSettings": "打开设置",
   "languageSettingsTitle": "语言",
   "followSystemLanguage": "跟随系统",
   "themeDisplaySettingsTitle": "主题与显示",
@@ -9,6 +13,8 @@
   "themeModeSystem": "跟随系统",
   "languageNameEnglish": "英语",
   "languageNameChinese": "简体中文",
+  "languageNameKorean": "韩语",
+  "languageNamePortuguese": "葡萄牙语（巴西）",
   "languageSearchHint": "搜索语言",
   "languageNoMatches": "没有匹配的语言",
   "builtInPromptGeneralName": "通用助手",
@@ -48,6 +54,12 @@
   "builtInSystemCompactionDescription": "把长对话压缩为结构化锚定摘要，释放上下文空间",
   "builtInSystemCompactionPrompt": "你是一个锚定上下文摘要助手，负责把长对话压缩为结构化摘要。\n\n只总结给你的对话历史。最近的新消息可能保持原文不变，所以请聚焦于\n仍然重要的旧上下文。\n\n如果提示中包含 <previous-summary> 块，把它当作当前锚定摘要：\n保留仍然成立的内容，删除过时的内容，合并新的事实。\n\n严格按照下面的结构输出，保持小节顺序不变，每个小节都要保留（即使为空）：\n<template>\n## Objective\n- [用户想要达成的目标，一到两句话]\n\n## Important Details\n- [约束/偏好、决策及原因、重要事实/假设、继续所需的确切上下文；没有则写 (none)]\n\n## Work State\n### Completed\n- [已完成的工作、已验证的事实或已做的修改；没有则写 (none)]\n\n### Active\n- [当前工作、部分修改或调查状态；没有则写 (none)]\n\n### Blocked\n- [阻塞项、失败的命令或未知数；没有则写 (none)]\n\n## Next Move\n1. [下一步具体行动，或 (none)]\n2. [已知的后续行动，或 (none)]\n\n## Relevant Files\n- [文件或目录路径：为什么重要；没有则写 (none)]\n</template>\n\n规则：\n- 每个小节都要保留，即使为空\n- 用简洁的要点，不要用段落\n- 保留准确的文件路径、符号、命令、错误信息、URL 和标识符\n- 不要提及你在总结、压缩或合并上下文\n- 使用与对话相同的语言",
   "builtInPromptMarketTitle": "助手市场",
+  "assistantAddTitle": "添加助手",
+  "assistantBuiltInTab": "内置助手",
+  "assistantImportTab": "导入助手",
+  "assistantBuiltInHint": "浏览可直接使用的内置助手，点击条目可预览后再添加。",
+  "assistantImportHint": "连接远程助手目录，或通过助手文件 URL 导入。",
+  "assistantImportAction": "连接目录或导入文件",
   "builtInPromptClose": "关闭",
   "builtInPromptImportHint": "选择后将添加为普通助手，之后可自由编辑",
   "builtInPromptView": "查看提示词",
@@ -107,6 +119,12 @@
   "taskFlowConfirmDelete": "确认删除",
   "taskFlowConfirmDeleteBody": "确定要删除任务流「{flowName}」吗？",
   "taskFlowUseTemplate": "使用",
+  "taskFlowOcrInputMissing": "找不到图片文件，请重新选择图片。",
+  "taskFlowOcrInputReadFailed": "无法读取图片文件，请检查文件访问权限后重试。",
+  "taskFlowOcrModelUnavailable": "未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。",
+  "taskFlowOcrRequestSizeLimit": "OCR 请求大小预算（{size} MiB）",
+  "taskFlowImageInputSizeLimit": "任务流图片输入上限（{size} MiB）",
+  "taskFlowOcrInputTooLarge": "图片超过{limit}，请缩小图片后重试。",
   "ocrTemplatePlainTextLabel": "纯文本模板",
   "ocrTemplatePlainTextContent": "请按页面的自然阅读顺序转录所有可见文字，保留换行与段落。只返回纯文本，不添加说明或推断。",
   "ocrTemplateMarkdownLabel": "Markdown 模板",
@@ -115,7 +133,7 @@
   "ocrTemplateTableContent": "请按页面的自然阅读顺序转录所有可见文字。遇到表格时完整保留表头、行列关系及空单元格，并以 Markdown 表格输出；其他内容按普通文本保留。只返回转录结果，不添加说明或推断。",
   "ocrTemplateLatexLabel": "LaTeX 模板",
   "ocrTemplateLatexContent": "请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 $...$，独立公式使用 $$...$$。只返回转录结果，不添加说明或推断。",
-  "ocrDefaultImagesOnly": "默认（仅发送图片）",
+  "ocrDefaultImagesOnly": "默认（不添加自定义指令；仍使用默认 OCR 提示）",
   "ocrDefaultSystemPrompt": "请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。",
   "ocrSavedInstructionSnapshot": "已保存的指令快照",
   "ocrPageTitle": "文字识别",
@@ -136,7 +154,7 @@
   "ocrSelectModel": "请选择模型",
   "ocrInstructionLabel": "指令",
   "ocrManageInstructions": "管理识别指令",
-  "ocrInstructionManageGuidance": "这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。",
+  "ocrInstructionManageGuidance": "这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。",
   "ocrInstructionManageEmpty": "暂无指令",
   "ocrInstructionEditTooltip": "编辑指令",
   "ocrInstructionDeleteTooltip": "删除指令",
@@ -249,6 +267,12 @@
   "aboutUpdateHttpError": "检查更新失败：HTTP 状态码 {statusCode}。",
   "aboutUpdateInvalidResponse": "更新服务器返回了无法识别的数据。",
   "aboutUpdateCheckFailed": "检查更新失败，请重试。",
+  "topicAssistantUpdateCheckFailed": "检查助手更新失败：{error}",
+  "@topicAssistantUpdateCheckFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "aboutPrivacyContent": "Stroom 尊重并保护所有使用服务用户的个人隐私权。\n\n1. 相机权限：仅用于拍摄照片，不会收集或上传任何图像数据。\n\n2. 相册权限：仅用于选择照片和保存照片，所有照片都保存在本地设备。\n\n3. 数据安全：所有拍摄的照片都保存在您的设备本地，我们不会访问或上传任何数据。\n\n4. 第三方服务：本应用不包含任何第三方分析或广告服务。\n\n如果您有任何疑问，请联系我们。",
   "aboutClose": "关闭",
   "contextToolPruneTitle": "工具结果自动清理 (Prune)",
@@ -296,6 +320,8 @@
   "updateLatestBadge": "最新",
   "updateSelectVersion": "选择版本",
   "updateDownloading": "正在下载更新...",
+  "updateCancelDownload": "取消下载",
+  "updateDownloadInBackground": "后台下载",
   "updateCheckNetworkError": "网络错误：{details}",
   "updateCheckHttpFailed": "检查更新失败：HTTP {statusCode}",
   "updateCheckInvalidResponse": "检查更新失败：服务器返回了无法识别的数据",
@@ -309,6 +335,12 @@
   "updateManualInstallFileError": "无法打开文件，请手动安装：{path}",
   "updateApkInstallFailed": "安装失败，请手动打开 APK 安装：{details}",
   "updateApkInstallFailedNoDetails": "安装失败，请手动打开 APK 安装",
+  "updateApkInstallerUnavailable": "未找到可安装 APK 的应用，请手动打开 APK 安装。",
+  "updateApkInstallPermissionDenied": "请在系统设置中允许 Stroom 安装未知来源应用。",
+  "updateRestartDialogTitle": "更新检测",
+  "updateRestartDialogBody": "检测到应用已更新，建议重启应用以确保稳定性。",
+  "updateRestartDialogLater": "稍后重启",
+  "updateRestartDialogNow": "立即重启",
   "contextCompactionHistoryIntro": "以下是需要压缩的对话历史：",
   "contextCompactionUserRole": "用户",
   "contextCompactionAssistantRole": "助手",
@@ -363,7 +395,11 @@
   "topicSelectionEditAssistant": "编辑助手",
   "topicSelectionReorderHint": "长按拖拽即可调整对话顺序",
   "@conversationDeleteNamed": {
-    "placeholders": {"title": {"type": "String"}}
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
   },
   "conversationDeleteNamed": "确定要删除对话“{title}”吗？此操作无法撤销。",
   "conversationDeleteTitle": "删除对话",
@@ -387,7 +423,18 @@
   "actionRename": "重命名",
   "conversationAutoRename": "自动命名",
   "conversationTemporary": "临时对话",
+  "conversationSetTemporary": "设为临时对话",
   "conversationCloseTemporary": "关闭临时对话",
+  "conversationKeep": "保留对话",
+  "conversationTemporaryStatus": "临时",
+  "conversationTemporaryWarning": "即将过期",
+  "conversationTemporaryExplanation": "此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。",
+  "conversationEnableTemporary": "开启临时模式",
+  "chatLoadingConversation": "正在加载对话…",
+  "chatEmptyConversation": "发送消息以开始对话。",
+  "chatNoActiveConversation": "请选择或新建对话以开始聊天。",
+  "chatConversationLoadError": "无法加载此对话。",
+  "chatRetryLoadConversation": "重试",
   "taskListTitle": "任务列表",
   "taskListEmpty": "暂无任务",
   "unifiedTaskListTabAll": "全部",
@@ -397,6 +444,7 @@
   "unifiedTaskListTabStopped": "已停止",
   "unifiedTaskListConfirmClear": "确认清除",
   "unifiedTaskListConfirmClearFailedMessage": "确定要清除所有失败任务吗？",
+  "unifiedTaskListConfirmClearCompletedMessage": "确定要清除所有已完成任务吗？此操作不可撤销。",
   "unifiedTaskListConfirmClearAllMessage": "确定要清除所有任务吗？此操作不可撤销。",
   "unifiedTaskListCancel": "取消",
   "unifiedTaskListConfirm": "确定",
@@ -501,9 +549,15 @@
   "@homeMediaDurationHoursMinutesSeconds": {
     "description": "媒体时长，包含小时、分钟和秒",
     "placeholders": {
-      "hours": {"type": "int"},
-      "minutes": {"type": "int"},
-      "seconds": {"type": "int"}
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      },
+      "seconds": {
+        "type": "int"
+      }
     }
   },
   "mediaDuration": "时长：{value}",
@@ -726,6 +780,23 @@
     }
   },
   "chatDataDetails": "数据详情",
+  "chatErrorDetailOcrDiagnostics": "OCR 诊断",
+  "chatErrorDetailRequestUrl": "请求 URL",
+  "chatErrorDetailRequestHeaders": "请求标头",
+  "chatErrorDetailRequestBody": "请求正文",
+  "chatErrorDetailStatusCode": "状态码",
+  "chatErrorDetailResponseHeaders": "响应标头",
+  "chatErrorDetailResponseBody": "响应正文",
+  "chatErrorDetailEmpty": "暂无详细信息",
+  "chatErrorDetailOmittedContentMarker": "[中间内容已省略，共 {count} 字]",
+  "@chatErrorDetailOmittedContentMarker": {
+    "description": "Clickable marker for omitted text in a Request Body preview",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
@@ -990,6 +1061,7 @@
   "unifiedTaskContinue": "继续",
   "unifiedTaskRemoveFromList": "从列表移除",
   "unifiedTaskSynthesisText": "合成文本",
+  "unifiedTaskViewFullSynthesisText": "查看完整合成文本",
   "unifiedTaskStatus": "状态",
   "unifiedTaskDetails": "详情",
   "unifiedTaskSynthesisError": "合成错误详情",
@@ -1026,6 +1098,79 @@
   "catcatchWebViewRecoveryGuidance": "自动获取网页资源连续超时。请在此页面登录或设置用户脚本；检测到媒体资源后，点击“继续流程”。",
   "browserRecoveryContinue": "继续流程",
   "catcatchSkipped": "已跳过（无需处理）",
+  "catCatchDetailMediaResources": "获取到{count}个媒体资源",
+  "@catCatchDetailMediaResources": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "catCatchDetailResources": "获取到{count}个资源",
+  "@catCatchDetailResources": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "catCatchDetailBrowserResources": "浏览器中获取到{count}个资源",
+  "@catCatchDetailBrowserResources": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "catCatchDetailPlaylistResources": "获取到{total}个资源（播放列表{segments}个分段）",
+  "@catCatchDetailPlaylistResources": {
+    "placeholders": {
+      "total": {},
+      "segments": {}
+    }
+  },
+  "catCatchDetailChooseResource": "共{count}个资源，请用户选择",
+  "@catCatchDetailChooseResource": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "catCatchDetailAutoSelectFirst": "自动选择第1个结果，进入下载",
+  "catCatchDetailAutoSelectRemaining": "剩余1个结果，自动进入下载",
+  "catCatchDetailSkipFormat": ".{extension} 格式无需转换，已跳过",
+  "@catCatchDetailSkipFormat": {
+    "placeholders": {
+      "extension": {}
+    }
+  },
+  "catCatchDetailSkipNoExtension": ". 格式无需转换，已跳过",
+  "catCatchDetailDurationFiltered": "按照{duration}时长筛选后剩余{remaining}个结果（已排除{removed}个不匹配的资源）",
+  "@catCatchDetailDurationFiltered": {
+    "placeholders": {
+      "duration": {},
+      "remaining": {},
+      "removed": {}
+    }
+  },
+  "catCatchDetailDurationAllMatch": "按时长{duration}筛选，{count}个资源全部匹配",
+  "@catCatchDetailDurationAllMatch": {
+    "placeholders": {
+      "count": {},
+      "duration": {}
+    }
+  },
+  "catCatchDurationHours": "{count}小时",
+  "@catCatchDurationHours": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "catCatchDurationMinutes": "{count}分钟",
+  "@catCatchDurationMinutes": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "catCatchDurationSeconds": "{count}秒",
+  "@catCatchDurationSeconds": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catcatchRetryStep": "重试此步骤",
   "catcatchCollapseSegments": "收起 {count} 个分片",
   "catcatchShowSegments": "显示 {count} 个分片",
@@ -1083,6 +1228,8 @@
   "topicItemNew": "新话题",
   "topicItemUnpin": "取消置顶",
   "topicItemPin": "置顶",
+  "topicItemMarkUnread": "标记为未读",
+  "topicItemMarkRead": "标记为已读",
   "topicItemRename": "重命名",
   "topicItemAutoName": "自动命名",
   "topicItemDelete": "删除",
@@ -1092,6 +1239,12 @@
   "galleryChoiceApp": "应用相册",
   "galleryChoiceAppDescription": "从应用内部相册选择",
   "appMediaUnreadable": "无法读取文件",
+  "appMediaLoadError": "加载文件失败：{error}",
+  "@appMediaLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "appMediaClearSelection": "清除 ({count})",
   "appMediaConfirmSelectionCount": "确定 ({count})",
   "appMediaConfirmSelection": "确定",
@@ -1225,6 +1378,7 @@
   "folderPickerRoot": "根目录",
   "folderPickerCurrentFolder": "当前文件夹",
   "folderPickerSubfolders": "子文件夹",
+  "folderPickerNoFolders": "没有文件夹",
   "folderPickerExistingFolders": "现有文件夹",
   "folderPickerCreateNew": "创建新文件夹",
   "folderPickerFolderNameHint": "输入文件夹名称",
@@ -2249,7 +2403,7 @@
   "providerCompressionMode": "压缩方式",
   "providerCompressionNone": "无（原样发送）",
   "providerCompressionAdpcm": "ADPCM（约 4 倍压缩）",
-  "providerCompressionFlac": "FLAC（无损，约 2 倍）",
+  "providerCompressionFlac": "FLAC（无损，约 2 倍，推荐）",
   "providerCompressionAdpcmDescription": "IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。",
   "providerCompressionFlacDescription": "FLAC 无损压缩，纯 Dart 实现，体积约缩小一半。",
   "providerCompressionWavDescription": "不压缩，以 WAV 文件原样发送。",
@@ -2294,7 +2448,7 @@
   "providerFallbackStrategy": "兜底策略",
   "providerFallbackMethod": "兜底方式",
   "providerPreprocessing": "音频预处理",
-  "providerPreprocessingHelp": "降低音频文件大小，不影响转写准确率。",
+  "providerPreprocessingHelp": "降低音频文件大小，但重采样可能会改变音频并影响转写准确率。",
   "providerPreprocessingMethod": "预处理方式",
   "@providerParamNameInvalid": {
     "placeholders": {
@@ -2372,8 +2526,8 @@
   "providerFallbackAllHelp": "先尝试符合请求体上限的 Base64；然后在启用压缩时压缩完整 WAV。若仍超限且已启用切块，则切分源 PCM 并逐块编码。仅支持 PCM WAV。",
   "providerFallbackRejectHelp": "文件超出限制时直接拒绝，不尝试兜底。",
   "providerPreprocessNone": "无",
-  "providerPreprocessResample": "WAV 优化（16 kHz 单声道）",
-  "providerPreprocessResampleHelp": "重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。",
+  "providerPreprocessResample": "WAV 重采样（16 kHz 单声道）",
+  "providerPreprocessResampleHelp": "重采样至 16 kHz 并混合为单声道；此操作可能会改变音频。",
   "providerPreprocessNoneHelp": "不进行预处理，原样发送。",
   "assistantDefaultsScopeHelp": "默认模型和工具仅用于在此助手下新建的话题。现有话题保留各自设置。工具结果截断适用于全部话题。",
   "assistantDefaultModelTitle": "默认模型",
@@ -3133,6 +3287,13 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "内置",
+  "providerBuiltinTtsName": "TTS（文本转语音）",
+  "providerBuiltinLlmName": "LLM（大语言模型）",
+  "providerBuiltinOcrName": "OCR（光学字符识别）",
+  "providerBuiltinAsrName": "STT（语音转文本）",
+  "providerBuiltinMcpName": "MCP（模型上下文协议）",
+  "providerBuiltinSearchGroupName": "搜索",
+  "providerBuiltinMcpServicesGroupName": "其他 MCP 服务",
   "@providerBuiltinBadge": {
     "placeholders": {}
   },
@@ -3473,6 +3634,25 @@
   "@paramTypeJsonLabel": {
     "placeholders": {}
   },
+  "ocrConfigUnsupportedParamType": "不支持的类型：{type}",
+  "@ocrConfigUnsupportedParamType": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "ocrConfigUnsupportedParamSaveError": "参数“{name}”使用了不支持的类型“{type}”，请替换为支持的类型或删除该参数后再保存。",
+  "@ocrConfigUnsupportedParamSaveError": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
   "paramTypeStringHint": "例如: cheerful",
   "@paramTypeStringHint": {
     "placeholders": {}
@@ -3492,6 +3672,15 @@
   "ankiPageTitle": "Anki闪卡",
   "ankiStatsTooltip": "学习统计",
   "ankiBrowseCardsTooltip": "浏览卡片",
+  "ankiStatsTotalCards": "总卡片数",
+  "ankiStatsNewCards": "待学习",
+  "ankiStatsLearning": "学习中",
+  "ankiStatsDueForReview": "待复习",
+  "ankiStatsReviewHistory": "历史复习次数",
+  "ankiStatsLearningProgress": "学习进度",
+  "ankiStatsReviewRate": "复习率",
+  "ankiBrowserSearchHint": "搜索卡片...",
+  "ankiBrowserEmpty": "无卡片",
   "ankiSyncTooltip": "AnkiWeb 同步",
   "ankiNewDeckTooltip": "新建牌组",
   "ankiDeckLoadError": "加载失败: {error}",
@@ -3605,6 +3794,10 @@
   "ankiSyncStatusServerAddressChanged": "服务器地址已更改，请重新登录后继续",
   "ankiSyncStatusVerifyingLogin": "正在验证登录…",
   "ankiSyncStatusLoginSuccess": "登录成功。密码未保存，同步密钥已加密保存。",
+  "ankiSyncLoginSuccessPromptTitle": "登录成功",
+  "ankiSyncLoginSuccessPromptMessage": "现在同步收藏集吗？",
+  "ankiSyncLoginSuccessPromptSync": "立即同步",
+  "ankiSyncLoginSuccessPromptLater": "继续使用",
   "ankiSyncStatusLoginSuccessNoSave": "登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。",
   "ankiSyncStatusLoginFailed": "登录失败：{error}",
   "@ankiSyncStatusLoginFailed": {
@@ -4489,17 +4682,23 @@
   },
   "@backupServiceExportSavedTo": {
     "placeholders": {
-      "location": { "type": "String" }
+      "location": {
+        "type": "String"
+      }
     }
   },
   "@backupServiceExportFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "@backupServiceRestoreFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "@backupRestoreSkippedCategories": {
@@ -5180,6 +5379,13 @@
       }
     }
   },
+  "bgTaskOcrRequestSizeExceeded": "OCR 请求 JSON 大小为 {encodedBytes} 字节，超过配置的 {budgetBytes} 字节上限。",
+  "@bgTaskOcrRequestSizeExceeded": {
+    "placeholders": {
+      "encodedBytes": {"type": "int"},
+      "budgetBytes": {"type": "int"}
+    }
+  },
   "bgTaskOcrError": "OCR识别失败：{details}",
   "@bgTaskOcrError": {
     "placeholders": {
@@ -5411,14 +5617,20 @@
   "ocrResultPageHeading": "第 {index} 张图片",
   "@ocrResultPageHeading": {
     "placeholders": {
-      "index": { "type": "String" }
+      "index": {
+        "type": "String"
+      }
     }
   },
   "ocrResultPageHeadingWithName": "第 {index} 张图片：{name}",
   "@ocrResultPageHeadingWithName": {
     "placeholders": {
-      "index": { "type": "String" },
-      "name": { "type": "String" }
+      "index": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocrPartialResultSuffix": "（部分结果）",
@@ -5706,22 +5918,32 @@
   "sseConnectionFailedWithStatus": "SSE 连接失败（HTTP {statusCode}：{statusText}）",
   "@sseConnectionFailedWithStatus": {
     "placeholders": {
-      "statusCode": {"type": "int"},
-      "statusText": {"type": "String"}
+      "statusCode": {
+        "type": "int"
+      },
+      "statusText": {
+        "type": "String"
+      }
     }
   },
   "sseConnectionFailedWithoutStatusText": "SSE 连接失败（HTTP {statusCode}）",
   "@sseConnectionFailedWithoutStatusText": {
     "placeholders": {
-      "statusCode": {"type": "int"}
+      "statusCode": {
+        "type": "int"
+      }
     }
   },
   "sseConnectionUnavailable": "SSE 连接失败：无法连接到服务器",
   "sseHttpRequestFailed": "HTTP 请求失败（HTTP {statusCode}：{statusText}）",
   "@sseHttpRequestFailed": {
     "placeholders": {
-      "statusCode": {"type": "int"},
-      "statusText": {"type": "String"}
+      "statusCode": {
+        "type": "int"
+      },
+      "statusText": {
+        "type": "String"
+      }
     }
   },
   "sseRequestFailed": "请求失败",
@@ -5729,14 +5951,20 @@
   "sseNetworkRequestFailedWithStatus": "网络请求失败（HTTP {statusCode}：{statusText}）",
   "@sseNetworkRequestFailedWithStatus": {
     "placeholders": {
-      "statusCode": {"type": "int"},
-      "statusText": {"type": "String"}
+      "statusCode": {
+        "type": "int"
+      },
+      "statusText": {
+        "type": "String"
+      }
     }
   },
   "sseNetworkRequestFailedWithoutStatusText": "网络请求失败（HTTP {statusCode}）",
   "@sseNetworkRequestFailedWithoutStatusText": {
     "placeholders": {
-      "statusCode": {"type": "int"}
+      "statusCode": {
+        "type": "int"
+      }
     }
   },
   "sseNetworkConnectionUnavailable": "网络请求失败：无法连接到服务器",
@@ -5745,25 +5973,47 @@
   "startupSafetyExportButton": "导出数据",
   "startupSafetyExitButton": "退出应用",
   "startupSafetyUpdateButton": "更新应用",
+  "startupSafetyRollbackButton": "恢复到之前的版本",
+  "startupSafetyRollbackNoCandidate": "没有找到记录版本的直接安装包。请先导出数据，再手动安装该版本。",
+  "startupSafetyRollbackRecommended": "更新失败前记录的推荐版本",
+  "startupSafetyRollbackReleaseNotes": "版本说明",
+  "startupSafetyRollbackNoReleaseNotes": "没有可用的版本说明。",
+  "startupSafetyRollbackConfirmTitle": "确认恢复版本",
+  "startupSafetyRollbackConfirmMessage": "即将下载并打开版本 {version}。请先导出数据。操作系统可能会拒绝安装较旧版本，Stroom 不会绕过安装器限制。",
+  "@startupSafetyRollbackConfirmMessage": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "startupSafetyRollbackContinue": "继续",
+  "startupSafetyUpdateAttemptUnavailable": "无法记录本次更新尝试，因此没有启动安装程序。请检查存储权限后重试。",
   "startupSafetyCheckingUpdates": "正在检查更新...",
   "startupSafetyUpToDate": "已是最新版本",
   "startupSafetyNewerDataVersion": "数据由更新版本的应用创建（{version}）。\n\n当前版本无法安全读取这些数据。请安装最新版本的应用后再继续，数据未做任何改动。",
   "@startupSafetyNewerDataVersion": {
     "placeholders": {
-        "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyStatusUnreadable": "无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。请先导出数据文件，然后退出应用并修复状态标记后重试。",
   "startupSafetyMigrationFailedNoChanges": "数据格式迁移失败（{part}）。\n\n为保护数据，未做任何改动。请回退到旧版本应用，或等待修复版本发布后再升级。",
   "@startupSafetyMigrationFailedNoChanges": {
     "placeholders": {
-        "part": {"type": "String"}
+      "part": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyMigrationFailedRestored": "数据格式迁移失败（{part}）。\n\n已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，或等待修复版本发布后再升级。",
   "@startupSafetyMigrationFailedRestored": {
     "placeholders": {
-        "part": {"type": "String"}
+      "part": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyDataCorrupted": "数据损坏且无法自动修复。\n\n应用已冻结以防止进一步破坏。请先导出数据文件，然后手动导入或重新安装。",
@@ -5772,7 +6022,9 @@
   "startupSafetyCheckFailed": "启动检查失败：{detail}",
   "@startupSafetyCheckFailed": {
     "placeholders": {
-        "detail": {"type": "String"}
+      "detail": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyStatusUnreadableAfterChecks": "完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。",
@@ -5785,21 +6037,27 @@
   "catCatchBadResponse": "服务器返回错误 (HTTP {statusCode})",
   "@catCatchBadResponse": {
     "placeholders": {
-      "statusCode": {"type": "int"}
+      "statusCode": {
+        "type": "int"
+      }
     }
   },
   "catCatchRequestCancelled": "请求已取消",
   "catCatchNetworkError": "网络错误：{message}",
   "@catCatchNetworkError": {
     "placeholders": {
-      "message": {"type": "String"}
+      "message": {
+        "type": "String"
+      }
     }
   },
   "catCatchUnknownError": "未知错误",
   "catCatchOriginalError": "原始错误：{message}",
   "@catCatchOriginalError": {
     "placeholders": {
-      "message": {"type": "String"}
+      "message": {
+        "type": "String"
+      }
     }
   },
   "catCatchWebDownloadHint": "Web 端不支持直接下载媒体文件。",
@@ -5841,6 +6099,7 @@
   "appLogWillBeCreated": "应用运行后将自动生成日志",
   "appLogExport": "导出",
   "appLogDelete": "删除",
+  "appLogDeleteUnconfirmed": "无法确认删除结果。",
   "appLogConfirmDeleteTitle": "确认删除",
   "appLogConfirmDeleteMessage": "确定要删除日志文件 \"{fileName}\" 吗？",
   "@appLogConfirmDeleteMessage": {
@@ -5955,6 +6214,50 @@
     }
   },
   "appLogCopyDone": "已复制全部日志内容",
+  "appLogSettings": "日志设置",
+  "appLogSettingsTitle": "应用日志设置",
+  "appLogStorageUsage": "{count} 个文件 · 已用 {size}",
+  "@appLogStorageUsage": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "size": { "type": "String" }
+    }
+  },
+  "appLogRetentionDays": "保留期限",
+  "appLogDays": "{count} 天",
+  "@appLogDays": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "appLogMinimumLevel": "记录详细度",
+  "appLogStorageLimit": "日志空间上限",
+  "appLogUnlimited": "不限制",
+  "appLogSettingsHelp": "超出保留期限或空间上限的旧日志会自动清理；当前小时的日志文件会保留。",
+  "appLogSettingsSaved": "日志设置已保存",
+  "appLogSettingsError": "保存日志设置失败：{error}",
+  "@appLogSettingsError": {
+    "placeholders": { "error": { "type": "Object" } }
+  },
+  "appLogSave": "保存",
+  "appLogLevelDebug": "调试 · 最详细",
+  "appLogLevelInfo": "信息",
+  "appLogLevelWarning": "警告",
+  "appLogLevelError": "错误",
+  "appLogFilter": "筛选日志",
+  "appLogSearch": "关键词",
+  "appLogSource": "来源",
+  "appLogLevel": "级别",
+  "appLogAnyLevel": "全部级别",
+  "appLogFromTime": "开始时间",
+  "appLogUntilTime": "结束时间",
+  "appLogClearFilters": "清除筛选",
+  "appLogNoMatches": "没有符合筛选条件的日志",
+  "appLogFilteredLineCount": "显示 {visible} / {total} 行",
+  "@appLogFilteredLineCount": {
+    "placeholders": {
+      "visible": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "iosContinuedTaskTitle": "Stroom 后台任务",
   "@iosContinuedTaskTitle": {
     "description": "Title shown in iOS continued-task system UI."
@@ -6042,7 +6345,8 @@
   "mermaidCatalogActionAddRequirement": "添加需求",
   "mermaidCatalogActionAddElement": "添加元素",
   "mermaidCatalogActionAddVerification": "添加验证",
-  "mermaidCatalogGanttDependencyBaseTask": "依赖基准任务",  "mermaidCatalogGanttDependentTaskName": "后续任务",
+  "mermaidCatalogGanttDependencyBaseTask": "依赖基准任务",
+  "mermaidCatalogGanttDependentTaskName": "后续任务",
   "startupMigrationTitle": "数据格式升级完成",
   "startupMigrationBody": "数据已迁移到新版格式。请重启应用以使用新版本。",
   "startupMigrationExit": "退出应用",
@@ -6164,11 +6468,18 @@
   "asrFailureStageStorage": "保存",
   "chatMissingProvider": "请先配置聊天供应商",
   "anthropicStreamApiError": "Anthropic API 错误：{detail}",
-  "@anthropicStreamApiError": { "placeholders": { "detail": {} } },
+  "@anthropicStreamApiError": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "anthropicStreamUnknownError": "未知错误",
   "chatHttpRequestFailed": "API 请求失败 (HTTP {statusCode})：{detail}",
   "@chatHttpRequestFailed": {
-    "placeholders": { "statusCode": {}, "detail": {} }
+    "placeholders": {
+      "statusCode": {},
+      "detail": {}
+    }
   },
   "fileUploadApiKeyMissing": "API 密钥未配置，无法上传文件",
   "fileUploadApiUrlMissing": "API 地址未配置，无法上传文件",
@@ -6183,18 +6494,33 @@
   "fileUploadMissingFileId": "上传失败：响应中缺少 file id",
   "fileUploadRequestFailedStatus": "文件上传请求失败 (HTTP {statusCode})：{detail}",
   "@fileUploadRequestFailedStatus": {
-    "placeholders": { "statusCode": {}, "detail": {} }
+    "placeholders": {
+      "statusCode": {},
+      "detail": {}
+    }
   },
   "fileUploadRequestFailed": "文件上传请求失败：{detail}",
-  "@fileUploadRequestFailed": { "placeholders": { "detail": {} } },
+  "@fileUploadRequestFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "chatApiKeyNotConfigured": "API 密钥未配置",
   "chatStreamError": "API 流式错误：{detail}",
-  "@chatStreamError": { "placeholders": { "detail": {} } },
+  "@chatStreamError": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "chatChoicesMissing": "API 返回的 choices 列表为空",
   "chatContentBlocksMissing": "API 返回的 content 列表为空",
   "chatResponseContentEmpty": "API 返回内容为空",
   "chatRequestFailed": "请求失败：{detail}",
-  "@chatRequestFailed": { "placeholders": { "detail": {} } },
+  "@chatRequestFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "startupTagline": "你的学习助手",
   "startupProgressDataSafety": "正在检查数据安全...",
   "startupProgressFormatVersion": "正在检查数据格式版本...",
@@ -6202,35 +6528,610 @@
   "startupProgressDataIntegrity": "正在检查数据完整性...",
   "startupProgressResults": "正在处理检查结果...",
   "startupProgressCompleteWithWarnings": "启动完成（注意：{warning}）",
-  "@startupProgressCompleteWithWarnings": { "placeholders": { "warning": {} } },
+  "@startupProgressCompleteWithWarnings": {
+    "placeholders": {
+      "warning": {}
+    }
+  },
   "startupProgressCompleteAfterMigration": "数据检查完成，正在准备启动应用。",
   "startupProgressReady": "正在准备启动应用。",
   "startupWarningErrorCount": "发现 {count} 个数据问题：",
-  "@startupWarningErrorCount": { "placeholders": { "count": {} } },
+  "@startupWarningErrorCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "startupWarningWarningCount": "{count} 个警告：",
-  "@startupWarningWarningCount": { "placeholders": { "count": {} } },
+  "@startupWarningWarningCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "startupIssueProviderEntriesInvalid": "服务商条目格式错误：应为 JSON 数组。",
   "startupIssueProviderEntryInvalid": "服务商条目 {index} 为空或类型无效。",
-  "@startupIssueProviderEntryInvalid": { "placeholders": { "index": {} } },
+  "@startupIssueProviderEntryInvalid": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderIdMissing": "服务商条目 {index} 缺少 ID 或 ID 为空。",
-  "@startupIssueProviderIdMissing": { "placeholders": { "index": {} } },
+  "@startupIssueProviderIdMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderTypeMissing": "服务商条目 {index} 缺少类型或类型为空。",
-  "@startupIssueProviderTypeMissing": { "placeholders": { "index": {} } },
+  "@startupIssueProviderTypeMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderNameMissing": "服务商条目 {index} 缺少名称或名称为空。",
-  "@startupIssueProviderNameMissing": { "placeholders": { "index": {} } },
+  "@startupIssueProviderNameMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderListInvalid": "服务商条目 {index} 的 {field} 字段不是有效列表。",
-  "@startupIssueProviderListInvalid": { "placeholders": { "index": {}, "field": {} } },
+  "@startupIssueProviderListInvalid": {
+    "placeholders": {
+      "index": {},
+      "field": {}
+    }
+  },
   "startupIssueProviderNestedItemInvalid": "服务商条目 {index} 的 {field} 中有无效项目，可能导致解析失败。",
-  "@startupIssueProviderNestedItemInvalid": { "placeholders": { "index": {}, "field": {} } },
+  "@startupIssueProviderNestedItemInvalid": {
+    "placeholders": {
+      "index": {},
+      "field": {}
+    }
+  },
   "startupIssueConversationsInvalid": "会话数据格式错误：应为 JSON 数组。",
   "startupIssueConversationInvalid": "会话 {index} 为空或类型无效。",
-  "@startupIssueConversationInvalid": { "placeholders": { "index": {} } },
+  "@startupIssueConversationInvalid": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueConversationIdMissing": "会话 {index} 缺少 ID。",
-  "@startupIssueConversationIdMissing": { "placeholders": { "index": {} } },
+  "@startupIssueConversationIdMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueConversationMessagesMissing": "会话 {index} 缺少消息字段。",
-  "@startupIssueConversationMessagesMissing": { "placeholders": { "index": {} } },
+  "@startupIssueConversationMessagesMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueConversationMessagesInvalid": "会话 {index} 的消息字段不是有效列表。",
-  "@startupIssueConversationMessagesInvalid": { "placeholders": { "index": {} } },
+  "@startupIssueConversationMessagesInvalid": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueUnknownProviderType": "服务商条目 {index} 使用未知类型“{type}”，可能无法正常工作。",
-  "@startupIssueUnknownProviderType": { "placeholders": { "index": {}, "type": {} } }
+  "@startupIssueUnknownProviderType": {
+    "placeholders": {
+      "index": {},
+      "type": {}
+    }
+  },
+  "startupErrorTitle": "应用启动失败",
+  "startupErrorDetails": "错误：{error}",
+  "@startupErrorDetails": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "renderErrorTitle": "界面渲染异常",
+  "renderErrorDebugTitle": "界面渲染异常（调试模式）",
+  "renderErrorRestartMessage": "请尝试重启应用。",
+  "batchDlgFileName": "文件名",
+  "batchDlgFolderName": "文件夹名",
+  "batchDlgFileNameConflict": "同一文件夹内存在同名文件",
+  "batchDlgFolderNameConflict": "目标位置已存在同名文件夹",
+  "batchDlgFolderNameSwapConflict": "文件夹之间不能在同一批次互换名称",
+  "batchDlgControlCharacterError": "名称不能包含控制字符",
+  "batchDlgNameWhitespaceError": "名称不能以空白开头或结尾，可添加空白清理规则",
+  "batchDlgNameEmpty": "{kind}不能为空",
+  "@batchDlgNameEmpty": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgNameTrailingWhitespace": "{kind}不能以空白结尾",
+  "@batchDlgNameTrailingWhitespace": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgNameTooLong": "{kind}不能超过{count}个字符",
+  "@batchDlgNameTooLong": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgNameIllegalCharacters": "{kind}不能包含 Windows 非法字符",
+  "@batchDlgNameIllegalCharacters": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgNameTrailingDot": "{kind}不能以 . 结尾",
+  "@batchDlgNameTrailingDot": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgNameReserved": "{kind}不能使用 Windows 保留名称",
+  "@batchDlgNameReserved": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgIntermediateNameTooLong": "中间名称过长，请调整规则",
+  "batchDlgTemplateMissingDate": "该项目没有{date}，请调整模板",
+  "@batchDlgTemplateMissingDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgCreatedDate": "创建时间",
+  "batchDlgModifiedDate": "修改时间",
+  "connectivityTestHttpSuccess": "HTTP 工具请求成功",
+  "connectivityTestHttpFailure": "HTTP 工具请求失败",
+  "connectivityTestInvalidMcpConfig": "MCP 配置无效",
+  "connectivityTestMissingTransport": "缺少有效的传输类型配置。",
+  "connectivityTestStdioUnsupported": "当前平台不支持 stdio",
+  "connectivityTestStdioDesktopOnly": "stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。",
+  "connectivityTestInvalidContent": "测试内容无效",
+  "connectivityTestMethodMustBeString": "method 必须是字符串。",
+  "connectivityTestUnsupportedMethod": "不支持的测试方法",
+  "connectivityTestReadOnlyMethodOnly": "为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。",
+  "connectivityTestParamsMustBeObject": "params 必须是 JSON 对象。",
+  "connectivityTestMcpConnectionFailed": "无法连接 MCP 服务",
+  "connectivityTestCheckConnectionSettings": "请检查地址、认证信息和网络，或查看应用日志获取连接详情。",
+  "connectivityTestRemainingToolsOmitted": "；其余工具已省略",
+  "connectivityTestMcpSuccess": "MCP 连通性测试成功",
+  "connectivityTestToolNames": "：{names}",
+  "connectivityTestMcpSuccessDetails": "连接及 tools/list 请求成功，共发现 {count} 个工具{names}{suffix}。",
+  "connectivityTestTodoMutationBlocked": "测试参数会修改待办数据",
+  "connectivityTestTodoReadOnly": "为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。",
+  "connectivityTestUnknownBuiltin": "未知的内置工具",
+  "connectivityTestBuiltinExecutorMissing": "找不到工具“{toolName}”的测试执行器。",
+  "connectivityTestBuiltinSuccess": "内置工具测试成功",
+  "connectivityTestBuiltinFailure": "内置工具测试失败",
+  "connectivityTestTopLevelObjectRequired": "测试内容顶层必须是 JSON 对象。",
+  "connectivityTestRequestTimeout": "请求超时，请检查服务响应和网络。",
+  "connectivityTestMcpRequestTimeout": "MCP 请求超时：{method}",
+  "connectivityTestResultTruncated": "…（结果已截断）",
+  "@connectivityTestMcpSuccessDetails": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      },
+      "suffix": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestBuiltinExecutorMissing": {
+    "placeholders": {
+      "toolName": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestMcpRequestTimeout": {
+    "placeholders": {
+      "method": {
+        "type": "String"
+      }
+    }
+  },
+  "toolResultWebSearchEmptyQuery": "错误：搜索关键词不能为空。",
+  "toolResultWebSearchInvalidSource": "错误：不支持的搜索引擎“{source}”。可选值：google、bing、baidu。",
+  "toolResultWebSearchFallback": "首选引擎 {preferred} {reason}，已切换到 {fallback}。",
+  "toolResultWebSearchNotFound": "未找到相关搜索结果。",
+  "toolResultWebSearchNotFoundFrom": "未找到相关搜索结果（{sources} 均明确返回无结果）。",
+  "toolResultWebSearchIncomplete": "搜索不完整：{sources} 明确返回无结果；其他引擎不可用或返回了无法解析的页面：{failures}",
+  "toolResultWebSearchUnavailable": "错误：所有搜索引擎均不可用。{failures}",
+  "toolResultWebSearchResultsHeader": "来自 {source} 的搜索结果：",
+  "toolResultWebSearchLinkLabel": "链接",
+  "toolResultWebSearchSummaryLabel": "摘要",
+  "toolResultWebSearchEmptyResults": "未找到相关搜索结果。",
+  "toolResultTodoInvalid": "错误：todos 参数必须是数组（省略或传 null 表示读取待办列表）。",
+  "toolResultTodoEmpty": "当前没有待办事项。",
+  "toolResultTodoCount": "{count} 个待办事项未完成",
+  "toolResultMcpReconnectFailed": "错误：MCP 服务器“{server}”重新连接失败。",
+  "toolResultMcpUnavailable": "错误：MCP 服务器“{server}”当前不可用。",
+  "toolResultMcpNoTools": "错误：MCP 服务器“{server}”连接失败或未返回任何工具，请检查服务器配置。",
+  "toolResultMcpAliasedName": "真实工具“{tool}”在此服务器上的调用名为“{alias}”。",
+  "toolResultMcpDuplicateNames": "同名工具“{tool}”由多个 MCP 服务器提供；请使用对应调用名：{routes}。",
+  "toolResultMcpAliasedConflict": "错误：真实工具“{tool}”存在名称冲突，请使用上面列出的调用名。",
+  "toolResultMcpMissingTool": "错误：MCP 服务器“{server}”没有名为“{tool}”的工具。",
+  "toolResultMcpAvailableTools": "该服务器可用的工具：{tools}。请改用这些工具名调用。",
+  "toolResultMcpAliasConflict": "错误：MCP 工具“{tool}”当前使用了冲突别名。请使用对应调用名：{routes}。",
+  "toolResultToolDisabled": "错误：工具“{tool}”已停用。",
+  "toolResultToolUnknown": "错误：未知工具“{tool}”",
+  "@toolResultWebSearchInvalidSource": {
+    "placeholders": {
+      "source": {}
+    }
+  },
+  "@toolResultWebSearchFallback": {
+    "placeholders": {
+      "preferred": {},
+      "reason": {},
+      "fallback": {}
+    }
+  },
+  "@toolResultWebSearchNotFoundFrom": {
+    "placeholders": {
+      "sources": {}
+    }
+  },
+  "@toolResultWebSearchIncomplete": {
+    "placeholders": {
+      "sources": {},
+      "failures": {}
+    }
+  },
+  "@toolResultWebSearchUnavailable": {
+    "placeholders": {
+      "failures": {}
+    }
+  },
+  "@toolResultWebSearchResultsHeader": {
+    "placeholders": {
+      "source": {}
+    }
+  },
+  "@toolResultTodoCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@toolResultMcpReconnectFailed": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpUnavailable": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpNoTools": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpAliasedName": {
+    "placeholders": {
+      "tool": {},
+      "alias": {}
+    }
+  },
+  "@toolResultMcpDuplicateNames": {
+    "placeholders": {
+      "tool": {},
+      "routes": {}
+    }
+  },
+  "@toolResultMcpAliasedConflict": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultMcpMissingTool": {
+    "placeholders": {
+      "server": {},
+      "tool": {}
+    }
+  },
+  "@toolResultMcpAvailableTools": {
+    "placeholders": {
+      "tools": {}
+    }
+  },
+  "@toolResultMcpAliasConflict": {
+    "placeholders": {
+      "tool": {},
+      "routes": {}
+    }
+  },
+  "@toolResultToolDisabled": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultToolUnknown": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "toolResultWebSearchFallbackNoResults": "未找到相关结果",
+  "toolResultWebSearchFallbackUnavailable": "暂不可用",
+  "toolResultMcpServerRoute": "（MCP 服务器 {server}）",
+  "@toolResultMcpServerRoute": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "toolResultWebSearchUnparsedResults": "未返回可解析的搜索结果",
+  "toolResultSearchTitleLabel": "标题",
+  "toolResultSearchContentLabel": "内容",
+  "toolResultHttpApiKeyMissing": "错误：{provider} API Key 未配置，请在设置页面配置。",
+  "toolResultHttpUrlMissing": "错误：{provider} 实例 URL 未配置，请在设置页面配置。",
+  "toolResultHttpRequestFailedStatus": "错误：{provider} 请求失败 (HTTP {statusCode})",
+  "toolResultHttpRequestFailed": "错误：{provider} 请求失败：{detail}",
+  "toolResultHttpUnknownTool": "错误：未知的 HTTP 工具“{provider}”",
+  "@toolResultHttpApiKeyMissing": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "@toolResultHttpUrlMissing": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "@toolResultHttpRequestFailedStatus": {
+    "placeholders": {
+      "provider": {},
+      "statusCode": {}
+    }
+  },
+  "@toolResultHttpRequestFailed": {
+    "placeholders": {
+      "provider": {},
+      "detail": {}
+    }
+  },
+  "@toolResultHttpUnknownTool": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "toolResultMcpNotConnected": "错误：MCP 服务器“{server}”未连接。",
+  "toolResultMcpNoResponse": "错误：MCP 工具“{tool}”无响应。",
+  "toolResultMcpCallFailed": "错误：{detail}",
+  "@toolResultMcpNotConnected": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpNoResponse": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultMcpCallFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "httpToolBraveDescription": "使用 Brave Search API 搜索网络。需要配置 API Key。",
+  "@httpToolBraveDescription": {
+    "placeholders": {}
+  },
+  "httpToolBochaDescription": "使用博查 AI Search API 搜索网络。需要配置 API Key。",
+  "@httpToolBochaDescription": {
+    "placeholders": {}
+  },
+  "httpToolQueritDescription": "使用 Querit Search 搜索网络。需要配置 API Key。",
+  "@httpToolQueritDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearxngDescription": "注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。",
+  "@httpToolSearxngDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchQueryDescription": "搜索关键词。",
+  "@httpToolSearchQueryDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountDescription": "返回结果数量。",
+  "@httpToolSearchCountDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountMax20Description": "返回结果数量（最大 20）。",
+  "@httpToolSearchCountMax20Description": {
+    "placeholders": {}
+  },
+  "backupRestoreApkgImportSummary": "导入完成：{decks} 个牌组，{notes} 个笔记，{cards} 张卡片",
+  "@backupRestoreApkgImportSummary": {
+    "placeholders": {
+      "decks": {
+        "type": "int"
+      },
+      "notes": {
+        "type": "int"
+      },
+      "cards": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreApkgFileNotFound": "找不到所选的 .apkg 文件：{path}",
+  "backupRestoreApkgInvalidArchive": "所选的 .apkg 文件已损坏或不是有效的压缩包。",
+  "@backupRestoreApkgFileNotFound": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgCollectionMissing": ".apkg 文件中缺少 collection.anki2。",
+  "backupRestoreApkgTargetMissing": "请先打开 Anki 闪卡功能，再导入或导出牌组：{path}",
+  "@backupRestoreApkgTargetMissing": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgDatabaseCorrupt": "Anki collection 数据库已损坏。",
+  "backupRestoreApkgLocalFileFailure": "无法访问本地 Anki 文件：{path}",
+  "@backupRestoreApkgLocalFileFailure": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgUnexpectedError": ".apkg 操作访问此路径时失败：{path}",
+  "@backupRestoreApkgUnexpectedError": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgOperationFailed": ".apkg 操作失败，无法读取文件或数据库。",
+  "backupRestoreApkgExportFailed": "无法从此数据库打包导出 Anki 牌组：{path}",
+  "@backupRestoreApkgExportFailed": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusProtocolFailed": "同步服务器响应无效或不完整。请确认服务器支持 Anki sync v10。",
+  "ankiSyncStatusLoginRequired": "请先登录 Anki 同步账户，再继续操作。",
+  "ankiSyncStatusInvalidServerUrl": "请输入有效的 HTTP 或 HTTPS 同步服务器地址。",
+  "ankiSyncStatusHttpsRequired": "远程自建同步服务器必须使用 HTTPS。",
+  "ankiSyncStatusConnectionTimeout": "同步请求超时。请检查服务器地址和网络后重试。",
+  "ankiSyncStatusTlsFailure": "无法验证服务器证书。请检查证书或配置自定义 CA。",
+  "ankiSyncStatusConnectionFailure": "无法连接到同步服务器。请检查服务器地址和网络。",
+  "ankiSyncStatusRequestFailure": "同步请求失败。请检查服务器和网络后重试。",
+  "ankiSyncStatusServerHttpError": "同步服务器返回了 HTTP {statusCode}。",
+  "@ankiSyncStatusServerHttpError": {
+    "placeholders": {
+      "statusCode": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusResponseTooLarge": "同步响应超过 {limitMb} MB 限制。",
+  "@ankiSyncStatusResponseTooLarge": {
+    "placeholders": {
+      "limitMb": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusLocalFileFailure": "无法读取或清理本地同步文件。请检查磁盘访问权限后重试。",
+  "ankiSyncStatusCollectionInvalid": "无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。",
+  "ankiSyncStatusServerAuthRejected": "同步服务器拒绝了请求（HTTP {statusCode}）。请检查登录凭据和服务器权限。",
+  "@ankiSyncStatusServerAuthRejected": {
+    "placeholders": {
+      "statusCode": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusServerEndpointNotFound": "找不到同步接口（HTTP {statusCode}）。请检查服务器地址。",
+  "@ankiSyncStatusServerEndpointNotFound": {
+    "placeholders": {
+      "statusCode": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusMediaProtocolFailed": "媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。",
+  "ankiSyncStatusMediaIndexCorrupt": "本地媒体同步索引已损坏。请重置媒体同步数据后重试。",
+  "ankiSyncStatusMediaIndexFailure": "本地媒体同步索引无法读取或更新。",
+  "ankiSyncStatusMediaChecksumMismatch": "下载的媒体文件校验失败。请重试媒体同步。",
+  "ankiSyncStatusMediaFilenameConflict": "媒体文件“{filename}”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。",
+  "@ankiSyncStatusMediaFilenameConflict": {
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaInvalidFilename": "媒体文件名“{filename}”无法同步。请将其重命名为符合 Anki 规则的名称后重试。",
+  "@ankiSyncStatusMediaInvalidFilename": {
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaFileSizeLimit": "媒体文件为空或超过 {limitMb} MB 限制。",
+  "@ankiSyncStatusMediaFileSizeLimit": {
+    "placeholders": {
+      "limitMb": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusMediaBatchLimitExceeded": "媒体压缩包包含 {count} 个条目，最多允许 {limit} 个（含清单）。",
+  "@ankiSyncStatusMediaBatchLimitExceeded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusMediaSanityCheckFailed": "媒体同步校验失败。请重试同步。",
+  "ankiWebSyncUnsupportedPlatform": "网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。",
+  "ankiWebDecksUnsupportedPlatform": "如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。",
+  "ankiStatsUnsupportedPlatform": "当前平台无法查看 Anki 统计数据。",
+  "ankiSyncStatusDeviceClockMismatch": "设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。",
+  "ankiSyncStatusFullDownloadRequired": "同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。",
+  "ankiSyncStatusFullTransferRequired": "此 collection 无法增量同步。请选择完整上传或下载后继续。",
+  "ankiSyncStatusIncrementalSyncFailed": "增量同步未能完成。请检查服务器和网络连接后重试。",
+  "emojiCategorySmileys": "表情",
+  "emojiCategoryPeople": "人物",
+  "emojiCategoryAnimals": "动物",
+  "emojiCategoryFood": "食物",
+  "emojiCategoryActivities": "活动",
+  "emojiCategoryTravel": "旅行",
+  "emojiCategoryObjects": "物品",
+  "emojiCategorySymbols": "符号",
+  "emojiCategoryFlags": "旗帜",
+  "languageNameSpanish": "西班牙语",
+  "languageNameJapanese": "日语",
+  "languageNameFrench": "法语",
+  "languageNameGerman": "德语",
+  "languageNameArabic": "阿拉伯语",
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "确定要删除空文件夹 “{name}” 吗？其下的 {count} 个子文件夹也将被删除。",
+  "providerMaxUploadSizePositive": "最大上传大小必须是正数。",
+  "ocrSamplingTemperatureOutOfRange": "已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。",
+  "@ocrSamplingTemperatureOutOfRange": {"description": "Explains how to repair an invalid stored OCR temperature."},
+  "ocrSamplingTopPOutOfRange": "已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。",
+  "@ocrSamplingTopPOutOfRange": {"description": "Explains how to repair an invalid stored OCR top-P value."},
+  "ocrSamplingSliderRepairRequired": "保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。",
+  "@ocrSamplingSliderRepairRequired": {"description": "Explains why an invalid enabled OCR sampling setting must be repaired before saving."},
+  "endpointResponsesApi": "OpenAI Responses API",
+  "providerResponsesEndpointHelp": "请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。"
+
 }

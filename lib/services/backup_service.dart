@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -14,18 +13,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 import 'package:uuid/uuid.dart';
 
-import '../models/stroom_conversation.dart';
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
 import '../l10n/app_localizations.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
-import 'conversation_migration_service.dart';
-import 'conversation_repository.dart';
 import '../utils/file_picker_utils.dart';
+import '../utils/file_manifest.dart' show AudioRecord;
 import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
@@ -33,20 +31,19 @@ import '../anki/database/anki_database.dart';
 import '../anki/sync/anki_media_sync.dart';
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
-import '../utils/credential_field_sanitizer.dart';
 import '../utils/backup_archive_path.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
-import 'llm_account_migration_service.dart';
-import 'llm_credential_store.dart';
 import '../catcatch/models/catcatch_task.dart' show CatCatchTask;
 import '../providers/background_task_provider.dart' show BackgroundTask;
 import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
 import '../task_flow/models/flow_payload.dart' show FlowPayload;
+import '../task_flow/services/flow_temporary_artifact_storage.dart'
+    show FlowTemporaryArtifactStorage;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -80,6 +77,14 @@ class DataManagementPreflightException implements Exception {
   String toString() => message;
 }
 
+class _RestoreTemporaryArtifactCleanupException extends StateError {
+  _RestoreTemporaryArtifactCleanupException()
+      : super(
+          'Restore completed, but some replaced TaskFlow temporary artifacts '
+          'could not be removed.',
+        );
+}
+
 /// 恢复中途（已删除选中类别的现有数据之后）发现归档条目损坏时抛出。
 ///
 /// 与 [BackupValidationException] 区分：校验期失败意味着"什么都没动"，
@@ -94,66 +99,17 @@ class _RestoreEntryCorruptException implements Exception {
   String toString() => message;
 }
 
-class _StagedRestoreCredentials {
-  final LlmCredentialStore _store;
-  final Map<String, String?> _previousValues;
-  final Map<String, String> _stagedValues;
-  final Set<String> _changedReferences;
-  final LlmCredentialTransactionLease _lease;
-  var _resolved = false;
-  bool? _rollbackResult;
-
-  _StagedRestoreCredentials(
-    this._store,
-    this._previousValues,
-    this._stagedValues,
-    this._changedReferences,
-    this._lease,
-  );
-
-  void commit() {
-    if (_resolved) return;
-    _resolved = true;
-    _rollbackResult = true;
-    _lease.release();
-  }
-
-  Future<bool> rollback() async {
-    if (_resolved) return _rollbackResult ?? false;
-    var complete = true;
-    try {
-      for (final reference in _changedReferences) {
-        try {
-          final current = await _store.read(reference);
-          final previous = _previousValues[reference];
-          if (current == previous) continue;
-          if (current != _stagedValues[reference]) {
-            complete = false;
-            continue;
-          }
-          if (previous == null) {
-            await _store.delete(reference);
-            if (await _store.read(reference) != null) complete = false;
-          } else {
-            await _store.write(reference, previous);
-            if (await _store.read(reference) != previous) complete = false;
-          }
-        } catch (_) {
-          complete = false;
-        }
-      }
-    } finally {
-      _resolved = true;
-      _rollbackResult = complete;
-      _lease.release();
-    }
-    return complete;
-  }
-}
-
-class _PreferenceRestoreRollbackIncomplete implements Exception {
-  const _PreferenceRestoreRollbackIncomplete();
-}
+typedef _RestoreCollisionCandidate = ({
+  String destination,
+  String sourcePath,
+  String normalizedSourcePath,
+  String targetDirectory,
+  String targetPath,
+  String relativePath,
+  String fileName,
+  bool isAttachment,
+  bool normalizationInsensitive,
+});
 
 // ====================================================================
 // BackupSelection — 选择性备份/恢复的数据类别
@@ -268,8 +224,29 @@ class BackupSelection {
 // ====================================================================
 
 class BackupService {
-  static const _conversationRepositoryBackupField = 'conversation_repository';
   static int? _lastBackupFileTimestampSeconds;
+  @visibleForTesting
+  static bool? restorePathsCaseInsensitiveForTesting;
+  @visibleForTesting
+  static bool? restorePathsNormalizationInsensitiveForTesting;
+  @visibleForTesting
+  static bool? restorePathsCaseExpansionInsensitiveForTesting;
+  @visibleForTesting
+  static bool? restorePathsWindowsNameNormalizationInsensitiveForTesting;
+  @visibleForTesting
+  static String? restoreAppDirectoryForTesting;
+  @visibleForTesting
+  static bool restorePathsWindowsSeparatorsForTesting = false;
+  @visibleForTesting
+  static void Function(int entryIndex)? beforeRestoreBinaryPublishForTesting;
+  @visibleForTesting
+  static bool skipRestoreRollbackForTesting = false;
+  static const _restoreRollbackDirectoryPrefix = '.stroom-restore-rollback-';
+  static const _webRestoreRollbackPrefix = '.stroom-restore-rollback-web-';
+  static const _webRestoreRollbackUuid = Uuid();
+  static const _restoreInProgressMarker = 'restore-in-progress';
+  static const _startupPreferenceRestoreMarker = 'startup-preferences';
+  static const _sharedPreferenceRestoreMarker = 'shared-preferences';
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
     r'^recording_\d+\.m4a$',
@@ -289,30 +266,69 @@ class BackupService {
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
     bool useStartupPreferenceAdapter = false,
-  }) async {
-    await AppLogService.info(
-      'BackupService',
-      'createBackup: outputPath=$outputPath',
-    );
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'createBackup is not available on web. Use exportBackup instead.',
-      );
-    }
-    if (isCancelled != null && isCancelled()) {
-      throw const BackupCancelledException();
-    }
-    // 使用流式写入：逐个文件处理并直接写入磁盘，
-    // 峰值内存从 O(总备份大小) 降低到 O(最大单文件大小)。
-    await _createBackupStreaming(
+  }) {
+    return _createBackup(
       outputPath: outputPath,
       onProgress: onProgress,
       isCancelled: isCancelled,
       selection: selection,
       useStartupPreferenceAdapter: useStartupPreferenceAdapter,
     );
-    await AppLogService.info('BackupService', 'createBackup: success');
-    return outputPath;
+  }
+
+  static Future<String> _createBackup({
+    required String outputPath,
+    void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
+    BackupSelection selection = BackupSelection.all,
+    bool useStartupPreferenceAdapter = false,
+    bool skipMissingSelectedFiles = false,
+  }) async {
+    final operationClock = Stopwatch()..start();
+    await AppLogService.info(
+      'BackupService',
+      'createBackup: start, selectedCategories=${selection.selectedLabels.length}, '
+          'includeMediaFiles=${selection.includeMediaFiles}',
+    );
+    try {
+      if (kIsWeb) {
+        throw UnsupportedError(
+          'createBackup is not available on web. Use exportBackup instead.',
+        );
+      }
+      if (isCancelled != null && isCancelled()) {
+        throw const BackupCancelledException();
+      }
+      // 使用流式写入：逐个文件处理并直接写入磁盘，
+      // 峰值内存从 O(总备份大小) 降低到 O(最大单文件大小)。
+      await _createBackupStreaming(
+        outputPath: outputPath,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+        selection: selection,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        skipMissingSelectedFiles: skipMissingSelectedFiles,
+      );
+      await AppLogService.info(
+        'BackupService',
+        'createBackup: success, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
+      return outputPath;
+    } on BackupCancelledException {
+      await AppLogService.info(
+        'BackupService',
+        'createBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
+      rethrow;
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'BackupService',
+        'createBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        error.runtimeType,
+        stackTrace,
+      );
+      rethrow;
+    }
   }
 
   static Future<void> restoreBackup(
@@ -324,26 +340,511 @@ class BackupService {
     bool trustEmptyLegacyTaskPayloads = false,
     bool useStartupPreferenceAdapter = false,
   }) async {
+    final operationClock = Stopwatch()..start();
     await AppLogService.info(
       'BackupService',
-      'restoreBackup: zipPath=$zipPath',
+      'restoreBackup: start, selectedCategories=${selection.selectedLabels.length}',
     );
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'restoreBackup is not available on web. Use importBackup instead.',
+    try {
+      if (kIsWeb) {
+        throw UnsupportedError(
+          'restoreBackup is not available on web. Use importBackup instead.',
+        );
+      }
+      // 流式恢复：只解析中央目录 + 按条目分块解压落盘，
+      // 峰值内存 O(块大小)，不再把整个备份包 readAsBytes 进内存。
+      await _restoreFromZipFile(
+        zipPath,
+        onProgress: onProgress,
+        selection: selection,
+        skipPostRestoreMigration: skipPostRestoreMigration,
+        skipMissingCategories: skipMissingCategories,
+        trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
+      await AppLogService.info(
+        'BackupService',
+        'restoreBackup: success, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'BackupService',
+        'restoreBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        error.runtimeType,
+        stackTrace,
+      );
+      rethrow;
     }
-    // 流式恢复：只解析中央目录 + 按条目分块解压落盘，
-    // 峰值内存 O(块大小)，不再把整个备份包 readAsBytes 进内存。
-    await _restoreFromZipFile(
-      zipPath,
-      onProgress: onProgress,
-      selection: selection,
-      skipPostRestoreMigration: skipPostRestoreMigration,
-      skipMissingCategories: skipMissingCategories,
-      trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
+  }
+
+  /// Rolls back a restore interrupted by process termination.
+  ///
+  /// A completed snapshot is marked immediately before selected data can be
+  /// changed. The marker remains until the restore (or its in-process rollback)
+  /// completes, so startup can safely replay the snapshot after a crash.
+  static Future<void> recoverInterruptedRestores() async {
+    if (kIsWeb || WebFileStore.isTestMode) {
+      await _recoverInterruptedWebStoreRestores();
+      return;
+    }
+
+    final appDirectory = Directory(await AppStorage.directory);
+    if (!await appDirectory.exists()) return;
+
+    await for (final entity in appDirectory.list(followLinks: false)) {
+      if (entity is! Directory ||
+          !p
+              .basename(entity.path)
+              .startsWith(_restoreRollbackDirectoryPrefix)) {
+        continue;
+      }
+      final marker = File(p.join(entity.path, _restoreInProgressMarker));
+      if (!await marker.exists()) {
+        // Snapshot creation had not finished, so the restore had not begun.
+        await entity.delete(recursive: true);
+        continue;
+      }
+
+      final archivePath = p.join(entity.path, 'pre-restore.zip');
+      if (!await File(archivePath).exists()) {
+        throw StateError(
+          'Interrupted restore recovery archive is missing: $archivePath',
+        );
+      }
+      final markerContents = await marker.readAsString();
+      final bool useStartupPreferenceAdapter;
+      final BackupSelection originalSelection;
+      final BackupSelection recoverySelection;
+      final bool skipMissingCategories;
+      if (markerContents == _startupPreferenceRestoreMarker ||
+          markerContents == _sharedPreferenceRestoreMarker) {
+        final legacyState = await _readSnapshotSelection(archivePath);
+        useStartupPreferenceAdapter =
+            markerContents == _startupPreferenceRestoreMarker;
+        originalSelection = legacyState.selection;
+        recoverySelection = legacyState.availableSelection;
+        skipMissingCategories = legacyState.skipMissingCategories;
+      } else {
+        final recoveryState = _parseRestoreRecoveryMarker(markerContents);
+        final archiveState = await _readSnapshotSelection(archivePath);
+        final recordedSnapshotSelection = recoveryState.snapshotSelection;
+        if (recordedSnapshotSelection != null &&
+            !_sameRestoreSelection(
+              recordedSnapshotSelection,
+              archiveState.selection,
+            )) {
+          throw const FormatException(
+            'Interrupted restore marker does not match its archive.',
+          );
+        }
+        if (!_restoreSelectionIsSubset(
+          archiveState.selection,
+          recoveryState.selection,
+        )) {
+          throw const FormatException(
+            'Interrupted restore archive exceeds its selected categories.',
+          );
+        }
+        useStartupPreferenceAdapter = recoveryState.useStartupPreferenceAdapter;
+        originalSelection = recoveryState.selection;
+        recoverySelection = archiveState.availableSelection;
+        skipMissingCategories = archiveState.skipMissingCategories;
+      }
+      await _restoreFromZipFile(
+        archivePath,
+        selection: recoverySelection,
+        skipMissingCategories: skipMissingCategories,
+        skipPostRestoreMigration: true,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        skipAnkiMigrationMarkerInvalidation: true,
+        skipAnkiSyncIndexClear: true,
+        skipRollbackSnapshot: true,
+        replaceBrowserCookiesExactly: true,
+      );
+      final absentSelection =
+          _selectionDifference(originalSelection, recoverySelection);
+      if (absentSelection.selectedPartIds.isNotEmpty) {
+        await clearSelectedData(
+          absentSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        );
+      }
+      await entity.delete(recursive: true);
+    }
+  }
+
+  /// Replays WebFileStore snapshots left by an interrupted selected restore.
+  /// The journal marker is written only after every snapshot entry is durable.
+  static Future<void> _recoverInterruptedWebStoreRestores() async {
+    final keys = await WebFileStore.keysWithPrefix(_webRestoreRollbackPrefix);
+    final journalIds = <String>{};
+    for (final key in keys) {
+      final remainder = key.substring(_webRestoreRollbackPrefix.length);
+      final separator = remainder.indexOf('/');
+      if (separator >= 0) journalIds.add(remainder.substring(0, separator));
+    }
+
+    for (final journalId in journalIds) {
+      await _replayWebStoreRollbackJournal(journalId);
+    }
+  }
+
+  static Future<void> _replayWebStoreRollbackJournal(String journalId) async {
+    final journalPrefix = '$_webRestoreRollbackPrefix$journalId/';
+    final marker = await WebFileStore.read('${journalPrefix}journal');
+    if (marker == null) {
+      // Snapshot creation had not committed, so live data was not touched.
+      await _deleteWebStoreRollbackJournal(journalId);
+      return;
+    }
+
+    final decoded = jsonDecode(utf8.decode(marker));
+    if (decoded is! Map || decoded['version'] != 1) {
+      throw const FormatException('Invalid Web restore rollback journal.');
+    }
+    final selection = _parseRestoreSelection(decoded['selection']);
+    final rawEntries = decoded['entries'];
+    if (rawEntries is! List || rawEntries.any((entry) => entry is! String)) {
+      throw const FormatException('Invalid Web restore rollback entries.');
+    }
+    final entries = <MapEntry<String, Uint8List>>[];
+    for (var index = 0; index < rawEntries.length; index++) {
+      final key = rawEntries[index] as String;
+      if (!_isSelectedWebStoreKey(key, selection)) {
+        throw const FormatException(
+          'Web restore rollback journal contains an unselected key.',
+        );
+      }
+      final bytes = await WebFileStore.read('${journalPrefix}data/$index');
+      if (bytes == null) {
+        throw const FormatException(
+          'Web restore rollback journal snapshot entry is missing.',
+        );
+      }
+      entries.add(MapEntry(key, bytes));
+    }
+
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (!key.startsWith(_webRestoreRollbackPrefix) &&
+          _isSelectedWebStoreKey(key, selection)) {
+        await WebFileStore.delete(key);
+      }
+    }
+    for (final entry in entries) {
+      await WebFileStore.write(entry.key, entry.value);
+    }
+    await _deleteWebStoreRollbackJournal(journalId);
+  }
+
+  static Future<void> _deleteWebStoreRollbackJournal(String journalId) async {
+    final prefix = '$_webRestoreRollbackPrefix$journalId/';
+    // The live restore or replay is complete. Remove the commit marker first
+    // so an interruption during snapshot cleanup is treated as an orphan.
+    await WebFileStore.delete('${prefix}journal');
+    try {
+      for (final key in await WebFileStore.keysWithPrefix(prefix)) {
+        await WebFileStore.delete(key);
+      }
+    } catch (error) {
+      // Leftover payloads are harmless without the marker and are retried at
+      // startup. Cleanup failure must not roll back a completed restore.
+      debugPrint('Web restore rollback journal cleanup deferred: $error');
+    }
+  }
+
+  static Future<
+      ({
+        BackupSelection selection,
+        BackupSelection availableSelection,
+        bool skipMissingCategories,
+      })> _readSnapshotSelection(String archivePath) async {
+    final reader = _ZipStreamReader(archivePath);
+    try {
+      final manifestBytes = reader.readMetaFile('manifest.json');
+      if (manifestBytes == null) {
+        throw const BackupValidationException(
+          'Interrupted restore archive has no manifest.',
+        );
+      }
+      final decoded = jsonDecode(utf8.decode(manifestBytes));
+      if (decoded is! Map<String, dynamic>) {
+        throw const BackupValidationException(
+          'Interrupted restore manifest is invalid.',
+        );
+      }
+      final declaredSelection = _selectionFromDeclaredParts(
+        decoded['dataParts'],
+      );
+      final includeMediaFiles = decoded['includeMediaFiles'];
+      if (includeMediaFiles != null && includeMediaFiles is! bool) {
+        throw const BackupValidationException(
+          'Interrupted restore media selection is invalid.',
+        );
+      }
+      final selection = _selectionWithMediaFiles(
+        declaredSelection ?? BackupSelection.all,
+        includeMediaFiles ?? true,
+      );
+      Uint8List? readMetaFile(String name) => reader.readMetaFile(name);
+      final metadata = _validateAndParseMetadata(
+        readMetaFile,
+        selection,
+        archiveEntries: reader.entries.map((entry) => entry.name).toSet(),
+        archiveEntrySizes: {
+          for (final entry in reader.entries)
+            entry.name: entry.uncompressedSize,
+        },
+        skipMissingCategories: true,
+      );
+      if (declaredSelection == null) {
+        return (
+          selection: selection,
+          availableSelection: metadata.restoreSelection,
+          skipMissingCategories: true,
+        );
+      }
+      return (
+        selection: selection,
+        availableSelection: metadata.restoreSelection,
+        skipMissingCategories: true,
+      );
+    } finally {
+      reader.close();
+    }
+  }
+
+  static BackupSelection _selectionWithMediaFiles(
+    BackupSelection selection,
+    bool includeMediaFiles,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: selection.chatRecordsAndAttachments,
+        settings: selection.settings,
+        pictures: selection.pictures,
+        audio: selection.audio,
+        videos: selection.videos,
+        texts: selection.texts,
+        tasks: selection.tasks,
+        ankiData: selection.ankiData,
+        browserCookies: selection.browserCookies,
+        includeMediaFiles: includeMediaFiles,
+      );
+
+  static bool _sameRestoreSelection(
+    BackupSelection first,
+    BackupSelection second,
+  ) =>
+      first.chatRecordsAndAttachments == second.chatRecordsAndAttachments &&
+      first.settings == second.settings &&
+      first.pictures == second.pictures &&
+      first.audio == second.audio &&
+      first.videos == second.videos &&
+      first.texts == second.texts &&
+      first.tasks == second.tasks &&
+      first.ankiData == second.ankiData &&
+      first.browserCookies == second.browserCookies &&
+      first.includeMediaFiles == second.includeMediaFiles;
+
+  static bool _restoreSelectionIsSubset(
+    BackupSelection subset,
+    BackupSelection superset,
+  ) =>
+      (!subset.chatRecordsAndAttachments ||
+          superset.chatRecordsAndAttachments) &&
+      (!subset.settings || superset.settings) &&
+      (!subset.pictures || superset.pictures) &&
+      (!subset.audio || superset.audio) &&
+      (!subset.videos || superset.videos) &&
+      (!subset.texts || superset.texts) &&
+      (!subset.tasks || superset.tasks) &&
+      (!subset.ankiData || superset.ankiData) &&
+      (!subset.browserCookies || superset.browserCookies) &&
+      subset.includeMediaFiles == superset.includeMediaFiles;
+
+  static BackupSelection _selectionDifference(
+    BackupSelection original,
+    BackupSelection snapshot,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: original.chatRecordsAndAttachments &&
+            !snapshot.chatRecordsAndAttachments,
+        settings: original.settings && !snapshot.settings,
+        pictures: original.pictures && !snapshot.pictures,
+        audio: original.audio && !snapshot.audio,
+        videos: original.videos && !snapshot.videos,
+        texts: original.texts && !snapshot.texts,
+        tasks: original.tasks && !snapshot.tasks,
+        ankiData: original.ankiData && !snapshot.ankiData,
+        browserCookies: original.browserCookies && !snapshot.browserCookies,
+        includeMediaFiles: original.includeMediaFiles,
+      );
+
+  static ({
+    BackupSelection selection,
+    BackupSelection? snapshotSelection,
+    bool useStartupPreferenceAdapter,
+  }) _parseRestoreRecoveryMarker(String contents) {
+    final decoded = jsonDecode(contents);
+    if (decoded is! Map) {
+      throw const FormatException('Invalid interrupted restore marker.');
+    }
+    const versionOneKeys = {
+      'version',
+      'useStartupPreferenceAdapter',
+      'selection',
+    };
+    final actualMarkerKeys = decoded.keys.toSet();
+    final version = decoded['version'];
+    const versionTwoKeys = {...versionOneKeys, 'snapshotSelection'};
+    final expectedMarkerKeys = switch (version) {
+      1 => versionOneKeys,
+      2 => versionTwoKeys,
+      _ => throw const FormatException(
+          'Invalid interrupted restore marker version.',
+        ),
+    };
+    if (actualMarkerKeys.length != expectedMarkerKeys.length ||
+        !actualMarkerKeys.containsAll(expectedMarkerKeys)) {
+      throw const FormatException('Invalid interrupted restore marker fields.');
+    }
+    final useStartupPreferenceAdapter = decoded['useStartupPreferenceAdapter'];
+    if (useStartupPreferenceAdapter is! bool) {
+      throw const FormatException('Incomplete interrupted restore marker.');
+    }
+
+    return (
       useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      selection: _parseRestoreSelection(decoded['selection']),
+      snapshotSelection: version == 2
+          ? _parseRestoreSelection(decoded['snapshotSelection'])
+          : null,
     );
+  }
+
+  static Map<String, bool> _restoreSelectionMarkerFields(
+    BackupSelection selection,
+  ) =>
+      {
+        'chatRecordsAndAttachments': selection.chatRecordsAndAttachments,
+        'settings': selection.settings,
+        'pictures': selection.pictures,
+        'audio': selection.audio,
+        'videos': selection.videos,
+        'texts': selection.texts,
+        'tasks': selection.tasks,
+        'ankiData': selection.ankiData,
+        'browserCookies': selection.browserCookies,
+        'includeMediaFiles': selection.includeMediaFiles,
+      };
+
+  static BackupSelection _parseRestoreSelection(Object? rawSelection) {
+    const selectionKeys = {
+      'chatRecordsAndAttachments',
+      'settings',
+      'pictures',
+      'audio',
+      'videos',
+      'texts',
+      'tasks',
+      'ankiData',
+      'browserCookies',
+      'includeMediaFiles',
+    };
+    if (rawSelection is! Map) {
+      throw const FormatException('Incomplete interrupted restore marker.');
+    }
+    final actualSelectionKeys = rawSelection.keys.toSet();
+    if (actualSelectionKeys.length != selectionKeys.length ||
+        !actualSelectionKeys.containsAll(selectionKeys)) {
+      throw const FormatException('Incomplete interrupted restore selection.');
+    }
+    bool selectionFlag(String key) {
+      final value = rawSelection[key];
+      if (value is! bool) {
+        throw FormatException('Invalid interrupted restore selection: $key.');
+      }
+      return value;
+    }
+
+    return BackupSelection(
+      chatRecordsAndAttachments: selectionFlag('chatRecordsAndAttachments'),
+      settings: selectionFlag('settings'),
+      pictures: selectionFlag('pictures'),
+      audio: selectionFlag('audio'),
+      videos: selectionFlag('videos'),
+      texts: selectionFlag('texts'),
+      tasks: selectionFlag('tasks'),
+      ankiData: selectionFlag('ankiData'),
+      browserCookies: selectionFlag('browserCookies'),
+      includeMediaFiles: selectionFlag('includeMediaFiles'),
+    );
+  }
+
+  static bool _isSelectedWebStoreKey(
+    String key,
+    BackupSelection selection,
+  ) {
+    final rootKey = key.startsWith('/') ? key.substring(1) : key;
+    if (selection.tasks &&
+        const {'task_list_last_read.json', 'app_launches.json'}
+            .contains(rootKey)) {
+      return true;
+    }
+    if (selection.ankiData &&
+        (rootKey == 'collection.anki2' ||
+            (selection.includeMediaFiles &&
+                rootKey.startsWith('collection.media/')))) {
+      return true;
+    }
+    if (selection.browserCookies && rootKey == 'browser_cookies.json') {
+      return true;
+    }
+    if ((selection.chatRecordsAndAttachments || selection.tasks) &&
+        selection.includeMediaFiles &&
+        (key.startsWith('attachments/') || key.startsWith('temp_edited/'))) {
+      return true;
+    }
+    for (final dir in _restoreKnownDirs) {
+      if (key.startsWith('$dir/')) {
+        if (dir == 'attachments' &&
+            selection.tasks &&
+            selection.includeMediaFiles) {
+          return true;
+        }
+        return _shouldRestoreDir(dir, selection);
+      }
+    }
+    return false;
+  }
+
+  static Future<String> _snapshotSelectedWebStoreFiles(
+    BackupSelection selection,
+  ) async {
+    final journalId = _webRestoreRollbackUuid.v4();
+    final prefix = '$_webRestoreRollbackPrefix$journalId/';
+    final keys = <String>[];
+    for (final key in await WebFileStore.keysWithPrefix('')) {
+      if (!_isSelectedWebStoreKey(key, selection)) continue;
+      final bytes = await WebFileStore.read(key);
+      if (bytes == null) continue;
+      await WebFileStore.write('${prefix}data/${keys.length}', bytes);
+      keys.add(key);
+    }
+    // This final write is the commit point: recovery ignores partial snapshots
+    // created before live selected data could have been changed.
+    await WebFileStore.write(
+      '${prefix}journal',
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'version': 1,
+            'selection': _restoreSelectionMarkerFields(selection),
+            'entries': keys,
+          }),
+        ),
+      ),
+    );
+    return journalId;
   }
 
   // ================================================================
@@ -373,6 +874,7 @@ class BackupService {
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
     bool useStartupPreferenceAdapter = false,
+    bool skipMissingSelectedFiles = false,
   }) async {
     void checkCancelled() {
       if (isCancelled != null && isCancelled()) {
@@ -392,6 +894,7 @@ class BackupService {
       checkCancelled: checkCancelled,
       onProgress: onProgress,
       useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      skipMissingSelectedFiles: skipMissingSelectedFiles,
     );
 
     // ------------------------------------------------------------
@@ -446,6 +949,7 @@ class BackupService {
     required void Function() checkCancelled,
     void Function(double progress)? onProgress,
     bool useStartupPreferenceAdapter = false,
+    bool skipMissingSelectedFiles = false,
   }) async {
     final jsonFiles = <String, String>{};
     final memoryFiles = <String, Uint8List>{};
@@ -485,8 +989,6 @@ class BackupService {
         final settingsKeys = <String>[];
         for (final key in await StartupPreferences.getKeys()) {
           if (key.startsWith('flutter.') ||
-              _isLegacyProviderQuarantineKey(key) ||
-              _isConversationMigrationKey(key) ||
               DataMigrationService.isFormatMetadataKey(key) ||
               _isDeviceLocalPreferenceKey(key) ||
               (key == _browserCookieRetentionKey &&
@@ -514,14 +1016,7 @@ class BackupService {
                 ),
               );
         if (selection.chatRecordsAndAttachments) {
-          final chatData = Map<String, dynamic>.from(
-            jsonDecode(encoded['chat_data']!) as Map,
-          );
-          final repositoryData = await _exportConversationRepository();
-          if (repositoryData != null) {
-            chatData[_conversationRepositoryBackupField] = repositoryData;
-          }
-          jsonFiles['chat_data.json'] = jsonEncode(chatData);
+          jsonFiles['chat_data.json'] = encoded['chat_data']!;
         }
         if (selection.settings) {
           jsonFiles['settings.json'] = encoded['settings']!;
@@ -532,8 +1027,6 @@ class BackupService {
         final settingsData = <String, dynamic>{};
         for (final key in prefs.getKeys()) {
           if (key.startsWith('flutter.') ||
-              _isLegacyProviderQuarantineKey(key) ||
-              _isConversationMigrationKey(key) ||
               DataMigrationService.isFormatMetadataKey(key) ||
               _isDeviceLocalPreferenceKey(key) ||
               (key == _browserCookieRetentionKey &&
@@ -548,12 +1041,7 @@ class BackupService {
             settingsData[key] = prefs.get(key);
           }
         }
-        _sanitizeBackupSettings(settingsData);
         if (selection.chatRecordsAndAttachments) {
-          final repositoryData = await _exportConversationRepository();
-          if (repositoryData != null) {
-            chatData[_conversationRepositoryBackupField] = repositoryData;
-          }
           jsonFiles['chat_data.json'] = jsonEncode(chatData);
         }
         if (selection.settings) {
@@ -572,7 +1060,7 @@ class BackupService {
       final taskFlowAttachmentPaths =
           selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode
               ? await _taskFlowAttachmentPathsForBackup(appDir)
-              : <String>{};
+              : <String, String>{};
       await _addTaskPlanFile(
         jsonFiles,
         memoryFiles,
@@ -622,13 +1110,14 @@ class BackupService {
       // CatCatch completed outputs are stored separately from their gallery
       // copies. Keep the task list's open-file action working after transfer.
       if (selection.includeMediaFiles) {
-        for (final relativePath in taskFlowAttachmentPaths) {
+        for (final entry in taskFlowAttachmentPaths.entries) {
           await _addPlanFile(
             diskFiles,
             memoryFiles,
-            'task_flow_attachments/$relativePath',
-            p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+            'task_flow_attachments/${entry.key}',
+            entry.value,
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
         }
         await _addDirectoryPlanFiles(
@@ -651,13 +1140,6 @@ class BackupService {
           memoryFiles,
           archivePrefix: 'task_flow_temporary',
           sourcePath: p.join(appDir, 'task_flow_temporary'),
-          useStreaming: useStreaming,
-        );
-        await _addDirectoryPlanFiles(
-          diskFiles,
-          memoryFiles,
-          archivePrefix: 'ocr_retry_cache',
-          sourcePath: p.join(appDir, 'ocr_retry_cache'),
           useStreaming: useStreaming,
         );
       }
@@ -731,6 +1213,7 @@ class BackupService {
             'pictures/$hash.$format',
             p.join(appDir, 'pictures', '$hash.$format'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           await _addPlanFile(
             diskFiles,
@@ -777,6 +1260,7 @@ class BackupService {
             'tts_audio/$hash.$format',
             p.join(appDir, 'tts_audio', '$hash.$format'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           await _addPlanFile(
             diskFiles,
@@ -829,6 +1313,7 @@ class BackupService {
             'videos/$hash.$format',
             p.join(appDir, 'videos', '$hash.$format'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
@@ -866,6 +1351,7 @@ class BackupService {
             'texts/$hash.txt',
             p.join(appDir, 'texts', '$hash.txt'),
             useStreaming,
+            required: !skipMissingSelectedFiles,
           );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
@@ -889,16 +1375,19 @@ class BackupService {
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       final attachmentPaths = await collectAttachmentPaths();
       for (final storagePath in attachmentPaths) {
-        final parts = storagePath.split('/');
-        if (parts.length < 2) continue;
-        final subDir = parts[0];
-        final fileName = parts.sublist(1).join('/');
+        if (!storagePath.startsWith('attachments/')) continue;
+        final sourcePath = await resolveSafeAttachmentSourcePath(
+          appDir,
+          storagePath,
+        );
+        if (sourcePath == null) continue;
         await _addPlanFile(
           diskFiles,
           memoryFiles,
           storagePath,
-          p.join(appDir, subDir, fileName),
+          sourcePath,
           useStreaming,
+          required: !skipMissingSelectedFiles,
         );
       }
     }
@@ -1155,7 +1644,6 @@ class BackupService {
           'task_state/',
           'task_flow_attachments/',
           'task_flow_temporary/',
-          'ocr_retry_cache/',
           'catcatch/completed/',
           for (final directory in _catCatchRuntimeSubdirectories)
             'catcatch/$directory/',
@@ -1422,7 +1910,11 @@ class BackupService {
       return;
     }
 
-    final directory = Directory(sourcePath);
+    final nativeSourcePath = archivePrefix == 'attachments'
+        ? await resolveSafeAttachmentDirectoryPath(p.dirname(sourcePath))
+        : sourcePath;
+    if (nativeSourcePath == null) return;
+    final directory = Directory(nativeSourcePath);
     if (!await directory.exists()) return;
     var count = 0;
     await for (final entity in directory.list(
@@ -1536,7 +2028,11 @@ class BackupService {
       return;
     }
 
-    final directory = Directory(sourcePath);
+    final nativeSourcePath = archivePrefix == 'attachments'
+        ? await resolveSafeAttachmentDirectoryPath(p.dirname(sourcePath))
+        : sourcePath;
+    if (nativeSourcePath == null) return;
+    final directory = Directory(nativeSourcePath);
     if (!await directory.exists()) return;
     var count = 0;
     await for (final entity in directory.list(
@@ -1584,37 +2080,6 @@ class BackupService {
     return key == 'conversations' || key == 'active_conversation_id';
   }
 
-  static bool _isConversationMigrationKey(String key) =>
-      key.startsWith('conversations.migration.');
-
-  static Future<Map<String, dynamic>?> _exportConversationRepository() async {
-    if (WebFileStore.isTestMode) return null;
-    final repository = createConversationRepository();
-    try {
-      await repository.initialize();
-      final preferences = await SharedPreferences.getInstance();
-      final migration = await ConversationMigrationService(
-        repository,
-      ).migrate(preferences);
-      if (!migration.verified) {
-        throw StateError(
-          'Conversation migration was not verified before backup.',
-        );
-      }
-      return await repository.exportData();
-    } catch (error) {
-      debugPrint('Conversation repository backup export failed: $error');
-      if (await isConversationRepositoryAuthoritative(repository)) {
-        rethrow;
-      }
-      debugPrint(
-          'Conversation repository is not authoritative; omitting it from backup.');
-      return null;
-    } finally {
-      await repository.close();
-    }
-  }
-
   static const _browserCookieRetentionKey = 'browser_cookie_retention';
 
   static const _portableAppDataPathPrefix = 'stroom-app-data:/';
@@ -1626,8 +2091,14 @@ class BackupService {
     Object? value, {
     required String appDir,
     required bool restoring,
+    bool removePortablePaths = false,
   }) {
     if (value is String) {
+      if (restoring &&
+          removePortablePaths &&
+          value.startsWith(_portableAppDataPathPrefix)) {
+        return null;
+      }
       if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         if (!_isSafeRelativeArchivePath(relative)) return value;
@@ -1664,17 +2135,37 @@ class BackupService {
               child,
               appDir: appDir,
               restoring: restoring,
+              removePortablePaths: removePortablePaths,
             ),
           )
           .toList();
     }
     if (value is Map) {
-      return value.map(
+      final mapped = value.map(
         (key, child) => MapEntry(
           key,
-          _mapPortableTaskPaths(child, appDir: appDir, restoring: restoring),
+          _mapPortableTaskPaths(
+            child,
+            appDir: appDir,
+            restoring: restoring,
+            removePortablePaths: removePortablePaths,
+          ),
         ),
       );
+      if (restoring && removePortablePaths) {
+        mapped.removeWhere((key, _) {
+          final originalValue = value[key];
+          return originalValue is String &&
+              originalValue.startsWith(_portableAppDataPathPrefix);
+        });
+        // A temporary artifact is only meaningful while its file reference
+        // exists. Drop the ownership marker together with the omitted file.
+        mapped.removeWhere((key, child) =>
+            key == 'temporaryArtifact' &&
+            child is Map &&
+            !child.containsKey('reference'));
+      }
+      return mapped;
     }
     return value;
   }
@@ -1709,6 +2200,7 @@ class BackupService {
           decoded,
           appDir: appDir,
           restoring: true,
+          removePortablePaths: !selection.includeMediaFiles,
         );
         final restoredJson = jsonEncode(restored);
         if (isWebStore) {
@@ -1729,22 +2221,11 @@ class BackupService {
   static bool _isDeviceLocalPreferenceKey(String key) =>
       key == 'backup_saf_uri' || key == 'browser_cookie_backup_restore_pending';
 
-  /// Corrupt provider snapshots predate secure credential migration and may
-  /// contain plaintext keys. They are recovery artifacts, not portable app
-  /// settings, so never export or restore them through ordinary backups.
-  static bool _isLegacyProviderQuarantineKey(String key) =>
-      key.startsWith('provider_entries_corrupt_') ||
-      key.startsWith('chat_configs_corrupt_');
-
   /// 判断一个 SharedPreferences 键是否属于 [selection] 中选中的类别。
   ///
   /// `flutter.*` 内部键永不参与备份/恢复/清除。
   static bool _isKeyInSelection(String key, BackupSelection selection) {
-    if (_isConversationMigrationKey(key)) {
-      return selection.chatRecordsAndAttachments;
-    }
     if (key.startsWith('flutter.') ||
-        _isLegacyProviderQuarantineKey(key) ||
         _isDeviceLocalPreferenceKey(key) ||
         DataMigrationService.isFormatMetadataKey(key)) {
       return false;
@@ -1944,8 +2425,6 @@ class BackupService {
       final prefs = await SharedPreferences.getInstance();
       for (final key in prefs.getKeys()) {
         if (key.startsWith('flutter.') ||
-            _isLegacyProviderQuarantineKey(key) ||
-            _isConversationMigrationKey(key) ||
             DataMigrationService.isFormatMetadataKey(key) ||
             _isDeviceLocalPreferenceKey(key) ||
             (key == _browserCookieRetentionKey && !selection.browserCookies)) {
@@ -1961,14 +2440,9 @@ class BackupService {
           }
         }
       }
-      _sanitizeBackupSettings(settingsData);
     }
 
     if (selection.chatRecordsAndAttachments) {
-      final repositoryData = await _exportConversationRepository();
-      if (repositoryData != null) {
-        chatData[_conversationRepositoryBackupField] = repositoryData;
-      }
       addStringToArchive(archive, 'chat_data.json', jsonEncode(chatData));
     }
     if (selection.settings) {
@@ -1985,7 +2459,7 @@ class BackupService {
         final appDir = await AppStorage.directory;
         final taskFlowAttachmentPaths = selection.includeMediaFiles
             ? await _taskFlowAttachmentPathsForBackup(appDir)
-            : <String>{};
+            : <String, String>{};
         await _addPortableTaskFileToArchive(
           archive,
           'synthesis/tasks.json',
@@ -2017,13 +2491,11 @@ class BackupService {
           appDir: appDir,
         );
         if (selection.includeMediaFiles) {
-          for (final relativePath in taskFlowAttachmentPaths) {
-            final data = await File(
-              p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
-            ).readAsBytes();
+          for (final entry in taskFlowAttachmentPaths.entries) {
+            final data = await File(entry.value).readAsBytes();
             archive.addFile(
               ArchiveFile(
-                'task_flow_attachments/$relativePath',
+                'task_flow_attachments/${entry.key}',
                 data.length,
                 data,
               ),
@@ -2038,11 +2510,6 @@ class BackupService {
             archive,
             archivePrefix: 'task_flow_temporary',
             sourcePath: p.join(appDir, 'task_flow_temporary'),
-          );
-          await _addDirectoryToArchive(
-            archive,
-            archivePrefix: 'ocr_retry_cache',
-            sourcePath: p.join(appDir, 'ocr_retry_cache'),
           );
         }
         await _addTaskStateFileToArchive(
@@ -2286,42 +2753,15 @@ class BackupService {
   /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
   /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
   ///       attachments/ 作为聊天记录和附件的一部分
-  static Future<void> _writeRestoredConversationMigrationCheckpoint(
-    ConversationRepository repository,
-    String legacyJson,
-  ) async {
-    final repositorySourceHash = await repository.migrationSourceHash();
-    late final String sourceHash;
-    if (repositorySourceHash == null) {
-      sourceHash = sha256.convert(utf8.encode(legacyJson)).toString();
-    } else {
-      // The repository snapshot may include changes made after migration, so
-      // its paired legacy preference can be stale. Keeping that preference
-      // would make startup migration treat it as a new source and clear the
-      // restored repository rows.
-      await StartupPreferences.remove('conversations');
-      sourceHash = repositorySourceHash;
-    }
-    await StartupPreferences.setString(
-      ConversationMigrationService.stateKey,
-      jsonEncode({
-        'sourceHash': sourceHash,
-        'verified': true,
-        if (repositorySourceHash == null) 'preserveRepositoryRows': true,
-        'conversationCount': await repository.countConversations(),
-        'messageCount': await repository.countMessages(),
-      }),
-    );
-  }
-
   static Future<List<String>> _restoreFromBytes(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
-    LlmCredentialStore? credentialStoreForTest,
-    Future<void> Function()? afterCredentialStagingForTest,
+    bool skipRollbackSnapshot = false,
+    bool skipAnkiMigrationMarkerInvalidation = false,
+    bool replaceBrowserCookiesExactly = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2366,32 +2806,22 @@ class BackupService {
       skipMissingCategories: skipMissingCategories,
     );
     final restoreSelection = metadata.restoreSelection;
-    final selectedPreferences = _restoredPreferencePayload(
-      metadata,
-      restoreSelection,
-    );
-    _normalizeLegacyProviderEntriesForRestore(selectedPreferences);
-    final restoreCredentialStore =
-        credentialStoreForTest ?? PlatformLlmCredentialStore();
-    await _validateRestoredCredentialSettings(
-      selectedPreferences,
-      credentialStore: restoreCredentialStore,
-    );
     _validateArchiveEntryChecksums(archive, fileMap, restoreSelection);
-    await _preflightBrowserCookieMerge(
-      restoreSelection,
-      metadata.browserCookiesData,
-    );
-    if (restoreSelection.browserCookies) {
-      try {
-        await BrowserProfileService.prepareForRestore();
-      } catch (e) {
-        throw DataManagementPreflightException('请先重启应用，完成上一次内置浏览器数据操作后再导入：$e');
-      }
+    if (!replaceBrowserCookiesExactly) {
+      await _preflightBrowserCookieMerge(
+        restoreSelection,
+        metadata.browserCookiesData,
+      );
     }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
+    );
+    final deferredTaskFlowExecutionIds =
+        await _taskFlowExecutionIdsToCleanupAfterRestore(
+      restoreSelection,
+      metadata.taskFilesToReplace,
+      skipRollbackSnapshot: skipRollbackSnapshot,
     );
     await _validateAttachmentRestoreTargets(
       restoreSelection,
@@ -2402,105 +2832,165 @@ class BackupService {
       },
       taskFlowAttachmentKeysToPreserve: taskFlowAttachmentKeys,
     );
+    await _validateMediaRestoreTargetCollisions(
+      restoreSelection,
+      fileMap.keys,
+      entryFingerprint: (name) {
+        final data = fileMap[name];
+        return data == null ? null : sha256.convert(data).toString();
+      },
+    );
+    if (restoreSelection.browserCookies) {
+      try {
+        await BrowserProfileService.prepareForRestore();
+      } catch (e) {
+        throw DataManagementPreflightException('请先重启应用，完成上一次内置浏览器数据操作后再导入：$e');
+      }
+    }
     onProgress?.call(0.15);
     await _yieldToEventLoop();
-    final restoreCredentialTransaction = await _stageInlineRestoreCredentials(
-      selectedPreferences,
-      credentialStore: restoreCredentialStore,
-    );
 
+    // Resolve every archive entry to its destination and retain its bytes
+    // before clearing selected live data.
+    final stagedEntries =
+        <({String subDir, String fileName, Uint8List bytes})>[];
+    for (final entry in fileMap.entries) {
+      await _restoreArchiveEntry(
+        entry.key,
+        restoreSelection,
+        (subDir, fileName) async {
+          stagedEntries.add((
+            subDir: subDir,
+            fileName: fileName,
+            bytes: entry.value,
+          ));
+        },
+        deferAnkiMigrationMarkerInvalidation: true,
+      );
+    }
+
+    final rollbackBytes = skipRollbackSnapshot
+        ? null
+        : await _buildBackupBytes(selection: restoreSelection);
+    final webStoreJournal =
+        skipRollbackSnapshot || !(kIsWeb || WebFileStore.isTestMode)
+            ? null
+            : await _snapshotSelectedWebStoreFiles(restoreSelection);
     try {
-      await afterCredentialStagingForTest?.call();
       // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
       // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
-      // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
-      // 与清除功能的行为一致。
       await _prepareSelectedFilesForRestore(
         restoreSelection,
         taskFlowAttachmentKeys: taskFlowAttachmentKeys,
         taskFilesToReplace: metadata.taskFilesToReplace,
         completeFileInventories: metadata.completeFileInventories,
+        deferAnkiMigrationMarkerInvalidation: true,
       );
 
       // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
       debugPrint('[BackupService] _restoreFromBytes: restoring database');
-      await _restoreRecordsAndPrefs(
-        metadata,
+      await _restoreRecordsAndPrefs(metadata, restoreSelection);
+      onProgress?.call(0.55);
+      await _yieldToEventLoop();
+
+      // Restore selected binary files and task files from the staged entries.
+      debugPrint(
+        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
+      );
+      for (var restoreIndex = 0;
+          restoreIndex < stagedEntries.length;
+          restoreIndex++) {
+        final entry = stagedEntries[restoreIndex];
+        beforeRestoreBinaryPublishForTesting?.call(restoreIndex);
+        await writeBackupFile(entry.subDir, entry.fileName, entry.bytes);
+        if ((restoreIndex + 1) % 20 == 0) await _yieldToEventLoop();
+      }
+      await _restorePortableTaskPaths(
         restoreSelection,
-        selectedPreferences: selectedPreferences,
+        taskFilesToRestore: metadata.taskFilesToReplace,
       );
-      restoreCredentialTransaction.commit();
-    } catch (error) {
-      if (error is _PreferenceRestoreRollbackIncomplete) {
-        // Some selected settings may still point at the staged references.
-        // Keep those secure values until preferences can be recovered.
-        restoreCredentialTransaction.commit();
-        throw StateError(
-          'Backup preferences could not be restored after a failed restore. '
-          'Secure credentials were retained.',
+
+      // 数据迁移：确保恢复后的数据格式是最新的
+      final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+      final deferVersionCommit =
+          !skipPostRestoreMigration && !_isBackupFlutterTest;
+      final restoredPartVersions =
+          await DataMigrationService.mergeRestoredPartVersions(
+        backupVersions: metadata.dataPartVersions,
+        restoredParts: restoredPartIds,
+        deferCommit: deferVersionCommit,
+      );
+      if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+        await DataMigrationService.migrateDataFormatIfNeeded(
+          onlyParts: restoredPartIds,
+          restoredPartVersions:
+              deferVersionCommit ? restoredPartVersions : null,
+          validateRestoredDataBeforeVersionCommit: deferVersionCommit,
         );
       }
-      if (!await restoreCredentialTransaction.rollback()) {
-        throw StateError(
-          'Unable to restore secure credentials after a failed backup restore.',
-        );
+      if (restoreSelection.ankiData && !skipAnkiMigrationMarkerInvalidation) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
       }
-      rethrow;
-    }
-    onProgress?.call(0.55);
-    await _yieldToEventLoop();
-
-    // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
-    // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
-    // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
-    debugPrint(
-      '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
-    );
-    var restoreIndex = 0;
-    for (final entry in fileMap.entries) {
-      final handled = await _restoreArchiveEntry(entry.key, restoreSelection, (
-        subDir,
-        fileName,
-      ) async {
-        final builder = BytesBuilder(copy: false);
-        builder.add(entry.value);
-        await writeBackupFile(subDir, fileName, builder.takeBytes());
-      });
-      if (handled) {
-        restoreIndex++;
-        // 每处理 20 个文件让出事件循环
-        if (restoreIndex % 20 == 0) await _yieldToEventLoop();
-      }
-    }
-    await _restorePortableTaskPaths(
-      restoreSelection,
-      taskFilesToRestore: metadata.taskFilesToReplace,
-    );
-
-    // 数据迁移：确保恢复后的数据格式是最新的
-    // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
-    // 需要迁移到当前数据格式才能正常使用。
-    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-    final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-    final deferVersionCommit =
-        !skipPostRestoreMigration && !_isBackupFlutterTest;
-    final restoredPartVersions =
-        await DataMigrationService.mergeRestoredPartVersions(
-      backupVersions: metadata.dataPartVersions,
-      restoredParts: restoredPartIds,
-      deferCommit: deferVersionCommit,
-    );
-    if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
-      await DataMigrationService.migrateDataFormatIfNeeded(
-        onlyParts: restoredPartIds,
-        restoredPartVersions: deferVersionCommit ? restoredPartVersions : null,
-        validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+      await _restoreBrowserCookiesAfterDataRestore(
+        restoreSelection,
+        metadata.browserCookiesData,
+        replaceExisting: replaceBrowserCookiesExactly,
       );
+      if (webStoreJournal != null) {
+        await _deleteWebStoreRollbackJournal(webStoreJournal);
+      }
+    } catch (restoreError, restoreStackTrace) {
+      if (skipRestoreRollbackForTesting) {
+        Error.throwWithStackTrace(restoreError, restoreStackTrace);
+      }
+      if (rollbackBytes != null) {
+        final publishHook = beforeRestoreBinaryPublishForTesting;
+        beforeRestoreBinaryPublishForTesting = null;
+        Object? rollbackError;
+        StackTrace? rollbackStackTrace;
+        try {
+          try {
+            await _restoreFromBytes(
+              rollbackBytes,
+              selection: restoreSelection,
+              skipPostRestoreMigration: true,
+              skipMissingCategories: true,
+              skipRollbackSnapshot: true,
+              skipAnkiMigrationMarkerInvalidation: true,
+              replaceBrowserCookiesExactly: true,
+            );
+          } catch (error, stackTrace) {
+            rollbackError = error;
+            rollbackStackTrace = stackTrace;
+          }
+          if (webStoreJournal != null) {
+            try {
+              await _replayWebStoreRollbackJournal(webStoreJournal);
+            } catch (error, stackTrace) {
+              rollbackError ??= error;
+              rollbackStackTrace ??= stackTrace;
+            }
+          }
+          if (rollbackError != null) {
+            debugPrint(
+              '[BackupService] byte restore rollback failed: $rollbackError\n'
+              '${rollbackStackTrace ?? StackTrace.current}',
+            );
+            throw StateError(
+              'Restore failed: $restoreError; rollback also failed: $rollbackError.',
+            );
+          }
+        } finally {
+          beforeRestoreBinaryPublishForTesting = publishHook;
+        }
+      }
+      Error.throwWithStackTrace(restoreError, restoreStackTrace);
     }
-    await _restoreBrowserCookiesAfterDataRestore(
-      restoreSelection,
-      metadata.browserCookiesData,
-    );
+    if (await _deleteTaskFlowTemporaryArtifacts(
+      deferredTaskFlowExecutionIds,
+    )) {
+      throw _RestoreTemporaryArtifactCleanupException();
+    }
     onProgress?.call(1.0);
     return metadata.skippedLabels;
   }
@@ -2527,6 +3017,10 @@ class BackupService {
     bool skipMissingCategories = false,
     bool trustEmptyLegacyTaskPayloads = false,
     bool useStartupPreferenceAdapter = false,
+    bool skipAnkiMigrationMarkerInvalidation = false,
+    bool skipAnkiSyncIndexClear = false,
+    bool skipRollbackSnapshot = false,
+    bool replaceBrowserCookiesExactly = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2569,20 +3063,33 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
-      final selectedPreferences = _restoredPreferencePayload(
-        metadata,
-        restoreSelection,
-      );
-      _normalizeLegacyProviderEntriesForRestore(selectedPreferences);
-      final restoreCredentialStore = PlatformLlmCredentialStore();
-      await _validateRestoredCredentialSettings(
-        selectedPreferences,
-        credentialStore: restoreCredentialStore,
-      );
       _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
-      await _preflightBrowserCookieMerge(
+      if (!replaceBrowserCookiesExactly) {
+        await _preflightBrowserCookieMerge(
+          restoreSelection,
+          metadata.browserCookiesData,
+        );
+      }
+      final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
-        metadata.browserCookiesData,
+        taskFilesToReplace: metadata.taskFilesToReplace,
+      );
+      final deferredTaskFlowExecutionIds =
+          await _taskFlowExecutionIdsToCleanupAfterRestore(
+        restoreSelection,
+        metadata.taskFilesToReplace,
+        skipRollbackSnapshot: skipRollbackSnapshot,
+      );
+      await _validateAttachmentRestoreTargets(
+        restoreSelection,
+        reader.entries.map((entry) => entry.name),
+        entryFingerprint: reader.entryFingerprint,
+        taskFlowAttachmentKeysToPreserve: taskFlowAttachmentKeys,
+      );
+      await _validateMediaRestoreTargetCollisions(
+        restoreSelection,
+        reader.entries.map((entry) => entry.name),
+        entryFingerprint: reader.entryFingerprint,
       );
       if (restoreSelection.browserCookies) {
         try {
@@ -2593,151 +3100,269 @@ class BackupService {
           );
         }
       }
-      final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
-        restoreSelection,
-        taskFilesToReplace: metadata.taskFilesToReplace,
-      );
-      await _validateAttachmentRestoreTargets(
-        restoreSelection,
-        reader.entries.map((entry) => entry.name),
-        entryFingerprint: reader.entryFingerprint,
-        taskFlowAttachmentKeysToPreserve: taskFlowAttachmentKeys,
-      );
       onProgress?.call(0.15);
       await _yieldToEventLoop();
-      final restoreCredentialTransaction = await _stageInlineRestoreCredentials(
-        selectedPreferences,
-        credentialStore: restoreCredentialStore,
-      );
 
+      // Extract every selected binary entry to a private staging directory
+      // before changing any selected destination files, records or prefs.
+      // This keeps a late ZIP read/decompression/filesystem failure from
+      // leaving a partially restored app state.
+      final appDir =
+          WebFileStore.isTestMode ? null : await AppStorage.directory;
+      final stageParent =
+          appDir == null ? Directory.systemTemp : Directory(appDir);
+      final stagingDirectory = await stageParent.createTemp(
+        '.stroom-restore-$pid-',
+      );
+      final stagedEntries = <({String subDir, String fileName, String path})>[];
+      Directory? rollbackDirectory;
+      var retainRollbackSnapshot = false;
       try {
-        // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
-        await _prepareSelectedFilesForRestore(
-          restoreSelection,
-          taskFlowAttachmentKeys: taskFlowAttachmentKeys,
-          taskFilesToReplace: metadata.taskFilesToReplace,
-          completeFileInventories: metadata.completeFileInventories,
+        debugPrint(
+          '[BackupService] _restoreFromZipFile: staging binary files '
+          '(selection: ${restoreSelection.selectedLabels})',
         );
+        var handledEntryCount = 0;
+        for (final entry in reader.entries) {
+          final handled = await _restoreArchiveEntry(
+            entry.name,
+            restoreSelection,
+            (subDir, fileName) async {
+              final stagedFile = File(
+                p.join(stagingDirectory.path, subDir, fileName),
+              );
+              await stagedFile.parent.create(recursive: true);
+              await AtomicFile.writeFromSync(
+                stagedFile,
+                (output) => reader.extractEntry(entry, output.writeFromSync),
+              );
+              stagedEntries.add((
+                subDir: subDir,
+                fileName: fileName,
+                path: stagedFile.path,
+              ));
+            },
+            deferAnkiMigrationMarkerInvalidation: true,
+          );
+          if (handled) {
+            handledEntryCount++;
+            if (handledEntryCount % 20 == 0) await _yieldToEventLoop();
+          }
+        }
 
-        // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
-        debugPrint('[BackupService] _restoreFromZipFile: restoring database');
-        await _restoreRecordsAndPrefs(
-          metadata,
-          restoreSelection,
-          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-          selectedPreferences: selectedPreferences,
-        );
-        restoreCredentialTransaction.commit();
-      } catch (error) {
-        if (error is _PreferenceRestoreRollbackIncomplete) {
-          restoreCredentialTransaction.commit();
-          throw StateError(
-            'Backup preferences could not be restored after a failed restore. '
-            'Secure credentials were retained.',
+        // Keep a streaming snapshot of the selected pre-restore state. If a
+        // staged file cannot be published, the restore can roll back files,
+        // manifest records, and selected preferences together.
+        String? rollbackArchivePath;
+        File? rollbackMarker;
+        if (!skipRollbackSnapshot) {
+          final rollbackParent =
+              appDir == null ? Directory.systemTemp : Directory(appDir);
+          rollbackDirectory = await rollbackParent.createTemp(
+            '$_restoreRollbackDirectoryPrefix$pid-',
+          );
+          rollbackArchivePath =
+              p.join(rollbackDirectory.path, 'pre-restore.zip');
+          await _createBackup(
+            outputPath: rollbackArchivePath,
+            selection: restoreSelection,
+            useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+            skipMissingSelectedFiles: true,
+          );
+          if (appDir != null) {
+            final snapshotState =
+                await _readSnapshotSelection(rollbackArchivePath);
+            rollbackMarker = File(
+              p.join(rollbackDirectory.path, _restoreInProgressMarker),
+            );
+            final markerContents = jsonEncode({
+              'version': 2,
+              'useStartupPreferenceAdapter': useStartupPreferenceAdapter,
+              'selection': _restoreSelectionMarkerFields(restoreSelection),
+              'snapshotSelection':
+                  _restoreSelectionMarkerFields(snapshotState.selection),
+            });
+            final temporaryMarker = File('${rollbackMarker.path}.tmp');
+            await temporaryMarker.writeAsString(
+              markerContents,
+              flush: true,
+            );
+            await temporaryMarker.rename(rollbackMarker.path);
+          }
+        }
+
+        try {
+          // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
+          await _prepareSelectedFilesForRestore(
+            restoreSelection,
+            taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+            taskFilesToReplace: metadata.taskFilesToReplace,
+            completeFileInventories: metadata.completeFileInventories,
+            deferAnkiMigrationMarkerInvalidation: true,
+            deferAnkiSyncIndexClear: true,
+          );
+
+          // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+          debugPrint('[BackupService] _restoreFromZipFile: restoring database');
+          await _restoreRecordsAndPrefs(
+            metadata,
+            restoreSelection,
+            useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+          );
+          onProgress?.call(0.55);
+          await _yieldToEventLoop();
+
+          // Restore all extracted files after ZIP reads and writes have succeeded.
+          debugPrint(
+            '[BackupService] _restoreFromZipFile: publishing binary files '
+            '(selection: ${restoreSelection.selectedLabels})',
+          );
+          var publishedEntryCount = 0;
+          for (final entry in stagedEntries) {
+            beforeRestoreBinaryPublishForTesting?.call(publishedEntryCount);
+            final stagedFile = File(entry.path);
+            if (WebFileStore.isTestMode) {
+              await writeBackupFile(
+                entry.subDir,
+                entry.fileName,
+                await stagedFile.readAsBytes(),
+              );
+            } else {
+              final destination = File(
+                p.join(appDir!, entry.subDir, entry.fileName),
+              );
+              await destination.parent.create(recursive: true);
+              await stagedFile.rename(destination.path);
+            }
+            publishedEntryCount++;
+            if (publishedEntryCount % 20 == 0) await _yieldToEventLoop();
+          }
+          await _restorePortableTaskPaths(
+            restoreSelection,
+            taskFilesToRestore: metadata.taskFilesToReplace,
+          );
+
+          // 数据迁移：确保恢复后的数据格式是最新的
+          // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
+          final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+          final deferVersionCommit =
+              !skipPostRestoreMigration && !_isBackupFlutterTest;
+          final restoredPartVersions =
+              await DataMigrationService.mergeRestoredPartVersions(
+            backupVersions: metadata.dataPartVersions,
+            restoredParts: restoredPartIds,
+            deferCommit: deferVersionCommit,
+          );
+          if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+            await DataMigrationService.migrateDataFormatIfNeeded(
+              onlyParts: restoredPartIds,
+              restoredPartVersions:
+                  deferVersionCommit ? restoredPartVersions : null,
+              validateRestoredDataBeforeVersionCommit: deferVersionCommit,
+            );
+          }
+          await _restoreBrowserCookiesAfterDataRestore(
+            restoreSelection,
+            metadata.browserCookiesData,
+            replaceExisting: replaceBrowserCookiesExactly,
+          );
+          if (restoreSelection.ankiData &&
+              restoreSelection.includeMediaFiles &&
+              metadata.completeFileInventories.contains(DataParts.anki) &&
+              !skipAnkiSyncIndexClear &&
+              !kIsWeb &&
+              !WebFileStore.isTestMode) {
+            await AnkiMediaSync.clearSyncIndexes(
+              documentsPath: await AppStorage.directory,
+            );
+          }
+          if (restoreSelection.ankiData &&
+              !skipAnkiMigrationMarkerInvalidation) {
+            await _invalidateAnkiSyncMetadataMigrationMarker();
+          }
+          if (await _deleteTaskFlowTemporaryArtifacts(
+            deferredTaskFlowExecutionIds,
+          )) {
+            throw _RestoreTemporaryArtifactCleanupException();
+          }
+          if (rollbackMarker != null && await rollbackMarker.exists()) {
+            await rollbackMarker.delete();
+          }
+          onProgress?.call(1.0);
+          return metadata.skippedLabels;
+        } catch (restoreError, restoreStackTrace) {
+          if (skipRollbackSnapshot) {
+            Error.throwWithStackTrace(restoreError, restoreStackTrace);
+          }
+          if (restoreError is _RestoreTemporaryArtifactCleanupException) {
+            if (rollbackMarker != null && await rollbackMarker.exists()) {
+              await rollbackMarker.delete();
+            }
+            Error.throwWithStackTrace(restoreError, restoreStackTrace);
+          }
+          Object? rollbackError;
+          StackTrace? rollbackStackTrace;
+          try {
+            await _restoreFromZipFile(
+              rollbackArchivePath!,
+              selection: restoreSelection,
+              skipPostRestoreMigration: true,
+              useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+              skipAnkiMigrationMarkerInvalidation: true,
+              skipAnkiSyncIndexClear: true,
+              skipRollbackSnapshot: true,
+              replaceBrowserCookiesExactly: true,
+            );
+            if (rollbackMarker != null && await rollbackMarker.exists()) {
+              await rollbackMarker.delete();
+            }
+          } catch (error, stackTrace) {
+            rollbackError = error;
+            rollbackStackTrace = stackTrace;
+            retainRollbackSnapshot = true;
+            debugPrint(
+              '[BackupService] restore rollback failed; snapshot retained at '
+              '${rollbackDirectory!.path}: $rollbackError\n'
+              '$rollbackStackTrace',
+            );
+          }
+          if (retainRollbackSnapshot) {
+            throw StateError(
+              'Restore failed: $restoreError; rollback also failed: '
+              '$rollbackError.\n$rollbackStackTrace '
+              'The recovery archive is retained at '
+              '${p.join(rollbackDirectory!.path, 'pre-restore.zip')}.',
+            );
+          }
+          Error.throwWithStackTrace(restoreError, restoreStackTrace);
+        }
+      } finally {
+        try {
+          if (await stagingDirectory.exists()) {
+            await stagingDirectory.delete(recursive: true);
+          }
+        } catch (cleanupError) {
+          debugPrint(
+            '[BackupService] failed to remove restore staging directory '
+            '${stagingDirectory.path}: $cleanupError',
           );
         }
-        if (!await restoreCredentialTransaction.rollback()) {
-          throw StateError(
-            'Unable to restore secure credentials after a failed backup restore.',
-          );
-        }
-        rethrow;
-      }
-      onProgress?.call(0.55);
-      await _yieldToEventLoop();
-
-      // 恢复二进制文件和任务文件：逐条目分块流式落盘
-      // （新格式: pictures/, tts_audio/, ...；旧格式: files/, tasks/ 前缀）
-      // （条目损坏在此处按恢复中途失败传播，调用方需提示重启）
-      debugPrint(
-        '[BackupService] _restoreFromZipFile: restoring binary files '
-        '(selection: ${restoreSelection.selectedLabels})',
-      );
-      var restoreIndex = 0;
-      for (final entry in reader.entries) {
-        final handled = await _restoreArchiveEntry(
-          entry.name,
-          restoreSelection,
-          (subDir, fileName) =>
-              _writeZipEntryStreamed(reader, entry, subDir, fileName),
-        );
-        if (handled) {
-          restoreIndex++;
-          // 每处理 20 个文件让出事件循环
-          if (restoreIndex % 20 == 0) await _yieldToEventLoop();
+        if (!retainRollbackSnapshot && rollbackDirectory != null) {
+          try {
+            if (await rollbackDirectory.exists()) {
+              await rollbackDirectory.delete(recursive: true);
+            }
+          } catch (cleanupError) {
+            debugPrint(
+              '[BackupService] failed to remove restore rollback snapshot '
+              '${rollbackDirectory.path}: $cleanupError',
+            );
+          }
         }
       }
-      await _restorePortableTaskPaths(
-        restoreSelection,
-        taskFilesToRestore: metadata.taskFilesToReplace,
-      );
-
-      // 数据迁移：确保恢复后的数据格式是最新的
-      // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-      final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-      final deferVersionCommit =
-          !skipPostRestoreMigration && !_isBackupFlutterTest;
-      final restoredPartVersions =
-          await DataMigrationService.mergeRestoredPartVersions(
-        backupVersions: metadata.dataPartVersions,
-        restoredParts: restoredPartIds,
-        deferCommit: deferVersionCommit,
-      );
-      if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
-        await DataMigrationService.migrateDataFormatIfNeeded(
-          onlyParts: restoredPartIds,
-          restoredPartVersions:
-              deferVersionCommit ? restoredPartVersions : null,
-          validateRestoredDataBeforeVersionCommit: deferVersionCommit,
-        );
-      }
-      await _restoreBrowserCookiesAfterDataRestore(
-        restoreSelection,
-        metadata.browserCookiesData,
-      );
-      onProgress?.call(1.0);
-      return metadata.skippedLabels;
     } finally {
       reader.close();
     }
-  }
-
-  /// 把单个 ZIP 条目分块写出到应用数据目录。
-  ///
-  /// 测试模式（[WebFileStore.isTestMode]）：收集后经 [writeBackupFile]
-  /// 写入（与内存版测试路径一致）；原生：直接分块写磁盘，峰值内存
-  /// O(块大小)，不随条目大小增长。
-  ///
-  /// 写出失败时删除半成品文件，避免损坏的半个文件被后续逻辑使用。
-  static Future<void> _writeZipEntryStreamed(
-    _ZipStreamReader reader,
-    _ZipEntryInfo entry,
-    String subDir,
-    String fileName,
-  ) async {
-    if (WebFileStore.isTestMode) {
-      final builder = BytesBuilder(copy: false);
-      reader.extractEntry(entry, builder.add);
-      await writeBackupFile(subDir, fileName, builder.takeBytes());
-      return;
-    }
-    final appDir = await AppStorage.directory;
-    final dir = Directory(p.join(appDir, subDir));
-    final dest = File(p.join(dir.path, fileName));
-    await dest.parent.create(recursive: true);
-    final raf = dest.openSync(mode: FileMode.write);
-    try {
-      reader.extractEntry(entry, raf.writeFromSync);
-    } catch (_) {
-      try {
-        raf.closeSync();
-      } catch (_) {}
-      try {
-        await dest.delete();
-      } catch (_) {}
-      rethrow;
-    }
-    raf.closeSync();
   }
 
   /// 预解析并校验备份中的全部 JSON 元数据（在任何删除操作之前调用）。
@@ -2808,6 +3433,23 @@ class BackupService {
           Set<String> stringColumns,
           Set<String> integerColumns,
         ) {
+          bool isSafeStorageComponent(Object? value) {
+            if (value is! String ||
+                value.isEmpty ||
+                value == '.' ||
+                value == '..' ||
+                value.length > 255 ||
+                value.contains('/') ||
+                value.contains('\\') ||
+                value.contains(':') ||
+                RegExp(r'[<>"|?*\x00-\x1F]').hasMatch(value) ||
+                value.endsWith('.') ||
+                value.endsWith(' ')) {
+              return false;
+            }
+            return true;
+          }
+
           if (value == null) return;
           if (value is! List) throw FormatException('$field 不是数组');
           for (final item in value) {
@@ -2864,6 +3506,42 @@ class BackupService {
                 } else if (value is! int) {
                   throw FormatException('$field 字段 ${entry.key} 不是有效日期');
                 }
+              }
+            }
+
+            for (final storageField in const ['hash', 'format']) {
+              if (columns.containsKey(storageField) &&
+                  !isSafeStorageComponent(columns[storageField])) {
+                throw FormatException('$field 字段 $storageField 不是安全的存储路径组件');
+              }
+            }
+
+            final hash = columns['hash'] as String;
+            final format = columns['format'] as String? ??
+                switch (field) {
+                  'image_records' => 'jpg',
+                  'video_records' => 'mp4',
+                  'audio_records' => 'wav',
+                  _ => 'txt',
+                };
+            final storageName = switch (field) {
+              'text_records' =>
+                '$hash.${format == 'srt' || format == 'vtt' ? format : 'txt'}',
+              'audio_records' => AudioRecord.storageFileNameFor(
+                  hash: hash,
+                  format: format,
+                ),
+              _ => '$hash.$format',
+            };
+            if (!isSafeStorageComponent(storageName) ||
+                utf8.encode(storageName).length > 255) {
+              throw FormatException('$field 生成的存储文件名无效或过长');
+            }
+            if (field == 'audio_records') {
+              final archiveStorageName = '$hash.$format';
+              if (!isSafeStorageComponent(archiveStorageName) ||
+                  utf8.encode(archiveStorageName).length > 255) {
+                throw FormatException('$field 备份文件名无效或过长');
               }
             }
 
@@ -2987,14 +3665,6 @@ class BackupService {
       if (selection.settings) {
         settingsPrefs = validatePrefsFile('settings.json');
       }
-    }
-
-    final repositoryBackup = chatPrefs?[_conversationRepositoryBackupField];
-    if (repositoryBackup != null &&
-        !_isValidConversationRepositoryBackup(repositoryBackup)) {
-      throw const BackupValidationException(
-        'Conversation repository data in the backup is invalid.',
-      );
     }
 
     final declaredSelection = _selectionFromDeclaredParts(
@@ -3551,6 +4221,18 @@ class BackupService {
     required bool requireFiles,
   }) {
     if (!requireFiles) return true;
+    final rawConversations = chatPrefs?['conversations'];
+    if (rawConversations == null) return true;
+    if (rawConversations is! String) return false;
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(rawConversations);
+    } catch (_) {
+      return false;
+    }
+    if (decoded is! List) return false;
+
     bool allPresent = true;
     void checkAttachments(Object? rawAttachments) {
       if (rawAttachments == null) return;
@@ -3563,19 +4245,11 @@ class BackupService {
           allPresent = false;
           continue;
         }
-        for (final key in const [
-          'storagePath',
-          'reference',
-          'thumbnailPath',
-        ]) {
+        for (final key in const ['storagePath', 'thumbnailPath']) {
           final path = attachment[key];
           if (path == null || path == '') continue;
           if (path is! String) {
             allPresent = false;
-            continue;
-          }
-          if (key == 'reference' &&
-              RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(path)) {
             continue;
           }
           final normalizedPath = path.replaceAll(r'\', '/');
@@ -3591,189 +4265,26 @@ class BackupService {
       }
     }
 
-    final repositoryBackup = chatPrefs?[_conversationRepositoryBackupField];
-    final repositoryIsAuthoritative = repositoryBackup is Map &&
-        repositoryBackup['migrationSourceHash'] is String;
-    final rawConversations = chatPrefs?['conversations'];
-    if (!repositoryIsAuthoritative && rawConversations != null) {
-      if (rawConversations is! String) return false;
-      final Object? decoded;
-      try {
-        decoded = jsonDecode(rawConversations);
-      } catch (_) {
-        return false;
+    for (final conversation in decoded) {
+      if (conversation is! Map) {
+        allPresent = false;
+        continue;
       }
-      if (decoded is! List) return false;
-      for (final conv in decoded) {
-        if (conv is! Map) {
-          allPresent = false;
-          continue;
-        }
-        final messages = conv['messages'];
-        if (messages is! List) {
-          allPresent = false;
-        } else {
-          for (final message in messages) {
-            if (message is! Map) {
-              allPresent = false;
-              continue;
-            }
-            checkAttachments(message['attachments']);
-          }
-        }
-        checkAttachments(conv['draftAttachments']);
-      }
-    }
-    if (repositoryBackup is Map) {
-      final seen = <String>{};
-      void checkRepositoryPath(
-        Object? rawPath, {
-        bool allowExternalReference = false,
-      }) {
-        if (rawPath == null || rawPath == '') return;
-        if (rawPath is! String) {
-          allPresent = false;
-          return;
-        }
-        if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(rawPath)) {
-          if (!allowExternalReference) allPresent = false;
-          return;
-        }
-        if (!seen.add(rawPath)) return;
-        final path = rawPath.replaceAll(r'\', '/');
-        if (!_isSafeRelativeArchivePath(path)) {
-          allPresent = false;
-          return;
-        }
-        final archivePaths = path.startsWith('temp_edited/')
-            ? {path, 'attachments/${p.posix.basename(path)}'}
-            : {path.startsWith('attachments/') ? path : 'attachments/$path'};
-        if (!archivePaths.any(archiveEntries.contains)) allPresent = false;
-      }
-
-      void checkRepositoryAttachment(Object? raw) {
-        if (raw is! Map) return;
-        checkRepositoryPath(raw['storagePath']);
-        checkRepositoryPath(
-          raw['reference'],
-          allowExternalReference: true,
-        );
-        checkRepositoryPath(raw['thumbnailPath']);
-      }
-
-      final repositoryConversations = repositoryBackup['conversations'];
-      if (repositoryConversations is List) {
-        for (final raw in repositoryConversations) {
-          if (raw is! Map) continue;
-          checkAttachments(raw['draftAttachments']);
-          final extensions = raw['extensions'];
-          final legacy = extensions is Map
-              ? extensions['stroom.legacyConversation']
-              : null;
-          if (legacy is Map) checkAttachments(legacy['draftAttachments']);
-        }
-      }
-      final repositoryMessages = repositoryBackup['messages'];
-      if (repositoryMessages is List) {
-        for (final raw in repositoryMessages) {
-          if (raw is! Map) continue;
-          final messageRecord = repositoryBackup['messageEnvelopeVersion'] == 1
-              ? raw['record']
-              : raw;
-          if (messageRecord is! Map) {
+      final messages = conversation['messages'];
+      if (messages is! List) {
+        allPresent = false;
+      } else {
+        for (final message in messages) {
+          if (message is! Map) {
             allPresent = false;
             continue;
           }
-          final extensions = messageRecord['extensions'];
-          final legacy = extensions is Map ? extensions['stroom.legacy'] : null;
-          final legacyRecord = legacy is Map ? legacy['record'] : null;
-          if (legacyRecord is Map) {
-            checkAttachments(legacyRecord['attachments']);
-          }
-          final content = messageRecord['content'];
-          if (content is! List) continue;
-          for (final part in content) {
-            if (part is! Map) continue;
-            final data = part['data'];
-            if (data is! Map) continue;
-            final attachment = data['attachment'];
-            if (attachment is Map) {
-              checkRepositoryAttachment(attachment);
-              // Typed parts can keep derived paths beside the nested media
-              // object. Validate these paths too, or an archive can omit a
-              // thumbnail while still passing restore validation.
-              checkRepositoryPath(
-                data['reference'],
-                allowExternalReference: true,
-              );
-              checkRepositoryPath(data['storagePath']);
-              checkRepositoryPath(data['thumbnailPath']);
-            } else if (const {
-              'image',
-              'audio',
-              'video',
-              'file',
-            }.contains(part['type'])) {
-              checkRepositoryPath(
-                data['reference'],
-                allowExternalReference: true,
-              );
-              checkRepositoryPath(data['storagePath']);
-              checkRepositoryPath(data['thumbnailPath']);
-            }
-          }
+          checkAttachments(message['attachments']);
         }
       }
+      checkAttachments(conversation['draftAttachments']);
     }
-
     return allPresent;
-  }
-
-  static bool _isValidConversationRepositoryBackup(Object? raw) {
-    if (raw is! Map) return false;
-    final data = Map<String, dynamic>.from(raw);
-    if (data['schemaVersion'] != 1 ||
-        data['conversations'] is! List ||
-        data['messages'] is! List ||
-        (data['messageEnvelopeVersion'] != null &&
-            data['messageEnvelopeVersion'] != 1)) {
-      return false;
-    }
-    try {
-      final conversationIds = <String>{};
-      for (final item in data['conversations'] as List) {
-        if (item is! Map) return false;
-        final conversation = StroomConversation.fromMap(
-          Map<String, dynamic>.from(item),
-        );
-        if (conversation.id.isEmpty || !conversationIds.add(conversation.id)) {
-          return false;
-        }
-      }
-      final messageIds = <String>{};
-      for (final item in data['messages'] as List) {
-        if (item is! Map) return false;
-        final row = Map<String, dynamic>.from(item);
-        final conversationId = row.remove('conversationId');
-        if (conversationId is! String ||
-            !conversationIds.contains(conversationId)) {
-          return false;
-        }
-        final record =
-            data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
-        if (record is! Map) return false;
-        final message = StroomMessage.fromMap(
-          Map<String, dynamic>.from(record),
-        );
-        if (message.id.isEmpty ||
-            !messageIds.add('$conversationId\u0000${message.id}')) {
-          return false;
-        }
-      }
-      return true;
-    } catch (_) {
-      return false;
-    }
   }
 
   static bool _hasAllPortableTaskFileReferences({
@@ -4010,8 +4521,6 @@ class BackupService {
         v1Prefs?.keys.any(
           (key) =>
               !_isDeviceLocalPreferenceKey(key) &&
-              !_isLegacyProviderQuarantineKey(key) &&
-              !_isConversationMigrationKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key) &&
               predicate(key),
         ) ??
@@ -4023,8 +4532,6 @@ class BackupService {
               key != _browserCookieRetentionKey &&
               !key.startsWith('flutter.') &&
               !_isDeviceLocalPreferenceKey(key) &&
-              !_isLegacyProviderQuarantineKey(key) &&
-              !_isConversationMigrationKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key),
         ) ??
         false;
@@ -4077,7 +4584,6 @@ class BackupService {
                 (key) =>
                     !_isChatPrefKey(key) &&
                     key != _browserCookieRetentionKey &&
-                    !_isLegacyProviderQuarantineKey(key) &&
                     !DataMigrationService.isFormatMetadataKey(key),
               )),
       pictures: hasMediaData(
@@ -4360,6 +4866,541 @@ class BackupService {
         : normalized;
   }
 
+  /// Reject selected media paths that resolve to the same destination on
+  /// case-insensitive filesystems before restore preparation deletes data.
+  static Future<void> _validateMediaRestoreTargetCollisions(
+    BackupSelection selection,
+    Iterable<String> archiveEntries, {
+    required String? Function(String name) entryFingerprint,
+  }) async {
+    if (!selection.includeMediaFiles) return;
+
+    const mediaDirectories = {
+      'pictures',
+      'tts_audio',
+      'audio_drafts',
+      'videos',
+      'texts',
+      'synthesis',
+      'catcatch',
+      'task_flow_temporary',
+      'anki',
+      'attachments',
+    };
+    final appDirectory = restoreAppDirectoryForTesting ??
+        (kIsWeb || WebFileStore.isTestMode ? null : await AppStorage.directory);
+    final nameRulesByDirectory = <String, (bool, bool)>{};
+    final canonicalTargetDirectories = <String, String>{};
+    final destinations = <String, List<_RestoreCollisionCandidate>>{};
+    final expansionCandidates = <_RestoreCollisionCandidate>[];
+    final registeredCandidates = <_RestoreCollisionCandidate>[];
+    final destinationPrefixes = <String>{};
+
+    Future<void> addDestination({
+      required String directory,
+      required String relativePath,
+      required String sourcePath,
+      required String normalizedSourcePath,
+      bool isAttachment = false,
+    }) async {
+      final targetDirectory = appDirectory == null
+          ? p.posix.join(directory, p.posix.dirname(relativePath))
+          : directory == 'anki'
+              ? p.join(appDirectory, p.posix.dirname(relativePath))
+              : p.join(appDirectory, directory, p.posix.dirname(relativePath));
+      final bool caseInsensitive;
+      final bool normalizationInsensitive;
+      final override = restorePathsCaseInsensitiveForTesting;
+      if (override != null) {
+        caseInsensitive = override;
+        normalizationInsensitive =
+            restorePathsNormalizationInsensitiveForTesting ?? false;
+      } else if (kIsWeb || WebFileStore.isTestMode) {
+        caseInsensitive = false;
+        normalizationInsensitive = false;
+      } else if (nameRulesByDirectory.containsKey(targetDirectory)) {
+        final rules = nameRulesByDirectory[targetDirectory]!;
+        caseInsensitive = rules.$1;
+        normalizationInsensitive = rules.$2;
+      } else {
+        final rules = await _restoreTargetDirectoryNameRules(targetDirectory);
+        caseInsensitive = rules.$1;
+        normalizationInsensitive = rules.$2;
+        nameRulesByDirectory[targetDirectory] = rules;
+      }
+      final canonicalTargetDirectory = appDirectory == null
+          ? targetDirectory
+          : canonicalTargetDirectories[targetDirectory] ??=
+              await _canonicalRestoreTargetRoot(targetDirectory);
+      final targetPath = appDirectory == null
+          ? '$directory/$relativePath'
+          : p.join(canonicalTargetDirectory, p.posix.basename(relativePath));
+      final targetPathForTesting = restorePathsWindowsSeparatorsForTesting
+          ? targetPath.replaceAll('/', r'\')
+          : targetPath;
+      var comparableDestination = targetPathForTesting.replaceAll(r'\', '/');
+      if (normalizationInsensitive) {
+        comparableDestination = unorm.nfc(comparableDestination);
+      }
+      if (caseInsensitive) {
+        comparableDestination = _caseInsensitiveRestorePath(
+          comparableDestination,
+        );
+      }
+
+      final candidate = (
+        destination: '$directory/$relativePath',
+        sourcePath: sourcePath,
+        normalizedSourcePath: normalizedSourcePath,
+        targetDirectory: targetDirectory,
+        targetPath: targetPathForTesting,
+        relativePath: relativePath,
+        fileName: p.posix.basename(relativePath),
+        isAttachment: isAttachment,
+        normalizationInsensitive: normalizationInsensitive,
+      );
+      final windowsNameNormalization =
+          restorePathsWindowsNameNormalizationInsensitiveForTesting == true ||
+              (restorePathsWindowsNameNormalizationInsensitiveForTesting ==
+                      null &&
+                  Platform.isWindows);
+      if (caseInsensitive || windowsNameNormalization) {
+        final candidateHasExpansion = caseInsensitive &&
+                restorePathsCaseExpansionInsensitiveForTesting == true ||
+            caseInsensitive && _hasExpandingCaseFold(candidate.destination);
+        final candidateHasWindowsNameNormalization = windowsNameNormalization &&
+            _windowsNormalizedRestorePath(candidate.destination) !=
+                candidate.destination;
+        final possibleCandidates = candidateHasExpansion ||
+                candidateHasWindowsNameNormalization ||
+                windowsNameNormalization
+            ? registeredCandidates
+            : expansionCandidates;
+        for (final previous in possibleCandidates) {
+          final expandedPathsOverlap = _expandedPathsMayOverlap(
+            previous,
+            candidate,
+          );
+          final windowsNormalizedPathsOverlap =
+              _windowsNormalizedPathsMayOverlap(previous, candidate);
+          if (!expandedPathsOverlap && !windowsNormalizedPathsOverlap) {
+            continue;
+          }
+          if (_isSafeSharedTaskAttachmentAlias(
+            previous,
+            candidate,
+            entryFingerprint,
+          )) {
+            continue;
+          }
+          final windowsOverrideMatches =
+              restorePathsWindowsNameNormalizationInsensitiveForTesting ==
+                      true &&
+                  override != null &&
+                  _windowsNormalizedPathsOverlapForTesting(
+                    previous,
+                    candidate,
+                    caseInsensitive: override,
+                  );
+          if (restorePathsCaseExpansionInsensitiveForTesting == true &&
+                  expandedPathsOverlap ||
+              windowsOverrideMatches ||
+              (override == null &&
+                  await _restoreTargetPathsOverlap(previous, candidate))) {
+            throw const DataManagementPreflightException(
+              '备份中的媒体路径在当前设备上重名。为避免覆盖文件，已取消导入。',
+            );
+          }
+        }
+      }
+      final pathSegments = comparableDestination.split('/');
+      var prefixCollision = destinationPrefixes.contains(comparableDestination);
+      for (var i = 1; !prefixCollision && i < pathSegments.length; i++) {
+        final ancestor = pathSegments.take(i).join('/');
+        prefixCollision = destinations.containsKey(ancestor);
+      }
+      if (prefixCollision) {
+        throw const DataManagementPreflightException(
+          '备份中的媒体文件路径与目录路径冲突。为避免覆盖文件，已取消导入。',
+        );
+      }
+      final matches = destinations.putIfAbsent(
+        comparableDestination,
+        () => <_RestoreCollisionCandidate>[],
+      );
+      if (matches.isNotEmpty) {
+        final sharedTaskAttachmentAlias = isAttachment &&
+            matches.length == 1 &&
+            _isSafeSharedTaskAttachmentAlias(
+              matches.single,
+              candidate,
+              entryFingerprint,
+            );
+        if (!sharedTaskAttachmentAlias) {
+          throw const DataManagementPreflightException(
+            '备份中的媒体路径在当前设备上重名。为避免覆盖文件，已取消导入。',
+          );
+        }
+      }
+      matches.add(candidate);
+      if (caseInsensitive && _hasExpandingCaseFold(candidate.destination)) {
+        expansionCandidates.add(candidate);
+      }
+      registeredCandidates.add(candidate);
+      for (var i = 1; i < pathSegments.length; i++) {
+        destinationPrefixes.add(pathSegments.take(i).join('/'));
+      }
+    }
+
+    for (final sourcePath in archiveEntries) {
+      var archivePath = sourcePath;
+      if (!_isSafeRelativeArchivePath(archivePath)) continue;
+      if (archivePath.startsWith('files/')) {
+        archivePath = archivePath.substring('files/'.length);
+      }
+
+      if (selection.chatRecordsAndAttachments &&
+          selection.includeMediaFiles &&
+          archivePath.startsWith('temp_edited/')) {
+        final relativePath = p.posix.basename(archivePath);
+        await addDestination(
+          directory: 'attachments',
+          relativePath: relativePath,
+          sourcePath: sourcePath,
+          normalizedSourcePath: archivePath,
+          isAttachment: true,
+        );
+        continue;
+      }
+      if (selection.chatRecordsAndAttachments &&
+          selection.includeMediaFiles &&
+          archivePath.startsWith('attachments/')) {
+        final relativePath = archivePath.substring('attachments/'.length);
+        if (_isSafeRelativeArchivePath(relativePath)) {
+          await addDestination(
+            directory: 'attachments',
+            relativePath: relativePath,
+            sourcePath: sourcePath,
+            normalizedSourcePath: archivePath,
+            isAttachment: true,
+          );
+        }
+        continue;
+      }
+      if (selection.tasks &&
+          selection.includeMediaFiles &&
+          archivePath.startsWith('task_flow_attachments/')) {
+        final relativePath = archivePath.substring(
+          'task_flow_attachments/'.length,
+        );
+        if (_isSafeRelativeArchivePath(relativePath)) {
+          await addDestination(
+            directory: 'attachments',
+            relativePath: relativePath,
+            sourcePath: sourcePath,
+            normalizedSourcePath: archivePath,
+            isAttachment: true,
+          );
+        }
+        continue;
+      }
+      if (archivePath.startsWith('tasks/')) {
+        archivePath = archivePath.substring('tasks/'.length);
+        if (archivePath == 'synthesis_tasks.json') {
+          archivePath = 'synthesis/tasks.json';
+        } else if (archivePath == 'catcatch_tasks.json') {
+          archivePath = 'catcatch/tasks.json';
+        }
+      }
+      for (final directory in mediaDirectories) {
+        if (!archivePath.startsWith('$directory/')) continue;
+        if (!_shouldRestoreDir(directory, selection)) break;
+        final relativePath = archivePath.substring(directory.length + 1);
+        if (!_isSafeRelativeArchivePath(relativePath)) break;
+        if (directory == 'audio_drafts' &&
+            !_isAudioRecordingDraft(relativePath)) {
+          break;
+        }
+        if (directory == 'synthesis' && relativePath != 'tasks.json') break;
+        if (directory == 'catcatch' &&
+            relativePath != 'tasks.json' &&
+            !_isCatCatchMediaPath(relativePath)) {
+          break;
+        }
+        if (directory == 'anki' &&
+            (!selection.includeMediaFiles ||
+                !relativePath.startsWith('collection.media/'))) {
+          break;
+        }
+        await addDestination(
+          directory: directory,
+          relativePath: relativePath,
+          sourcePath: sourcePath,
+          normalizedSourcePath: archivePath,
+        );
+        break;
+      }
+    }
+  }
+
+  static bool _isSafeSharedTaskAttachmentAlias(
+    _RestoreCollisionCandidate previous,
+    _RestoreCollisionCandidate current,
+    String? Function(String name) entryFingerprint,
+  ) {
+    if (!previous.isAttachment || !current.isAttachment) return false;
+    if (previous.destination != current.destination) return false;
+    final destination = current.destination;
+    final relativePath = destination.substring('attachments/'.length);
+    final taskAlias = 'task_flow_attachments/$relativePath';
+    final isAliasPair = (previous.normalizedSourcePath == destination &&
+            current.normalizedSourcePath == taskAlias) ||
+        (current.normalizedSourcePath == destination &&
+            previous.normalizedSourcePath == taskAlias);
+    if (!isAliasPair) return false;
+    final previousFingerprint = entryFingerprint(previous.sourcePath);
+    return previousFingerprint != null &&
+        previousFingerprint == entryFingerprint(current.sourcePath);
+  }
+
+  static String _caseInsensitiveRestorePath(String path) =>
+      path.runes.map((rune) {
+        if (rune == 0x0345) return 'ι';
+        final character = String.fromCharCode(rune);
+        final uppercase = character.toUpperCase();
+        return uppercase.runes.length == 1
+            ? uppercase.toLowerCase()
+            : character.toLowerCase();
+      }).join();
+
+  static String _expandedCaseInsensitiveRestorePath(String path) =>
+      path.runes.map((rune) {
+        if (rune == 0x0345) return 'ι';
+        if (rune == 0x00df || rune == 0x1e9e) return 'ss';
+        return String.fromCharCode(rune).toUpperCase().toLowerCase();
+      }).join();
+
+  static Future<String> _canonicalRestoreTargetRoot(String targetRoot) async {
+    var directory = Directory(targetRoot);
+    final missingSegments = <String>[];
+    while (!await directory.exists()) {
+      final parent = directory.parent;
+      if (parent.path == directory.path) break;
+      missingSegments.insert(0, p.basename(directory.path));
+      directory = parent;
+    }
+    try {
+      final resolvedParent = await directory.resolveSymbolicLinks();
+      return p.normalize(p.joinAll([resolvedParent, ...missingSegments]));
+    } catch (error) {
+      throw DataManagementPreflightException(
+        '无法检查恢复目标目录是否指向相同位置，已取消导入：$error',
+      );
+    }
+  }
+
+  static String _windowsNormalizedRestorePath(String path) => path
+      .replaceAll(r'\', '/')
+      .split('/')
+      .map((component) => component.replaceFirst(RegExp(r'[ .]+$'), ''))
+      .join('/');
+
+  static String _windowsNormalizedCaseInsensitiveRestorePath(String path) =>
+      _caseInsensitiveRestorePath(_windowsNormalizedRestorePath(path));
+
+  static bool _hasExpandingCaseFold(String path) => path.runes.any((rune) {
+        if (rune == 0x0345) return false;
+        return String.fromCharCode(rune).toUpperCase().runes.length > 1;
+      });
+
+  static bool _expandedPathsMayOverlap(
+    _RestoreCollisionCandidate left,
+    _RestoreCollisionCandidate right,
+  ) {
+    final leftPortablePath = left.targetPath.replaceAll(r'\', '/');
+    final rightPortablePath = right.targetPath.replaceAll(r'\', '/');
+    final leftPath = left.normalizationInsensitive
+        ? unorm.nfc(leftPortablePath)
+        : leftPortablePath;
+    final rightPath = right.normalizationInsensitive
+        ? unorm.nfc(rightPortablePath)
+        : rightPortablePath;
+    final expandedLeft = _expandedCaseInsensitiveRestorePath(leftPath);
+    final expandedRight = _expandedCaseInsensitiveRestorePath(rightPath);
+    return expandedLeft == expandedRight ||
+        expandedLeft.startsWith('$expandedRight/') ||
+        expandedRight.startsWith('$expandedLeft/');
+  }
+
+  static bool _windowsNormalizedPathsMayOverlap(
+    _RestoreCollisionCandidate left,
+    _RestoreCollisionCandidate right,
+  ) {
+    final leftPath = _windowsNormalizedCaseInsensitiveRestorePath(
+      left.targetPath,
+    );
+    final rightPath = _windowsNormalizedCaseInsensitiveRestorePath(
+      right.targetPath,
+    );
+    return leftPath == rightPath ||
+        leftPath.startsWith('$rightPath/') ||
+        rightPath.startsWith('$leftPath/');
+  }
+
+  static bool _windowsNormalizedPathsOverlapForTesting(
+    _RestoreCollisionCandidate left,
+    _RestoreCollisionCandidate right, {
+    required bool caseInsensitive,
+  }) {
+    String normalize(String path) {
+      final windowsPath = _windowsNormalizedRestorePath(path);
+      return caseInsensitive
+          ? _caseInsensitiveRestorePath(windowsPath)
+          : windowsPath;
+    }
+
+    final leftPath = normalize(left.targetPath);
+    final rightPath = normalize(right.targetPath);
+    return leftPath == rightPath ||
+        leftPath.startsWith('$rightPath/') ||
+        rightPath.startsWith('$leftPath/');
+  }
+
+  static Future<bool> _restoreTargetPathsOverlap(
+    _RestoreCollisionCandidate left,
+    _RestoreCollisionCandidate right,
+  ) async {
+    final leftParts = p.split(left.targetPath);
+    final rightParts = p.split(right.targetPath);
+    final sharedLength = leftParts.length < rightParts.length
+        ? leftParts.length
+        : rightParts.length;
+    for (var i = 0; i < sharedLength; i++) {
+      final leftOriginalPart = leftParts[i];
+      final rightOriginalPart = rightParts[i];
+      var leftPart = leftParts[i];
+      var rightPart = rightParts[i];
+      if (left.normalizationInsensitive || right.normalizationInsensitive) {
+        leftPart = unorm.nfc(leftPart);
+        rightPart = unorm.nfc(rightPart);
+      }
+      if (leftOriginalPart == rightOriginalPart) {
+        continue;
+      }
+      final caseEquivalent = _caseInsensitiveRestorePath(leftPart) ==
+          _caseInsensitiveRestorePath(rightPart);
+      final windowsNameNormalization =
+          restorePathsWindowsNameNormalizationInsensitiveForTesting == true ||
+              (restorePathsWindowsNameNormalizationInsensitiveForTesting ==
+                      null &&
+                  Platform.isWindows);
+      final windowsNamesMatch = windowsNameNormalization &&
+          _windowsNormalizedCaseInsensitiveRestorePath(leftPart) ==
+              _windowsNormalizedCaseInsensitiveRestorePath(rightPart);
+      final parentDirectory = p.joinAll([
+        ...leftParts.take(i),
+      ]);
+      if (caseEquivalent) {
+        if (!await _restoreTargetNamesAreEquivalent(
+          parentDirectory,
+          leftOriginalPart,
+          rightOriginalPart,
+        )) {
+          return false;
+        }
+        continue;
+      }
+      if (!windowsNamesMatch &&
+          _expandedCaseInsensitiveRestorePath(leftPart) !=
+              _expandedCaseInsensitiveRestorePath(rightPart)) {
+        return false;
+      }
+      if (!await _restoreTargetNamesAreEquivalent(
+        parentDirectory,
+        leftOriginalPart,
+        rightOriginalPart,
+      )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static Future<bool> _restoreTargetNamesAreEquivalent(
+    String targetDirectory,
+    String leftName,
+    String rightName,
+  ) async {
+    var directory = Directory(targetDirectory);
+    while (!await directory.exists()) {
+      final parent = directory.parent;
+      if (parent.path == directory.path) break;
+      directory = parent;
+    }
+
+    Directory? probeDirectory;
+    try {
+      probeDirectory = await directory.createTemp('.stroom-name-check-');
+      await File(p.join(probeDirectory.path, leftName)).create(exclusive: true);
+      return await File(p.join(probeDirectory.path, rightName)).exists();
+    } catch (error) {
+      throw DataManagementPreflightException('无法检查恢复目标文件名的大小写规则，已取消导入：$error');
+    } finally {
+      if (probeDirectory != null) {
+        try {
+          await probeDirectory.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+  }
+
+  static Future<(bool, bool)> _restoreTargetDirectoryNameRules(
+    String targetDirectory,
+  ) async {
+    var directory = Directory(targetDirectory);
+    while (!await directory.exists()) {
+      final parent = directory.parent;
+      if (parent.path == directory.path) break;
+      directory = parent;
+    }
+
+    File? caseProbeFile;
+    File? normalizationProbeFile;
+    try {
+      final probePrefix =
+          '.stroom_restore_name_${pid}_${DateTime.now().microsecondsSinceEpoch}_';
+      final caseProbeName = '${probePrefix}a';
+      caseProbeFile = File(p.join(directory.path, caseProbeName));
+      await caseProbeFile.create(exclusive: true);
+      final alternateCaseExists = await File(
+        p.join(directory.path, '${probePrefix}A'),
+      ).exists();
+
+      final normalizationProbeName = '${probePrefix}café';
+      normalizationProbeFile = File(
+        p.join(directory.path, normalizationProbeName),
+      );
+      await normalizationProbeFile.create(exclusive: true);
+      final alternateNormalizationExists = await File(
+        p.join(directory.path, unorm.nfd(normalizationProbeName)),
+      ).exists();
+      return (alternateCaseExists, alternateNormalizationExists);
+    } catch (error) {
+      throw DataManagementPreflightException('无法检查恢复目标文件系统的大小写规则，已取消导入：$error');
+    } finally {
+      if (caseProbeFile != null) {
+        try {
+          await caseProbeFile.delete();
+        } catch (_) {}
+      }
+      if (normalizationProbeFile != null) {
+        try {
+          await normalizationProbeFile.delete();
+        } catch (_) {}
+      }
+    }
+  }
+
   /// Prevent restoring attachment files from overwriting files referenced by
   /// categories or task flows the user left untouched.
   static Future<void> _validateAttachmentRestoreTargets(
@@ -4407,6 +5448,9 @@ class BackupService {
     }
     if (archivedAttachmentKeys.isEmpty) return;
 
+    final appDirectory =
+        kIsWeb || WebFileStore.isTestMode ? null : await AppStorage.directory;
+
     final protectedKeys = <String>{...taskFlowAttachmentKeysToPreserve};
     if (selection.tasks && !selection.chatRecordsAndAttachments) {
       final chatAttachmentKeys = await _collectChatAttachmentKeysStrict();
@@ -4418,17 +5462,19 @@ class BackupService {
       protectedKeys.addAll(chatAttachmentKeys);
     }
 
-    bool pathsOverlap(String left, String right) {
-      final comparableLeft = _comparableAttachmentPath(left);
-      final comparableRight = _comparableAttachmentPath(right);
-      return comparableLeft == comparableRight ||
-          comparableLeft.startsWith('$comparableRight/') ||
-          comparableRight.startsWith('$comparableLeft/');
+    Future<bool> pathsOverlap(String left, String right) async {
+      return kIsWeb || WebFileStore.isTestMode
+          ? _webAttachmentPathsOverlapForTesting(left, right)
+          : _attachmentTargetPathsOverlap(
+              left,
+              right,
+              appDirectory: appDirectory!,
+            );
     }
 
     for (var i = 0; i < archivedAttachmentKeys.length; i++) {
       for (var j = i + 1; j < archivedAttachmentKeys.length; j++) {
-        if (pathsOverlap(
+        if (await pathsOverlap(
           archivedAttachmentKeys[i],
           archivedAttachmentKeys[j],
         )) {
@@ -4455,18 +5501,100 @@ class BackupService {
       }
     }
 
-    final collidingKeys = archivedAttachmentKeys
-        .where(
-          (archiveKey) => protectedKeys.any(
-            (protectedKey) => pathsOverlap(archiveKey, protectedKey),
-          ),
-        )
-        .toSet();
-    if (collidingKeys.isNotEmpty) {
-      throw const DataManagementPreflightException(
-        '备份中的附件与本机未选中的聊天或任务附件路径重名。为保护未选中的数据，已取消导入。',
-      );
+    for (final archiveKey in archivedAttachmentKeys) {
+      for (final protectedKey in protectedKeys) {
+        final overlaps = kIsWeb || WebFileStore.isTestMode
+            ? _webAttachmentPathsOverlapForTesting(archiveKey, protectedKey)
+            : await _attachmentTargetPathsOverlap(
+                archiveKey,
+                protectedKey,
+                appDirectory: appDirectory!,
+              );
+        if (overlaps) {
+          throw const DataManagementPreflightException(
+            '备份中的附件与本机未选中的聊天或任务附件路径重名。为保护未选中的数据，已取消导入。',
+          );
+        }
+      }
     }
+  }
+
+  static bool _webAttachmentPathsOverlapForTesting(String left, String right) {
+    String comparable(String path) {
+      var result = path;
+      if (restorePathsNormalizationInsensitiveForTesting == true) {
+        result = unorm.nfc(result);
+      }
+      if (restorePathsWindowsNameNormalizationInsensitiveForTesting == true) {
+        result = _windowsNormalizedRestorePath(result);
+      }
+      if (restorePathsCaseInsensitiveForTesting == true) {
+        result = _caseInsensitiveRestorePath(result);
+      }
+      if (restorePathsCaseExpansionInsensitiveForTesting == true) {
+        result = _expandedCaseInsensitiveRestorePath(result);
+      }
+      return result;
+    }
+
+    final comparableLeft = comparable(left);
+    final comparableRight = comparable(right);
+    return comparableLeft == comparableRight ||
+        comparableLeft.startsWith('$comparableRight/') ||
+        comparableRight.startsWith('$comparableLeft/');
+  }
+
+  static Future<bool> _attachmentTargetPathsOverlap(
+    String left,
+    String right, {
+    required String appDirectory,
+  }) async {
+    const attachmentPrefix = 'attachments/';
+    if (!left.startsWith(attachmentPrefix) ||
+        !right.startsWith(attachmentPrefix)) {
+      return false;
+    }
+    final leftParts = left.substring(attachmentPrefix.length).split('/');
+    final rightParts = right.substring(attachmentPrefix.length).split('/');
+    final sharedLength = leftParts.length < rightParts.length
+        ? leftParts.length
+        : rightParts.length;
+    for (var i = 0; i < sharedLength; i++) {
+      final leftPart = leftParts[i];
+      final rightPart = rightParts[i];
+      if (leftPart == rightPart) continue;
+      final normalizationEquivalent =
+          unorm.nfc(leftPart) == unorm.nfc(rightPart);
+      final caseEquivalent = _caseInsensitiveRestorePath(leftPart) ==
+          _caseInsensitiveRestorePath(rightPart);
+      final expandedEquivalent =
+          _expandedCaseInsensitiveRestorePath(leftPart) ==
+              _expandedCaseInsensitiveRestorePath(rightPart);
+      final windowsEquivalent = (Platform.isWindows ||
+              restorePathsWindowsNameNormalizationInsensitiveForTesting ==
+                  true) &&
+          _windowsNormalizedCaseInsensitiveRestorePath(leftPart) ==
+              _windowsNormalizedCaseInsensitiveRestorePath(rightPart);
+      if (!normalizationEquivalent &&
+          !caseEquivalent &&
+          !expandedEquivalent &&
+          !windowsEquivalent) {
+        return false;
+      }
+      final parentDirectory = p.joinAll([
+        appDirectory,
+        'attachments',
+        ...leftParts.take(i),
+      ]);
+      if (!await _restoreTargetNamesAreEquivalent(
+        parentDirectory,
+        leftPart,
+        rightPart,
+      )) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Keep the existing cookie snapshot until all other selected data has been
@@ -4476,6 +5604,8 @@ class BackupService {
     required Set<String> taskFlowAttachmentKeys,
     required Set<String> taskFilesToReplace,
     required Set<String> completeFileInventories,
+    bool deferAnkiMigrationMarkerInvalidation = false,
+    bool deferAnkiSyncIndexClear = false,
   }) async {
     if (await _deleteSelectedFiles(
       selection,
@@ -4483,6 +5613,8 @@ class BackupService {
       preserveBrowserCookieSnapshot: selection.browserCookies,
       taskFilesToReplace: taskFilesToReplace,
       completeFileInventories: completeFileInventories,
+      invalidateAnkiMigrationMarker: !deferAnkiMigrationMarkerInvalidation,
+      clearAnkiSyncIndexes: !deferAnkiSyncIndexClear,
     )) {
       throw Exception('部分数据文件删除失败，请重启应用后重试');
     }
@@ -4508,8 +5640,9 @@ class BackupService {
   /// profile entries are ignored by [_restoreArchiveEntry].
   static Future<void> _restoreBrowserCookiesAfterDataRestore(
     BackupSelection selection,
-    Uint8List? cookieData,
-  ) async {
+    Uint8List? cookieData, {
+    bool replaceExisting = false,
+  }) async {
     if (!selection.browserCookies || cookieData == null) return;
 
     await BrowserCookieService.runExclusiveRetentionOperation(() async {
@@ -4517,23 +5650,26 @@ class BackupService {
       final previousRestorePending =
           await BrowserCookieService.hasBackupRestorePending();
       try {
-        final existingCookies =
-            (await BrowserCookieService.getCookiesFromFileChecked())
+        final existingCookies = replaceExisting
+            ? const <Map<String, dynamic>>[]
+            : (await BrowserCookieService.getCookiesFromFileChecked())
                 .values
                 .expand((cookies) => cookies)
                 .toList();
         final importedCookies = (jsonDecode(utf8.decode(cookieData)) as List)
             .cast<Map<String, dynamic>>();
-        final cookieDataToWrite = Uint8List.fromList(
-          utf8.encode(
-            jsonEncode(
-              BrowserCookieService.mergeCookieSnapshots(
-                existingCookies,
-                importedCookies,
-              ),
-            ),
-          ),
-        );
+        final cookieDataToWrite = replaceExisting
+            ? cookieData
+            : Uint8List.fromList(
+                utf8.encode(
+                  jsonEncode(
+                    BrowserCookieService.mergeCookieSnapshots(
+                      existingCookies,
+                      importedCookies,
+                    ),
+                  ),
+                ),
+              );
         await writeBackupFile('', 'browser_cookies.json', cookieDataToWrite);
         await BrowserCookieService.markBackupRestorePending();
         if (!WebFileStore.isTestMode &&
@@ -4552,6 +5688,27 @@ class BackupService {
       }
     });
   }
+
+  @visibleForTesting
+  static Future<void> restoreBrowserCookiesSnapshotForTest(
+    Uint8List cookieData, {
+    bool replaceExisting = false,
+  }) =>
+      _restoreBrowserCookiesAfterDataRestore(
+        const BackupSelection(
+          chatRecordsAndAttachments: false,
+          settings: false,
+          pictures: false,
+          audio: false,
+          videos: false,
+          texts: false,
+          tasks: false,
+          ankiData: false,
+          browserCookies: true,
+        ),
+        cookieData,
+        replaceExisting: replaceExisting,
+      );
 
   static Future<void> _rollbackCookiesAfterFailedRestore({
     required Uint8List? previousFileData,
@@ -4593,959 +5750,6 @@ class BackupService {
     return versions.isEmpty ? null : versions;
   }
 
-  static Map<String, dynamic> _restoredPreferencePayload(
-    _RestoreMetadata metadata,
-    BackupSelection selection,
-  ) {
-    final restoreChat =
-        selection.chatRecordsAndAttachments && metadata.restoreChatPreferences;
-    if (metadata.isV1) {
-      final result = <String, dynamic>{};
-      if (metadata.v1Prefs == null) return result;
-      for (final entry in metadata.v1Prefs!.entries) {
-        final isChat = _isChatPrefKey(entry.key);
-        if ((isChat && restoreChat) || (!isChat && selection.settings)) {
-          result[entry.key] = entry.value;
-        }
-      }
-      return result;
-    }
-    return {
-      if (restoreChat && metadata.chatPrefs != null) ...metadata.chatPrefs!,
-      if (selection.settings && metadata.settingsPrefs != null)
-        ...metadata.settingsPrefs!,
-    };
-  }
-
-  static void _normalizeLegacyProviderEntriesForRestore(
-    Map<String, dynamic> selectedPreferences,
-  ) {
-    final encoded = selectedPreferences['provider_entries'];
-    if (encoded is! String || encoded.isEmpty) return;
-    final decoded = jsonDecode(encoded);
-    if (decoded is! List) return;
-
-    final configs = <Map>[];
-    final modelsByConfig = <List<Map>>[];
-    var changed = false;
-    const configFields = [
-      'providerName',
-      'host',
-      'key',
-      'models',
-      'typeConfig',
-      'customParams',
-      'reasoningParams',
-      'endpointType',
-      'apiProtocol',
-    ];
-
-    for (var entryIndex = 0; entryIndex < decoded.length; entryIndex++) {
-      final rawEntry = decoded[entryIndex];
-      if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
-      final entry = Map<String, dynamic>.from(rawEntry);
-      if (!entry.containsKey('configs')) {
-        if (entry['key'] != null && entry['key'] is! String) continue;
-        final config = <String, dynamic>{
-          for (final field in configFields)
-            if (entry.containsKey(field)) field: entry[field],
-        };
-        final hasSingleConfig = ['providerName', 'host', 'key'].any(
-          (field) =>
-              config[field] is String && (config[field] as String).isNotEmpty,
-        );
-        entry['configs'] = hasSingleConfig ? [config] : <Map>[];
-        for (final field in configFields) {
-          entry.remove(field);
-        }
-        changed = true;
-      }
-
-      final rawConfigs = entry['configs'];
-      if (rawConfigs is List) {
-        for (var configIndex = 0;
-            configIndex < rawConfigs.length;
-            configIndex++) {
-          final rawConfig = rawConfigs[configIndex];
-          if (rawConfig is! Map) continue;
-          final config = Map<String, dynamic>.from(rawConfig);
-          rawConfigs[configIndex] = config;
-          configs.add(config);
-          final rawModels = config['models'];
-          if (rawModels is! List) continue;
-          final configModels = <Map>[];
-          for (var modelIndex = 0;
-              modelIndex < rawModels.length;
-              modelIndex++) {
-            final rawModel = rawModels[modelIndex];
-            if (rawModel is! Map) continue;
-            final model = Map<String, dynamic>.from(rawModel);
-            rawModels[modelIndex] = model;
-            configModels.add(model);
-          }
-          modelsByConfig.add(configModels);
-        }
-      }
-      decoded[entryIndex] = entry;
-    }
-
-    bool assignIds(List<Map> items, String prefix) {
-      final counts = <String, int>{};
-      for (final item in items) {
-        final id = item['id'];
-        if (id is String && id.isNotEmpty) {
-          counts[id] = (counts[id] ?? 0) + 1;
-        }
-      }
-      var idsChanged = false;
-      for (final item in items) {
-        final id = item['id'];
-        if (id is! String || id.isEmpty || counts[id] != 1) {
-          item['id'] = '${prefix}_${const Uuid().v4()}';
-          idsChanged = true;
-        }
-      }
-      return idsChanged;
-    }
-
-    changed = assignIds(configs, 'config') || changed;
-    for (final models in modelsByConfig) {
-      changed = assignIds(models, 'model') || changed;
-    }
-    if (changed) selectedPreferences['provider_entries'] = jsonEncode(decoded);
-  }
-
-  static Future<_StagedRestoreCredentials> _stageInlineRestoreCredentials(
-    Map<String, dynamic> selectedPreferences, {
-    required LlmCredentialStore credentialStore,
-  }) async {
-    final lease =
-        await LlmAccountMigrationService.acquireCredentialTransaction();
-    var transactionOwnsQueue = false;
-    try {
-      // Credential preflight runs before acquiring this shared lease. Recheck
-      // against the current secure values while holding the lease so a
-      // concurrent migration cannot invalidate that earlier result.
-      await _validateRestoredCredentialSettings(
-        selectedPreferences,
-        credentialStore: credentialStore,
-      );
-      final accountReferenceById = <String, String>{};
-      final accountEnvelope =
-          selectedPreferences[LlmAccountMigrationService.accountsPreferenceKey];
-      if (accountEnvelope is String && accountEnvelope.isNotEmpty) {
-        final decoded = jsonDecode(accountEnvelope) as Map;
-        for (final rawAccount in decoded['items'] as List) {
-          final account = Map<String, dynamic>.from(rawAccount as Map);
-          final id = account['id'];
-          final reference = account['credentialRef'];
-          if (id is String && reference is String) {
-            accountReferenceById[id] = reference;
-          }
-        }
-      }
-
-      String? configIdentity(Map<String, dynamic> config) {
-        final rawModels = config['models'];
-        final modelIds = <String>[];
-        if (rawModels is! List || rawModels.isEmpty) return null;
-        for (final rawModel in rawModels) {
-          if (rawModel is! Map) return null;
-          final modelId = rawModel['modelId'];
-          final name = rawModel['name'];
-          final stableId = modelId is String && modelId.trim().isNotEmpty
-              ? modelId
-              : (name is String && name.trim().isNotEmpty ? name : '');
-          if (stableId.isEmpty) return null;
-          modelIds.add(stableId);
-        }
-        return jsonEncode([
-          config['providerName'] is String ? config['providerName'] : '',
-          config['host'] is String ? config['host'] : '',
-          modelIds,
-        ]);
-      }
-
-      String legacyCredentialReference(String? identity) {
-        if (identity == null) {
-          return 'stroom.llm.credential.legacy_backup_${const Uuid().v4()}';
-        }
-        final digest = sha256.convert(utf8.encode(identity));
-        return 'stroom.llm.credential.legacy_backup.$digest';
-      }
-
-      final referencesByAccountId = <String, String>{...accountReferenceById};
-      final referencesByIdentity = <String, Set<String>>{};
-      void rememberReference(
-        String? identity,
-        String reference, {
-        String? accountId,
-      }) {
-        if (accountId != null) {
-          final previous = referencesByAccountId[accountId];
-          if (previous != null && previous != reference) {
-            throw const FormatException('Conflicting restore references.');
-          }
-          referencesByAccountId[accountId] = reference;
-        }
-        if (identity != null) {
-          referencesByIdentity
-              .putIfAbsent(identity, () => <String>{})
-              .add(reference);
-        }
-      }
-
-      String? uniqueIdentityReference(String? identity) {
-        if (identity == null) return null;
-        final references = referencesByIdentity[identity];
-        if (references == null || references.isEmpty) return null;
-        if (references.length != 1) {
-          throw const FormatException('Ambiguous restore references.');
-        }
-        return references.single;
-      }
-
-      final pendingSecrets = <String, String>{};
-      void stageSecret(String reference, String secret) {
-        final previous = pendingSecrets[reference];
-        if (previous != null && previous != secret) {
-          throw const FormatException('Conflicting restore credentials.');
-        }
-        pendingSecrets[reference] = secret;
-      }
-
-      var providerEntriesChanged = false;
-      List<dynamic>? restoredProviderEntries;
-      final rawProviderEntries = selectedPreferences['provider_entries'];
-      if (rawProviderEntries is String) {
-        restoredProviderEntries = jsonDecode(rawProviderEntries) as List;
-        for (var entryIndex = 0;
-            entryIndex < restoredProviderEntries.length;
-            entryIndex++) {
-          final rawEntry = restoredProviderEntries[entryIndex];
-          if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
-          final entry = Map<String, dynamic>.from(rawEntry);
-          final rawEntryKey = entry.remove('key');
-          if (rawEntry.containsKey('key')) providerEntriesChanged = true;
-          final rawConfigs = entry['configs'];
-          if (rawConfigs is! List) {
-            if (rawEntryKey is String && rawEntryKey.isNotEmpty) {
-              throw const FormatException('Invalid LLM restore config.');
-            }
-            restoredProviderEntries[entryIndex] = entry;
-            continue;
-          }
-          final configs = rawConfigs;
-          if (rawEntryKey is String && rawEntryKey.isNotEmpty) {
-            if (configs.length != 1 || configs.single is! Map) {
-              throw const FormatException('Invalid LLM restore config.');
-            }
-            final config = Map<String, dynamic>.from(configs.single as Map);
-            final configKey = config['key'];
-            if (configKey is String &&
-                configKey.isNotEmpty &&
-                configKey != rawEntryKey) {
-              throw const FormatException('Conflicting restore credentials.');
-            }
-            config['key'] = rawEntryKey;
-            configs[0] = config;
-            providerEntriesChanged = true;
-          }
-          for (var configIndex = 0;
-              configIndex < configs.length;
-              configIndex++) {
-            final rawConfig = configs[configIndex];
-            if (rawConfig is! Map) continue;
-            final config = Map<String, dynamic>.from(rawConfig);
-            configs[configIndex] = config;
-            final id = config['id'];
-            final reference = config['credentialRef'] ??
-                (id is String ? accountReferenceById[id] : null);
-            if (reference is String) {
-              rememberReference(
-                configIdentity(config),
-                reference,
-                accountId: id is String ? id : null,
-              );
-            }
-          }
-          entry['configs'] = configs;
-          restoredProviderEntries[entryIndex] = entry;
-        }
-
-        for (var entryIndex = 0;
-            entryIndex < restoredProviderEntries.length;
-            entryIndex++) {
-          final rawEntry = restoredProviderEntries[entryIndex];
-          if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
-          final entry = Map<String, dynamic>.from(rawEntry);
-          final configs = entry['configs'];
-          if (configs is! List) continue;
-          for (var configIndex = 0;
-              configIndex < configs.length;
-              configIndex++) {
-            final rawConfig = configs[configIndex];
-            if (rawConfig is! Map) continue;
-            final config = Map<String, dynamic>.from(rawConfig);
-            final rawKey = config.remove('key');
-            if (rawConfig.containsKey('key')) providerEntriesChanged = true;
-            if (rawKey is String && rawKey.isNotEmpty) {
-              final id = config['id'];
-              if (id is! String || id.isEmpty) {
-                throw const FormatException('Invalid LLM restore config ID.');
-              }
-              final identity = configIdentity(config);
-              final reference = config['credentialRef'] ??
-                  referencesByAccountId[id] ??
-                  'stroom.llm.credential.${Uri.encodeComponent(id)}';
-              if (reference is! String || reference.isEmpty) {
-                throw const FormatException('Invalid restore reference.');
-              }
-              rememberReference(identity, reference, accountId: id);
-              config['credentialRef'] = reference;
-              stageSecret(reference, rawKey);
-              providerEntriesChanged = true;
-            }
-            configs[configIndex] = config;
-          }
-          entry['configs'] = configs;
-          restoredProviderEntries[entryIndex] = entry;
-        }
-      }
-
-      var legacyConfigsChanged = false;
-      List<dynamic>? restoredLegacyConfigs;
-      final rawLegacyConfigs = selectedPreferences['chat_configs'];
-      if (rawLegacyConfigs is String) {
-        restoredLegacyConfigs = jsonDecode(rawLegacyConfigs) as List;
-        for (var index = 0; index < restoredLegacyConfigs.length; index++) {
-          final rawConfig = restoredLegacyConfigs[index];
-          if (rawConfig is! Map) continue;
-          final config = Map<String, dynamic>.from(rawConfig);
-          final identity = configIdentity(config);
-          final reference = config['credentialRef'];
-          final id = config['id'];
-          if (reference is String) {
-            rememberReference(
-              identity,
-              reference,
-              accountId: id is String ? id : null,
-            );
-          }
-        }
-        for (var index = 0; index < restoredLegacyConfigs.length; index++) {
-          final rawConfig = restoredLegacyConfigs[index];
-          if (rawConfig is! Map) continue;
-          final config = Map<String, dynamic>.from(rawConfig);
-          final key = config.remove('key');
-          if (rawConfig.containsKey('key')) legacyConfigsChanged = true;
-          final identity = configIdentity(config);
-          final id = config['id'];
-          final existingReference = id is String
-              ? referencesByAccountId[id]
-              : uniqueIdentityReference(identity);
-          if (key is String && key.isNotEmpty) {
-            final reference = config['credentialRef'] ??
-                existingReference ??
-                (id is String
-                    ? 'stroom.llm.credential.${Uri.encodeComponent(id)}'
-                    : legacyCredentialReference(identity));
-            if (reference is! String || reference.isEmpty) {
-              throw const FormatException('Invalid legacy restore reference.');
-            }
-            rememberReference(
-              identity,
-              reference,
-              accountId: id is String ? id : null,
-            );
-            config['credentialRef'] = reference;
-            stageSecret(reference, key);
-            legacyConfigsChanged = true;
-          } else if (config['credentialRef'] == null &&
-              existingReference != null) {
-            config['credentialRef'] = existingReference;
-            legacyConfigsChanged = true;
-          }
-          restoredLegacyConfigs[index] = config;
-        }
-      }
-
-      final previousValues = <String, String?>{};
-      final attemptedReferences = <String>{};
-      try {
-        for (final reference in pendingSecrets.keys) {
-          previousValues[reference] = await credentialStore.read(reference);
-        }
-        for (final entry in pendingSecrets.entries) {
-          if (previousValues[entry.key] == entry.value) continue;
-          attemptedReferences.add(entry.key);
-          await credentialStore.write(entry.key, entry.value);
-          if (await credentialStore.read(entry.key) != entry.value) {
-            throw const LlmCredentialStoreException();
-          }
-        }
-
-        final sanitizedPreferences = Map<String, dynamic>.from(
-          selectedPreferences,
-        );
-        if (providerEntriesChanged) {
-          sanitizedPreferences['provider_entries'] = jsonEncode(
-            restoredProviderEntries,
-          );
-        }
-        if (legacyConfigsChanged) {
-          sanitizedPreferences['chat_configs'] = jsonEncode(
-            restoredLegacyConfigs,
-          );
-        }
-        await _validateRestoredCredentialSettings(
-          sanitizedPreferences,
-          credentialStore: credentialStore,
-        );
-        if (providerEntriesChanged) {
-          selectedPreferences['provider_entries'] =
-              sanitizedPreferences['provider_entries'];
-        }
-        if (legacyConfigsChanged) {
-          selectedPreferences['chat_configs'] =
-              sanitizedPreferences['chat_configs'];
-        }
-        final transaction = _StagedRestoreCredentials(
-          credentialStore,
-          Map<String, String?>.from(previousValues),
-          Map<String, String>.from(pendingSecrets),
-          Set<String>.from(attemptedReferences),
-          lease,
-        );
-        transactionOwnsQueue = true;
-        return transaction;
-      } catch (_) {
-        var rollbackComplete = true;
-        for (final reference in attemptedReferences) {
-          try {
-            final current = await credentialStore.read(reference);
-            final previous = previousValues[reference];
-            if (current == previous) continue;
-            if (current != pendingSecrets[reference]) {
-              rollbackComplete = false;
-              continue;
-            }
-            if (previous == null) {
-              await credentialStore.delete(reference);
-              if (await credentialStore.read(reference) != null) {
-                rollbackComplete = false;
-              }
-            } else {
-              await credentialStore.write(reference, previous);
-              if (await credentialStore.read(reference) != previous) {
-                rollbackComplete = false;
-              }
-            }
-          } catch (_) {
-            rollbackComplete = false;
-          }
-        }
-        if (!rollbackComplete) {
-          throw const BackupValidationException('备份中的 LLM 凭据无法回滚。请保留原备份并重试恢复。');
-        }
-        throw const BackupValidationException('备份中的 LLM 凭据无法安全存储。未更改本机数据。');
-      }
-    } on BackupValidationException {
-      rethrow;
-    } catch (_) {
-      throw const BackupValidationException('备份中的 LLM 设置无效或无法安全存储。未更改本机数据。');
-    } finally {
-      if (!transactionOwnsQueue) lease.release();
-    }
-  }
-
-  static Future<void> _validateRestoredCredentialSettings(
-    Map<String, dynamic> selectedPreferences, {
-    LlmCredentialStore? credentialStore,
-  }) async {
-    try {
-      if (selectedPreferences.values.any((value) => value == null)) {
-        throw const FormatException('Null selected preference value.');
-      }
-      final credentialUsages =
-          <String, List<({String? accountId, String? key})>>{};
-      final accountLinkedReferences = <String, Set<String>>{};
-      final accountReferenceById = <String, String>{};
-      final providerAccountIds = <String>{};
-      final providerConfigUsagesById =
-          <String, ({String key, String? reference, String? publicKey})>{};
-      final providerConfigUsagesByIdentity = <String,
-          List<({String key, String? reference, String? publicKey})>>{};
-
-      String? configIdentity(
-        Map<String, dynamic> config,
-        List<String> modelIds,
-      ) {
-        if (modelIds.isEmpty || modelIds.any((id) => id.trim().isEmpty)) {
-          return null;
-        }
-        return jsonEncode([
-          config['providerName'] is String ? config['providerName'] : '',
-          config['host'] is String ? config['host'] : '',
-          modelIds,
-        ]);
-      }
-
-      bool hasConflictingMetadata(
-        ({String key, String? reference, String? publicKey}) left,
-        ({String key, String? reference, String? publicKey}) right,
-      ) =>
-          (left.key.isNotEmpty &&
-              right.key.isNotEmpty &&
-              left.key != right.key) ||
-          (left.reference != null &&
-              right.reference != null &&
-              left.reference != right.reference) ||
-          (left.publicKey != null &&
-              right.publicKey != null &&
-              left.publicKey != right.publicKey);
-
-      ({String key, String? reference, String? publicKey})?
-          matchingProviderConfig(String? accountId, String? identity) {
-        if (accountId != null) return providerConfigUsagesById[accountId];
-        if (identity == null) return null;
-        final candidates = providerConfigUsagesByIdentity[identity];
-        if (candidates == null || candidates.isEmpty) return null;
-        final first = candidates.first;
-        for (final candidate in candidates.skip(1)) {
-          if (hasConflictingMetadata(first, candidate)) {
-            throw const FormatException('Ambiguous provider identity.');
-          }
-        }
-        return first;
-      }
-
-      final accountEnvelope =
-          selectedPreferences[LlmAccountMigrationService.accountsPreferenceKey];
-      if (accountEnvelope != null) {
-        if (accountEnvelope is! String) {
-          throw const FormatException('Invalid LLM account envelope.');
-        }
-        if (accountEnvelope.isNotEmpty) {
-          final decoded = jsonDecode(accountEnvelope);
-          if (decoded is! Map || decoded['items'] is! List) {
-            throw const FormatException('Invalid LLM account envelope.');
-          }
-          final accountIds = <String>{};
-          for (final rawAccount in decoded['items'] as List) {
-            if (rawAccount is! Map) {
-              throw const FormatException('Invalid LLM account record.');
-            }
-            final account = Map<String, dynamic>.from(rawAccount);
-            final id = account['id'];
-            if (id is! String || id.trim().isEmpty || !accountIds.add(id)) {
-              throw const FormatException('Invalid LLM account ID.');
-            }
-            final reference = account['credentialRef'];
-            if (reference != null &&
-                (reference is! String || reference.trim().isEmpty)) {
-              throw const FormatException('Invalid credential reference.');
-            }
-            if (reference is String &&
-                !isValidGeneratedCredentialReference(reference, id)) {
-              throw const FormatException('Invalid credential reference.');
-            }
-            final models = account['models'];
-            if (models != null &&
-                (models is! List || models.any((model) => model is! Map))) {
-              throw const FormatException('Invalid LLM account models.');
-            }
-            if (reference is String) accountReferenceById[id] = reference;
-          }
-          if (containsCredentialValue(decoded)) {
-            throw const FormatException('Invalid LLM account envelope.');
-          }
-        }
-      }
-
-      final groupEnvelope = selectedPreferences[
-          LlmAccountMigrationService.modelGroupsPreferenceKey];
-      if (groupEnvelope != null) {
-        if (groupEnvelope is! String) {
-          throw const FormatException('Invalid LLM model-group envelope.');
-        }
-        if (groupEnvelope.isNotEmpty) {
-          final decoded = jsonDecode(groupEnvelope);
-          if (decoded is! Map || decoded['items'] is! List) {
-            throw const FormatException('Invalid LLM model-group envelope.');
-          }
-          final groupIds = <String>{};
-          for (final rawGroup in decoded['items'] as List) {
-            if (rawGroup is! Map) {
-              throw const FormatException('Invalid LLM model-group record.');
-            }
-            final group = Map<String, dynamic>.from(rawGroup);
-            final id = group['id'];
-            if (id is! String || id.trim().isEmpty || !groupIds.add(id)) {
-              throw const FormatException('Invalid LLM model-group ID.');
-            }
-            final members = group['members'];
-            if (members != null &&
-                (members is! List || members.any((member) => member is! Map))) {
-              throw const FormatException('Invalid LLM model-group members.');
-            }
-          }
-          if (containsCredentialValue(decoded)) {
-            throw const FormatException('Invalid LLM model-group envelope.');
-          }
-        }
-      }
-
-      final providerEntries = selectedPreferences['provider_entries'];
-      if (providerEntries != null) {
-        if (providerEntries is! String) {
-          throw const FormatException('Invalid provider entries.');
-        }
-        final decoded = jsonDecode(providerEntries);
-        if (decoded is! List) {
-          throw const FormatException('Invalid provider entries.');
-        }
-        for (final rawEntry in decoded) {
-          if (rawEntry is! Map) {
-            throw const FormatException('Invalid provider entry.');
-          }
-          if (rawEntry['type'] != 'llm') {
-            final type = rawEntry['type'];
-            if ((type == 'mcp' ||
-                    type == 'builtin' ||
-                    !_backupKnownProviderTypes.contains(type)) &&
-                containsCredentialValue(rawEntry)) {
-              throw const FormatException('Unsupported provider credential.');
-            }
-            continue;
-          }
-          final entry = Map<String, dynamic>.from(rawEntry);
-          final rawEntryKey = entry['key'];
-          if (rawEntryKey != null && rawEntryKey is! String) {
-            throw const FormatException('Invalid provider credential.');
-          }
-          final entryKey = rawEntryKey is String ? rawEntryKey : '';
-          final safeEntryFields = Map<String, dynamic>.from(entry)
-            ..remove('key')
-            ..remove('configs');
-          if (containsCredentialValue(safeEntryFields)) {
-            throw const FormatException('Unsupported provider credential.');
-          }
-          final rawConfigs = entry['configs'];
-          if (rawConfigs == null) {
-            if (entryKey.isNotEmpty) {
-              throw const FormatException('Invalid provider config.');
-            }
-            continue;
-          }
-          if (rawConfigs is! List ||
-              (entryKey.isNotEmpty &&
-                  (rawConfigs.length != 1 || rawConfigs.single is! Map))) {
-            throw const FormatException('Invalid provider config.');
-          }
-          for (final rawConfig in rawConfigs) {
-            if (rawConfig is! Map) {
-              throw const FormatException('Invalid provider config.');
-            }
-            final config = Map<String, dynamic>.from(rawConfig);
-            final accountId = config['id'];
-            if (accountId is! String ||
-                accountId.trim().isEmpty ||
-                !providerAccountIds.add(accountId)) {
-              throw const FormatException('Invalid provider account ID.');
-            }
-            final rawKey = config['key'];
-            if (rawKey != null && rawKey is! String) {
-              throw const FormatException('Invalid provider credential.');
-            }
-            if (entryKey.isNotEmpty &&
-                rawKey is String &&
-                rawKey.isNotEmpty &&
-                rawKey != entryKey) {
-              throw const FormatException('Conflicting provider credentials.');
-            }
-            final key =
-                rawKey is String && rawKey.isNotEmpty ? rawKey : entryKey;
-            final reference = config['credentialRef'];
-            if (reference != null &&
-                (reference is! String || reference.trim().isEmpty)) {
-              throw const FormatException('Invalid credential reference.');
-            }
-            final accountReference = accountReferenceById[accountId];
-            if (reference is String &&
-                accountReference != null &&
-                reference != accountReference) {
-              throw const FormatException('Conflicting credential references.');
-            }
-            final effectiveReference = reference ?? accountReference;
-            if (accountReference is String &&
-                effectiveReference == accountReference) {
-              accountLinkedReferences
-                  .putIfAbsent(accountId, () => <String>{})
-                  .add(accountReference);
-            }
-            if (effectiveReference is String &&
-                !isValidGeneratedCredentialReference(
-                  effectiveReference,
-                  accountId,
-                )) {
-              throw const FormatException('Invalid credential reference.');
-            }
-            final models = config['models'];
-            if (models != null && models is! List) {
-              throw const FormatException('Invalid provider models.');
-            }
-            if (models is List && models.any((model) => model is! Map)) {
-              throw const FormatException('Invalid provider models.');
-            }
-            final modelIds = <String>[];
-            if (models is List) {
-              for (final rawModel in models) {
-                final model = rawModel as Map;
-                final modelId = model['modelId'];
-                final name = model['name'];
-                modelIds.add(
-                  modelId is String && modelId.trim().isNotEmpty
-                      ? modelId
-                      : (name is String && name.trim().isNotEmpty ? name : ''),
-                );
-              }
-            }
-            final publicKey = config['publicKey'];
-            if (publicKey != null &&
-                (publicKey is! String || publicKey.trim().isEmpty)) {
-              throw const FormatException('Invalid public key metadata.');
-            }
-            final identity = configIdentity(config, modelIds);
-            final current = (
-              key: key,
-              reference: effectiveReference as String?,
-              publicKey: publicKey as String?,
-            );
-            providerConfigUsagesById[accountId] = current;
-            if (identity != null) {
-              providerConfigUsagesByIdentity
-                  .putIfAbsent(
-                    identity,
-                    () => <({
-                      String key,
-                      String? reference,
-                      String? publicKey
-                    })>[],
-                  )
-                  .add(current);
-            }
-            config.remove('key');
-            if (containsCredentialValue(config)) {
-              throw const FormatException('Unsupported nested credential.');
-            }
-            if (effectiveReference is String) {
-              credentialUsages
-                  .putIfAbsent(
-                effectiveReference,
-                () => <({String? accountId, String? key})>[],
-              )
-                  .add((accountId: accountId, key: key.isEmpty ? null : key));
-            }
-          }
-        }
-      }
-
-      for (final accountReference in accountReferenceById.entries) {
-        if (providerAccountIds.contains(accountReference.key)) continue;
-        credentialUsages
-            .putIfAbsent(
-          accountReference.value,
-          () => <({String? accountId, String? key})>[],
-        )
-            .add((accountId: accountReference.key, key: null));
-      }
-
-      final legacyConfigs = selectedPreferences['chat_configs'];
-      if (legacyConfigs != null) {
-        if (legacyConfigs is! String) {
-          throw const FormatException('Invalid legacy chat configs.');
-        }
-        final decoded = jsonDecode(legacyConfigs);
-        if (decoded is! List) {
-          throw const FormatException('Invalid legacy chat configs.');
-        }
-        final seen =
-            <String, ({String key, String? reference, String? publicKey})>{};
-        for (var legacyIndex = 0; legacyIndex < decoded.length; legacyIndex++) {
-          final rawConfig = decoded[legacyIndex];
-          if (rawConfig is! Map) {
-            throw const FormatException('Invalid legacy chat config.');
-          }
-          final config = Map<String, dynamic>.from(rawConfig);
-          final rawAccountId = config['id'];
-          if (rawAccountId != null &&
-              (rawAccountId is! String || rawAccountId.trim().isEmpty)) {
-            throw const FormatException('Invalid legacy account ID.');
-          }
-          final accountId = rawAccountId is String ? rawAccountId : null;
-          final key = config['key'];
-          if (key != null && key is! String) {
-            throw const FormatException('Invalid legacy credential.');
-          }
-          final reference = config['credentialRef'];
-          final publicKey = config['publicKey'];
-          if (reference != null &&
-                  (reference is! String || reference.trim().isEmpty) ||
-              publicKey != null &&
-                  (publicKey is! String || publicKey.trim().isEmpty)) {
-            throw const FormatException('Invalid legacy metadata.');
-          }
-          if (accountId != null &&
-              reference is String &&
-              !isValidGeneratedCredentialReference(reference, accountId)) {
-            throw const FormatException('Invalid legacy credential reference.');
-          }
-          final models = config['models'];
-          if (models != null && models is! List) {
-            throw const FormatException('Invalid legacy models.');
-          }
-          final modelIds = <String>[];
-          if (models is List) {
-            for (final rawModel in models) {
-              if (rawModel is! Map) {
-                throw const FormatException('Invalid legacy models.');
-              }
-              final rawModelId = rawModel['modelId'];
-              final name = rawModel['name'];
-              final modelId =
-                  rawModelId is String && rawModelId.trim().isNotEmpty
-                      ? rawModelId
-                      : (name is String && name.trim().isNotEmpty ? name : '');
-              modelIds.add(modelId);
-            }
-          }
-          config.remove('key');
-          if (containsCredentialValue(config)) {
-            throw const FormatException('Unsupported nested credential.');
-          }
-          final identity = configIdentity(config, modelIds);
-          final current = (
-            key: key is String ? key : '',
-            reference: reference as String?,
-            publicKey: publicKey as String?,
-          );
-          final providerConfig = matchingProviderConfig(accountId, identity);
-          if (providerConfig != null &&
-              hasConflictingMetadata(providerConfig, current)) {
-            throw const FormatException('Conflicting provider credentials.');
-          }
-          final effectiveReference =
-              current.reference ?? providerConfig?.reference;
-          final correlationKey = accountId != null
-              ? 'account:$accountId'
-              : identity != null
-                  ? 'identity:$identity'
-                  : 'anonymous:$legacyIndex';
-          final previous = seen[correlationKey];
-          if (previous != null &&
-              ((previous.key.isNotEmpty &&
-                      current.key.isNotEmpty &&
-                      previous.key != current.key) ||
-                  (previous.reference != null &&
-                      current.reference != null &&
-                      previous.reference != current.reference) ||
-                  (previous.publicKey != null &&
-                      current.publicKey != null &&
-                      previous.publicKey != current.publicKey))) {
-            throw const FormatException('Ambiguous legacy chat configs.');
-          }
-          seen[correlationKey] = previous == null
-              ? (
-                  key: current.key,
-                  reference: effectiveReference,
-                  publicKey: current.publicKey,
-                )
-              : (
-                  key: previous.key.isNotEmpty ? previous.key : current.key,
-                  reference: previous.reference ?? effectiveReference,
-                  publicKey: previous.publicKey ?? current.publicKey,
-                );
-        }
-        for (final usageEntry in seen.entries) {
-          final usage = usageEntry.value;
-          if (usage.reference == null) continue;
-          final accountId = usageEntry.key.startsWith('account:')
-              ? usageEntry.key.substring('account:'.length)
-              : null;
-          credentialUsages
-              .putIfAbsent(
-            usage.reference!,
-            () => <({String? accountId, String? key})>[],
-          )
-              .add((
-            accountId: accountId,
-            key: usage.key.isEmpty ? null : usage.key,
-          ));
-        }
-      }
-
-      final secureStore = credentialStore ?? PlatformLlmCredentialStore();
-      final credentialValues = collectCredentialValues(selectedPreferences);
-      for (final usage in credentialUsages.entries) {
-        final existing = await secureStore.read(usage.key);
-        if (existing != null && existing.trim().isNotEmpty) {
-          credentialValues.add(existing);
-        }
-        final keys =
-            usage.value.map((use) => use.key).whereType<String>().toSet();
-        if (keys.length > 1) {
-          throw const FormatException('Conflicting credential references.');
-        }
-        final keylessUses =
-            usage.value.where((use) => use.key == null).toList();
-        final hasKeylessUse = keylessUses.isNotEmpty;
-        if (hasKeylessUse && keys.isNotEmpty && existing != keys.single) {
-          throw const FormatException('Conflicting credential references.');
-        }
-        if (hasKeylessUse &&
-            keys.isEmpty &&
-            existing == null &&
-            keylessUses.any(
-              (use) =>
-                  use.accountId == null ||
-                  accountLinkedReferences[use.accountId]?.contains(usage.key) !=
-                      true,
-            )) {
-          throw const FormatException('Missing secure credential.');
-        }
-      }
-      bool leaksCredentialInIdentifier(Object? value) {
-        if (value is Map) {
-          for (final entry in value.entries) {
-            final name = entry.key;
-            if (name is String &&
-                isCredentialIdentifierFieldName(name) &&
-                entry.value is String &&
-                containsCredentialValueInIdentifier(
-                  entry.value as String,
-                  credentialValues,
-                )) {
-              return true;
-            }
-            if (leaksCredentialInIdentifier(entry.value)) return true;
-          }
-        } else if (value is List) {
-          return value.any(leaksCredentialInIdentifier);
-        }
-        return false;
-      }
-
-      if (leaksCredentialInIdentifier(selectedPreferences)) {
-        throw const FormatException('Credential value in an identifier.');
-      }
-    } on BackupValidationException {
-      rethrow;
-    } catch (_) {
-      throw const BackupValidationException('备份中的 LLM 设置无效或存在歧义。未更改本机数据。');
-    }
-  }
-
   /// 恢复数据库记录与 SharedPreferences（删除操作已在调用前完成）。
   ///
   /// 注意：偏好设置必须将要恢复的所有数据合并后一次性调用
@@ -5555,7 +5759,6 @@ class BackupService {
     _RestoreMetadata metadata,
     BackupSelection selection, {
     bool useStartupPreferenceAdapter = false,
-    Map<String, dynamic>? selectedPreferences,
   }) async {
     // 恢复数据库记录（使用已解析校验的数据）
     if (metadata.dbData != null) {
@@ -5602,46 +5805,54 @@ class BackupService {
       browserCookies: selection.browserCookies,
       includeMediaFiles: false,
     );
-    if (restoreChatPreferences || selection.settings) {
-      final restoredPrefs = Map<String, dynamic>.from(
-        selectedPreferences ?? _restoredPreferencePayload(metadata, selection),
-      );
-      final repositoryBackup = restoredPrefs.remove(
-        _conversationRepositoryBackupField,
-      );
-      await _restorePreferencesFromJson(
-        restoredPrefs,
-        selection: preferenceSelection,
-        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-      );
-      if (restoreChatPreferences && (!WebFileStore.isTestMode || kIsWeb)) {
-        final repository = createConversationRepository();
-        try {
-          await repository.initialize();
-          final data = repositoryBackup is Map
-              ? Map<String, dynamic>.from(repositoryBackup)
-              : <String, dynamic>{
-                  'schemaVersion': 1,
-                  'conversations': <dynamic>[],
-                  'messages': <dynamic>[],
-                };
-          await repository.restoreData(data);
-          final legacyJson = await StartupPreferences.getString(
-            'conversations',
-          );
-          if (repositoryBackup is Map && legacyJson != null) {
-            await _writeRestoredConversationMigrationCheckpoint(
-              repository,
-              legacyJson,
-            );
-          } else {
-            await StartupPreferences.remove(
-              ConversationMigrationService.stateKey,
-            );
+    if (metadata.isV1) {
+      // v1 格式：preferences.json 包含所有键（聊天+设置合并）
+      // 按 key 分类拆分：只恢复选中类别对应的键，未选中的类别保持原样
+      if (restoreChatPreferences || selection.settings) {
+        debugPrint(
+          '[BackupService] _restoreRecordsAndPrefs: restoring v1 preferences',
+        );
+        final restorePrefs = <String, dynamic>{};
+        if (metadata.v1Prefs != null) {
+          for (final entry in metadata.v1Prefs!.entries) {
+            final isChat = _isChatPrefKey(entry.key);
+            if ((isChat && restoreChatPreferences) ||
+                (!isChat && selection.settings)) {
+              restorePrefs[entry.key] = entry.value;
+            }
           }
-        } finally {
-          await repository.close();
         }
+        await _restorePreferencesFromJson(
+          restorePrefs,
+          selection: preferenceSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        );
+      }
+    } else {
+      // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
+      final mergedPrefs = <String, dynamic>{};
+      if (restoreChatPreferences) {
+        debugPrint(
+          '[BackupService] _restoreRecordsAndPrefs: merging chat_data.json',
+        );
+        if (metadata.chatPrefs != null) {
+          mergedPrefs.addAll(metadata.chatPrefs!);
+        }
+      }
+      if (selection.settings) {
+        debugPrint(
+          '[BackupService] _restoreRecordsAndPrefs: merging settings.json',
+        );
+        if (metadata.settingsPrefs != null) {
+          mergedPrefs.addAll(metadata.settingsPrefs!);
+        }
+      }
+      if (restoreChatPreferences || selection.settings) {
+        await _restorePreferencesFromJson(
+          mergedPrefs,
+          selection: preferenceSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+        );
       }
     }
   }
@@ -5654,10 +5865,10 @@ class BackupService {
   ///
   /// [writeEntry] 负责把条目内容写出到 (subDir, fileName)。
   static Future<bool> _restoreArchiveEntry(
-    String rawKey,
-    BackupSelection selection,
-    Future<void> Function(String subDir, String fileName) writeEntry,
-  ) async {
+      String rawKey,
+      BackupSelection selection,
+      Future<void> Function(String subDir, String fileName) writeEntry,
+      {bool deferAnkiMigrationMarkerInvalidation = false}) async {
     var key = rawKey;
 
     // ZIP 归档可能包含显式目录条目；它们不是数据文件，不能作为类别
@@ -5694,7 +5905,9 @@ class BackupService {
     if (key == 'collection.anki2') {
       if (!selection.ankiData) return false;
       await AnkiDatabase.closeOpenedInstance();
-      await _invalidateAnkiSyncMetadataMigrationMarker();
+      if (!deferAnkiMigrationMarkerInvalidation) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       await writeEntry('', key);
       return true;
     }
@@ -5739,7 +5952,8 @@ class BackupService {
       //（备份归档内的路径为 anki/collection.anki2）。
       // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
       await AnkiDatabase.closeOpenedInstance();
-      if (relativePath == 'collection.anki2') {
+      if (relativePath == 'collection.anki2' &&
+          !deferAnkiMigrationMarkerInvalidation) {
         await _invalidateAnkiSyncMetadataMigrationMarker();
       }
       await writeEntry('', relativePath);
@@ -6027,169 +6241,62 @@ class BackupService {
       startupPrefs = null;
     }
 
-    final existingKeys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
-    final affectedKeys = <String>{
-      ...existingKeys.where((key) => _isKeyInSelection(key, selection)),
-      ...backupPrefs.keys.where((key) => _isKeyInSelection(key, selection)),
-    };
-    final previousValues = await _readPreferenceValues(
-      affectedKeys,
-      preferences: prefs,
-    );
-
-    Future<void> restorePreviousPreferences() async {
-      final currentKeys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
-      for (final key in currentKeys.where(affectedKeys.contains)) {
-        final removed = prefs != null
-            ? await prefs.remove(key)
-            : await startupPrefs!.remove(key);
-        if (!removed) {
-          throw StateError(
-            'Failed to remove preference during restore rollback.',
-          );
-        }
-      }
-      for (final entry in previousValues.entries) {
-        final previousValue = entry.value;
-        if (previousValue == null) {
-          throw StateError(
-            'Unsupported preference value during restore rollback.',
-          );
-        }
-        final saved = await _writePreferenceValue(
-          entry.key,
-          previousValue,
-          preferences: prefs,
-          startupPreferences: startupPrefs,
-        );
-        if (saved != true) {
-          throw StateError(
-            'Failed to restore a preference after backup failure.',
-          );
-        }
-      }
-
-      final restoredValues = await _readPreferenceValues(
-        affectedKeys,
-        preferences: prefs,
-      );
-      for (final key in affectedKeys) {
-        final wasPresent = previousValues.containsKey(key);
-        final isPresent = restoredValues.containsKey(key);
-        if (wasPresent != isPresent ||
-            (wasPresent &&
-                !_samePreferenceValue(
-                  previousValues[key],
-                  restoredValues[key],
-                ))) {
-          throw StateError('Preference rollback verification failed.');
-        }
+    final keys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
+    final keysToRemove =
+        keys.where((k) => _isKeyInSelection(k, selection)).toList();
+    for (final key in keysToRemove) {
+      if (prefs != null) {
+        await prefs.remove(key);
+      } else {
+        await startupPrefs!.remove(key);
       }
     }
 
-    try {
-      final keysToRemove = existingKeys
-          .where((key) => _isKeyInSelection(key, selection))
-          .toList();
-      for (final key in keysToRemove) {
-        final removed = prefs != null
-            ? await prefs.remove(key)
-            : await startupPrefs!.remove(key);
-        if (!removed) {
-          throw StateError('Failed to remove restored preference $key.');
-        }
-      }
-
-      for (final entry in backupPrefs.entries) {
-        if (!_isKeyInSelection(entry.key, selection)) continue;
-        try {
-          final saved = await _writePreferenceValue(
-            entry.key,
-            entry.value,
-            preferences: prefs,
-            startupPreferences: startupPrefs,
-          );
-          if (saved == null) continue;
-          if (!saved) {
-            throw StateError(
-              'Failed to write restored preference ${entry.key}.',
-            );
-          }
-        } catch (e) {
-          debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
-          rethrow;
-        }
-      }
-    } catch (error, stackTrace) {
+    for (final entry in backupPrefs.entries) {
+      if (!_isKeyInSelection(entry.key, selection)) continue;
+      final v = entry.value;
       try {
-        await restorePreviousPreferences();
-      } catch (_) {
-        throw const _PreferenceRestoreRollbackIncomplete();
+        if (v is String) {
+          if (prefs != null) {
+            await prefs.setString(entry.key, v);
+          } else {
+            await startupPrefs!.setString(entry.key, v);
+          }
+        } else if (v is bool) {
+          if (prefs != null) {
+            await prefs.setBool(entry.key, v);
+          } else {
+            await startupPrefs!.setBool(entry.key, v);
+          }
+        } else if (v is int) {
+          if (prefs != null) {
+            await prefs.setInt(entry.key, v);
+          } else {
+            await startupPrefs!.setInt(entry.key, v);
+          }
+        } else if (v is double) {
+          if (prefs != null) {
+            await prefs.setDouble(entry.key, v);
+          } else {
+            await startupPrefs!.setDouble(entry.key, v);
+          }
+        } else if (v is List) {
+          final stringList = v.cast<String>();
+          if (prefs != null) {
+            await prefs.setStringList(entry.key, stringList);
+          } else {
+            await startupPrefs!.setStringList(entry.key, stringList);
+          }
+        }
+      } catch (e) {
+        debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
+        if (useStartupPreferenceAdapter) rethrow;
       }
-      Error.throwWithStackTrace(error, stackTrace);
     }
-
     await AppLogService.info(
       'BackupService',
-      '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${existingKeys.where((key) => _isKeyInSelection(key, selection)).length}',
+      '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${keysToRemove.length}',
     );
-  }
-
-  static Future<Map<String, Object?>> _readPreferenceValues(
-    Set<String> keys, {
-    required SharedPreferences? preferences,
-  }) async {
-    if (preferences == null) return StartupPreferences.getValues(keys);
-    return {
-      for (final key in keys)
-        if (preferences.containsKey(key)) key: preferences.get(key),
-    };
-  }
-
-  static Future<bool?> _writePreferenceValue(
-    String key,
-    Object value, {
-    required SharedPreferences? preferences,
-    required StartupMigrationPreferences? startupPreferences,
-  }) async {
-    if (value is String) {
-      return preferences != null
-          ? preferences.setString(key, value)
-          : startupPreferences!.setString(key, value);
-    }
-    if (value is bool) {
-      return preferences != null
-          ? preferences.setBool(key, value)
-          : startupPreferences!.setBool(key, value);
-    }
-    if (value is int) {
-      return preferences != null
-          ? preferences.setInt(key, value)
-          : startupPreferences!.setInt(key, value);
-    }
-    if (value is double) {
-      return preferences != null
-          ? preferences.setDouble(key, value)
-          : startupPreferences!.setDouble(key, value);
-    }
-    if (value is List) {
-      final stringList = value.cast<String>();
-      return preferences != null
-          ? preferences.setStringList(key, stringList)
-          : startupPreferences!.setStringList(key, stringList);
-    }
-    return null;
-  }
-
-  static bool _samePreferenceValue(Object? left, Object? right) {
-    if (left is List && right is List) {
-      if (left.length != right.length) return false;
-      for (var index = 0; index < left.length; index++) {
-        if (left[index] != right[index]) return false;
-      }
-      return true;
-    }
-    return left == right;
   }
 
   // ================================================================
@@ -6207,9 +6314,11 @@ class BackupService {
     }
 
     String fileNameFor(int seconds) {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
-        seconds * 1000,
-      ).toIso8601String().split('.').first.replaceAll(':', '-');
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(seconds * 1000)
+          .toIso8601String()
+          .split('.')
+          .first
+          .replaceAll(':', '-');
       return 'backup_$timestamp.zip';
     }
 
@@ -6245,7 +6354,11 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
   }) async {
     final l10n = AppLocalizations.of(context)!;
-    await AppLogService.info('BackupService', 'exportBackup: start');
+    final operationClock = Stopwatch()..start();
+    await AppLogService.info(
+      'BackupService',
+      'exportBackup: start, selectedCategories=${selection.selectedLabels.length}',
+    );
     try {
       final defaultName = await _nextBackupFileName();
 
@@ -6298,7 +6411,10 @@ class BackupService {
         );
         if (saveLocation == null) {
           // 用户取消保存
-          await AppLogService.info('BackupService', 'exportBackup: 用户取消');
+          await AppLogService.info(
+            'BackupService',
+            'exportBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+          );
           return false;
         }
         final outputPath = saveLocation.path;
@@ -6328,7 +6444,13 @@ class BackupService {
         savedLocation = destinationPath;
       }
 
-      if (savedLocation == null) return false;
+      if (savedLocation == null) {
+        await AppLogService.info(
+          'BackupService',
+          'exportBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+        );
+        return false;
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -6336,10 +6458,18 @@ class BackupService {
           ),
         );
       }
-      await AppLogService.info('BackupService', 'exportBackup: success');
+      await AppLogService.info(
+        'BackupService',
+        'exportBackup: success, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
       return true;
-    } catch (e) {
-      await AppLogService.error('BackupService', 'exportBackup: 失败', e);
+    } catch (e, s) {
+      await AppLogService.error(
+        'BackupService',
+        'exportBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        e.runtimeType,
+        s,
+      );
       if (context.mounted) {
         final errorText = e.toString();
         final noBackupFolderError =
@@ -6373,14 +6503,24 @@ class BackupService {
     void Function(List<String> skippedCategories)? onSkippedCategories,
   }) async {
     final l10n = AppLocalizations.of(context)!;
-    await AppLogService.info('BackupService', 'importBackup: start');
+    final operationClock = Stopwatch()..start();
+    await AppLogService.info(
+      'BackupService',
+      'importBackup: start, selectedCategories=${selection.selectedLabels.length}',
+    );
     try {
       final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['zip'],
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (file == null) return false;
+      if (file == null) {
+        await AppLogService.info(
+          'BackupService',
+          'importBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+        );
+        return false;
+      }
 
       final List<String> skippedCategories;
 
@@ -6427,10 +6567,19 @@ class BackupService {
       onSkippedCategories?.call(skippedCategories);
 
       // 恢复成功 — 让调用方处理重启提示
-      await AppLogService.info('BackupService', 'importBackup: success');
+      await AppLogService.info(
+        'BackupService',
+        'importBackup: success, skippedCategories=${skippedCategories.length}, '
+            'elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
       return true;
-    } catch (e) {
-      await AppLogService.error('BackupService', 'importBackup: 失败', e);
+    } catch (e, s) {
+      await AppLogService.error(
+        'BackupService',
+        'importBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        e.runtimeType,
+        s,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -6462,6 +6611,7 @@ class BackupService {
   static Future<bool> clearSelectedData(
     BackupSelection selection, {
     void Function(double progress)? onProgress,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -6484,6 +6634,7 @@ class BackupService {
         selection,
         taskFlowAttachmentKeys,
         onProgress,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
     } finally {
       if (guardsBrowserAction) BrowserProfileService.endAction();
@@ -6494,7 +6645,7 @@ class BackupService {
     BackupSelection selection,
     Set<String> taskFlowAttachmentKeys,
     void Function(double progress)? onProgress, {
-    ConversationRepository? repositoryOverride,
+    required bool useStartupPreferenceAdapter,
   }) async {
     var browserWebsiteDataCleared = true;
     // Clear live and persisted Cookies together so browser-close persistence
@@ -6512,28 +6663,31 @@ class BackupService {
 
     // 1. SharedPreferences — 只删除选中类别的键
     if (selection.chatRecordsAndAttachments || selection.settings) {
-      final prefs = await SharedPreferences.getInstance();
-      final keysToRemove = prefs
-          .getKeys()
-          .where((k) => _isKeyInSelection(k, selection))
-          .toList();
+      final SharedPreferences? prefs;
+      final StartupMigrationPreferences? startupPrefs;
+      final Set<String> keys;
+      if (useStartupPreferenceAdapter) {
+        prefs = null;
+        startupPrefs = await StartupMigrationPreferences.load();
+        keys = await startupPrefs.getKeys();
+      } else {
+        prefs = await SharedPreferences.getInstance();
+        startupPrefs = null;
+        keys = prefs.getKeys();
+      }
+      final keysToRemove =
+          keys.where((key) => _isKeyInSelection(key, selection)).toList();
       for (final key in keysToRemove) {
-        await prefs.remove(key);
+        if (prefs != null) {
+          await prefs.remove(key);
+        } else {
+          await startupPrefs!.remove(key);
+        }
       }
       await AppLogService.info(
         'BackupService',
         'clearSelectedData: removed ${keysToRemove.length} preference keys',
       );
-    }
-
-    if (selection.chatRecordsAndAttachments) {
-      final repository = repositoryOverride ?? createConversationRepository();
-      try {
-        await repository.initialize();
-        await repository.clearConversations();
-      } finally {
-        if (repositoryOverride == null) await repository.close();
-      }
     }
 
     // 2. 选中类别的文件（附件目录整清，孤儿文件一并删除）
@@ -6628,6 +6782,78 @@ class BackupService {
     }
   }
 
+  /// Reads the execution IDs whose persisted inventory is about to be replaced.
+  /// A null result means the current file could not be parsed safely, so its
+  /// artifact namespaces must be retained.
+  static Future<Set<String>?> _taskFlowExecutionIdsToReplace() async {
+    try {
+      final isWebStore = kIsWeb || WebFileStore.isTestMode;
+      final appDir = isWebStore ? null : await AppStorage.directory;
+      final file = isWebStore
+          ? null
+          : File(p.join(appDir!, 'task_flows', 'executions.json'));
+      if (isWebStore) {
+        if (!await WebFileStore.exists('task_flows/executions.json')) {
+          return <String>{};
+        }
+      } else if (!await file!.exists()) {
+        return <String>{};
+      }
+
+      final data = isWebStore
+          ? await WebFileStore.read('task_flows/executions.json')
+          : await file!.readAsBytes();
+      if (data == null) return null;
+      final decoded = jsonDecode(utf8.decode(data));
+      if (decoded is! List) return null;
+
+      final executionIds = <String>{};
+      for (final value in decoded) {
+        if (value is! Map) return null;
+        final id = value['id'];
+        if (id is String && id.isNotEmpty) executionIds.add(id);
+      }
+      return executionIds;
+    } catch (e) {
+      debugPrint('读取待替换的任务流执行记录失败，保留临时输出: $e');
+      return null;
+    }
+  }
+
+  static Future<Set<String>> _taskFlowExecutionIdsToCleanupAfterRestore(
+    BackupSelection selection,
+    Set<String> taskFilesToReplace, {
+    required bool skipRollbackSnapshot,
+  }) async {
+    if (skipRollbackSnapshot ||
+        selection.includeMediaFiles ||
+        !taskFilesToReplace.contains('task_flows/executions.json')) {
+      return const <String>{};
+    }
+    final executionIds = await _taskFlowExecutionIdsToReplace();
+    if (executionIds == null) {
+      throw const DataManagementPreflightException(
+        '无法安全识别待替换任务流的临时输出，已取消恢复以避免数据丢失。',
+      );
+    }
+    return executionIds;
+  }
+
+  static Future<bool> _deleteTaskFlowTemporaryArtifacts(
+    Iterable<String> executionIds,
+  ) async {
+    var deleteFailed = false;
+    for (final executionId in executionIds) {
+      try {
+        await FlowTemporaryArtifactStorage.deleteExecution(executionId);
+      } catch (e) {
+        debugPrint('删除被替换任务流的临时输出失败: $e');
+        deleteFailed = true;
+      }
+    }
+    return deleteFailed;
+  }
+
   static bool get _isBackupFlutterTest {
     try {
       return Platform.environment['FLUTTER_TEST'] == 'true';
@@ -6708,7 +6934,7 @@ class BackupService {
         'task_flows/executions.json',
       });
 
-  static Future<Set<String>> _taskFlowAttachmentPathsForBackup(
+  static Future<Map<String, String>> _taskFlowAttachmentPathsForBackup(
     String appDir,
   ) async {
     final taskFlowFiles = await _collectTaskFlowAttachmentKeys(const {
@@ -6720,7 +6946,7 @@ class BackupService {
         '无法读取任务流附件引用，已取消备份以避免遗漏任务文件。',
       );
     }
-    final relativePaths = <String>{};
+    final relativePaths = <String, String>{};
     for (final key in taskFlowFiles) {
       late final String relativePath;
       if (key.startsWith('attachments/')) {
@@ -6733,13 +6959,17 @@ class BackupService {
       if (!_isSafeRelativeArchivePath(relativePath)) {
         throw const DataManagementPreflightException('任务流包含无效附件路径，已取消备份。');
       }
-      final file = File(
-        p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+      final sourcePath = await resolveSafeAttachmentSourcePath(
+        appDir,
+        'attachments/$relativePath',
       );
-      if (!await file.exists()) {
-        throw FileSystemException('任务流引用的附件不存在', file.path);
+      if (sourcePath == null) {
+        throw const DataManagementPreflightException('任务流包含无效附件路径，已取消备份。');
       }
-      relativePaths.add(relativePath);
+      if (!await File(sourcePath).exists()) {
+        throw FileSystemException('任务流引用的附件不存在', sourcePath);
+      }
+      relativePaths[relativePath] = sourcePath;
     }
     return relativePaths;
   }
@@ -6780,24 +7010,13 @@ class BackupService {
     }
   }
 
-  static Future<Set<String>?> _collectChatAttachmentKeysStrict({
-    ConversationRepository? repositoryOverride,
-  }) async {
+  static Future<Set<String>?> _collectChatAttachmentKeysStrict() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('conversations');
-      Object? decoded;
-      var malformedLegacyPreferences = false;
-      if (raw != null) {
-        try {
-          decoded = jsonDecode(raw);
-          if (decoded != null && decoded is! List) {
-            malformedLegacyPreferences = true;
-          }
-        } catch (_) {
-          malformedLegacyPreferences = true;
-        }
-      }
+      if (raw == null) return <String>{};
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return null;
       final appDir =
           kIsWeb || WebFileStore.isTestMode ? null : await AppStorage.directory;
       final keys = <String>{};
@@ -6833,11 +7052,7 @@ class BackupService {
           if (attachment is! Map) {
             throw const FormatException('attachment is not an object');
           }
-          for (final field in const [
-            'storagePath',
-            'reference',
-            'thumbnailPath',
-          ]) {
+          for (final field in const ['storagePath', 'thumbnailPath']) {
             final rawPath = attachment[field];
             if (rawPath == null) continue;
             if (rawPath is! String) {
@@ -6849,93 +7064,17 @@ class BackupService {
         }
       }
 
-      // ConversationRepository is authoritative after M2 migration. Legacy
-      // preferences may be absent or stale, so include attachment references
-      // from every repository row before allowing task-only restores to write
-      // files into the shared attachments directory.
-      var repositoryAuthoritative = false;
-      if (repositoryOverride != null ||
-          kIsWeb ||
-          (!WebFileStore.isTestMode && !_isBackupFlutterTest)) {
-        final repository = repositoryOverride ?? createConversationRepository();
-        try {
-          await repository.initialize();
-          repositoryAuthoritative =
-              await isConversationRepositoryAuthoritative(repository);
-          for (final summary in await repository.listSummaries()) {
-            final conversation = await repository.getConversation(summary.id);
-            if (conversation == null) return null;
-            final conversationLegacy =
-                conversation.extensions['stroom.legacyConversation'];
-            if (conversationLegacy is Map) {
-              collectAttachments(conversationLegacy['draftAttachments']);
-            }
-            collectAttachments(conversation.extraFields['draftAttachments']);
-
-            var offset = 0;
-            const pageSize = 100;
-            while (true) {
-              final messages = await repository.getMessages(
-                summary.id,
-                offset: offset,
-                limit: pageSize,
-              );
-              if (messages.isEmpty) break;
-              for (final message in messages) {
-                final legacy = message.extensions['stroom.legacy'];
-                final record = legacy is Map ? legacy['record'] : null;
-                if (record is Map) collectAttachments(record['attachments']);
-                for (final part in message.content) {
-                  final data = part.data;
-                  final attachment = data['attachment'];
-                  if (attachment is Map) {
-                    collectAttachments([attachment]);
-                  }
-                  if (const {
-                    'image',
-                    'audio',
-                    'video',
-                    'file',
-                  }.contains(part.type)) {
-                    for (final field in const [
-                      'reference',
-                      'storagePath',
-                      'thumbnailPath',
-                    ]) {
-                      final key = canonicalKey(data[field]);
-                      if (key != null) keys.add(key);
-                    }
-                  }
-                }
-              }
-              offset += messages.length;
-              if (messages.length < pageSize) break;
-            }
-          }
-        } finally {
-          await repository.close();
-        }
-      }
-
-      // Old SharedPreferences records are consulted only before the verified
-      // repository checkpoint. After that checkpoint they may be stale and
-      // malformed legacy data must not block a task-only restore.
-      if (!repositoryAuthoritative) {
-        if (malformedLegacyPreferences) return null;
-        if (decoded is List) {
-          for (final conversation in decoded) {
-            if (conversation is! Map) return null;
-            final messages = conversation['messages'];
-            if (messages != null) {
-              if (messages is! List) return null;
-              for (final message in messages) {
-                if (message is! Map) return null;
-                collectAttachments(message['attachments']);
-              }
-            }
-            collectAttachments(conversation['draftAttachments']);
+      for (final conversation in decoded) {
+        if (conversation is! Map) return null;
+        final messages = conversation['messages'];
+        if (messages != null) {
+          if (messages is! List) return null;
+          for (final message in messages) {
+            if (message is! Map) return null;
+            collectAttachments(message['attachments']);
           }
         }
+        collectAttachments(conversation['draftAttachments']);
       }
       return keys;
     } catch (e) {
@@ -6943,50 +7082,6 @@ class BackupService {
       return null;
     }
   }
-
-  @visibleForTesting
-  static Future<Set<String>?> collectChatAttachmentKeysForTest(
-    ConversationRepository repository,
-  ) =>
-      _collectChatAttachmentKeysStrict(repositoryOverride: repository);
-
-  @visibleForTesting
-  static Future<bool> clearSelectedDataForTest(
-    BackupSelection selection, {
-    required ConversationRepository repository,
-    void Function(double progress)? onProgress,
-  }) async {
-    onProgress?.call(0.0);
-    await _yieldToEventLoop();
-    final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
-      selection,
-    );
-    return _clearSelectedDataAfterPreflight(
-      selection,
-      taskFlowAttachmentKeys,
-      onProgress,
-      repositoryOverride: repository,
-    );
-  }
-
-  @visibleForTesting
-  static Future<void> writeRestoredConversationMigrationCheckpointForTest(
-    ConversationRepository repository,
-    String legacyJson,
-  ) =>
-      _writeRestoredConversationMigrationCheckpoint(repository, legacyJson);
-
-  @visibleForTesting
-  static bool hasAllReferencedAttachmentFilesForTest({
-    required Map<String, dynamic>? chatPrefs,
-    required Set<String> archiveEntries,
-    required bool requireFiles,
-  }) =>
-      _hasAllReferencedAttachmentFiles(
-        chatPrefs: chatPrefs,
-        archiveEntries: archiveEntries,
-        requireFiles: requireFiles,
-      );
 
   static Future<bool> _deleteAttachmentKeys(Set<String> keys) async {
     try {
@@ -7030,6 +7125,8 @@ class BackupService {
     bool preserveBrowserCookieSnapshot = false,
     Set<String>? taskFilesToReplace,
     Set<String>? completeFileInventories,
+    bool invalidateAnkiMigrationMarker = true,
+    bool clearAnkiSyncIndexes = true,
   }) async {
     var deleteFailed = false;
 
@@ -7137,6 +7234,15 @@ class BackupService {
             'task_state/task_list_last_read.json',
             'task_state/app_launches.json',
           };
+      const executionsFile = 'task_flows/executions.json';
+      final cleanupReplacedExecutionArtifacts =
+          selection.includeMediaFiles && taskFiles.contains(executionsFile);
+      final replacedExecutionIds = cleanupReplacedExecutionArtifacts
+          ? await _taskFlowExecutionIdsToReplace()
+          : const <String>{};
+      if (cleanupReplacedExecutionArtifacts && replacedExecutionIds == null) {
+        deleteFailed = true;
+      }
       if (!selection.chatRecordsAndAttachments &&
           selection.includeMediaFiles &&
           (completeFileInventories == null ||
@@ -7182,9 +7288,18 @@ class BackupService {
           !await _deleteFile('task_flows', 'flows.json')) {
         deleteFailed = true;
       }
-      if (taskFiles.contains('task_flows/executions.json') &&
-          !await _deleteFile('task_flows', 'executions.json')) {
-        deleteFailed = true;
+      if (taskFiles.contains(executionsFile) &&
+          (!cleanupReplacedExecutionArtifacts ||
+              replacedExecutionIds != null)) {
+        if (await _deleteFile('task_flows', 'executions.json')) {
+          if (await _deleteTaskFlowTemporaryArtifacts(
+            replacedExecutionIds ?? const <String>{},
+          )) {
+            deleteFailed = true;
+          }
+        } else {
+          deleteFailed = true;
+        }
       }
       if (taskFiles.contains('task_state/task_list_last_read.json') &&
           !await _deleteFile('', 'task_list_last_read.json')) {
@@ -7217,16 +7332,22 @@ class BackupService {
     // 同时清理历史恢复写入的 anki/collection.anki2 残留文件。
     if (selection.ankiData) {
       await AnkiDatabase.closeOpenedInstance();
-      await _invalidateAnkiSyncMetadataMigrationMarker();
+      if (invalidateAnkiMigrationMarker) {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
       if (selection.includeMediaFiles &&
           (completeFileInventories == null ||
               completeFileInventories.contains(DataParts.anki))) {
-        final mediaDirectoryDeleted =
-            await _deleteDirectory('collection.media');
+        final mediaDirectoryDeleted = await _deleteDirectory(
+          'collection.media',
+        );
         if (!mediaDirectoryDeleted) deleteFailed = true;
-        if (mediaDirectoryDeleted && !kIsWeb && !WebFileStore.isTestMode) {
+        if (clearAnkiSyncIndexes &&
+            mediaDirectoryDeleted &&
+            !kIsWeb &&
+            !WebFileStore.isTestMode) {
           try {
             await AnkiMediaSync.clearSyncIndexes(
               documentsPath: await AppStorage.directory,
@@ -7289,19 +7410,13 @@ class BackupService {
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
-    bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
-    LlmCredentialStore? credentialStore,
-    Future<void> Function()? afterCredentialStagingForTest,
   }) async {
     await _restoreFromBytes(
       bytes,
       onProgress: onProgress,
       selection: selection,
-      skipPostRestoreMigration: skipPostRestoreMigration,
       skipMissingCategories: skipMissingCategories,
-      credentialStoreForTest: credentialStore,
-      afterCredentialStagingForTest: afterCredentialStagingForTest,
     );
   }
 
@@ -7325,171 +7440,17 @@ Map<String, String> _encodeBackupPreferenceGroups(
   Map<String, Object?> values,
   List<String> chatKeys,
   List<String> settingsKeys,
-) {
-  final chatData = {
-    for (final key in chatKeys)
-      if (values.containsKey(key)) key: values[key],
-  };
-  final settingsData = {
-    for (final key in settingsKeys)
-      if (values.containsKey(key)) key: values[key],
-  };
-  _sanitizeBackupSettings(settingsData);
-  return {
-    'chat_data': jsonEncode(chatData),
-    'settings': jsonEncode(settingsData),
-  };
-}
-
-void _sanitizeBackupSettings(Map<String, dynamic> settings) {
-  final credentialValues = <String>{};
-  for (final value in settings.values) {
-    try {
-      final decoded =
-          value is String ? jsonDecode(value) : jsonDecode(jsonEncode(value));
-      credentialValues.addAll(collectCredentialValues(decoded));
-    } catch (_) {
-      // Malformed known preferences are omitted by the per-key sanitizer.
-    }
-  }
-  for (final key in settings.keys.toList()) {
-    final safeValue = _safeBackupPreferenceValue(
-      key,
-      settings[key],
-      knownCredentials: credentialValues,
-    );
-    if (safeValue == null) {
-      settings.remove(key);
-    } else {
-      settings[key] = safeValue;
-    }
-  }
-}
-
-/// Exports preserve the legacy source on-device when secure storage is
-/// unavailable, but backup archives must never copy its plaintext LLM keys.
-/// Malformed provider settings are omitted rather than copied without a safe
-/// way to identify credential fields.
-const _backupKnownProviderTypes = {
-  'llm',
-  'tts',
-  'ocr',
-  'asr',
-  'mcp',
-  'builtin',
-};
-
-Object? _safeBackupPreferenceValue(
-  String key,
-  Object? value, {
-  Set<String> knownCredentials = const {},
-}) {
-  bool unsafeIdentifiers(Object? decoded) {
-    final credentialValues = <String>{
-      ...knownCredentials,
-      ...collectCredentialValues(decoded),
+) =>
+    {
+      'chat_data': jsonEncode({
+        for (final key in chatKeys)
+          if (values.containsKey(key)) key: values[key],
+      }),
+      'settings': jsonEncode({
+        for (final key in settingsKeys)
+          if (values.containsKey(key)) key: values[key],
+      }),
     };
-    bool visit(Object? current) {
-      if (current is Map) {
-        for (final entry in current.entries) {
-          final name = entry.key;
-          if (name is String &&
-              isCredentialIdentifierFieldName(name) &&
-              entry.value is String &&
-              containsCredentialValueInIdentifier(
-                entry.value as String,
-                credentialValues,
-              )) {
-            return true;
-          }
-          if (visit(entry.value)) return true;
-        }
-      } else if (current is List) {
-        return current.any(visit);
-      }
-      return false;
-    }
-
-    return visit(decoded);
-  }
-
-  Object? sanitizeBuiltinCredentialContainers(Object? value) {
-    if (value is Map) {
-      final result = <Object?, Object?>{};
-      for (final entry in value.entries) {
-        final name = entry.key;
-        if (name is String &&
-            normalizeCredentialFieldName(name) == 'credentials') {
-          continue;
-        }
-        result[name] = sanitizeBuiltinCredentialContainers(entry.value);
-      }
-      return result;
-    }
-    if (value is List) {
-      return value.map(sanitizeBuiltinCredentialContainers).toList();
-    }
-    return value;
-  }
-
-  if (key == 'chat_configs') {
-    if (value is! String) return null;
-    try {
-      final decoded = jsonDecode(value);
-      if (decoded is! List) return null;
-      if (unsafeIdentifiers(decoded)) return null;
-      return jsonEncode(sanitizeCredentialFields(decoded));
-    } catch (_) {
-      return null;
-    }
-  }
-  if (key == LlmAccountMigrationService.accountsPreferenceKey ||
-      key == LlmAccountMigrationService.modelGroupsPreferenceKey) {
-    if (value is! String) return null;
-    try {
-      final decoded = jsonDecode(value);
-      if (decoded is! Map || decoded['items'] is! List) return null;
-      if (unsafeIdentifiers(decoded)) return null;
-      return jsonEncode(sanitizeCredentialFields(decoded));
-    } catch (_) {
-      return null;
-    }
-  }
-  if (key != 'provider_entries') return value;
-  if (value is! String) return null;
-  try {
-    final decoded = jsonDecode(value);
-    if (decoded is! List) return null;
-    if (unsafeIdentifiers(decoded)) return null;
-    for (var index = 0; index < decoded.length; index++) {
-      final entry = decoded[index];
-      if (entry is! Map) return null;
-      if (entry['type'] != 'llm') {
-        if (entry['type'] == 'mcp' || entry['type'] == 'builtin') {
-          decoded[index] = entry['type'] == 'builtin'
-              ? sanitizeBuiltinCredentialContainers(entry)
-              : sanitizeCredentialFields(entry);
-          continue;
-        }
-        if (!_backupKnownProviderTypes.contains(entry['type'])) {
-          decoded[index] = sanitizeCredentialFields(entry);
-        }
-        continue;
-      }
-      final configs = entry['configs'];
-      if (configs != null && configs is! List) return null;
-      if (configs is List) {
-        for (final config in configs) {
-          if (config is! Map) return null;
-        }
-      }
-      decoded[index] = sanitizeCredentialFields(entry);
-    }
-    return jsonEncode(decoded);
-  } catch (_) {
-    return null;
-  }
-}
 
 /// 备份计划：主 isolate 收集的数据与文件清单。
 ///
@@ -7783,7 +7744,6 @@ const List<String> _restoreKnownDirs = [
   'task_state',
   'task_flow_attachments',
   'task_flow_temporary',
-  'ocr_retry_cache',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -7811,7 +7771,6 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
       return selection.tasks;
     case 'task_flow_attachments':
     case 'task_flow_temporary':
-    case 'ocr_retry_cache':
       return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;

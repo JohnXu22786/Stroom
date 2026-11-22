@@ -7,6 +7,8 @@ import 'package:stroom/widgets/stroom_menu_style.dart';
 import '../providers/provider_config.dart';
 import 'model_config_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// 简洁模型配置编辑页面（适用于 OCR、ASR 等不需要 TTS 特有字段的类型）
 /// 包含：模型名称（可选）、模型ID（必填）、自定义参数（可选）
 class SimpleModelConfigPage extends StatefulWidget {
@@ -152,11 +154,19 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
-            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.mermaidSaveButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -202,17 +212,26 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           // ==========================================================
           Row(
             children: [
-              Text(
-                AppLocalizations.of(context)!.chatCustomParameters,
-                style: TextStyle(fontWeight: FontWeight.w600),
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.chatCustomParameters,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Spacer(),
-              TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(
-                  AppLocalizations.of(context)!.assistantAddParameter,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 148),
+                child: TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.assistantAddParameter,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: _addCustomParam,
                 ),
-                onPressed: _addCustomParam,
               ),
             ],
           ),
@@ -247,8 +266,12 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                             child: TextFormField(
                               initialValue: param.paramName,
                               decoration: InputDecoration(
-                                labelText: AppLocalizations.of(context)!
-                                    .assistantParameterName,
+                                label: ConstrainedText(
+                                  AppLocalizations.of(context)!
+                                      .assistantParameterName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 border: const OutlineInputBorder(),
                                 isDense: true,
                                 errorText: isDuplicate
@@ -278,14 +301,19 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                                 borderRadius: StroomMenuStyle.borderRadius,
                                 value: param.type,
                                 isDense: true,
+                                isExpanded: true,
                                 items: ParamType.values
                                     .map(
                                       (t) => DropdownMenuItem(
                                         value: t.value,
-                                        child: Text(
+                                        child: ConstrainedText(
                                           localizedParamTypeLabel(
-                                              AppLocalizations.of(context)!, t),
+                                            AppLocalizations.of(context)!,
+                                            t,
+                                          ),
                                           style: const TextStyle(fontSize: 13),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     )
@@ -315,10 +343,16 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                       TextFormField(
                         initialValue: param.defaultValue,
                         decoration: InputDecoration(
-                          labelText: AppLocalizations.of(context)!
-                              .modelParamDefaultValue,
+                          label: ConstrainedText(
+                            AppLocalizations.of(context)!
+                                .modelParamDefaultValue,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           hintText: localizedParamTypeDefaultValueHint(
-                              AppLocalizations.of(context)!, param.paramType),
+                            AppLocalizations.of(context)!,
+                            param.paramType,
+                          ),
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),

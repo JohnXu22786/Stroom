@@ -40,6 +40,75 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('recovery guidance wraps and remains scrollable at large text',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: BrowserPage(initialUrl: 'about:blank', recoveryMode: true),
+        ),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.params.onLoadStart!(controller, WebUri('about:blank'));
+    await tester.pump();
+
+    final guidance = find.byKey(const Key('browser-recovery-guidance-scroll'));
+    expect(guidance, findsOneWidget);
+    final guidanceText = tester.widget<Text>(
+      find.descendant(of: guidance, matching: find.byType(Text)),
+    );
+    expect(
+      guidanceText.data,
+      AppLocalizations.of(tester.element(find.byType(BrowserPage)))!
+          .catcatchWebViewRecoveryGuidance,
+    );
+    expect(guidanceText.maxLines, isNull);
+    expect(guidanceText.overflow, isNull);
+    expect(find.byTooltip('Continue flow'), findsOneWidget);
+
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(of: guidance, matching: find.byType(Scrollable)),
+    );
+    expect(scrollable.position.maxScrollExtent, greaterThan(0));
+    await tester.drag(guidance, const Offset(0, -80));
+    await tester.pumpAndSettle();
+    expect(scrollable.position.pixels, greaterThan(0));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('browser permits externally hosted mixed-content resources',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+
+    await _startNavigation(tester, platform);
+
+    expect(
+      platform.webView!.params.initialSettings?.mixedContentMode,
+      MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('ambiguous same-URL error waits for active load completion',
       (tester) async {
     final previousPlatform = InAppWebViewPlatform.instance;

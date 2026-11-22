@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
@@ -17,8 +16,12 @@ import '../l10n/app_localizations.dart';
 import '../services/backup_service.dart';
 import '../startup/app_restart.dart';
 import '../anki/apkg/apkg_exporter.dart';
+import '../anki/apkg/apkg_result.dart';
 import '../anki/apkg/apkg_importer.dart';
 import '../utils/system_pick_utils.dart';
+
+import '../widgets/clear_selected_data_confirmation_dialog.dart';
+import '../widgets/constrained_text.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
   const BackupRestorePage({super.key, this.clearDataForTest});
@@ -100,8 +103,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         builder: (ctx) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(
+            title: ConstrainedText(
               AppLocalizations.of(ctx)!.backupRestoreExportingBackup,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             content: Row(
               children: [
@@ -221,7 +226,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(_strings.backupRestoreConfirmRestore),
+        title: ConstrainedText(
+          _strings.backupRestoreConfirmRestore,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,11 +298,19 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(AppLocalizations.of(context)!.backupRestoreCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.backupRestoreCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(_strings.backupRestoreConfirmRestoreButton),
+            child: ConstrainedText(
+              _strings.backupRestoreConfirmRestoreButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -375,7 +392,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => _ClearSelectedDataConfirmationDialog(
+      builder: (_) => ClearSelectedDataConfirmationDialog(
         labels: _localizedCategoryLabels(clearLabels),
         browserWebsiteDataUnsupported: browserWebsiteDataUnsupported,
       ),
@@ -393,7 +410,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         builder: (ctx) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(_strings.backupRestoreClearingData),
+            title: ConstrainedText(
+              _strings.backupRestoreClearingData,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Row(
               children: [
                 SizedBox(
@@ -490,7 +511,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_strings.backupRestoreExportFailed(e.toString())),
+            content: Text(
+              _strings.backupRestoreExportFailed(
+                e is AnkiApkgException
+                    ? e.localizedMessage(_strings)
+                    : _strings.backupRestoreApkgOperationFailed,
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -524,14 +551,23 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       final summary = await AnkiApkgImporter.import(path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(summary), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(summary.format(_strings)),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_strings.backupRestoreImportFailed(e.toString())),
+            content: Text(
+              _strings.backupRestoreImportFailed(
+                e is AnkiApkgException
+                    ? e.localizedMessage(_strings)
+                    : _strings.backupRestoreApkgUnexpectedError(path),
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -562,7 +598,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             children: [
               Icon(icon, color: iconColor, size: 24),
               const SizedBox(width: 8),
-              Text(title ?? _strings.backupRestoreRestoreSuccessTitle),
+              Flexible(
+                child: ConstrainedText(
+                  title ?? _strings.backupRestoreRestoreSuccessTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: Text(message ?? _strings.backupRestoreRestoredMessage),
@@ -572,14 +614,22 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 Navigator.of(dialogContext).pop();
                 _exitApp();
               },
-              child: Text(_strings.backupRestoreExitApp),
+              child: ConstrainedText(
+                _strings.backupRestoreExitApp,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 restartApp();
               },
-              child: Text(_strings.backupRestoreRestartNow),
+              child: ConstrainedText(
+                _strings.backupRestoreRestartNow,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -592,16 +642,22 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
+        title: ConstrainedText(
           categories.every((category) => category == '内置浏览器网站存储')
               ? _strings.backupRestoreSkippedTitle
               : _strings.backupRestoreNothingRestoredTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: Text(_skippedCategoriesMessage(categories)),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(_strings.backupRestoreGotIt),
+            child: ConstrainedText(
+              _strings.backupRestoreGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -672,7 +728,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_strings.backupRestorePageTitle)),
+      appBar: AppBar(
+        title: ConstrainedText(
+          _strings.backupRestorePageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -726,10 +788,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                                   ),
                                 )
                               : const Icon(Icons.file_upload_outlined),
-                          label: Text(
+                          label: ConstrainedText(
                             _isAnkiExporting
                                 ? _strings.backupRestoreExportingApkg
                                 : _strings.backupRestoreExportApkg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
@@ -746,10 +810,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                                   ),
                                 )
                               : const Icon(Icons.file_download_outlined),
-                          label: Text(
+                          label: ConstrainedText(
                             _isAnkiImporting
                                 ? _strings.backupRestoreImportingApkg
                                 : _strings.backupRestoreImportApkg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
@@ -780,10 +846,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.backup),
-                      label: Text(
+                      label: ConstrainedText(
                         _isExporting
                             ? _strings.backupRestoreExporting
                             : _strings.backupRestoreExportBackup,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -798,10 +866,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.restore),
-                      label: Text(
+                      label: ConstrainedText(
                         _isImporting
                             ? _strings.backupRestoreRestoring
                             : _strings.backupRestoreChooseBackup,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -825,12 +895,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                         size: 20,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _strings.backupRestoreClearSelected,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                          color: Colors.red.shade800,
+                      Flexible(
+                        child: ConstrainedText(
+                          _strings.backupRestoreClearSelected,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: Colors.red.shade800,
+                          ),
                         ),
                       ),
                     ],
@@ -855,10 +929,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.delete_forever_outlined),
-                      label: Text(
+                      label: ConstrainedText(
                         _isClearing
                             ? _strings.backupRestoreClearing
                             : _strings.backupRestoreClearSelected,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
@@ -995,7 +1071,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         children: [
           Icon(icon, size: 18, color: iconColor),
           const SizedBox(width: 8),
-          Text(title, style: const TextStyle(fontSize: 14)),
+          Flexible(
+            child: ConstrainedText(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
         ],
       ),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
@@ -1025,12 +1108,20 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(_strings.backupRestoreGotIt),
+            child: ConstrainedText(
+              _strings.backupRestoreGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1060,146 +1151,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _ClearSelectedDataConfirmationDialog extends StatefulWidget {
-  const _ClearSelectedDataConfirmationDialog({
-    required this.labels,
-    required this.browserWebsiteDataUnsupported,
-  });
-
-  final List<String> labels;
-  final bool browserWebsiteDataUnsupported;
-
-  @override
-  State<_ClearSelectedDataConfirmationDialog> createState() =>
-      _ClearSelectedDataConfirmationDialogState();
-}
-
-class _ClearSelectedDataConfirmationDialogState
-    extends State<_ClearSelectedDataConfirmationDialog> {
-  static const _countdownDuration = 10;
-  int _secondsRemaining = _countdownDuration;
-  Timer? _countdownTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() => _secondsRemaining--);
-      if (_secondsRemaining == 0) timer.cancel();
-    });
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.backupRestoreConfirmClear),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(AppLocalizations.of(context)!.backupRestoreClearCategoriesIntro),
-          const SizedBox(height: 12),
-          ...widget.labels.map(
-            (label) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(label, style: const TextStyle(fontSize: 13)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (widget.browserWebsiteDataUnsupported) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.orange, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context)!
-                        .backupRestoreBrowserClearUnsupported,
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (widget.labels.length < 9) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context)!
-                        .backupRestoreUnselectedUnchanged,
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context)!.backupRestoreClearWarning,
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(AppLocalizations.of(context)!.backupRestoreCancel),
-        ),
-        FilledButton(
-          onPressed: _secondsRemaining == 0
-              ? () => Navigator.of(context).pop(true)
-              : null,
-          style: FilledButton.styleFrom(backgroundColor: Colors.red),
-          child: Text(
-            _secondsRemaining == 0
-                ? AppLocalizations.of(context)!.backupRestoreClearSelected
-                : AppLocalizations.of(context)!
-                    .backupRestoreConfirmClearCountdown(_secondsRemaining),
-          ),
-        ),
-      ],
     );
   }
 }

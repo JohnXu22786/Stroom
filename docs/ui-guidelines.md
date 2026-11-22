@@ -40,10 +40,25 @@ Use the active theme's text roles for comparable UI: `bodyMedium` is 14 px for o
 
 The app does not define a complete custom global `textTheme`; read the nearest theme and current comparable widgets before adding local styles. Let text scaling and localization expand layout naturally.
 
+### Constrained display labels
+
+Apply this rule to compact first-party labels and summaries in finite width, line-count, or height slots across `lib/` and `packages/streaming_markdown/`, including navigation tabs, dropdown options and selected values, buttons, chips, card and list labels, compact form/helper labels, bounded metadata, and dialog titles. Essential explanatory content on detail and information pages is not a compact label: keep it fully expanded, naturally wrapped, and reachable by scrolling rather than placing it in a clipped slot. Treat a fixed limit on a compact label as a candidate even when the current English or Chinese value happens to fit: measure the actual localized string with the current width, text scale, direction, and style. Use [`ConstrainedText`](../lib/widgets/constrained_text.dart) for labels that can be clipped. If the complete current string fits, keep it stationary and visually identical, including its original alignment; only a measured clip starts motion. Single-line labels use the bidirectional horizontal marquee; multi-line labels keep their wrapping and reveal clipped lines vertically. Preserve control sizing, focus, selection, keyboard, and touch behavior, and expose the complete value as one semantic label. Never shrink text or add language-specific shortening to avoid overflow.
+
+For static labels inside `InputDecoration`, pass the localized text through `label: ConstrainedText(...)` when it occupies a finite field slot; leave the editable text itself as a native `TextField` so caret following and selection remain unchanged.
+
+The [constrained-text inventory](ui-constrained-text-inventory.csv) lists every source file found by the latest hard-limit, text-widget, and finite-layout scans across the current `main` snapshot and the Stage 2 rollout. It records scan signals and the disposition of verified additions; generic layout hits remain candidates until actual text clipping is confirmed.
+
+Overflowing labels remain still for 1 second when first laid out, then move bidirectionally at 24 logical px/s by default, reversing at the actual text start and end without traversing extra blank space. For horizontal and vertical reveal, pause for 2 seconds at each actual text endpoint before reversing. The first 1-second still period is independent of these endpoint pauses. Honor reduced-motion settings and pause motion while the containing view is hidden. Do not shrink text for individual translations.
+
+Choose the amount of text shown by the role of the content and what the user needs to do with it, not by source-string length, locale, or whether it happens to fit in English. In compact settings and navigation list rows, a heading is generally one line; reveal it horizontally only when measurement shows actual clipping. A concise descriptive summary usually gets up to two visible lines and wraps naturally; if it exceeds its available height, reveal the clipped lines vertically. Two lines are a common compact-row treatment, not a global height rule. Keep row density and established typography, alignment, and controls intact.
+
+On detail and information pages, keep explanations needed to understand a feature, compare choices, understand consequences, check prerequisites or limitations, consider battery or security impacts, or complete an action fully expanded. Let this content wrap naturally and use page or content scrolling to reach it; do not make users wait for an animation to read decision-critical information. A short summary may appear in a compact row, but it does not replace essential detail-page content. At narrow widths, let rows and page content reflow; stack controls when needed to preserve readable text and operable controls. A description, helper, or subtitle placed in an explicitly finite single-line slot as a compact label is constrained even when it reads as prose; otherwise, prose and content bodies that are not explicitly line-bounded should wrap naturally or scroll. For clipped multi-line labels, retain their line wrapping and reveal the clipped lines vertically. Editable inputs retain native caret-follow behavior; never animate typed content or code/document bodies as labels.
+
 ## 2. App shell, navigation, and page layout
 
 - Follow the responsive app shell in [`lib/pages/home_page_navigation.dart`](../lib/pages/home_page_navigation.dart) and the page's existing navigation structure. The app uses different navigation affordances across available widths/orientations; don't assume a phone-width bottom bar is the only layout.
 - Keep page title, back navigation, and page-level actions in the established app bar/header region. Put actions that apply to a section or item at that scope rather than duplicating global actions in the body.
+- Keep a page app bar's background color and visual color state unchanged while scrollable content moves beneath it. Use the established theme color consistently before and after scrolling; configure scroll-under styling so it does not introduce a color or tint change.
 - Respect system safe areas, keyboard insets, scrollable content bounds, and platform-specific back behavior. Check portrait and landscape or narrow and wide layouts when the page supports them.
 - Use consistent section spacing and alignment within one screen. Don't nest redundant cards, borders, and shadows around content already grouped by a parent surface.
 - When adding a page, follow route and shell conventions in the existing page family; search for the route, title, navigation entry and all links to that page.
@@ -77,6 +92,15 @@ Check helper/error text at large text scale and in longer translations. Keep tou
 The shared menu style is in [`lib/widgets/stroom_menu_style.dart`](../lib/widgets/stroom_menu_style.dart), attached to both themes in [`lib/application.dart`](../lib/application.dart). It uses `surfaceContainerHigh`, transparent surface tint, 16 dp corners, and a 0.5 dp `outlineVariant` stroke at 35% alpha; the Material 3 `DropdownMenu` style uses 8 dp elevation. Legacy `DropdownButton` widgets do not inherit a global menu radius, so the 33 current legacy call sites set the shared surface and radius locally. See the complete current [call-site inventory](ui-popup-dropdown-inventory.md).
 
 Use a popup for a short set of contextual actions or a compact selection. Use a dialog when the user must decide or enter focused information before continuing. Use a bottom sheet for a larger contextual picker or content that benefits from a tall, scrollable surface. Use a snackbar for brief, non-blocking confirmation; persistent or actionable warnings need a more visible banner/inline state. Tooltips explain controls without replacing visible labels.
+
+#### Responsive modal bottom-origin panels
+
+Apply these Stroom width rules only to modal bottom sheets (panels that originate from the bottom).
+
+- When the available viewport width is at least `600 dp`, constrain the panel width to `min(640 dp, availableWidth - 48 dp)` and keep at least `24 dp` between each panel edge and the viewport edge. Do not stretch a bottom-origin panel edge-to-edge on these wide viewports.
+- Bound these bottom-origin panels to `min(80% of the available viewport, 640 dp)` in height. Keep long content scrollable within that bound and respect system safe areas.
+- Use a `28 dp` corner radius and `16 dp` content inset. Use theme-aware `surfaceContainerHigh` or `surface` roles, with a clear title and close or cancel action.
+- Preserve the panel's expected selection, cancel, outside-tap, and back behavior, and expose selected state semantically.
 
 - Keep overlays anchored to the action or selection they belong to and inside the visible viewport, including short windows and keyboard-open states.
 - Preserve expected outside-tap, back, escape, and selection dismissal behavior. Don't dismiss a destructive confirmation merely because a child control was tapped.
@@ -116,6 +140,19 @@ These links are orientation points in the current source tree, not a claim that 
 | CatCatch | [`catcatch_page.dart`](../lib/pages/catcatch_page.dart), [`catcatch_policy_menu.dart`](../lib/task_flow/widgets/catcatch_policy_menu.dart) | Capture/permission states, policy choices, category semantics and progress. |
 | Browser, downloads, cookies | [`browser_page.dart`](../lib/pages/browser_page.dart), [`browser_cookies_page.dart`](../lib/pages/browser_cookies_page.dart), [`download_manager.dart`](../lib/catcatch/engine/download_manager.dart), [`browser_cookie_service.dart`](../lib/services/browser_cookie_service.dart) | Navigation/toolbar density, download progress, permission and cookie settings. |
 | Mermaid and charts | [`mermaid_chart_page.dart`](../lib/pages/mermaid_chart_page.dart), [`mermaid_render_widget.dart`](../lib/widgets/mermaid_render_widget.dart) | Editor/preview split, code density, render errors, viewport fit and mode selection. |
+
+### Representative captured screens
+
+These contact sheets show selected real screens from the current Flutter Web build; they are examples, not a complete screen inventory. Each panel is an actual Flutter-rendered app screenshot placed beside its caption, with no generated or redrawn UI. Captures used Flutter 3.47.9 / Dart 3.13.7, Microsoft Edge 142, a 430 × 932 viewport, and zh-CN. The isolated browser profile had no restored account data. OCR, ASR, and TTS providers were unconfigured, and no provider request or API call was made. The settings sheet includes light and dark appearance examples; the other examples are light theme.
+
+| Examples | Captured screens |
+|---|---|
+| Home, assistant selection, empty file state, and a local sample text file list. | ![Home, assistant selection, and file browser examples](images/ui-guidelines/core-navigation.png) |
+| Unconfigured OCR, the OCR image-quality popup, unconfigured ASR, and unconfigured TTS. | ![Recognition and speech examples](images/ui-guidelines/recognition-speech.png) |
+| Empty Task Flow, its built-in template sheet, and empty audio-separation and web-download states. The task list is not pictured because the isolated fresh web profile could not restore its task history. | ![Task Flow and media examples](images/ui-guidelines/tasks-media.png) |
+| Settings overview, light and dark appearance, and a new OCR provider editor. The editor is unsaved; no provider request was made. | ![Settings and unsaved provider editor examples](images/ui-guidelines/settings-providers.png) |
+| Local sample text list, its actual file popup menu, blank new-text editor, and first-party Markdown preview. | ![Text files and first-party Markdown preview examples](images/ui-guidelines/files-markdown.png) |
+| Message Search at 320 × 640 logical pixels, zh_CN, light theme, and 1× text scale; includes a clipped highlighted snippet and a fitting highlighted snippet. | ![Message Search clipped and fitting highlighted snippet results](images/ui-guidelines/search-highlight-reveal/search-highlight-reveal-320x640.png) [Play the vertical reveal preview](images/ui-guidelines/search-highlight-reveal/search-highlight-reveal-motion.webm) |
 
 ## 8. Accessibility, localization, and platform behavior
 

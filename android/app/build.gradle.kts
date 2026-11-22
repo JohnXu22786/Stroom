@@ -30,6 +30,7 @@ android {
     // Kotlin/JVM build runs the same source and tests without Android plugins.
     sourceSets {
         getByName("main").java.srcDir("../keep_alive_schedule/src/main/kotlin")
+        getByName("main").java.srcDir("../saf_log_content/src/main/kotlin")
     }
 
     compileOptions {

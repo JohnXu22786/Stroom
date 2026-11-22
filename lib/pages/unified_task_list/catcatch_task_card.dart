@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_resource.dart';
+import '../../catcatch/models/catcatch_step_detail_localizer.dart';
 import '../../l10n/app_localizations.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
@@ -15,6 +16,8 @@ import 'task_utils.dart';
 import 'file_opener.dart';
 import 'media_preview_sheet.dart';
 import '../../widgets/running_elapsed_label.dart';
+
+import '../../widgets/constrained_text.dart';
 
 String _localizedCatCatchStatus(
   catcatch.TaskStatus status,
@@ -92,10 +95,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final result = await Navigator.push<BrowserRecoveryResult>(
       context,
       MaterialPageRoute(
-        builder: (_) => BrowserPage(
-          initialUrl: widget.task.url,
-          recoveryMode: true,
-        ),
+        builder: (_) =>
+            BrowserPage(initialUrl: widget.task.url, recoveryMode: true),
       ),
     );
     if (!mounted || result == null || result.mediaUrls.isEmpty) return;
@@ -268,8 +269,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         _openRecoveryPage();
                       },
                       icon: const Icon(Icons.open_in_browser),
-                      label: Text(AppLocalizations.of(context)!
-                          .browserRecoveryOpenPage),
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.browserRecoveryOpenPage,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -305,10 +309,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          task.title.isNotEmpty
-                              ? task.title
-                              : truncateUrl(task.url),
+                        ConstrainedText(
+                          task.title.isNotEmpty ? task.title : task.url,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
@@ -543,7 +545,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              step.detail!,
+                              localizeCatCatchStepDetail(
+                                step.detail!,
+                                AppLocalizations.of(context)!,
+                              ),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: colorScheme.onSurfaceVariant,
@@ -553,8 +558,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           ),
                         ] else if (hasDetail && !isDetailExpanded) ...[
                           const SizedBox(height: 2),
-                          Text(
-                            step.detail!,
+                          ConstrainedText(
+                            localizeCatCatchStepDetail(
+                              step.detail!,
+                              AppLocalizations.of(context)!,
+                            ),
                             style: TextStyle(
                               fontSize: 11,
                               color: colorScheme.onSurfaceVariant,
@@ -594,14 +602,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ],
                         if (step.failed && step.error != null) ...[
                           const SizedBox(height: 4),
-                          Text(
+                          SelectableText(
                             step.error!,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.red.shade400,
                             ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
                           if (!widget.isFlowManaged)
@@ -612,9 +618,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                                     .retryStep(task.id, step.type);
                               },
                               icon: const Icon(Icons.refresh, size: 16),
-                              label: Text(
+                              label: ConstrainedText(
                                 AppLocalizations.of(context)!.catcatchRetryStep,
                                 style: TextStyle(fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
@@ -713,12 +721,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             }
           }),
           icon: Icon(segmentsExpanded ? Icons.expand_less : Icons.expand_more),
-          label: Text(
+          label: ConstrainedText(
             segmentsExpanded
                 ? AppLocalizations.of(context)!
                     .catcatchCollapseSegments(segments.length)
                 : AppLocalizations.of(context)!
                     .catcatchShowSegments(segments.length),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),
@@ -761,8 +771,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            pageTitle.isNotEmpty ? pageTitle : truncateUrl(task.url),
+          ConstrainedText(
+            pageTitle.isNotEmpty ? pageTitle : task.url,
             key: const Key('catcatch_selection_title'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -887,13 +897,15 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ? Icons.hourglass_top
                 : Icons.download,
           ),
-          label: Text(
+          label: ConstrainedText(
             _isFlowActionPending(task.id)
                 ? AppLocalizations.of(context)!.catcatchWaitingForResources
                 : selectedIdentities.isNotEmpty
                     ? AppLocalizations.of(context)!
                         .catcatchDownloadSelected(selectedIdentities.length)
                     : AppLocalizations.of(context)!.catcatchSelectResources,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           style: FilledButton.styleFrom(
             shape: RoundedRectangleBorder(
@@ -1047,9 +1059,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         });
                       },
                 icon: const Icon(Icons.videocam, size: 18),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.catcatchVideoOnly,
                   style: TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
@@ -1079,9 +1093,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         });
                       },
                 icon: const Icon(Icons.audiotrack, size: 18),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.catcatchAudioOnly,
                   style: TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
@@ -1141,7 +1157,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               const SizedBox(width: 4),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   '${media.name}.${media.ext}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1178,9 +1194,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? () => showMediaPreview(
                           context,
                           media,
-                          task.title.isNotEmpty
-                              ? task.title
-                              : truncateUrl(task.url),
+                          task.title.isNotEmpty ? task.title : task.url,
                         )
                     : null,
                 padding: EdgeInsets.zero,
@@ -1353,7 +1367,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             '${media.name}.${media.ext}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1410,9 +1424,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     showMediaPreview(
                       context,
                       media,
-                      task.title.isNotEmpty
-                          ? task.title
-                          : truncateUrl(task.url),
+                      task.title.isNotEmpty ? task.title : task.url,
                     );
                   },
                 )
@@ -1519,9 +1531,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           }
                         : null,
                     icon: const Icon(Icons.auto_fix_high, size: 18),
-                    label: Text(
+                    label: ConstrainedText(
                       AppLocalizations.of(context)!.catcatchAutoProcess,
                       style: TextStyle(fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -1544,9 +1558,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           }
                         : null,
                     icon: const Icon(Icons.save_alt, size: 18),
-                    label: Text(
+                    label: ConstrainedText(
                       AppLocalizations.of(context)!.catcatchKeepOriginalFormat,
                       style: TextStyle(fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -1705,7 +1721,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       child: TextButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 12)),
+        label: ConstrainedText(
+          label,
+          style: const TextStyle(fontSize: 12),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         style: TextButton.styleFrom(
           foregroundColor: color,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

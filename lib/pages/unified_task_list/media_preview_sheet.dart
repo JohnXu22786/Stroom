@@ -7,11 +7,16 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
+import 'package:uuid/uuid.dart';
 import 'package:chewie/chewie.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import '../../catcatch/config/default_rules.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../l10n/app_localizations.dart';
+
+import '../../widgets/constrained_text.dart';
 
 const _audioPreviewExtensions = {
   'oga',
@@ -25,6 +30,9 @@ const _audioPreviewExtensions = {
 };
 
 const _videoPreviewExtensions = {'mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv'};
+final _previewVideoPlayerOptions = VideoPlayerOptions(
+  allowBackgroundPlayback: true,
+);
 
 /// Whether the preview flow treats this resource as audio.
 bool isAudioPreviewResource(MediaResource resource) =>
@@ -68,6 +76,7 @@ Future<void> showMediaPreview(
 ) async {
   await showModalBottomSheet(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -82,12 +91,15 @@ class MediaPreviewSheet extends ConsumerStatefulWidget {
   final String taskTitle;
   @visibleForTesting
   final AudioPlayer Function()? audioPlayerFactory;
+  @visibleForTesting
+  final Future<void> Function(String url, File file)? downloadToFile;
 
   const MediaPreviewSheet({
     super.key,
     required this.resource,
     required this.taskTitle,
     this.audioPlayerFactory,
+    this.downloadToFile,
   });
 
   @override
@@ -116,20 +128,29 @@ class _MediaPreviewError {
         _MediaPreviewErrorKind.loadFailed =>
           strings.unifiedTaskLoadFailed(detail!),
         _MediaPreviewErrorKind.playbackFailed =>
-          strings.unifiedTaskPlaybackFailed(detail!),
+          strings.unifiedTaskPlaybackFailed(
+            detail!,
+          ),
       };
 }
 
 enum _MediaPreviewErrorKind { unsupportedFormat, loadFailed, playbackFailed }
 
-class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
+class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
+    with WidgetsBindingObserver {
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
   bool _loading = true;
   _MediaPreviewError? _previewError;
   File? _tempFile;
+  bool _downloadInProgress = false;
   bool _isAudioFormat = false;
   AudioPlayer? _audioPlayer;
+  Future<void>? _videoInitialization;
+  bool _videoInitializationFailed = false;
+  bool _videoInitializationFailedBeforePlayerCreation = false;
+  bool _wasVideoPlayingBeforePause = false;
+  Future<void>? _videoPreviewDisposal;
   final List<StreamSubscription<dynamic>> _audioSubscriptions = [];
   bool _isAudioPlaying = false;
   Duration _audioPosition = Duration.zero;
@@ -138,9 +159,25 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_initPreview());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _videoPlayerController;
+    if (controller == null || _videoInitializationFailed) return;
+
+    if (state == AppLifecycleState.paused) {
+      _wasVideoPlayingBeforePause = controller.value.isPlaying;
+      if (_wasVideoPlayingBeforePause) unawaited(controller.pause());
+    } else if (state == AppLifecycleState.resumed &&
+        _wasVideoPlayingBeforePause) {
+      _wasVideoPlayingBeforePause = false;
+      unawaited(controller.play());
+    }
   }
 
   Future<void> _initPreview() async {
@@ -155,6 +192,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
           VideoPlayerController.networkUrl(
             Uri.parse(resource.url),
             httpHeaders: headers,
+            videoPlayerOptions: _previewVideoPlayerOptions,
           ),
         );
         return;
@@ -184,37 +222,34 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
         RegExp(r'[^\w\-.]'),
         '_',
       );
-      _tempFile = File(p.join(tempDir.path, 'preview_$safeName.$ext'));
+      final downloadId = const Uuid().v4().replaceAll('-', '');
+      _tempFile = File(
+        p.join(tempDir.path, 'preview_${safeName}_$downloadId.$ext'),
+      );
 
-      await _downloadToFile(widget.resource.url, _tempFile!);
+      _downloadInProgress = true;
+      try {
+        await (widget.downloadToFile ?? _downloadToFile)(
+          widget.resource.url,
+          _tempFile!,
+        );
+      } finally {
+        _downloadInProgress = false;
+        if (!mounted) await _deleteTempFile();
+      }
 
       if (!mounted) return;
 
       if (isVideoFormat) {
-        final controller = VideoPlayerController.file(_tempFile!);
-        _videoPlayerController = controller;
-        await controller.initialize();
-
-        _chewieController = ChewieController(
-          videoPlayerController: controller,
-          autoPlay: true,
-          looping: false,
-          showControls: true,
-          materialProgressColors: ChewieProgressColors(
-            playedColor: Colors.red,
-            handleColor: Colors.red,
-            backgroundColor: Colors.grey,
-            bufferedColor: Colors.white24,
-          ),
+        final controller = VideoPlayerController.file(
+          _tempFile!,
+          videoPlayerOptions: _previewVideoPlayerOptions,
         );
-
-        if (!mounted) return;
-        setState(() => _loading = false);
+        await _initializeVideoPreview(controller);
       }
     } catch (e) {
       // Dispose controller to prevent resource leak on init failure
-      _videoPlayerController?.dispose();
-      _videoPlayerController = null;
+      await _disposeVideoPreview();
       _disposeAudioPlayer();
       if (!mounted) return;
       setState(() {
@@ -327,7 +362,21 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
 
   Future<void> _initializeVideoPreview(VideoPlayerController controller) async {
     _videoPlayerController = controller;
-    await controller.initialize();
+    _videoInitializationFailed = false;
+    _videoInitializationFailedBeforePlayerCreation = false;
+    final initialization = controller.initialize();
+    _videoInitialization = initialization;
+    try {
+      await initialization;
+    } catch (_) {
+      _videoInitializationFailed = true;
+      _videoInitializationFailedBeforePlayerCreation =
+          !_videoPlayerWasCreated(controller) &&
+              controller.value.errorDescription == null;
+      rethrow;
+    } finally {
+      _videoInitialization = null;
+    }
     if (!mounted) return;
     _chewieController = ChewieController(
       videoPlayerController: controller,
@@ -368,16 +417,106 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
     }
   }
 
+  Future<void> _deleteTempFile() async {
+    try {
+      final file = _tempFile;
+      if (file != null && await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
+  Future<void> _disposeVideoPreview() =>
+      _videoPreviewDisposal ??= _disposeVideoPreviewAndFile();
+
+  Future<void> _disposeVideoPreviewAndFile() async {
+    _chewieController?.dispose();
+    _chewieController = null;
+    final controller = _videoPlayerController;
+    var canDeleteTempFile = controller == null;
+    if (controller != null) {
+      final initialization = _videoInitialization;
+      if (initialization != null) {
+        await _waitForVideoPlayerCreationOrInitializationEnd(
+          controller,
+          initialization,
+        );
+      }
+
+      if (_videoPlayerWasCreated(controller)) {
+        try {
+          await controller.dispose();
+          canDeleteTempFile = true;
+        } catch (_) {}
+      } else if (_videoInitializationFailedBeforePlayerCreation ||
+          controller.value.errorDescription == null) {
+        // video_player leaves its creation completer unresolved when player
+        // creation fails before a player ID or event subscription is assigned.
+        // Its dispose waits on that completer; background playback also avoids
+        // registering the plugin's lifecycle observer on this path.
+        canDeleteTempFile = true;
+      } else {
+        // A platform can return no player ID and then report an event error.
+        // Creation has settled, so disposal is safe and cancels its event
+        // subscription even though there is no valid player ID.
+        try {
+          await controller.dispose();
+          canDeleteTempFile = true;
+        } catch (_) {}
+      }
+    }
+    _videoPlayerController = null;
+    if (canDeleteTempFile && !_downloadInProgress) await _deleteTempFile();
+  }
+
+  Future<void> _waitForVideoPlayerCreationOrInitializationEnd(
+    VideoPlayerController controller,
+    Future<void> initialization,
+  ) async {
+    var initializationEnded = false;
+    unawaited(
+      initialization.then<void>(
+        (_) => initializationEnded = true,
+        onError: (Object _, StackTrace _) => initializationEnded = true,
+      ),
+    );
+
+    while (!_videoPlayerWasCreated(controller) && !initializationEnded) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    if (_videoPlayerWasCreated(controller)) {
+      // VideoPlayerController exposes the ID before its initial display-sleep
+      // platform call and event subscription are ready. Repeat that platform
+      // call as a FIFO barrier so disposal cannot race subscription setup.
+      // ignore: invalid_use_of_visible_for_testing_member
+      final playerId = controller.playerId;
+      try {
+        await VideoPlayerPlatform.instance
+            .setPreventsDisplaySleepDuringVideoPlayback(
+          playerId,
+          controller.value.preventsDisplaySleepDuringVideoPlayback,
+        );
+        await Future<void>.delayed(Duration.zero);
+      } catch (_) {
+        // Continue into controller.dispose; it still owns native cleanup.
+      }
+    }
+  }
+
+  bool _videoPlayerWasCreated(VideoPlayerController controller) {
+    // The plugin has no public lifecycle signal for a failed create call.
+    // Its testing-visible player ID is the only way to distinguish that path
+    // from a controller with an open player that must be disposed first. FVP
+    // can use negative IDs for players that report an open failure, so only
+    // the plugin's exact uninitialized sentinel means creation is pending.
+    // ignore: invalid_use_of_visible_for_testing_member
+    return controller.playerId != VideoPlayerController.kUninitializedPlayerId;
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _disposeAudioPlayer();
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
-    try {
-      if (_tempFile != null && _tempFile!.existsSync()) {
-        _tempFile!.deleteSync();
-      }
-    } catch (_) {}
+    unawaited(_disposeVideoPreview());
     super.dispose();
   }
 
@@ -403,7 +542,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
+            child: ConstrainedText(
               widget.taskTitle,
               style: Theme.of(context).textTheme.titleMedium,
               maxLines: 1,

@@ -10,8 +10,11 @@ import 'package:photo_view/photo_view.dart';
 import '../utils/byte_lru_cache.dart';
 import '../utils/image_manifest.dart';
 import '../utils/image_thumbnail_loader.dart';
+import '../utils/storage_file_publication.dart';
 import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// Full-screen gallery viewer with paging support.
 class GalleryViewerPage extends StatefulWidget {
@@ -250,53 +253,69 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
     try {
       final newHash = computeImageHash(editedBytes);
       final newFileName = '$newHash.${file.format}';
-      await ImageManifest.writeFile(newFileName, editedBytes);
-
-      ImageRecord newRecord;
-
-      if (isSaveAs) {
-        newRecord = ImageRecord(
-          name: '${file.name}_edited',
-          hash: newHash,
-          format: file.format,
-          createdAt: DateTime.now(),
-          size: editedBytes.length,
-          folder: file.folder,
-        );
-        await ImageManifest.addRecord(newRecord);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(context)!.imageViewerImageSavedAsCopy,
-              ),
-              duration: Duration(seconds: 2),
-            ),
+      late ImageRecord newRecord;
+      await ImageManifest.withFolderReadLock(
+        file.folder,
+        () => ImageManifest.withSaveLocks([newHash, file.hash], () async {
+          await publishStorageFiles<void, ImageRecord>(
+            publish: (writeFile) async {
+              await writeFile(newFileName, editedBytes);
+              if (isSaveAs) {
+                newRecord = ImageRecord(
+                  name: '${file.name}_edited',
+                  hash: newHash,
+                  format: file.format,
+                  createdAt: DateTime.now(),
+                  size: editedBytes.length,
+                  folder: file.folder,
+                );
+                await ImageManifest.addRecord(newRecord);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!
+                            .imageViewerImageSavedAsCopy,
+                      ),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } else {
+                newRecord = ImageRecord(
+                  name: file.name,
+                  hash: newHash,
+                  format: file.format,
+                  createdAt: file.createdAt,
+                  size: editedBytes.length,
+                  folder: file.folder,
+                );
+                await ImageManifest.addRecord(newRecord);
+                await ImageManifest.deleteRecord(file.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!.imageViewerImageUpdated,
+                      ),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              }
+            },
+            loadRecords: ImageManifest.loadRecordsStrict,
+            isReferenced: (record, name) =>
+                record.hash == newHash &&
+                (name == record.storageFileName ||
+                    name == imageThumbFileName(record.hash)),
+            writeFile: ImageManifest.writeFile,
+            readFile: ImageManifest.readFile,
+            fileExists: ImageManifest.fileExists,
+            deleteFile: ImageManifest.deleteFile,
           );
-        }
-      } else {
-        await ImageManifest.deleteFile(file.storagePath);
-        await ImageManifest.deleteRecord(file.id);
-        newRecord = ImageRecord(
-          name: file.name,
-          hash: newHash,
-          format: file.format,
-          createdAt: file.createdAt,
-          size: editedBytes.length,
-          folder: file.folder,
-        );
-        await ImageManifest.addRecord(newRecord);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                AppLocalizations.of(context)!.imageViewerImageUpdated,
-              ),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
+        }),
+      );
 
       // Update in-memory cache and widget data so the current page shows
       // the new image immediately without requiring a manual refresh.
@@ -481,7 +500,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
             bottom: 52,
             left: 16,
             right: 16,
-            child: Text(
+            child: ConstrainedText(
               _currentFileName,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 14),

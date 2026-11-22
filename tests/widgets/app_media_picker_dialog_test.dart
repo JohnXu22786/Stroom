@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -139,6 +140,90 @@ void main() {
 
       // Should show empty state text
       expect(find.text('暂无文件'), findsOneWidget);
+    });
+
+    testWidgets('shows and retries record loading failures', (tester) async {
+      var loadRecordsCalls = 0;
+      const record = _TestRecord(id: '1', name: '恢复后的文件');
+      final config = MediaPickerConfig<_TestRecord>(
+        title: '测试选择器',
+        emptyIcon: Icons.folder_outlined,
+        emptyText: '暂无文件',
+        fileIcon: Icons.insert_drive_file,
+        loadRecords: () async {
+          loadRecordsCalls++;
+          if (loadRecordsCalls == 1) throw StateError('records unavailable');
+          return [record];
+        },
+        loadFolders: () async => <String>{},
+        displayName: (record) => record.name,
+        subtitleBuilder: (record) => const Text(''),
+      );
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(context, config),
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('records unavailable'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      expect(find.text('暂无文件'), findsNothing);
+
+      await tester.tap(find.text('重试'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(loadRecordsCalls, 2);
+      expect(find.text('恢复后的文件'), findsOneWidget);
+      expect(find.textContaining('records unavailable'), findsNothing);
+    });
+
+    testWidgets('shows and retries folder loading failures', (tester) async {
+      var loadFoldersCalls = 0;
+      const record = _TestRecord(id: '1', name: '文件');
+      final config = MediaPickerConfig<_TestRecord>(
+        title: '测试选择器',
+        emptyIcon: Icons.folder_outlined,
+        emptyText: '暂无文件',
+        fileIcon: Icons.insert_drive_file,
+        loadRecords: () async => [record],
+        loadFolders: () async {
+          loadFoldersCalls++;
+          if (loadFoldersCalls == 1) throw StateError('folders unavailable');
+          return <String>{};
+        },
+        displayName: (record) => record.name,
+        subtitleBuilder: (record) => const Text(''),
+      );
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(context, config),
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('folders unavailable'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      expect(find.text('暂无文件'), findsNothing);
+
+      await tester.tap(find.text('重试'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(loadFoldersCalls, 2);
+      expect(find.text('文件'), findsOneWidget);
+      expect(find.textContaining('folders unavailable'), findsNothing);
     });
 
     testWidgets('shows records when data is loaded', (tester) async {
@@ -501,6 +586,114 @@ void main() {
       expect(pickerResult!.first.key, '文件1');
     });
 
+    testWidgets('multi-select: confirm waits for pending file reads', (
+      tester,
+    ) async {
+      final pendingRead = Completer<Uint8List?>();
+      List<MapEntry<String, Uint8List>>? pickerResult;
+      const record = _TestRecord(id: '1', name: '待读取文件');
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showMediaPickerDialog(
+              context,
+              MediaPickerConfig<_TestRecord>(
+                title: '测试选择器',
+                emptyIcon: Icons.folder_outlined,
+                emptyText: '暂无文件',
+                fileIcon: Icons.insert_drive_file,
+                multiSelect: true,
+                loadRecords: () async => [record],
+                loadFolders: () async => <String>{},
+                readFile: (_) => pendingRead.future,
+                displayName: (item) => item.name,
+                subtitleBuilder: (_) => const Text(''),
+              ),
+            );
+          },
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('待读取文件'));
+      await tester.pump();
+
+      final confirmButton = find.byKey(const Key('media_picker_confirm_btn'));
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+      await tester.tap(confirmButton);
+      await tester.pump();
+      expect(find.text('待读取文件'), findsOneWidget);
+      expect(pickerResult, isNull);
+
+      final fileBytes = Uint8List.fromList([1, 2, 3]);
+      pendingRead.complete(fileBytes);
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+      await tester.tap(confirmButton);
+      await tester.pumpAndSettle();
+      expect(pickerResult, hasLength(1));
+      expect(pickerResult!.single.key, '待读取文件');
+      expect(pickerResult!.single.value, fileBytes);
+    });
+
+    testWidgets('canceling a pending read re-enables confirmation', (
+      tester,
+    ) async {
+      final pendingRead = Completer<Uint8List?>();
+      List<MapEntry<String, Uint8List>>? pickerResult;
+      const record = _TestRecord(id: '1', name: '待读取文件');
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showMediaPickerDialog(
+              context,
+              MediaPickerConfig<_TestRecord>(
+                title: '测试选择器',
+                emptyIcon: Icons.folder_outlined,
+                emptyText: '暂无文件',
+                fileIcon: Icons.insert_drive_file,
+                multiSelect: true,
+                loadRecords: () async => [record],
+                loadFolders: () async => <String>{},
+                readFile: (_) => pendingRead.future,
+                displayName: (item) => item.name,
+                subtitleBuilder: (_) => const Text(''),
+              ),
+            );
+          },
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('待读取文件'));
+      await tester.pump();
+
+      final confirmButton = find.byKey(const Key('media_picker_confirm_btn'));
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+      await tester.tap(find.text('待读取文件'));
+      await tester.pump();
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+
+      pendingRead.complete(Uint8List.fromList([1, 2, 3]));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('media_picker_preview_bar')), findsNothing);
+
+      await tester.tap(confirmButton);
+      await tester.pumpAndSettle();
+      expect(pickerResult, isEmpty);
+    });
+
     testWidgets('multi-select: clear button removes all selections', (
       tester,
     ) async {
@@ -543,6 +736,102 @@ void main() {
 
       // Preview bar should be gone
       expect(find.byKey(const Key('media_picker_preview_bar')), findsNothing);
+    });
+
+    testWidgets('clearing selection invalidates pending file reads', (
+      tester,
+    ) async {
+      final pendingRead = Completer<Uint8List?>();
+      List<MapEntry<String, Uint8List>>? pickerResult;
+      final records = [
+        const _TestRecord(id: '1', name: '文件1'),
+        const _TestRecord(id: '2', name: '文件2'),
+      ];
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showMediaPickerDialog(
+              context,
+              MediaPickerConfig<_TestRecord>(
+                title: '测试选择器',
+                emptyIcon: Icons.folder_outlined,
+                emptyText: '暂无文件',
+                fileIcon: Icons.insert_drive_file,
+                multiSelect: true,
+                loadRecords: () async => records,
+                loadFolders: () async => <String>{},
+                readFile: (record) => record.id == '2'
+                    ? pendingRead.future
+                    : Future.value(Uint8List.fromList([1])),
+                displayName: (record) => record.name,
+                subtitleBuilder: (record) => const Text(''),
+              ),
+            );
+          },
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('文件1'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('文件2'));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('media_picker_clear_btn')));
+      await tester.pump();
+
+      pendingRead.complete(Uint8List.fromList([2]));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const Key('media_picker_preview_bar')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+      expect(pickerResult, isEmpty);
+    });
+
+    testWidgets('pending file reads do not update a disposed dialog', (
+      tester,
+    ) async {
+      final pendingRead = Completer<Uint8List?>();
+      final records = [const _TestRecord(id: '1', name: '文件1')];
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(
+            context,
+            MediaPickerConfig<_TestRecord>(
+              title: '测试选择器',
+              emptyIcon: Icons.folder_outlined,
+              emptyText: '暂无文件',
+              fileIcon: Icons.insert_drive_file,
+              multiSelect: true,
+              loadRecords: () async => records,
+              loadFolders: () async => <String>{},
+              readFile: (record) => pendingRead.future,
+              displayName: (record) => record.name,
+              subtitleBuilder: (record) => const Text(''),
+            ),
+          ),
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('文件1'));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      pendingRead.complete(Uint8List.fromList([1]));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('folder navigation: shows folders and navigates into them', (
@@ -591,6 +880,62 @@ void main() {
       expect(find.text('内部文件'), findsOneWidget);
     });
 
+    testWidgets('long back-row labels stay bounded and navigation still works',
+        (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const parent = '父目录名称特别特别特别特别长';
+      const child = '子目录名称特别特别特别特别长';
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(
+            context,
+            _createTestConfig(
+              folders: {'$parent', '$parent/$child'},
+              records: [
+                const _TestRecord(
+                  id: 'long',
+                  name: '记录',
+                  folder: '$parent/$child',
+                ),
+              ],
+            ),
+          ),
+          child: const Text('Open'),
+        );
+      })));
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text(parent));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text(child));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byKey(const Key('media_picker_back_item')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('media_picker_back_item')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(parent), findsWidgets);
+      expect(find.byKey(const Key('media_picker_back_item')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('media_picker_back_item')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const Key('media_picker_back_item')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('folder navigation: back button returns to parent', (
       tester,
     ) async {
@@ -629,8 +974,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should see back button
-      expect(find.byKey(const Key('media_picker_back_item')), findsOneWidget);
+      // Should see back button with the short current-folder label at its
+      // original trailing edge.
+      final backItem = find.byKey(const Key('media_picker_back_item'));
+      expect(backItem, findsOneWidget);
+      final currentFolder = find.descendant(
+        of: backItem,
+        matching: find.text('子文件夹'),
+      );
+      final cardRect = tester.getRect(backItem);
+      final labelRect = tester.getRect(currentFolder);
+      expect((cardRect.right - 24 - labelRect.right).abs(), lessThan(1));
 
       // Tap back
       await tester.tap(find.byKey(const Key('media_picker_back_item')));

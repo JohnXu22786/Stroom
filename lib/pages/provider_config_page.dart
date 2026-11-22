@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../providers/provider_config_display_names.dart';
 import '../providers/provider_preset_localizations.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
@@ -19,6 +20,8 @@ import 'llm_account_management_page.dart';
 import 'mcp_server_config_page.dart';
 import 'provider_config_tool_dialogs.dart';
 import 'provider_settings_panel.dart';
+
+import '../widgets/constrained_text.dart';
 
 final _builtinToolDefinitions = [
   ...TodoToolService.toolDefinitions,
@@ -220,6 +223,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         ? config.models[0].typeConfig
         : config.typeConfig;
     final isHttpTool = typeConfig['isHttpTool'] == true;
+    final localizations = AppLocalizations.of(context)!;
     await showDialog<void>(
       context: context,
       builder: (_) => ConnectivityTestDialog(
@@ -228,12 +232,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           config,
           isHttpTool: isHttpTool,
         ),
-        note: AppLocalizations.of(context)!.providerTestSafetyNote,
+        note: localizations.providerTestSafetyNote,
         onSave: (content) =>
             _saveProviderConnectivityTest(configIndex, content),
         onRun: (content) => ConnectivityTestService.runProviderTest(
           config: config,
           testContent: content,
+          localizations: localizations,
+          locale: Localizations.localeOf(context),
         ),
       ),
     );
@@ -278,12 +284,13 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       definition.name,
     );
     if (!mounted) return;
+    final localizations = AppLocalizations.of(context)!;
     await showDialog<void>(
       context: context,
       builder: (_) => ConnectivityTestDialog(
         title: definition.name,
         initialContent: initialContent,
-        note: AppLocalizations.of(context)!.providerTestSafetyNote,
+        note: localizations.providerTestSafetyNote,
         onSave: (content) => ConnectivityTestService.saveBuiltinTestContent(
           definition.name,
           content,
@@ -291,6 +298,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         onRun: (content) => ConnectivityTestService.runBuiltinTest(
           toolName: definition.name,
           testContent: content,
+          localizations: localizations,
+          locale: Localizations.localeOf(context),
         ),
       ),
     );
@@ -325,19 +334,31 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.providerDeleteConfigTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.providerDeleteConfigTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!.providerDeleteConfigConfirm,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -445,28 +466,42 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
+        title: ConstrainedText(
           initialName == null
               ? AppLocalizations.of(context)!.providerCreateGroup
               : AppLocalizations.of(context)!.providerEditGroup,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 30,
           decoration: InputDecoration(
-            labelText: AppLocalizations.of(context)!.providerGroupName,
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.providerGroupName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.mermaidSaveButton,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -520,25 +555,47 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.providerDeleteGroup),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.providerDeleteGroup,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!.providerDeleteGroupConfirm(group.name),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.providerDeleteGroup),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.providerDeleteGroup,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
-    await ref.read(providerEntriesProvider.notifier).removeMcpGroup(group.id);
+    try {
+      await ref.read(providerEntriesProvider.notifier).removeMcpGroup(group.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.taskFlowUiSaveFailed),
+        ),
+      );
+      return;
+    }
     if (mounted) setState(() {});
   }
 
@@ -554,7 +611,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           for (final group in groups.where((g) => g.id != currentGroupId))
             SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, group.id),
-              child: Text(group.name),
+              child: Text(
+                mcpGroupDisplayName(group, AppLocalizations.of(context)!),
+              ),
             ),
         ],
       ),
@@ -700,7 +759,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         }).toList(),
     };
     return Scaffold(
-      appBar: AppBar(title: Text(entry.name), centerTitle: true),
+      appBar: AppBar(
+        title: ConstrainedText(
+          providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        centerTitle: true,
+      ),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -963,7 +1029,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (entry == null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(AppLocalizations.of(context)!.providerConfigTitle),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.providerConfigTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         body: Center(
           child: Text(AppLocalizations.of(context)!.providerNotFound),
@@ -987,7 +1057,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(entry.name), centerTitle: true),
+      appBar: AppBar(
+        title: ConstrainedText(
+          providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        centerTitle: true,
+      ),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -1011,8 +1088,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     if (!isBuiltinWebSearch)
                       TextButton.icon(
                         icon: const Icon(Icons.add, size: 18),
-                        label: Text(
+                        label: ConstrainedText(
                           AppLocalizations.of(context)!.builtInPromptAdd,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onPressed: _addConfig,
                       ),
@@ -1325,7 +1404,7 @@ class _McpConfigCard extends StatelessWidget {
                         Row(
                           children: [
                             Flexible(
-                              child: Text(
+                              child: ConstrainedText(
                                 providerName,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
@@ -1360,7 +1439,7 @@ class _McpConfigCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
+                        ConstrainedText(
                           subtitle,
                           style: TextStyle(
                             fontSize: 12,
@@ -1384,7 +1463,7 @@ class _McpConfigCard extends StatelessWidget {
                         if (mcpDescription != null &&
                             mcpDescription!.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text(
+                          ConstrainedText(
                             mcpDescription!,
                             style: TextStyle(
                               fontSize: 11,
@@ -1502,8 +1581,11 @@ class _McpGroupHeaderCard extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(
-                          group.name,
+                        child: ConstrainedText(
+                          mcpGroupDisplayName(
+                            group,
+                            AppLocalizations.of(context)!,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1547,8 +1629,10 @@ class _McpGroupHeaderCard extends StatelessWidget {
                   if (onEdit != null)
                     PopupMenuItem(
                       value: 'edit',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.providerEditGroupAction,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   if (onEdit != null && onDelete != null)
@@ -1556,8 +1640,10 @@ class _McpGroupHeaderCard extends StatelessWidget {
                   if (onDelete != null)
                     PopupMenuItem(
                       value: 'delete',
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.providerDeleteGroupAction,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],

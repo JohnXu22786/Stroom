@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -6,14 +7,76 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageEditingExt on _ChatPageState {
+  /// Temporarily removes the visible controller suffix while keeping its
+  /// history entries and rendering caches available for failure recovery.
+  Future<List<Message>> _detachVisibleSuffix(
+    String messageId, {
+    required InMemoryChatController? controller,
+  }) async {
+    if (controller == null) return const <Message>[];
+    final messages = List<Message>.from(controller.messages);
+    final index = messages.indexWhere((message) => message.id == messageId);
+    if (index < 0) return const <Message>[];
+    final suffix = messages.sublist(index);
+    for (final message in suffix.reversed) {
+      await controller.removeMessage(message, animated: false);
+    }
+    if (mounted) setState(() {});
+    return suffix;
+  }
+
+  /// Restores a detached transcript suffix before [beforeMessageId], or at
+  /// the end when the attempted replacement produced no controller item.
+  Future<void> _restoreVisibleSuffix(
+    List<Message> suffix, {
+    required InMemoryChatController? controller,
+    required String? conversationId,
+    String? beforeMessageId,
+  }) async {
+    if (!mounted ||
+        controller == null ||
+        suffix.isEmpty ||
+        !identical(_controller, controller) ||
+        ref.read(activeConversationIdProvider) != conversationId) {
+      return;
+    }
+    var index = beforeMessageId == null
+        ? -1
+        : controller.messages.indexWhere(
+            (message) => message.id == beforeMessageId,
+          );
+    if (index < 0) index = controller.messages.length;
+    for (final message in suffix) {
+      await controller.insertMessage(message, index: index++);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _discardReplacedSuffixCaches(
+    List<Message> suffix, {
+    required InMemoryChatController? controller,
+    required String? conversationId,
+  }) async {
+    if (!mounted ||
+        controller == null ||
+        !identical(_controller, controller) ||
+        ref.read(activeConversationIdProvider) != conversationId) {
+      return;
+    }
+    for (final message in suffix) {
+      await _removeMessageFromController(message.id);
+    }
+  }
+
   /// Removes [messageId]'s controller item and all per-message caches.
   ///
   /// Shared by the edit / retry truncation loops. The controller removal is
   /// id-based (the message must be looked up at removal time — the loop
   /// mutates the controller list, so positions shift).
   Future<void> _removeMessageFromController(String messageId) async {
-    final ctrlMsg =
-        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
+    final ctrlMsg = _controller?.messages
+        .where((m) => m.id == messageId)
+        .firstOrNull;
     if (ctrlMsg != null) {
       await _controller?.removeMessage(ctrlMsg);
     }
@@ -23,6 +86,33 @@ extension _ChatPageEditingExt on _ChatPageState {
     _finalizedMessages.remove(messageId);
     _isReasoningCompletedForMsg.remove(messageId);
     _messageKeys.remove(messageId);
+    _streamingMarkdownCache.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _streamingFenceInfoCaches.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _streamingSearchOccurrenceCache.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _liveMarkdownSearchPreviews.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _liveMarkdownAppendCounts.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _livePlainTextFragments.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _legacyFullReplySnapshots.removeWhere(
+      (key, _) => key.endsWith(':$messageId'),
+    );
+    _legacyFullReplySequences.removeWhere(
+      (key, _) => key.endsWith(':$messageId'),
+    );
+    _legacyFullReplyGenerations.removeWhere(
+      (key, _) => key.endsWith(':$messageId'),
+    );
   }
 
   /// Removes every controller message that is NOT part of [_history].
@@ -139,32 +229,71 @@ extension _ChatPageEditingExt on _ChatPageState {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index >= _history.length) return;
       final conversationId = ref.read(activeConversationIdProvider);
-      bool stillOwnsHistory() =>
-          mounted &&
-          ref.read(activeConversationIdProvider) == conversationId &&
-          (conversationId == null || _loadedConversationId == conversationId);
-      final persistedHistory = conversationId == null
+      final completeHistory = conversationId == null
           ? List<ChatMessage>.from(_history)
           : await ref
-              .read(conversationsProvider.notifier)
-              .loadFullMessagesForContext(conversationId);
-      if (!stillOwnsHistory()) return;
-      final persistedMessageIndex = persistedHistory.indexWhere(
+                .read(conversationsProvider.notifier)
+                .loadFullMessagesForContext(conversationId);
+      if (!mounted ||
+          ref.read(activeConversationIdProvider) != conversationId ||
+          _loadedConversationId != conversationId) {
+        return;
+      }
+      final completeIndex = completeHistory.indexWhere(
         (message) => message.id == messageId,
       );
-      if (persistedMessageIndex < 0) return;
-      final retainedHistory =
-          persistedHistory.take(persistedMessageIndex).toList();
-
-      // Preserve the original transcript while the replacement is in flight.
-      // The model sees the complete persisted prefix, even when older messages
-      // are outside the paginated UI window; a failed or stopped edit keeps the
-      // original tail available in history.
-      await _onMessageSend(
-        newText,
-        newAttachments,
-        historyForRequestPrefix: retainedHistory,
+      if (completeIndex < 0) return;
+      final originalController = _controller;
+      final originalConversationId = ref.read(activeConversationIdProvider);
+      final detachedSuffix = await _detachVisibleSuffix(
+        messageId,
+        controller: originalController,
       );
+      if (!mounted ||
+          !identical(_controller, originalController) ||
+          ref.read(activeConversationIdProvider) != originalConversationId) {
+        return;
+      }
+      String? replacementUserMessageId;
+      // Keep the complete old transcript durable while the replacement is
+      // in flight. The request sees only the prefix before the edited turn;
+      // on success the manager replaces the old tail, while an error or stop
+      // appends the failed attempt after the untouched transcript.
+      StreamResult? result;
+      try {
+        result = await _onMessageSend(
+          newText,
+          newAttachments,
+          historyForRequestPrefix: completeHistory.take(completeIndex).toList(),
+          onUserMessageCreated: (id) => replacementUserMessageId = id,
+          allowDuringHistoryModification: true,
+        );
+      } catch (_) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+          beforeMessageId: replacementUserMessageId,
+        );
+        rethrow;
+      }
+      if (result == null ||
+          result.cancelled ||
+          result.assistantMessage == null ||
+          result.assistantMessage!.isError) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+          beforeMessageId: replacementUserMessageId,
+        );
+      } else {
+        await _discardReplacedSuffixCaches(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+        );
+      }
     } finally {
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();
@@ -172,51 +301,141 @@ extension _ChatPageEditingExt on _ChatPageState {
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
+    if (_isModifyingHistory) return;
     _isModifyingHistory = true;
+    final retryConversationId = ref.read(activeConversationIdProvider);
+    final originalConversationId = retryConversationId;
+    final originalController = _controller;
+    final conversationsNotifier = ref.read(conversationsProvider.notifier);
+    var countdownPaused = false;
+    var countdownResolved = false;
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index >= _history.length) return;
-      final conversationId = ref.read(activeConversationIdProvider);
-      bool stillOwnsHistory() =>
-          mounted &&
-          ref.read(activeConversationIdProvider) == conversationId &&
-          (conversationId == null || _loadedConversationId == conversationId);
-      final persistedHistory = conversationId == null
+      if (retryConversationId != null &&
+          ref
+              .read(conversationsProvider)
+              .any(
+                (conversation) =>
+                    conversation.id == retryConversationId &&
+                    conversation.isTemporary,
+              )) {
+        countdownPaused = true;
+        await conversationsNotifier.pauseTemporaryCountdown(
+          retryConversationId,
+        );
+        if (!mounted ||
+            !identical(_controller, originalController) ||
+            ref.read(activeConversationIdProvider) != originalConversationId) {
+          return;
+        }
+      }
+      final historyBeforeAttempt = retryConversationId == null
           ? List<ChatMessage>.from(_history)
-          : await ref
-              .read(conversationsProvider.notifier)
-              .loadFullMessagesForContext(conversationId);
-      if (!stillOwnsHistory()) return;
-      final persistedAssistantIndex = persistedHistory.indexWhere(
+          : await conversationsNotifier.loadFullMessagesForContext(
+              retryConversationId,
+            );
+      if (!mounted ||
+          !identical(_controller, originalController) ||
+          ref.read(activeConversationIdProvider) != originalConversationId) {
+        return;
+      }
+      final persistedMessageIndex = historyBeforeAttempt.indexWhere(
         (message) => message.id == messageId,
       );
-      if (persistedAssistantIndex <= 0) return;
-      final userIndex = persistedHistory.lastIndexWhere(
+      if (persistedMessageIndex <= 0) return;
+      final userIndex = historyBeforeAttempt.lastIndexWhere(
         (message) => message.role == 'user',
-        persistedAssistantIndex,
+        persistedMessageIndex,
       );
       if (userIndex < 0) return;
-      final userMsg = persistedHistory[userIndex];
-      final requestHistory = persistedHistory.take(userIndex + 1).toList();
-
-      // Keep the prior assistant tail durable while retrying. Only the model
-      // request and successful replacement use the prefix through the user
-      // turn; repository-backed context must not be limited to the visible page.
-      await _startStreaming(
-        userMsg.content,
-        capturedConvId: conversationId,
-        historyOverride: persistedHistory,
-        requestHistoryOverride: requestHistory,
-        historyOnSuccess: requestHistory,
+      final historyForSuccess = historyBeforeAttempt.sublist(0, userIndex + 1);
+      final detachedSuffix = await _detachVisibleSuffix(
+        messageId,
+        controller: originalController,
       );
-      await _syncHistoryFromProvider(capturedConvId: conversationId);
+      if (!mounted ||
+          !identical(_controller, originalController) ||
+          ref.read(activeConversationIdProvider) != originalConversationId) {
+        return;
+      }
+      final userMsg = historyBeforeAttempt[userIndex];
+      StreamResult? result;
+      try {
+        result = await _startStreaming(
+          userMsg.content,
+          historyOverride: historyBeforeAttempt,
+          requestHistoryOverride: historyForSuccess,
+          historyOnSuccess: historyForSuccess,
+          // Keep the prior transcript intact if the retry errors or is
+          // cancelled. The replacement prefix is committed only on success.
+          replaceHistoryOnError: false,
+        );
+      } catch (_) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+        );
+        rethrow;
+      }
+      if (countdownPaused) {
+        countdownResolved = true;
+        await conversationsNotifier.finishTemporaryCountdown(
+          retryConversationId!,
+          successful:
+              result != null &&
+              !result.cancelled &&
+              !result.failed &&
+              result.assistantMessage?.isError != true,
+        );
+      }
+      if (result == null ||
+          result.cancelled ||
+          result.assistantMessage == null ||
+          result.assistantMessage!.isError) {
+        await _restoreVisibleSuffix(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+          beforeMessageId: result?.assistantMessage?.id,
+        );
+      } else {
+        await _discardReplacedSuffixCaches(
+          detachedSuffix,
+          controller: originalController,
+          conversationId: originalConversationId,
+        );
+      }
     } finally {
+      if (countdownPaused && !countdownResolved) {
+        countdownResolved = true;
+        await conversationsNotifier.finishTemporaryCountdown(
+          retryConversationId!,
+          successful: false,
+        );
+      }
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();
     }
   }
 
   Future<void> _deleteMessage(String messageId) async {
+    if (_isModifyingHistory) return;
+    final activeId = ref.read(activeConversationIdProvider);
+    // A send reserves its conversation before its first await. Let an
+    // admitted send finish before snapshotting history for deletion rollback.
+    if (activeId != null && _pendingSendConvIds.contains(activeId)) return;
+    _isModifyingHistory = true;
+    try {
+      await _deleteMessageWhileModifyingHistory(messageId);
+    } finally {
+      _isModifyingHistory = false;
+      _scheduleReloadAfterBlockingOperation();
+    }
+  }
+
+  Future<void> _deleteMessageWhileModifyingHistory(String messageId) async {
     // Prevent deleting the currently streaming message — the streaming loop
     // relies on _chatSegments entries for this
     // message, and removing them mid-stream would cause null-assert crashes.
@@ -237,54 +456,76 @@ extension _ChatPageEditingExt on _ChatPageState {
       return;
     }
     final msg = _history[index];
-    Set<String>? referencedAttachmentPaths;
-    try {
-      referencedAttachmentPaths = activeId == null
-          ? {
-              for (final message in _history)
-                if (message.id != messageId)
-                  for (final attachment in message.attachments)
-                    attachment.storagePath,
-            }
-          : await ref
-              .read(conversationsProvider.notifier)
-              .getOtherMessageAttachmentPaths(activeId, messageId);
-    } catch (error) {
-      debugPrint('[ChatPage] failed to inspect attachment references: $error');
-    }
-    if (!mounted || activeId != ref.read(activeConversationIdProvider)) {
-      return;
+    final historyBeforeDelete = List<ChatMessage>.from(_history);
+
+    Future<void> restoreHistory() async {
+      var persisted = false;
+      try {
+        persisted =
+            activeId != null &&
+            await ref
+                .read(conversationsProvider.notifier)
+                .restoreMessagesChecked(
+                  activeId,
+                  historyBeforeDelete,
+                  restoredIds: [messageId],
+                );
+      } finally {
+        if (mounted &&
+            ref.read(activeConversationIdProvider) == activeId &&
+            !_history.any((message) => message.id == messageId)) {
+          setState(() {
+            _history.insert(index, msg);
+            if (index < _loadedUpToIndex) _loadedUpToIndex++;
+          });
+        }
+      }
+      if (!persisted) {
+        throw StateError('Failed to persist deleted message restoration');
+      }
     }
 
+    Future<void> discardMessageFromView() async {
+      if (!mounted || ref.read(activeConversationIdProvider) != activeId)
+        return;
+      setState(() {
+        _chatSegments.remove(messageId);
+        _reasoningContents.remove(messageId);
+        _finalizedMessages.remove(messageId);
+        _isReasoningCompletedForMsg.remove(messageId);
+        _messageKeys.remove(messageId);
+      });
+      final controllerMessage = _controller?.messages
+          .where((message) => message.id == messageId)
+          .firstOrNull;
+      if (controllerMessage != null) {
+        await _controller?.removeMessage(controllerMessage);
+      }
+    }
+
+    final otherMessageAttachmentPaths = activeId == null
+        ? const <String>{}
+        : await ref
+              .read(conversationsProvider.notifier)
+              .getOtherMessageAttachmentPaths(activeId, messageId);
+    final attachmentsToDelete = <Attachment>[];
     for (final att in msg.attachments) {
-      final isReferencedElsewhere = referencedAttachmentPaths == null ||
-          referencedAttachmentPaths.contains(att.storagePath);
-      if (!isReferencedElsewhere) {
-        await AttachmentStorage.deleteFile(att.storagePath);
-        // 磁盘压缩缓存一并清理（派生缓存，best-effort：失败不影响
-        // 消息删除）。缓存按（对话, hash）定位，isReferencedElsewhere
-        // 按 storagePath 判定——字节完全相同（同 hash 不同文件）的
-        // 兄弟消息共享同一缓存条目，可能被本删除连带清掉，其下次
-        // 发送重新压缩即可（缓存删除永远安全）。
-        try {
-          await AttachmentStorage.deleteCompressedImage(
-            conversationId: att.conversationId,
-            hash: att.hash,
+      final isReferencedElsewhere =
+          otherMessageAttachmentPaths.contains(att.storagePath) ||
+          _history.asMap().entries.any(
+            (entry) =>
+                entry.key != index &&
+                entry.value.attachments.any(
+                  (a) => a.storagePath == att.storagePath,
+                ),
           );
-        } catch (_) {
-          // 非关键清理
-        }
+      if (!isReferencedElsewhere) {
+        attachmentsToDelete.add(att);
       }
     }
 
     setState(() {
       _history.removeAt(index);
-      // Clean up cached maps for the deleted message to prevent memory leaks.
-      _chatSegments.remove(messageId);
-      _reasoningContents.remove(messageId);
-      _finalizedMessages.remove(messageId);
-      _isReasoningCompletedForMsg.remove(messageId);
-      _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
       // region, shift _loadedUpToIndex to keep it pointing at the same messages.
       if (index < _loadedUpToIndex && _loadedUpToIndex > 0) {
@@ -295,13 +536,49 @@ extension _ChatPageEditingExt on _ChatPageState {
       _loadMoreGeneration++;
     });
 
-    final msgToRemove =
-        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
-    if (msgToRemove != null) {
-      await _controller?.removeMessage(msgToRemove);
+    // Commit history before deleting attachment bytes. A crash after the save
+    // can leave orphaned files, but persisted messages retain all their files.
+    if (!await _saveMessages(
+      capturedConvId: activeId,
+      requireNotifierPersistence: true,
+    )) {
+      await restoreHistory();
+      throw StateError('Failed to persist message deletion');
     }
 
-    _saveMessages();
+    try {
+      await AttachmentStorage.deleteFilesWithRollback(
+        attachmentsToDelete.map((att) => att.storagePath),
+      );
+    } on AttachmentDeleteRollbackException {
+      // Some attachment bytes could not be restored. Keep the already-persisted
+      // history deletion so no message points at missing files.
+      await discardMessageFromView();
+      rethrow;
+    } catch (_) {
+      // The storage helper restores any partially deleted files. Restore the
+      // original history by conversation ID even if the user switched chats.
+      await restoreHistory();
+      rethrow;
+    }
+
+    for (final att in attachmentsToDelete) {
+      // 磁盘压缩缓存一并清理（派生缓存，best-effort：失败不影响
+      // 消息删除）。缓存按（对话, hash）定位，isReferencedElsewhere
+      // 按 storagePath 判定——字节完全相同（同 hash 不同文件）的
+      // 兄弟消息共享同一缓存条目，可能被本删除连带清掉，其下次
+      // 发送重新压缩即可（缓存删除永远安全）。
+      try {
+        await AttachmentStorage.deleteCompressedImage(
+          conversationId: att.conversationId,
+          hash: att.hash,
+        );
+      } catch (_) {
+        // 非关键清理
+      }
+    }
+
+    await discardMessageFromView();
   }
 
   void _confirmDeleteMessage(String messageId) {

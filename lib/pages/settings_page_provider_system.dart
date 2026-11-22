@@ -27,7 +27,11 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
         Icons.business,
         color: Theme.of(context).colorScheme.primary,
       ),
-      title: Text(entry.name),
+      title: ConstrainedText(
+        providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: const Icon(Icons.chevron_right),
       contentPadding: EdgeInsets.zero,
       onTap: () => _openProviderConfig(entry.id),
@@ -106,11 +110,17 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: iconColor),
-      title: Text(title),
+      title: ConstrainedText(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       // 模型名显示格式与对话页一致（"模型名 | 供应商名"）；未配置时
       // 提示跟随对话页当前模型。
-      subtitle: Text(
+      subtitle: ConstrainedText(
         _systemAssistantModelSubtitle(task, llmModels),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: () => _showSystemAssistantPanel(
@@ -154,6 +164,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
   }) {
     return showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -230,8 +241,10 @@ class _SystemAssistantConfigPanelState
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       setState(() {
-        _modelNames =
-            applySavedOrder(baseNames, prefs.getStringList('model_order'));
+        _modelNames = applySavedOrder(
+          baseNames,
+          prefs.getStringList('model_order'),
+        );
       });
     });
   }
@@ -275,6 +288,7 @@ class _SystemAssistantConfigPanelState
   Future<void> _pickModel() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -311,7 +325,7 @@ class _SystemAssistantConfigPanelState
               for (final name in _modelNames)
                 ListTile(
                   dense: true,
-                  title: Text(
+                  title: ConstrainedText(
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -347,7 +361,11 @@ class _SystemAssistantConfigPanelState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(ctx)!.systemAssistantResetPromptTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(ctx)!.systemAssistantResetPromptTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(ctx)!
               .systemAssistantResetPromptBody(widget.title),
@@ -355,11 +373,19 @@ class _SystemAssistantConfigPanelState
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(ctx)!.systemAssistantCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(ctx)!.systemAssistantCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(AppLocalizations.of(ctx)!.systemAssistantReset),
+            child: ConstrainedText(
+              AppLocalizations.of(ctx)!.systemAssistantReset,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -461,7 +487,7 @@ class _SystemAssistantConfigPanelState
               child: ListTile(
                 dense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                title: Text(
+                title: ConstrainedText(
                   _selectedModelDisplay,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -517,16 +543,17 @@ class _SystemAssistantConfigPanelState
                     _isCustomPrompt
                         ? strings.systemAssistantUsingCustomPrompt
                         : strings.systemAssistantUsingDefaultPrompt,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: _isCustomPrompt ? _resetPromptToDefault : null,
                   icon: const Icon(Icons.restart_alt, size: 18),
-                  label: Text(strings.systemAssistantResetButton),
+                  label: ConstrainedText(
+                    strings.systemAssistantResetButton,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -536,12 +563,20 @@ class _SystemAssistantConfigPanelState
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(strings.systemAssistantCancel),
+                  child: ConstrainedText(
+                    strings.systemAssistantCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _save,
-                  child: Text(strings.systemAssistantSave),
+                  child: ConstrainedText(
+                    strings.systemAssistantSave,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

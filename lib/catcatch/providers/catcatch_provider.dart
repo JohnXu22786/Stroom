@@ -15,6 +15,7 @@ import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
 import '../engine/sniffing_engine.dart';
+import '../engine/task_progress_path.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
 import '../../utils/atomic_file.dart';
@@ -509,26 +510,45 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       return false;
     }
 
-    // 1. 删除分段下载进度跟踪
-    final progressPath =
-        p.join(appDir, 'catcatch', '.progress', '${task.id}_dl_progress.json');
-    await _deleteFileBestEffort(File(progressPath),
-        shouldDelete: () =>
-            !currentRemainingTasks().any((current) => current.id == task.id));
+    // 1. 删除分段下载进度跟踪。
+    final catcatchDir = p.join(appDir, 'catcatch');
+    final progressDir = p.join(appDir, 'catcatch', '.progress');
+    final progressPath = p.join(progressDir, taskProgressFileName(task.id));
+    if (await _isCanonicalPathWithin(
+        progressPath, progressDir, catcatchDir, appDir)) {
+      await _deleteFileBestEffort(File(progressPath),
+          shouldDelete: () =>
+              !currentRemainingTasks().any((current) => current.id == task.id));
+    }
 
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
     // （放在前面处理，与 selectedMedia 无关）
     if (task.downloadedFilePath != null &&
         task.status != TaskStatus.completed) {
       final downloadedFilePath = task.downloadedFilePath!;
-      await _deleteFileBestEffort(File(downloadedFilePath),
-          shouldDelete: () => !isInUse(downloadedFilePath));
+      final downloadsDir = p.join(catcatchDir, 'downloads');
+      final convertedDir = p.join(catcatchDir, 'converted');
+      if (await _isCanonicalPathWithin(
+              downloadedFilePath, downloadsDir, catcatchDir, appDir) ||
+          await _isCanonicalPathWithin(
+              downloadedFilePath, convertedDir, catcatchDir, appDir)) {
+        await _deleteFileBestEffort(File(downloadedFilePath),
+            shouldDelete: () => !isInUse(downloadedFilePath));
+      }
     }
 
     // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
     if (task.selectedMedia == null) return;
 
+    final downloadsDir = p.join(catcatchDir, 'downloads');
+    final convertedDir = p.join(catcatchDir, 'converted');
     for (final artifact in _mediaDerivedArtifacts(task, appDir)) {
+      final managedDir =
+          p.isWithin(convertedDir, artifact.path) ? convertedDir : downloadsDir;
+      if (!await _isCanonicalPathWithin(
+          artifact.path, managedDir, catcatchDir, appDir)) {
+        continue;
+      }
       bool shouldDelete() => !isInUse(artifact.path);
       if (artifact is Directory) {
         await _deleteDirBestEffort(artifact, shouldDelete: shouldDelete);
@@ -540,6 +560,37 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   static String _normalizedFilePath(String path) =>
       p.normalize(p.absolute(path));
+
+  /// Checks a path after resolving existing symlinks in its path components.
+  /// Missing leaf paths are resolved against their nearest existing parent.
+  static Future<bool> _isCanonicalPathWithin(
+      String path, String root, String managedRoot, String appRoot) async {
+    final canonicalPath = await _canonicalizePath(path);
+    final canonicalRoot = await _canonicalizePath(root);
+    final canonicalManagedRoot = await _canonicalizePath(managedRoot);
+    final canonicalAppRoot = await _canonicalizePath(appRoot);
+    return canonicalPath != null &&
+        canonicalRoot != null &&
+        canonicalManagedRoot != null &&
+        canonicalAppRoot != null &&
+        p.equals(canonicalManagedRoot, p.join(canonicalAppRoot, 'catcatch')) &&
+        p.equals(canonicalRoot,
+            p.join(canonicalManagedRoot, p.basename(p.normalize(root)))) &&
+        p.isWithin(canonicalRoot, canonicalPath);
+  }
+
+  static Future<String?> _canonicalizePath(String path) async {
+    final normalizedPath = p.normalize(p.absolute(path));
+    try {
+      return await Directory(normalizedPath).resolveSymbolicLinks();
+    } on FileSystemException {
+      final parent = p.dirname(normalizedPath);
+      if (parent == normalizedPath) return null;
+      final canonicalParent = await _canonicalizePath(parent);
+      if (canonicalParent == null) return null;
+      return p.join(canonicalParent, p.basename(normalizedPath));
+    }
+  }
 
   static List<FileSystemEntity> _mediaDerivedArtifacts(
       CatCatchTask task, String appDir) {
@@ -556,8 +607,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // The downloader writes the non-dot temp file while the executor checks
     // the dot-prefixed variant when resuming.
     final tempSuffix = DefaultRules.tempFileSuffix;
-    return [
+    final taskSuffix =
+        base64Url.encode(utf8.encode(task.id)).replaceAll('=', '');
+    final artifacts = <FileSystemEntity>[
       File(p.join(downloadDir, '$fileName$tempSuffix')),
+      File(p.join(downloadDir, '$fileName.$taskSuffix$tempSuffix')),
       File(p.join(downloadDir, '.$fileName$tempSuffix')),
       File(p.join(downloadDir, fileName)),
       for (final extension in ['ts', 'mp4']) ...[
@@ -567,6 +621,60 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       // Playlist conversions use the merged file basename for the output.
       File(p.join(convertDir, '$convertBase.mp4')),
     ];
+
+    // Conversion reservations can select a numbered output path when another
+    // file already uses the same basename. Remuxers write temporary files next
+    // to that output, so discover those names for both cleanup and ownership
+    // checks instead of relying on the task's persisted output path.
+    final conversionArtifactPattern = RegExp(
+      '^${RegExp.escape(convertBase)}(?: \\(\\d+\\))*\\.mp4'
+      '(?:\\.tmp|\\.spool\\.tmp|\\.ev1_tmp\\.flv|\\.reserve)?\$',
+    );
+    try {
+      for (final entity in Directory(convertDir).listSync(followLinks: false)) {
+        if (entity is File &&
+            conversionArtifactPattern.hasMatch(p.basename(entity.path))) {
+          artifacts.add(entity);
+        }
+      }
+    } on FileSystemException {
+      // The conversion directory may not exist yet.
+    }
+
+    // DownloadManager reserves `name (N).ext` when the requested output name
+    // already exists. Its resumable single-file partial and playlist parts
+    // directory use that reserved name too, so include matching on-disk
+    // variants when cleaning up a task.
+    final outputName = p.basenameWithoutExtension(fileName);
+    final outputExtension = p.extension(fileName);
+    final partialPattern = RegExp(
+      '^${RegExp.escape(outputName)}(?: \\(\\d+\\))?'
+      '${RegExp.escape(outputExtension)}'
+      '${RegExp.escape('.$taskSuffix$tempSuffix')}\$',
+    );
+    final playlistPartsPatterns = <RegExp>[
+      for (final extension in ['ts', 'mp4'])
+        RegExp(
+          '^\\.${RegExp.escape(mergedBaseName)}(?: \\(\\d+\\))?'
+          '\\.${extension}_parts\$',
+        ),
+    ];
+    try {
+      for (final entity
+          in Directory(downloadDir).listSync(followLinks: false)) {
+        final name = p.basename(entity.path);
+        if ((entity is File && partialPattern.hasMatch(name)) ||
+            (entity is Directory &&
+                playlistPartsPatterns
+                    .any((pattern) => pattern.hasMatch(name)))) {
+          artifacts.add(entity);
+        }
+      }
+    } on FileSystemException {
+      // The directory may not exist yet; the canonical fixed paths above are
+      // still sufficient for cleanup in that case.
+    }
+    return artifacts;
   }
 
   /// 删除文件（尽力而为，失败时短暂重试）。

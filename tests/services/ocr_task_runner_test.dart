@@ -166,6 +166,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = adapter,
       ),
       writeText: (name, text, {beforeCommit}) async {
@@ -202,6 +203,85 @@ void main() {
 
     adapter.succeed();
     await running;
+  });
+
+  test('joint request-size failures are localized and redact credentials',
+      () async {
+    locale = const Locale('fr', 'FR');
+    final strings = lookupAppLocalizations(locale);
+    final config = _config.copyWith(requestSizeBudgetBytes: 1);
+    final measuringService = OcrService(config: config);
+    final encodedBytes = measuringService.encodedRequestSizeBytes(
+      imageBytesList: [(input, 'png')],
+    );
+    measuringService.close();
+    final sizeRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: config,
+      images: [(input, 'png')],
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    await sizeRunner.run();
+
+    final detail = strings.bgTaskOcrRequestSizeExceeded(encodedBytes, 1);
+    expect(notifier.state.single.error, contains(detail));
+    expect(notifier.state.single.error, isNot(contains(_config.apiKey)));
+    expect(notifier.state.single.steps.first.error, contains(detail));
+    expect(adapter.calls, 0, reason: 'size rejection must remain preflight');
+    expect(saves, 0);
+  });
+
+  test('per-image request-size failures are localized and redact credentials',
+      () async {
+    locale = const Locale('fr', 'FR');
+    final strings = lookupAppLocalizations(locale);
+    final config = _config.copyWith(requestSizeBudgetBytes: 1);
+    final measuringService = OcrService(config: config);
+    final encodedBytes = measuringService.encodedRequestSizeBytes(
+      imageBytesList: [(input, 'png')],
+    );
+    measuringService.close();
+    final sizeRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: config,
+      images: [(input, 'png')],
+      executionMode: OcrBatchMode.perImage,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    await sizeRunner.run();
+
+    final detail = strings.bgTaskOcrRequestSizeExceeded(encodedBytes, 1);
+    final summary = strings.bgTaskOcrIncompleteError(
+      strings.bgTaskOcrPagesIncomplete(strings.bgTaskOcrPageFailed('1')),
+    );
+    expect(notifier.state.single.error, summary);
+    expect(notifier.state.single.error, isNot(contains(_config.apiKey)));
+    expect(
+      notifier.state.single.ocrPageOutcomes.single.error,
+      contains(detail),
+    );
+    expect(adapter.calls, 0, reason: 'size rejection must remain preflight');
+    expect(saves, 0);
   });
 
   test('owned runner snapshots input and duplicate run submits only once',
@@ -284,8 +364,11 @@ void main() {
         ],
         title: 'owned',
         folder: 'captured folder',
-        serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        serviceFactory: (config) => OcrService(
+          config: config,
+          ownsDio: true,
+          dio: Dio()..httpClientAdapter = adapter,
+        ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -321,6 +404,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = outOfOrderAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -377,6 +461,78 @@ void main() {
     },
   );
 
+  test('per-image finish reasons cannot persist a credential', () async {
+    const apiKey = 'provider-secret-echoed-as-finish-reason';
+    final credentialAdapter = _OutOfOrderAdapter();
+    final emittedSnapshots = <String>[];
+    final incompleteOutcomePublished = Completer<void>();
+    notifier.addListener((tasks) {
+      if (tasks.isNotEmpty) {
+        emittedSnapshots.add(jsonEncode(tasks.single.toMap()));
+        if (!incompleteOutcomePublished.isCompleted &&
+            tasks.single.ocrPageOutcomes.any(
+              (outcome) => outcome.status == OcrPageOutcomeStatus.incomplete,
+            )) {
+          incompleteOutcomePublished.complete();
+        }
+      }
+    }, fireImmediately: false);
+    final credentialRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config.copyWith(apiKey: apiKey),
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = credentialAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = credentialRunner.run();
+    await credentialAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    credentialAdapter.complete(
+      1,
+      text: 'partial text',
+      finishReason: apiKey,
+    );
+    await incompleteOutcomePublished.future.timeout(
+      const Duration(seconds: 2),
+    );
+
+    expect(
+      emittedSnapshots.any((snapshot) => snapshot.contains(apiKey)),
+      isFalse,
+      reason: 'page outcomes are emitted before terminal error sanitization',
+    );
+    await notifier.pendingPersistence;
+    final persistedFile = File(
+      '${directory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+    );
+    expect(await persistedFile.readAsString(), isNot(contains(apiKey)));
+
+    credentialAdapter.complete(2, text: 'complete page');
+    await running;
+    await notifier.pendingPersistence;
+
+    expect(await persistedFile.readAsString(), isNot(contains(apiKey)));
+    expect(
+      notifier.state.single.ocrPageOutcomes.first.error,
+      contains('unknown'),
+    );
+  });
+
   test('per-image result headings follow the current English locale', () async {
     locale = const Locale('en', 'US');
     final englishAdapter = _OutOfOrderAdapter();
@@ -395,6 +551,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = englishAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -443,6 +600,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = emptyFailedAdapter,
       ),
       writeText: writePartialText,
@@ -515,6 +673,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = stagedAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -558,6 +717,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = progressAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -598,6 +758,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = progressAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -691,6 +852,7 @@ void main() {
           }
           return OcrService(
             config: config,
+            ownsDio: true,
             dio: Dio()..httpClientAdapter = adapter,
           );
         },
@@ -745,6 +907,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = failedBeforeUploadAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -803,6 +966,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = diagnosticsAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -853,6 +1017,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = diagnosticsAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -869,6 +1034,10 @@ void main() {
       finishReason: 'length',
     );
     await incompletePagePublished.future.timeout(const Duration(seconds: 2));
+    expect(
+      notifier.state.single.ocrPageOutcomes.first.error,
+      contains('length'),
+    );
     diagnosticsAdapter.complete(
       2,
       text: 'failed page response',
@@ -905,8 +1074,11 @@ void main() {
       ],
       title: 'owned',
       folder: 'captured folder',
-      serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
       writeText: TextManifest.writeText,
       onSaved: () {},
     );
@@ -940,8 +1112,11 @@ void main() {
         executionMode: OcrBatchMode.perImage,
         title: 'owned',
         folder: 'captured folder',
-        serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        serviceFactory: (config) => OcrService(
+          config: config,
+          ownsDio: true,
+          dio: Dio()..httpClientAdapter = adapter,
+        ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -977,8 +1152,11 @@ void main() {
         executionMode: OcrBatchMode.perImage,
         title: 'owned',
         folder: 'captured folder',
-        serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        serviceFactory: (config) => OcrService(
+          config: config,
+          ownsDio: true,
+          dio: Dio()..httpClientAdapter = adapter,
+        ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -1025,8 +1203,11 @@ void main() {
         executionMode: OcrBatchMode.perImage,
         title: 'owned',
         folder: 'captured folder',
-        serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        serviceFactory: (config) => OcrService(
+          config: config,
+          ownsDio: true,
+          dio: Dio()..httpClientAdapter = adapter,
+        ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -1051,6 +1232,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = replacementAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -1146,6 +1328,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = adapter,
       ),
       writeText: TextManifest.writeText,
@@ -1192,6 +1375,7 @@ void main() {
           folder: 'captured folder',
           serviceFactory: (config) => OcrService(
             config: config,
+            ownsDio: true,
             dio: Dio()..httpClientAdapter = adapter,
           ),
           writeText: TextManifest.writeText,
@@ -1317,6 +1501,7 @@ void main() {
       onSaved: () {},
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = adapter,
       ),
       writeText: (name, text, {beforeCommit}) async {
@@ -1462,6 +1647,38 @@ void main() {
     await saver.retryTaskResult();
 
     expect((await TextManifest.loadRecords()).single.name, 'owned（部分结果）');
+  });
+
+  test('Spanish partial OCR titles include a separating space', () async {
+    for (final (index, spanishLocale) in [
+      const Locale('es'),
+      const Locale('es', 'ES'),
+    ].indexed) {
+      locale = spanishLocale;
+      final text = 'partial text $index';
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'Invoice',
+      );
+      notifier.setResult(taskId, text, isComplete: false);
+      notifier.failTask(taskId, error: 'incomplete OCR result');
+
+      final saver = OcrResultSaver(
+        taskId: taskId,
+        notifier: notifier,
+        title: 'Invoice',
+        folder: 'captured folder',
+        onSaved: () {},
+      );
+      await saver.retryTaskResult(allowPartial: true);
+
+      final record = (await TextManifest.loadRecords()).singleWhere(
+        (record) =>
+            record.hash ==
+            computeTextHash(Uint8List.fromList(utf8.encode(text))),
+      );
+      expect(record.name, 'Invoice (resultado parcial)');
+    }
   });
 
   test(
@@ -1656,6 +1873,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = replacementAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -1839,8 +2057,11 @@ void main() {
 
   test('batch uses one cancellable request with body-sized upload timeout',
       () async {
-    final service =
-        OcrService(config: _config, dio: Dio()..httpClientAdapter = adapter);
+    final service = OcrService(
+      config: _config,
+      ownsDio: true,
+      dio: Dio()..httpClientAdapter = adapter,
+    );
     final token = CancelToken();
     final stages = <OcrRequestStage>[];
     final running = service.recognizeBatch(
@@ -1932,8 +2153,11 @@ void main() {
         title: 'owned',
         folder: '',
         onSaved: () {},
-        serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        serviceFactory: (config) => OcrService(
+          config: config,
+          ownsDio: true,
+          dio: Dio()..httpClientAdapter = adapter,
+        ),
         writeText: (name, text, {beforeCommit}) async {
           final path = await TextManifest.writeText(name, text,
               beforeCommit: beforeCommit);
@@ -1994,8 +2218,11 @@ void main() {
       title: 'owned',
       folder: '',
       onSaved: () {},
-      serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
       writeText: (name, text, {beforeCommit}) async {
         final path = await TextManifest.writeText(name, text,
             beforeCommit: beforeCommit);
@@ -2092,8 +2319,11 @@ void main() {
       title: 'owned',
       folder: '',
       onSaved: () {},
-      serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
       writeText: (name, text, {beforeCommit}) async {
         final path = await TextManifest.writeText(name, text,
             beforeCommit: beforeCommit);
@@ -2137,8 +2367,11 @@ void main() {
       title: 'owned',
       folder: '',
       onSaved: () {},
-      serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+      serviceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
       writeText: (name, text, {beforeCommit}) async {
         final path = await TextManifest.writeText(name, text,
             beforeCommit: beforeCommit);
@@ -2232,7 +2465,7 @@ void main() {
     );
     expect(
       englishNotifier.state.single.error,
-      contains('OCR 处理失败'),
+      contains(englishStrings.bgTaskOcrErrorDetailsHidden),
     );
     englishNotifier.dispose();
     await englishNotifier.pendingPersistence;

@@ -1,3 +1,5 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -5,14 +7,30 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/backup_service_shared.dart';
+import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/startup_preferences.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+class _RestoreTestPathProvider extends PathProviderPlatform {
+  _RestoreTestPathProvider(this.root);
+
+  final String root;
+
+  @override
+  Future<String> getApplicationDocumentsPath() async => root;
+
+  @override
+  Future<String> getTemporaryPath() async => root;
+}
 
 /// 流式恢复（restoreBackup）回归测试。
 ///
@@ -45,6 +63,36 @@ void main() {
     }
   });
 
+  test('rollback cookie restoration replaces the selected snapshot exactly',
+      () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final snapshotCookies = [
+      {
+        'domain': 'snapshot.example',
+        'name': 'session',
+        'value': 'before-restore',
+        'path': '/',
+      },
+    ];
+    await WebFileStore.write(
+      '/browser_cookies.json',
+      Uint8List.fromList(utf8.encode('{malformed cookie data')),
+    );
+    final snapshot =
+        Uint8List.fromList(utf8.encode(jsonEncode(snapshotCookies)));
+
+    await BackupService.restoreBrowserCookiesSnapshotForTest(
+      snapshot,
+      replaceExisting: true,
+    );
+
+    final restored = jsonDecode(
+      utf8.decode((await WebFileStore.read('/browser_cookies.json'))!),
+    ) as List;
+    expect(restored, snapshotCookies);
+  });
+
   /// 把一个内存 Archive 编码为磁盘上的 zip 文件，返回其路径。
   Future<String> writeArchive(Archive archive, String name) async {
     final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
@@ -55,22 +103,26 @@ void main() {
 
   /// 构造 v2 格式的最小合法备份归档（manifest + stroom_manifest）。
   Archive buildV2Archive({
+    List<Map<String, dynamic>> imageRecords = const [],
     List<Map<String, dynamic>> videoRecords = const [],
     List<Map<String, dynamic>> textRecords = const [],
     Map<String, Uint8List> files = const {},
+    List<String>? dataParts,
+    Map<String, dynamic> manifestOverrides = const {},
     int version = 2,
   }) {
     final archive = Archive();
-    final manifest = utf8.encode(
-      jsonEncode({
-        'version': version,
-        'createdAt': DateTime.now().toIso8601String(),
-        'appVersion': 'test',
-      }),
-    );
+    final manifestData = <String, dynamic>{
+      'version': version,
+      'createdAt': DateTime.now().toIso8601String(),
+      'appVersion': 'test',
+    };
+    if (dataParts != null) manifestData['dataParts'] = dataParts;
+    manifestData.addAll(manifestOverrides);
+    final manifest = utf8.encode(jsonEncode(manifestData));
     archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final dbData = {
-      'image_records': <Map<String, dynamic>>[],
+      'image_records': imageRecords,
       'audio_records': <Map<String, dynamic>>[],
       'video_records': videoRecords,
       'text_records': textRecords,
@@ -93,6 +145,520 @@ void main() {
     }
     return archive;
   }
+
+  test(
+    'no-media restore removes unavailable task-flow file references',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      final execution = {
+        'id': 'missing-media-execution',
+        'flowId': 'flow',
+        'flowName': 'Flow',
+        'status': 'paused',
+        'createdAt': DateTime(2026).toIso8601String(),
+        'inputText': 'stroom-app-data:/attachments/input.wav',
+        'inputStoragePath': 'stroom-app-data:/attachments/input.wav',
+        'subTasks': [
+          {
+            'blockTypeKey': 'audio',
+            'blockLabel': 'Audio',
+            'subTaskId': 'audio-step',
+            'subTaskType': 'audio',
+            'result': {
+              'type': 'audio',
+              'text': '',
+              'fileReference':
+                  'stroom-app-data:/task_flow_temporary/execution/block/output.wav',
+              'temporaryArtifact': {
+                'executionId': 'missing-media-execution',
+                'blockId': 'block',
+                'reference':
+                    'stroom-app-data:/task_flow_temporary/execution/block/output.wav',
+              },
+            },
+          },
+        ],
+      };
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json':
+            Uint8List.fromList(utf8.encode(jsonEncode([execution]))),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath =
+          await writeArchive(archive, 'task_flow_without_media.zip');
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      final restored = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      final restoredExecution = restored.single as Map;
+      expect(restoredExecution['inputStoragePath'], isNull);
+      expect(restoredExecution['inputText'], isNull);
+      final result =
+          (restoredExecution['subTasks'] as List).single['result'] as Map;
+      expect(result['fileReference'], isNull);
+      expect(result['temporaryArtifact'], isNull);
+    },
+  );
+
+  test(
+    'restore removes artifacts for replaced executions before restoring archived outputs',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      const executionId = 'replaced-execution';
+      final staleArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'old-block',
+        fileName: 'stale.wav',
+        bytes: Uint8List.fromList([1]),
+      );
+      final restoredArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'restored-block',
+        fileName: 'restored.wav',
+        bytes: Uint8List.fromList([2]),
+      );
+      await FlowTemporaryArtifactStorage.deleteExecution(executionId);
+      await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'old-block',
+        fileName: 'stale.wav',
+        bytes: Uint8List.fromList([1]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'restored-flow',
+                'flowName': 'Restored flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+        restoredArtifact: Uint8List.fromList([2]),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': true,
+          'fileInventories': {
+            DataParts.tasks: [
+              for (final entry in files.entries)
+                if (entry.key.startsWith('task_flow_temporary/'))
+                  {'path': entry.key, 'size': entry.value.length},
+            ],
+          },
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_inventory.zip',
+      );
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      expect(await WebFileStore.read(staleArtifact), isNull);
+      expect(await WebFileStore.read(restoredArtifact), [2]);
+    },
+  );
+
+  test(
+    'restore preserves temporary artifacts when the execution inventory is untouched',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      const executionId = 'untouched-execution';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'existing-flow',
+                'flowName': 'Existing flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final archive = buildV2Archive(
+        files: {
+          'task_flows/flows.json': Uint8List.fromList(
+            utf8.encode(
+              jsonEncode([
+                {
+                  'id': 'restored-flow',
+                  'name': 'Restored flow',
+                  'description': '',
+                  'inputType': 'text',
+                  'blocks': <Object>[],
+                  'createdAt': DateTime(2026).toIso8601String(),
+                  'updatedAt': DateTime(2026).toIso8601String(),
+                },
+              ]),
+            ),
+          ),
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_definitions.zip',
+      );
+
+      await BackupService.restoreBackup(
+        zipPath,
+        selection: selection,
+        skipMissingCategories: true,
+      );
+
+      expect(await WebFileStore.read(artifact), [9]);
+      expect(await WebFileStore.read('task_flows/executions.json'), isNotNull);
+    },
+  );
+
+  test(
+    'restore cleans replaced execution artifacts when media files are excluded',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const executionId = 'replaced-without-media';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': executionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'replace_task_flow_inventory_without_media.zip',
+      );
+
+      await BackupService.restoreBackup(zipPath, selection: selection);
+
+      expect(await WebFileStore.read(artifact), isNull);
+    },
+  );
+
+  test(
+    'failed restore without media preserves artifacts from the old execution inventory',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const executionId = 'rolled-back-execution';
+      final artifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: executionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([7]),
+      );
+      final oldExecution = {
+        'id': executionId,
+        'flowId': 'old-flow',
+        'flowName': 'Old flow',
+        'status': 'completed',
+        'createdAt': DateTime(2026).toIso8601String(),
+      };
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(jsonEncode([oldExecution])),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(jsonEncode([oldExecution])),
+        ),
+        'task_state/task_list_last_read.json':
+            Uint8List.fromList(utf8.encode('{}')),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {
+            DataParts.tasks: [
+              {
+                'path': 'task_state/task_list_last_read.json',
+                'size': files['task_state/task_list_last_read.json']!.length,
+              },
+            ],
+          },
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'failed_task_flow_inventory_without_media.zip',
+      );
+      BackupService.beforeRestoreBinaryPublishForTesting = (index) {
+        if (index == files.length - 1) {
+          BackupService.beforeRestoreBinaryPublishForTesting = null;
+          throw StateError('injected restore publish failure');
+        }
+      };
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await WebFileStore.read(artifact), [7]);
+      final restoredExecutions = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      expect(restoredExecutions.single['id'], executionId);
+    },
+  );
+
+  test(
+    'no-media restore reports a failure to clean replaced temporary artifacts',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      addTearDown(() {
+        FlowTemporaryArtifactStorage.beforeDeleteExecutionForTesting = null;
+      });
+
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+        includeMediaFiles: false,
+      );
+      const oldExecutionId = 'cleanup-failure-old-execution';
+      final oldArtifact = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: oldExecutionId,
+        blockId: 'block',
+        fileName: 'voice.wav',
+        bytes: Uint8List.fromList([9]),
+      );
+      await WebFileStore.write(
+        'task_flows/executions.json',
+        Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': oldExecutionId,
+                'flowId': 'old-flow',
+                'flowName': 'Old flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      );
+
+      final files = {
+        'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+        'task_flows/executions.json': Uint8List.fromList(
+          utf8.encode(
+            jsonEncode([
+              {
+                'id': 'replacement-execution',
+                'flowId': 'new-flow',
+                'flowName': 'New flow',
+                'status': 'completed',
+                'createdAt': DateTime(2026).toIso8601String(),
+              },
+            ]),
+          ),
+        ),
+      };
+      final archive = buildV2Archive(
+        dataParts: [DataParts.tasks],
+        files: files,
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': false,
+          'fileInventories': {DataParts.tasks: <Map<String, dynamic>>[]},
+        },
+      );
+      final zipPath = await writeArchive(
+        archive,
+        'task_flow_cleanup_failure_without_media.zip',
+      );
+      FlowTemporaryArtifactStorage.beforeDeleteExecutionForTesting =
+          (_) async => throw StateError('injected artifact cleanup failure');
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await WebFileStore.read(oldArtifact), [9]);
+      final restoredExecutions = jsonDecode(
+        utf8.decode((await WebFileStore.read('task_flows/executions.json'))!),
+      ) as List;
+      expect(restoredExecutions.single['id'], 'replacement-execution');
+    },
+  );
 
   // ==================================================================
   // store 模式大文件：流式恢复逐字节一致（主回归）
@@ -159,6 +725,508 @@ void main() {
     },
   );
 
+  test(
+    'restoreBackup keeps selected data unchanged when a later binary entry write fails',
+    () async {
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final originalFile = Uint8List.fromList(utf8.encode('existing image'));
+      await writeBackupFile('pictures', 'existing.jpg', originalFile);
+      await ManifestDatabase.insertImageRecord({
+        'id': 'existing',
+        'name': 'existing',
+        'hash': 'existing',
+        'format': 'jpg',
+        'created_at': DateTime(2026).millisecondsSinceEpoch,
+        'size': originalFile.length,
+        'folder': '',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('darkMode', true);
+
+      final archive = buildV2Archive(
+        files: {
+          'pictures/first.jpg': Uint8List.fromList([1]),
+          'pictures/later.jpg': Uint8List.fromList([2]),
+        },
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+      final zipPath = await writeArchive(archive, 'write_failure.zip');
+
+      BackupService.beforeRestoreBinaryPublishForTesting = (entryIndex) {
+        if (entryIndex == 1) {
+          throw StateError('injected restore publish failure');
+        }
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(await readBackupFile('pictures', 'existing.jpg'), originalFile);
+      expect(await readBackupFile('pictures', 'first.jpg'), isNull);
+      expect(await readBackupFile('pictures', 'later.jpg'), isNull);
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records, hasLength(1));
+      expect(records.single['id'], 'existing');
+      expect(prefs.getBool('darkMode'), isTrue);
+    },
+  );
+
+  test(
+    'restoreBackup bounds a failed rollback and retains its recovery archive',
+    () async {
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await writeBackupFile(
+        'pictures',
+        'existing.jpg',
+        Uint8List.fromList(utf8.encode('existing image')),
+      );
+
+      final archive = buildV2Archive(
+        files: {
+          'pictures/incoming.jpg': Uint8List.fromList([1])
+        },
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+      final zipPath = await writeArchive(archive, 'rollback_failure.zip');
+
+      String? retainedArchivePath;
+      addTearDown(() async {
+        final path = retainedArchivePath;
+        if (path != null) {
+          final separator = path.lastIndexOf(Platform.pathSeparator);
+          if (separator >= 0) {
+            final rollbackDirectory = Directory(path.substring(0, separator));
+            if (await rollbackDirectory.exists()) {
+              await rollbackDirectory.delete(recursive: true);
+            }
+          }
+        }
+      });
+
+      var publishAttempts = 0;
+      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
+        publishAttempts++;
+        throw StateError(
+          publishAttempts == 1
+              ? 'injected primary restore failure'
+              : 'injected recovery restore failure',
+        );
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      late StateError failure;
+      try {
+        await BackupService.restoreBackup(zipPath, selection: selection);
+        fail('restoreBackup should report the failed restore and rollback');
+      } on StateError catch (error) {
+        failure = error;
+      }
+
+      expect(
+        publishAttempts,
+        2,
+        reason: 'only one rollback restore is allowed',
+      );
+      expect(failure.message, contains('injected primary restore failure'));
+      expect(failure.message, contains('injected recovery restore failure'));
+      final archivePath = RegExp(
+        r'The recovery archive is retained at (.+)\.',
+      ).firstMatch(failure.message)?.group(1);
+      expect(archivePath, isNotNull);
+      retainedArchivePath = archivePath!;
+      expect(await File(retainedArchivePath).exists(), isTrue);
+    },
+  );
+
+  test('startup restores an interrupted file restore from its durable snapshot',
+      () async {
+    final previousLegacyStartupPreferenceMode =
+        StartupPreferences.debugUseLegacyPreferencesForTesting;
+    StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+    addTearDown(() {
+      StartupPreferences.debugUseLegacyPreferencesForTesting =
+          previousLegacyStartupPreferenceMode;
+    });
+    WebFileStore.disableTestMode();
+    final previousPathProvider = PathProviderPlatform.instance;
+    final appDir = '$workDir/restore_app_data';
+    PathProviderPlatform.instance = _RestoreTestPathProvider(appDir);
+    AppStorage.resetCache();
+    addTearDown(() {
+      PathProviderPlatform.instance = previousPathProvider;
+      AppStorage.resetCache();
+    });
+    await Directory(appDir).create(recursive: true);
+    await Directory('$appDir/pictures').create(recursive: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([1, 2, 3]);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('darkMode', true);
+
+    const selection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+    );
+    final snapshotPath = '$workDir/pre-restore.zip';
+    await BackupService.createBackup(
+      outputPath: snapshotPath,
+      selection: selection,
+      useStartupPreferenceAdapter: true,
+    );
+    final recoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-test',
+    );
+    await recoveryDirectory.create();
+    await File(snapshotPath).copy('${recoveryDirectory.path}/pre-restore.zip');
+    final marker = File('${recoveryDirectory.path}/restore-in-progress');
+    final validMarker = {
+      'version': 2,
+      'useStartupPreferenceAdapter': true,
+      'selection': {
+        'chatRecordsAndAttachments': false,
+        'settings': true,
+        'pictures': true,
+        'audio': false,
+        'videos': false,
+        'texts': false,
+        'tasks': false,
+        'ankiData': true,
+        'browserCookies': false,
+        'includeMediaFiles': true,
+      },
+      'snapshotSelection': {
+        'chatRecordsAndAttachments': false,
+        'settings': true,
+        'pictures': true,
+        'audio': false,
+        'videos': false,
+        'texts': false,
+        'tasks': false,
+        'ankiData': false,
+        'browserCookies': false,
+        'includeMediaFiles': true,
+      },
+    };
+    await marker.writeAsString(
+      jsonEncode({...validMarker, 'unexpected': true}),
+      flush: true,
+    );
+    await File('$appDir/pictures/old.jpg').writeAsBytes([9]);
+    await File('$appDir/pictures/new.jpg').writeAsBytes([8]);
+    await File('$appDir/collection.anki2').writeAsBytes([12]);
+    await prefs.setBool('darkMode', false);
+
+    await expectLater(
+      BackupService.recoverInterruptedRestores(),
+      throwsA(isA<FormatException>()),
+    );
+    await marker.writeAsString('{"version":1}', flush: true);
+    await expectLater(
+      BackupService.recoverInterruptedRestores(),
+      throwsA(isA<FormatException>()),
+    );
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [9]);
+    expect(await File('$appDir/pictures/new.jpg').readAsBytes(), [8]);
+    expect(await File('$appDir/collection.anki2').exists(), isTrue);
+    expect(await recoveryDirectory.exists(), isTrue);
+
+    await marker.writeAsString(jsonEncode(validMarker), flush: true);
+    await BackupService.recoverInterruptedRestores();
+
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
+    expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
+    expect(await File('$appDir/collection.anki2').exists(), isFalse);
+    expect(prefs.getBool('darkMode'), isTrue);
+    expect(await recoveryDirectory.exists(), isFalse);
+
+    final legacyRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-legacy',
+    );
+    await legacyRecoveryDirectory.create();
+    await File(snapshotPath).copy(
+      '${legacyRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File('${legacyRecoveryDirectory.path}/restore-in-progress')
+        .writeAsString('startup-preferences', flush: true);
+    await File('$appDir/pictures/old.jpg').writeAsBytes([10]);
+    await File('$appDir/pictures/new.jpg').writeAsBytes([11]);
+    await prefs.setBool('darkMode', false);
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(await File('$appDir/pictures/old.jpg').readAsBytes(), [1, 2, 3]);
+    expect(await File('$appDir/pictures/new.jpg').exists(), isFalse);
+    expect(prefs.getBool('darkMode'), isTrue);
+    expect(await legacyRecoveryDirectory.exists(), isFalse);
+
+    final missingPreferenceSnapshot = await writeArchive(
+      buildV2Archive(dataParts: [DataParts.settings]),
+      'missing-startup-preferences.zip',
+    );
+    final missingPreferenceRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-missing-preferences',
+    );
+    await missingPreferenceRecoveryDirectory.create();
+    await File(missingPreferenceSnapshot).copy(
+      '${missingPreferenceRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File(
+      '${missingPreferenceRecoveryDirectory.path}/restore-in-progress',
+    ).writeAsString(
+      jsonEncode({
+        'version': 2,
+        'useStartupPreferenceAdapter': true,
+        'selection': {
+          'chatRecordsAndAttachments': false,
+          'settings': true,
+          'pictures': false,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': true,
+        },
+        'snapshotSelection': {
+          'chatRecordsAndAttachments': false,
+          'settings': true,
+          'pictures': false,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': true,
+        },
+      }),
+      flush: true,
+    );
+    await prefs.setBool('darkMode', false);
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(prefs.getBool('darkMode'), isNull);
+    expect(await missingPreferenceRecoveryDirectory.exists(), isFalse);
+
+    final structuredOnlySnapshot = await writeArchive(
+      buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'structured-only-image',
+            'name': 'structured-only-image',
+            'hash': 'structured-only-image',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        dataParts: [DataParts.pictures],
+        manifestOverrides: const {'includeMediaFiles': false},
+      ),
+      'structured-only-media.zip',
+    );
+    final structuredOnlyRecoveryDirectory = Directory(
+      '$appDir/.stroom-restore-rollback-structured-only',
+    );
+    await structuredOnlyRecoveryDirectory.create();
+    await File(structuredOnlySnapshot).copy(
+      '${structuredOnlyRecoveryDirectory.path}/pre-restore.zip',
+    );
+    await File(
+      '${structuredOnlyRecoveryDirectory.path}/restore-in-progress',
+    ).writeAsString(
+      jsonEncode({
+        'version': 2,
+        'useStartupPreferenceAdapter': false,
+        'selection': {
+          'chatRecordsAndAttachments': false,
+          'settings': false,
+          'pictures': true,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': false,
+        },
+        'snapshotSelection': {
+          'chatRecordsAndAttachments': false,
+          'settings': false,
+          'pictures': true,
+          'audio': false,
+          'videos': false,
+          'texts': false,
+          'tasks': false,
+          'ankiData': false,
+          'browserCookies': false,
+          'includeMediaFiles': false,
+        },
+      }),
+      flush: true,
+    );
+
+    await BackupService.recoverInterruptedRestores();
+
+    expect(
+      (await ManifestDatabase.getAllImageRecords())
+          .map((record) => record['id']),
+      contains('structured-only-image'),
+    );
+    expect(await structuredOnlyRecoveryDirectory.exists(), isFalse);
+  });
+
+  test(
+    'restoreFromBytes keeps selected data unchanged when a later binary write fails',
+    () async {
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      const selection = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final originalFile = Uint8List.fromList(utf8.encode('existing image'));
+      final originalTaskMedia =
+          Uint8List.fromList(utf8.encode('existing task media'));
+      await writeBackupFile('pictures', 'existing.jpg', originalFile);
+      await writeBackupFile(
+        'catcatch/completed',
+        'existing.wav',
+        originalTaskMedia,
+      );
+      final originalTaskState =
+          Uint8List.fromList(utf8.encode('original state'));
+      await writeBackupFile('', 'task_list_last_read.json', originalTaskState);
+      await ManifestDatabase.insertImageRecord({
+        'id': 'existing',
+        'name': 'existing',
+        'hash': 'existing',
+        'format': 'jpg',
+        'created_at': DateTime(2026).millisecondsSinceEpoch,
+        'size': originalFile.length,
+        'folder': '',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('darkMode', true);
+
+      final archive = buildV2Archive(
+        dataParts: ['pictures', 'settings', 'tasks'],
+        manifestOverrides: {
+          'fileInventoryVersion': 1,
+          'includeMediaFiles': true,
+          'fileInventories': {
+            'pictures': [
+              {'path': 'pictures/first.jpg', 'size': 1},
+              {'path': 'pictures/later.jpg', 'size': 1},
+            ],
+            'tasks': [
+              {'path': 'catcatch/completed/incoming.wav', 'size': 1},
+              {
+                'path': 'task_state/task_list_last_read.json',
+                'size': utf8.encode('imported state').length,
+              },
+            ],
+          },
+        },
+        files: {
+          'pictures/first.jpg': Uint8List.fromList([1]),
+          'task_state/task_list_last_read.json':
+              Uint8List.fromList(utf8.encode('imported state')),
+          'pictures/later.jpg': Uint8List.fromList([2]),
+          'synthesis/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'catcatch/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'background/tasks.json': Uint8List.fromList(utf8.encode('[]')),
+          'task_flows/flows.json': Uint8List.fromList(utf8.encode('[]')),
+          'task_flows/executions.json': Uint8List.fromList(utf8.encode('[]')),
+          'catcatch/completed/incoming.wav': Uint8List.fromList([3]),
+        },
+      );
+      final settings = utf8.encode(jsonEncode({'darkMode': false}));
+      archive.addFile(ArchiveFile('settings.json', settings.length, settings));
+
+      var injected = false;
+      BackupService.beforeRestoreBinaryPublishForTesting = (entryIndex) {
+        if (entryIndex == 2 && !injected) {
+          injected = true;
+          throw StateError('injected restore publish failure');
+        }
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+
+      await expectLater(
+        BackupService.restoreFromBytesForTest(
+          Uint8List.fromList(ZipEncoder().encode(archive)),
+          selection: selection,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(injected, isTrue);
+      expect(await readBackupFile('pictures', 'existing.jpg'), originalFile);
+      expect(
+        await readBackupFile('catcatch/completed', 'existing.wav'),
+        originalTaskMedia,
+      );
+      expect(
+        await readBackupFile('', 'task_list_last_read.json'),
+        originalTaskState,
+      );
+      expect(await readBackupFile('pictures', 'first.jpg'), isNull);
+      expect(await readBackupFile('pictures', 'later.jpg'), isNull);
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records, hasLength(1));
+      expect(records.single['id'], 'existing');
+      expect(prefs.getBool('darkMode'), isTrue);
+    },
+  );
+
   // ==================================================================
   // deflate 压缩条目（旧备份默认压缩格式）
   // ==================================================================
@@ -198,6 +1266,910 @@ void main() {
     expect(records[0]['id'], equals('v_deflate'));
   });
 
+  test(
+      'case-only media destination collisions fail before selected files are cleared',
+      () async {
+    const selection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+    );
+    const picturesOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const picturesVideosAndAttachmentsSelection = BackupSelection(
+      chatRecordsAndAttachments: true,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: true,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const attachmentsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: true,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const browserAndPicturesSelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: true,
+    );
+    const attachmentsAndTasksSelection = BackupSelection(
+      chatRecordsAndAttachments: true,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: true,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const tasksOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: true,
+      ankiData: false,
+      browserCookies: false,
+    );
+    Archive buildSharedTaskAttachmentArchive({required bool sameContent}) {
+      final archive = Archive();
+      void addJson(String name, Object value) {
+        final bytes = Uint8List.fromList(utf8.encode(jsonEncode(value)));
+        archive.addFile(ArchiveFile(name, bytes.length, bytes));
+      }
+
+      addJson('manifest.json', {
+        'version': 2,
+        'createdAt': DateTime.now().toIso8601String(),
+        'appVersion': 'test',
+        'dataParts': [DataParts.chat, DataParts.tasks],
+      });
+      addJson('stroom_manifest.json', {
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>[],
+        ManifestTables.textFolders: <String>[],
+        ManifestTables.audioFolders: <String>[],
+        ManifestTables.imageFolders: <String>[],
+        ManifestTables.videoFolders: <String>[],
+      });
+      addJson('chat_data.json', {'conversations': '[]'});
+      addJson('synthesis/tasks.json', []);
+      addJson('catcatch/tasks.json', []);
+      addJson('background/tasks.json', []);
+      addJson('task_flows/flows.json', []);
+      addJson('task_flows/executions.json', []);
+      final attachmentBytes = Uint8List.fromList([32, 33]);
+      final taskAttachmentBytes =
+          sameContent ? attachmentBytes : Uint8List.fromList([34, 35]);
+      archive.addFile(
+        ArchiveFile(
+          'attachments/shared.txt',
+          attachmentBytes.length,
+          attachmentBytes,
+        ),
+      );
+      archive.addFile(
+        ArchiveFile(
+          'task_flow_attachments/shared.txt',
+          taskAttachmentBytes.length,
+          taskAttachmentBytes,
+        ),
+      );
+      return archive;
+    }
+
+    Archive buildTaskAttachmentArchive(String relativePath) {
+      final archive = Archive();
+      void addJson(String name, Object value) {
+        final bytes = Uint8List.fromList(utf8.encode(jsonEncode(value)));
+        archive.addFile(ArchiveFile(name, bytes.length, bytes));
+      }
+
+      addJson('manifest.json', {
+        'version': 2,
+        'createdAt': DateTime.now().toIso8601String(),
+        'appVersion': 'test',
+        'dataParts': [DataParts.tasks],
+      });
+      addJson('stroom_manifest.json', {
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>[],
+        ManifestTables.textFolders: <String>[],
+        ManifestTables.audioFolders: <String>[],
+        ManifestTables.imageFolders: <String>[],
+        ManifestTables.videoFolders: <String>[],
+      });
+      addJson('synthesis/tasks.json', []);
+      addJson('catcatch/tasks.json', []);
+      addJson('background/tasks.json', []);
+      addJson('task_flows/flows.json', []);
+      addJson('task_flows/executions.json', []);
+      final bytes = Uint8List.fromList([40, 41]);
+      archive.addFile(
+        ArchiveFile('task_flow_attachments/$relativePath', bytes.length, bytes),
+      );
+      return archive;
+    }
+
+    const ankiDbOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+      includeMediaFiles: false,
+    );
+    final original = Uint8List.fromList(utf8.encode('keep existing image'));
+    final originalAttachment = Uint8List.fromList(
+      utf8.encode('keep existing attachment'),
+    );
+    WebFileStore.enableTestMode();
+    await writeBackupFile('pictures', 'existing.jpg', original);
+    await writeBackupFile('attachments', 'existing.jpg', originalAttachment);
+    BackupService.restorePathsCaseInsensitiveForTesting = true;
+    try {
+      final archive = buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'ab',
+            'name': 'ab',
+            'hash': 'ab',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'AB',
+            'name': 'AB',
+            'hash': 'AB',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'cafe-nfc',
+            'name': 'café',
+            'hash': 'café',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'cafe-nfd',
+            'name': 'cafe\u0301',
+            'hash': 'cafe\u0301',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'greek-sigma',
+            'name': 'Σ',
+            'hash': 'Σ',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'greek-final-sigma',
+            'name': 'ς',
+            'hash': 'ς',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'sharp-s',
+            'name': 'ß',
+            'hash': 'ß',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'double-s',
+            'name': 'SS',
+            'hash': 'SS',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        files: {
+          'pictures/ab.jpg': Uint8List.fromList([1]),
+          'pictures/AB.jpg': Uint8List.fromList([2]),
+          'pictures/café.jpg': Uint8List.fromList([6]),
+          'pictures/cafe\u0301.jpg': Uint8List.fromList([7]),
+          'pictures/Σ.jpg': Uint8List.fromList([8]),
+          'pictures/ς.jpg': Uint8List.fromList([9]),
+          'pictures/ß.jpg': Uint8List.fromList([10]),
+          'pictures/SS.jpg': Uint8List.fromList([11]),
+          'attachments/café.jpg': Uint8List.fromList([12]),
+          'attachments/cafe\u0301.jpg': Uint8List.fromList([13]),
+          'chat_data.json': Uint8List.fromList(
+            utf8.encode('{"conversations":"[]"}'),
+          ),
+          'anki/collection.anki2': Uint8List.fromList([3]),
+          'anki/collection.media/a.jpg': Uint8List.fromList([4]),
+          'anki/collection.media/A.jpg': Uint8List.fromList([5]),
+        },
+      );
+      final zipPath = await writeArchive(archive, 'case_collision.zip');
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason: 'collision preflight must run before selected media is cleared',
+      );
+
+      var browserRestorePreparationEntered = false;
+      BrowserProfileService.onPrepareForRestoreForTesting =
+          () => browserRestorePreparationEntered = true;
+      final browserCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/ab.jpg': Uint8List.fromList([30]),
+            'pictures/AB.jpg': Uint8List.fromList([31]),
+            'browser_cookies.json': Uint8List.fromList(utf8.encode('[]')),
+          },
+        ),
+        'browser_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          browserCollisionZip,
+          selection: browserAndPicturesSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        browserRestorePreparationEntered,
+        isFalse,
+        reason:
+            'collision preflight must preserve an existing browser restore staging directory',
+      );
+      BrowserProfileService.onPrepareForRestoreForTesting = null;
+      await BackupService.restoreBackup(
+        zipPath,
+        selection: ankiDbOnlySelection,
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'database-only Anki restore must ignore unselected media collisions',
+      );
+
+      final prefixCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Foo': Uint8List.fromList([14]),
+            'pictures/foo/bar.jpg': Uint8List.fromList([15]),
+          },
+        ),
+        'prefix_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          prefixCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'file/directory prefix collisions must fail before clearing media',
+      );
+
+      final symlinkAppDirectory = '$workDir/restore_root_aliases';
+      final sharedMediaDirectory = '$symlinkAppDirectory/shared';
+      final videoMediaDirectory = '$symlinkAppDirectory/video';
+      await Directory(sharedMediaDirectory).create(recursive: true);
+      await Directory(videoMediaDirectory).create(recursive: true);
+      await Link('$symlinkAppDirectory/pictures').create(sharedMediaDirectory);
+      await Link('$symlinkAppDirectory/attachments').create(
+        sharedMediaDirectory,
+      );
+      await Link('$symlinkAppDirectory/videos').create(videoMediaDirectory);
+      await Link('$sharedMediaDirectory/alias').create(videoMediaDirectory);
+      BackupService.restoreAppDirectoryForTesting = symlinkAppDirectory;
+      final categoryRootSymlinkCollisionZip = await writeArchive(
+        buildV2Archive(
+          imageRecords: [
+            {
+              'id': 'shared-picture',
+              'name': 'shared-picture',
+              'hash': 'shared',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          videoRecords: [
+            {
+              'id': 'root-video',
+              'name': 'root-video',
+              'hash': 'root-video',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          dataParts: [DataParts.chat, DataParts.pictures, DataParts.videos],
+          files: {
+            'chat_data.json': Uint8List.fromList(
+              utf8.encode('{"conversations":"[]"}'),
+            ),
+            'pictures/shared.bin': Uint8List.fromList([45]),
+            'attachments/shared.bin': Uint8List.fromList([46]),
+            'videos/root-video.bin': Uint8List.fromList([50]),
+          },
+        ),
+        'category_root_symlink_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          categoryRootSymlinkCollisionZip,
+          selection: picturesVideosAndAttachmentsSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'category roots that resolve to the same directory must collide before clearing',
+      );
+
+      final nestedSymlinkCollisionZip = await writeArchive(
+        buildV2Archive(
+          imageRecords: [
+            {
+              'id': 'shared-picture',
+              'name': 'shared-picture',
+              'hash': 'shared',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          videoRecords: [
+            {
+              'id': 'nested-video',
+              'name': 'nested-video',
+              'hash': 'nested',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          dataParts: [DataParts.chat, DataParts.pictures, DataParts.videos],
+          files: {
+            'chat_data.json': Uint8List.fromList(
+              utf8.encode('{"conversations":"[]"}'),
+            ),
+            'pictures/shared.bin': Uint8List.fromList([47]),
+            'pictures/alias/nested.bin': Uint8List.fromList([48]),
+            'videos/nested.bin': Uint8List.fromList([49]),
+          },
+        ),
+        'nested_symlink_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          nestedSymlinkCollisionZip,
+          selection: picturesVideosAndAttachmentsSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'nested symlink destinations must collide before selected files are cleared',
+      );
+      BackupService.restoreAppDirectoryForTesting = null;
+
+      final expansionPrefixZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/ß': Uint8List.fromList([16]),
+            'pictures/SS/child.jpg': Uint8List.fromList([17]),
+          },
+        ),
+        'case_expansion_prefix_collision.zip',
+      );
+      BackupService.restorePathsCaseExpansionInsensitiveForTesting = true;
+      await expectLater(
+        BackupService.restoreBackup(
+          expansionPrefixZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason: 'expansion prefix collisions must fail before clearing media',
+      );
+
+      BackupService.restorePathsCaseExpansionInsensitiveForTesting = false;
+      await BackupService.restoreBackup(
+        expansionPrefixZip,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'ß'), equals([16]));
+      expect(await readBackupFile('pictures', 'SS/child.jpg'), equals([17]));
+      await writeBackupFile('pictures', 'existing.jpg', original);
+
+      BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
+          true;
+      BackupService.restorePathsWindowsSeparatorsForTesting = true;
+      final windowsNameCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Foo': Uint8List.fromList([18]),
+            'pictures/foo.': Uint8List.fromList([19]),
+          },
+        ),
+        'windows_name_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsNameCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+      );
+
+      final windowsSpaceCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Name': Uint8List.fromList([24]),
+            'pictures/name ': Uint8List.fromList([25]),
+          },
+        ),
+        'windows_space_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsSpaceCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+      );
+
+      final windowsPrefixCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Folder.': Uint8List.fromList([20]),
+            'pictures/folder /child.jpg': Uint8List.fromList([21]),
+          },
+        ),
+        'windows_prefix_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsPrefixCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+      );
+
+      final windowsAttachmentCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'attachments/Folder.': Uint8List.fromList([22]),
+            'attachments/folder /child.jpg': Uint8List.fromList([23]),
+          },
+        ),
+        'windows_attachment_prefix_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsAttachmentCollisionZip,
+          selection: attachmentsOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+      );
+
+      final matchingTaskAttachmentAliasZip = await writeArchive(
+        buildSharedTaskAttachmentArchive(sameContent: true),
+        'matching_task_attachment_alias.zip',
+      );
+      await BackupService.restoreBackup(
+        matchingTaskAttachmentAliasZip,
+        selection: attachmentsAndTasksSelection,
+      );
+      expect(
+        await readBackupFile('attachments', 'shared.txt'),
+        equals([32, 33]),
+      );
+
+      await writeBackupFile('attachments', 'existing.jpg', originalAttachment);
+      final mismatchedTaskAttachmentAliasZip = await writeArchive(
+        buildSharedTaskAttachmentArchive(sameContent: false),
+        'mismatched_task_attachment_alias.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          mismatchedTaskAttachmentAliasZip,
+          selection: attachmentsAndTasksSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+        reason:
+            'different-content shared attachment aliases must fail before clearing files',
+      );
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/foo.'},
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+      final protectedAttachmentBytes = Uint8List.fromList([42]);
+      await writeBackupFile('attachments', 'foo.', protectedAttachmentBytes);
+      final protectedAttachmentCollisionZip = await writeArchive(
+        buildTaskAttachmentArchive('Foo'),
+        'protected_attachment_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          protectedAttachmentCollisionZip,
+          selection: tasksOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'foo.'),
+        equals(protectedAttachmentBytes),
+        reason:
+            'Windows-equivalent unselected chat attachment references must be preserved',
+      );
+      SharedPreferences.setMockInitialValues({});
+
+      final windowsAttachmentFileCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'attachments/Name': Uint8List.fromList([26]),
+            'attachments/name.': Uint8List.fromList([27]),
+          },
+        ),
+        'windows_attachment_file_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsAttachmentFileCollisionZip,
+          selection: attachmentsOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+      );
+
+      BackupService.restorePathsCaseInsensitiveForTesting = false;
+      final caseSensitiveWindowsZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Foo.': Uint8List.fromList([28]),
+            'pictures/foo.': Uint8List.fromList([29]),
+          },
+        ),
+        'case_sensitive_windows_names.zip',
+      );
+      await BackupService.restoreBackup(
+        caseSensitiveWindowsZip,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'Foo.'), equals([28]));
+      expect(await readBackupFile('pictures', 'foo.'), equals([29]));
+
+      final caseSensitiveAttachmentZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'chat_data.json': Uint8List.fromList(
+              utf8.encode('{"conversations":"[]"}'),
+            ),
+            'attachments/Foo': Uint8List.fromList([43]),
+            'attachments/foo': Uint8List.fromList([44]),
+          },
+        ),
+        'case_sensitive_windows_attachments.zip',
+      );
+      await BackupService.restoreBackup(
+        caseSensitiveAttachmentZip,
+        selection: attachmentsOnlySelection,
+      );
+      expect(await readBackupFile('attachments', 'Foo'), equals([43]));
+      expect(await readBackupFile('attachments', 'foo'), equals([44]));
+      await writeBackupFile('pictures', 'existing.jpg', original);
+      await writeBackupFile('attachments', 'existing.jpg', originalAttachment);
+
+      BackupService.restorePathsNormalizationInsensitiveForTesting = true;
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: picturesOnlySelection),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'normalization collision must also fail before selected files are cleared',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          zipPath,
+          selection: const BackupSelection(
+            chatRecordsAndAttachments: true,
+            settings: false,
+            pictures: false,
+            audio: false,
+            videos: false,
+            texts: false,
+            tasks: false,
+            ankiData: false,
+            browserCookies: false,
+          ),
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+        reason:
+            'attachment collisions must fail before selected files are cleared',
+      );
+
+      BackupService.restorePathsNormalizationInsensitiveForTesting = false;
+      await BackupService.restoreBackup(
+        zipPath,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'ab.jpg'), equals([1]));
+      expect(await readBackupFile('pictures', 'AB.jpg'), equals([2]));
+      expect(await readBackupFile('pictures', 'café.jpg'), equals([6]));
+      expect(await readBackupFile('pictures', 'cafe\u0301.jpg'), equals([7]));
+      expect(await readBackupFile('pictures', 'Σ.jpg'), equals([8]));
+      expect(await readBackupFile('pictures', 'ς.jpg'), equals([9]));
+      expect(await readBackupFile('pictures', 'ß.jpg'), equals([10]));
+      expect(await readBackupFile('pictures', 'SS.jpg'), equals([11]));
+
+      BackupService.restorePathsCaseInsensitiveForTesting = true;
+      final expansionArchive = buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'sharp-s',
+            'name': 'ß',
+            'hash': 'ß',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'double-s',
+            'name': 'SS',
+            'hash': 'SS',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        files: {
+          'pictures/ß.jpg': Uint8List.fromList([10]),
+          'pictures/SS.jpg': Uint8List.fromList([11]),
+        },
+      );
+      final expansionZip = await writeArchive(
+        expansionArchive,
+        'case_expansion.zip',
+      );
+      await BackupService.restoreBackup(
+        expansionZip,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'ß.jpg'), equals([10]));
+      expect(await readBackupFile('pictures', 'SS.jpg'), equals([11]));
+    } finally {
+      BrowserProfileService.onPrepareForRestoreForTesting = null;
+      BackupService.restorePathsCaseInsensitiveForTesting = null;
+      BackupService.restorePathsNormalizationInsensitiveForTesting = null;
+      BackupService.restorePathsCaseExpansionInsensitiveForTesting = null;
+      BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
+          null;
+      BackupService.restoreAppDirectoryForTesting = null;
+      BackupService.restorePathsWindowsSeparatorsForTesting = false;
+      WebFileStore.disableTestMode();
+    }
+  });
+
+  test(
+    'restoreBackup validates malformed task JSON before mutating restored data',
+    () async {
+      WebFileStore.disableTestMode();
+      final previousPathProvider = PathProviderPlatform.instance;
+      final appDir = '$workDir/restore_app_data';
+      PathProviderPlatform.instance = _RestoreTestPathProvider(appDir);
+      AppStorage.resetCache();
+      addTearDown(() {
+        PathProviderPlatform.instance = previousPathProvider;
+        AppStorage.resetCache();
+      });
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode(DataParts.currentVersions),
+        'existing_pref': 'keep',
+      });
+      await Directory(appDir).create(recursive: true);
+      expect(await AppStorage.directory, appDir);
+      final existingTaskBytes = Uint8List.fromList(utf8.encode('[]'));
+      final existingTextBytes = Uint8List.fromList(utf8.encode('keep'));
+      final existingTaskFile = File('$appDir/synthesis/tasks.json');
+      await existingTaskFile.parent.create(recursive: true);
+      await existingTaskFile.writeAsBytes(existingTaskBytes);
+      final existingTextFile = File('$appDir/texts/keep.txt');
+      await existingTextFile.parent.create(recursive: true);
+      await existingTextFile.writeAsBytes(existingTextBytes);
+      final incomingTextFile = File('$appDir/texts/new.txt');
+      if (await incomingTextFile.exists()) await incomingTextFile.delete();
+      addTearDown(() async {
+        for (final path in [
+          '$appDir/synthesis/tasks.json',
+          '$appDir/texts/keep.txt',
+          '$appDir/texts/new.txt',
+        ]) {
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        }
+      });
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'existing_video',
+        'name': 'existing_video',
+        'hash': 'existing_video',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 1,
+        'folder': '',
+      });
+      final archive = buildV2Archive(
+        videoRecords: [
+          {
+            'id': 'incoming_video',
+            'name': 'incoming_video',
+            'hash': 'incoming_video',
+            'format': 'mp4',
+            'createdAt': DateTime.now().toIso8601String(),
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        files: {
+          'synthesis/tasks.json': Uint8List.fromList(utf8.encode('{broken')),
+          'settings.json': Uint8List.fromList(
+            utf8.encode('{"existing_pref":"backup"}'),
+          ),
+          'texts/new.txt': Uint8List.fromList(utf8.encode('new')),
+        },
+      );
+      final zipPath = await writeArchive(archive, 'malformed_task_json.zip');
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath),
+        throwsA(isA<BackupValidationException>()),
+      );
+
+      expect(
+        (await ManifestDatabase.getAllVideoRecords()).map((r) => r['id']),
+        ['existing_video'],
+      );
+      expect(
+        await File('$appDir/synthesis/tasks.json').readAsBytes(),
+        existingTaskBytes,
+      );
+      expect(
+        await File('$appDir/texts/keep.txt').readAsBytes(),
+        existingTextBytes,
+      );
+      expect(await File('$appDir/texts/new.txt').exists(), isFalse);
+      expect(
+        (await SharedPreferences.getInstance()).getString('existing_pref'),
+        'keep',
+      );
+    },
+  );
+
   // ==================================================================
   // 旧版 v1 布局：files/ 前缀、tasks/*.json、preferences.json
   // ==================================================================
@@ -208,15 +2180,13 @@ void main() {
       final archive = Archive()
         // 带非空 EOCD 注释：覆盖尾部搜索的注释长度边界检查
         ..comment = 'stroom backup with a non-empty comment 中文';
-      final manifestBytes = utf8.encode(
+      final manifest = utf8.encode(
         jsonEncode({
           'version': 1,
           'createdAt': DateTime.now().toIso8601String(),
         }),
       );
-      archive.addFile(
-        ArchiveFile('manifest.json', manifestBytes.length, manifestBytes),
-      );
+      archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
       // v1：聊天+设置合并在一个 preferences.json
       // （conversations 在应用内以 JSON 字符串形式存储）
       archive.addFile(
@@ -720,9 +2690,8 @@ void main() {
     final zipPath = await writeArchive(archive, 'truncated_file.zip');
     final full = await File(zipPath).readAsBytes();
     // 整体截断到一半：中央目录偏移超出文件范围，解析阶段必须失败
-    await File(
-      zipPath,
-    ).writeAsBytes(Uint8List.fromList(full.sublist(0, full.length ~/ 2)));
+    await File(zipPath)
+        .writeAsBytes(Uint8List.fromList(full.sublist(0, full.length ~/ 2)));
 
     await expectLater(
       BackupService.restoreBackup(zipPath),
@@ -816,6 +2785,16 @@ void main() {
         'data_format_versions': jsonEncode(DataParts.currentVersions),
       });
       final appDir = await AppStorage.directory;
+      for (final relativePath in const [
+        'synthesis/tasks.json',
+        'catcatch/tasks.json',
+        'background/tasks.json',
+        'task_flows/flows.json',
+        'task_flows/executions.json',
+      ]) {
+        final taskFile = File('$appDir/$relativePath');
+        if (await taskFile.exists()) await taskFile.delete();
+      }
       final videosDir = Directory('$appDir/videos');
       await videosDir.create(recursive: true);
       addTearDown(() async {
@@ -844,21 +2823,35 @@ void main() {
       });
 
       final zipPath = '$workDir/prod_backup.zip';
-      await BackupService.createBackup(
-        outputPath: zipPath,
-        selection: const BackupSelection(
-          chatRecordsAndAttachments: false,
-          settings: false,
-          tasks: false,
-          ankiData: false,
-          browserCookies: false,
-        ),
-      );
+      await BackupService.createBackup(outputPath: zipPath);
 
       // 先清掉目标文件，再走真实生产恢复路径（分块 dart:io 落盘）
       if (await File(videoPath).exists()) {
         await File(videoPath).delete();
       }
+
+      // A stale manifest record can refer to a file that was already absent.
+      // A failed restore must keep that absent-file state when rolling back.
+      BackupService.beforeRestoreBinaryPublishForTesting = (_) {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+        throw StateError('injected production restore publish failure');
+      };
+      addTearDown(() {
+        BackupService.beforeRestoreBinaryPublishForTesting = null;
+      });
+      await expectLater(
+        BackupService.restoreBackup(zipPath, skipMissingCategories: true),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        await File(videoPath).exists(),
+        isFalse,
+        reason: 'rollback must preserve the previously absent media file',
+      );
+      final recordsAfterRollback = await ManifestDatabase.getAllVideoRecords();
+      expect(recordsAfterRollback, hasLength(1));
+      expect(recordsAfterRollback.single['id'], 'prod_big');
+
       await BackupService.restoreBackup(zipPath, skipMissingCategories: true);
 
       final restoredFile = File(videoPath);

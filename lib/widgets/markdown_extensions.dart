@@ -12,6 +12,8 @@ import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
 import 'mermaid_render_widget.dart';
 
+import 'constrained_text.dart';
+
 /// Tag used by the LaTeX custom generator.
 const _latexTag = 'latex';
 
@@ -113,6 +115,91 @@ final SpanNodeGeneratorWithTag latexGenerator = SpanNodeGeneratorWithTag(
   generator: (e, config, visitor) =>
       LatexNode(e.attributes, e.textContent, config),
 );
+
+/// Parses standalone `$$` display-math blocks before Markdown can interpret
+/// their formula lines as separate paragraphs or list items.
+class DisplayMathBlockSyntax extends m.BlockSyntax {
+  // CommonMark reserves four leading spaces for indented code blocks.
+  static final RegExp _delimiter = RegExp(r'^ {0,3}\$\$\s*$');
+  static final RegExp _fenceOpening = RegExp(r'^ {0,3}(`{3,}|~{3,})(.*)$');
+
+  @override
+  RegExp get pattern => _delimiter;
+
+  @override
+  bool canParse(m.BlockParser parser) {
+    if (!super.canParse(parser)) return false;
+    final search = _findClosingDelimiter(
+      parser,
+      parser.lines.indexWhere((line) => identical(line, parser.current)),
+    );
+    return search.closingIndex != null || !search.foundFence;
+  }
+
+  @override
+  m.Node parse(m.BlockParser parser) {
+    final currentIndex = parser.lines.indexWhere(
+      (line) => identical(line, parser.current),
+    );
+    final search = _findClosingDelimiter(parser, currentIndex);
+    assert(search.closingIndex != null || !search.foundFence);
+    final closingIndex = search.closingIndex;
+    parser.advance();
+    final content = <String>[];
+    final contentEnd = closingIndex ?? parser.lines.length;
+    for (var i = currentIndex + 1; i < contentEnd; i++) {
+      content.add(parser.current.content);
+      parser.advance();
+    }
+
+    if (closingIndex == null) {
+      final source = parser.lines
+          .sublist(currentIndex, parser.lines.length)
+          .map((line) => line.content)
+          .join('\n');
+      return m.Element.text('latex', source);
+    }
+    parser.advance();
+
+    final formula = content.join('\n');
+    final element = m.Element.text('latex', '\$\$$formula\$\$');
+    element.attributes['content'] = formula;
+    element.attributes['isInline'] = 'false';
+    return element;
+  }
+
+  ({int? closingIndex, bool foundFence}) _findClosingDelimiter(
+    m.BlockParser parser,
+    int openingIndex,
+  ) {
+    String? fenceMarker;
+    var fenceLength = 0;
+    var foundFence = false;
+    for (var i = openingIndex + 1; i < parser.lines.length; i++) {
+      final line = parser.lines[i].content;
+      if (fenceMarker != null) {
+        final closingFence = RegExp(
+          '^ {0,3}${RegExp.escape(fenceMarker)}{$fenceLength,}[ \\t]*\$',
+        );
+        if (closingFence.hasMatch(line)) fenceMarker = null;
+        continue;
+      }
+
+      final fence = _fenceOpening.firstMatch(line);
+      if (fence != null &&
+          (fence.group(1)![0] != '`' || !fence.group(2)!.contains('`'))) {
+        foundFence = true;
+        fenceMarker = fence.group(1)![0];
+        fenceLength = fence.group(1)!.length;
+        continue;
+      }
+      if (_delimiter.hasMatch(line)) {
+        return (closingIndex: i, foundFence: foundFence);
+      }
+    }
+    return (closingIndex: null, foundFence: foundFence);
+  }
+}
 
 /// [SpanNodeGeneratorWithTag] that creates [UNode] instances when
 /// the markdown parser encounters a `u` (underline) element.
@@ -302,14 +389,22 @@ class LatexNode extends SpanNode {
             onTap: () => showDialog<void>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: Text(AppLocalizations.of(dialogContext)!.mathParseError),
+                title: ConstrainedText(
+                  AppLocalizations.of(dialogContext)!.mathParseError,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 content: SingleChildScrollView(
                   child: SelectableText(error.messageWithType),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: Text(AppLocalizations.of(dialogContext)!.mathClose),
+                    child: ConstrainedText(
+                      AppLocalizations.of(dialogContext)!.mathClose,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -703,7 +798,12 @@ class _NormalizedContainerTailSource {
     _pendingPrefix.writeTo(line);
     _pendingLine.writeTo(line);
     return _stripFenceContainerPrefix(
-        line.toString(), quoteDepth, listIndent, innerQuoteDepth, fenceIndent);
+      line.toString(),
+      quoteDepth,
+      listIndent,
+      innerQuoteDepth,
+      fenceIndent,
+    );
   }
 }
 
@@ -1367,10 +1467,7 @@ class StreamingFenceInfoCache {
     return _info!;
   }
 
-  _MermaidFenceInfo _copyWithPendingLine(
-    _MermaidFenceInfo info,
-    String text,
-  ) =>
+  _MermaidFenceInfo _copyWithPendingLine(_MermaidFenceInfo info, String text) =>
       (
         tail: info.tail,
         tailSource: info.tailSource == null ? null : text,
@@ -2134,6 +2231,7 @@ PreConfig codeBlockPreConfig({
 /// [MarkdownWidget] build.
 final MarkdownGenerator markdownGenerator = MarkdownGenerator(
   inlineSyntaxList: [LatexSyntax(), BrSyntax(), USyntax()],
+  blockSyntaxList: [DisplayMathBlockSyntax()],
   generators: [latexGenerator, uGenerator],
 );
 
@@ -2362,6 +2460,7 @@ MarkdownGenerator buildSearchMarkdownGenerator({
   var counter = occurrenceOffset;
   return MarkdownGenerator(
     inlineSyntaxList: [LatexSyntax(), BrSyntax()],
+    blockSyntaxList: [DisplayMathBlockSyntax()],
     generators: [
       latexGenerator,
       // Inline/fenced code must not be counted or highlighted: the library's

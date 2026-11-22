@@ -10,6 +10,19 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get galleryPermissionTitle => 'Photo library access required';
+
+  @override
+  String get galleryPermissionMessage =>
+      'Allow Stroom to access photos and videos in system settings.';
+
+  @override
+  String get galleryPermissionCancel => 'Cancel';
+
+  @override
+  String get galleryPermissionOpenSettings => 'Open settings';
+
+  @override
   String get languageSettingsTitle => 'Language';
 
   @override
@@ -35,6 +48,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get languageNameChinese => 'Chinese (Simplified)';
+
+  @override
+  String get languageNameKorean => 'Korean';
+
+  @override
+  String get languageNamePortuguese => 'Portuguese (Brazil)';
 
   @override
   String get languageSearchHint => 'Search languages';
@@ -176,6 +195,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get builtInPromptMarketTitle => 'Assistant Market';
+
+  @override
+  String get assistantAddTitle => 'Add assistant';
+
+  @override
+  String get assistantBuiltInTab => 'Built-in';
+
+  @override
+  String get assistantImportTab => 'Import';
+
+  @override
+  String get assistantBuiltInHint =>
+      'Browse ready-to-use assistants. Tap one to preview it before adding.';
+
+  @override
+  String get assistantImportHint =>
+      'Connect a remote assistant catalog or import an assistant file from its URL.';
+
+  @override
+  String get assistantImportAction => 'Connect catalog or import file';
 
   @override
   String get builtInPromptClose => 'Close';
@@ -393,6 +432,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskFlowUseTemplate => 'Use';
 
   @override
+  String get taskFlowOcrInputMissing =>
+      'The image file could not be found. Select the image again.';
+
+  @override
+  String get taskFlowOcrInputReadFailed =>
+      'The image file could not be read. Check file access and try again.';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      'No usable OCR model is configured. Choose an OCR provider and model in flow settings.';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR request size budget ($size MiB)';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return 'the task flow image input limit ($size MiB)';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return 'The image exceeds $limit. Choose a smaller image and try again.';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => 'Plain Text';
 
   @override
@@ -421,7 +487,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use \$...\$ for inline formulas and \$\$...\$\$ for display formulas. Return only the transcription; do not add explanations or inferences.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Default (send images only)';
+  String get ocrDefaultImagesOnly =>
+      'Default (no custom instruction; default OCR prompt used)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -492,7 +559,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+      'These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.';
 
   @override
   String get ocrInstructionManageEmpty => 'No instructions yet';
@@ -918,6 +985,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'The update check failed. Please try again.';
 
   @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return 'Assistant update check failed: $error';
+  }
+
+  @override
   String get aboutPrivacyContent =>
       'Stroom respects and protects the privacy of everyone who uses the service.\n\n1. Camera permission: Used only to take photos. No image data is collected or uploaded.\n\n2. Photo library permission: Used only to choose and save photos. All photos are stored locally on your device.\n\n3. Data security: All photos you take are stored locally on your device. We do not access or upload your data.\n\n4. Third-party services: This app contains no third-party analytics or advertising services.\n\nContact us if you have questions.';
 
@@ -1084,6 +1156,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateDownloading => 'Downloading update…';
 
   @override
+  String get updateCancelDownload => 'Cancel download';
+
+  @override
+  String get updateDownloadInBackground => 'Download in background';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Network error: $details';
   }
@@ -1142,6 +1220,27 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
+
+  @override
+  String get updateRestartDialogTitle => 'App updated';
+
+  @override
+  String get updateRestartDialogBody =>
+      'The app has been updated. Restart the app to ensure stability.';
+
+  @override
+  String get updateRestartDialogLater => 'Restart Later';
+
+  @override
+  String get updateRestartDialogNow => 'Restart Now';
 
   @override
   String get contextCompactionHistoryIntro =>
@@ -1411,7 +1510,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationTemporary => 'Temporary conversation';
 
   @override
+  String get conversationSetTemporary => 'Set as temporary conversation';
+
+  @override
   String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get conversationKeep => 'Keep conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporary';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiring soon';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.';
+
+  @override
+  String get conversationEnableTemporary => 'Enable temporary mode';
+
+  @override
+  String get chatLoadingConversation => 'Loading conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Start the conversation by sending a message.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choose or create a conversation to start chatting.';
+
+  @override
+  String get chatConversationLoadError => 'Could not load this conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Retry';
 
   @override
   String get taskListTitle => 'Task list';
@@ -1440,6 +1575,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get unifiedTaskListConfirmClearFailedMessage =>
       'Are you sure you want to clear all failed tasks?';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Are you sure you want to clear all completed tasks? This action cannot be undone.';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
@@ -1996,6 +2135,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatDataDetails => 'Data details';
+
+  @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR Diagnostics';
+
+  @override
+  String get chatErrorDetailRequestUrl => 'Request URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => 'Request Headers';
+
+  @override
+  String get chatErrorDetailRequestBody => 'Request Body';
+
+  @override
+  String get chatErrorDetailStatusCode => 'Status Code';
+
+  @override
+  String get chatErrorDetailResponseHeaders => 'Response Headers';
+
+  @override
+  String get chatErrorDetailResponseBody => 'Response Body';
+
+  @override
+  String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Close';
@@ -2793,6 +2961,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unifiedTaskSynthesisText => 'Synthesized text';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => 'View full synthesized text';
+
+  @override
   String get unifiedTaskStatus => 'Status';
 
   @override
@@ -2887,6 +3058,77 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get catcatchSkipped => 'Skipped (nothing to process)';
+
+  @override
+  String catCatchDetailMediaResources(Object count) {
+    return 'Found $count media resources';
+  }
+
+  @override
+  String catCatchDetailResources(Object count) {
+    return 'Found $count resources';
+  }
+
+  @override
+  String catCatchDetailBrowserResources(Object count) {
+    return 'Browser found $count resources';
+  }
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return 'Found $total resources ($segments playlist segments)';
+  }
+
+  @override
+  String catCatchDetailChooseResource(Object count) {
+    return '$count resources found. Choose one.';
+  }
+
+  @override
+  String get catCatchDetailAutoSelectFirst =>
+      'Automatically selected result 1 and started downloading';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining =>
+      '1 result remains; started downloading automatically';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) {
+    return 'Conversion skipped for .$extension; this format needs no conversion';
+  }
+
+  @override
+  String get catCatchDetailSkipNoExtension =>
+      'Conversion skipped; this format needs no conversion';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) {
+    return 'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+  }
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return 'All $count resources match the $duration duration filter';
+  }
+
+  @override
+  String catCatchDurationHours(Object count) {
+    return '${count}h';
+  }
+
+  @override
+  String catCatchDurationMinutes(Object count) {
+    return '${count}m';
+  }
+
+  @override
+  String catCatchDurationSeconds(Object count) {
+    return '${count}s';
+  }
 
   @override
   String get catcatchRetryStep => 'Retry this step';
@@ -3085,6 +3327,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get topicItemPin => 'Pin';
 
   @override
+  String get topicItemMarkUnread => 'Mark as unread';
+
+  @override
+  String get topicItemMarkRead => 'Mark as read';
+
+  @override
   String get topicItemRename => 'Rename';
 
   @override
@@ -3111,6 +3359,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appMediaUnreadable => 'Could not read file';
+
+  @override
+  String appMediaLoadError(Object error) {
+    return 'Could not load files: $error';
+  }
 
   @override
   String appMediaClearSelection(Object count) {
@@ -3600,6 +3853,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => 'Subfolders';
+
+  @override
+  String get folderPickerNoFolders => 'No folders';
 
   @override
   String get folderPickerExistingFolders => 'Existing folders';
@@ -4887,7 +5143,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM (~4x compression)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (lossless, ~2x)';
+  String get providerCompressionFlac => 'FLAC (lossless, ~2x, recommended)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -5045,7 +5301,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduces audio file size without affecting transcription accuracy.';
+      'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.';
 
   @override
   String get providerPreprocessingMethod => 'Preprocessing method';
@@ -5103,11 +5359,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample => 'WAV optimization (16 kHz mono)';
+  String get providerPreprocessResample => 'WAV resampling (16 kHz mono)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.';
+      'Resamples to 16 kHz and mixes to mono; this can change the audio.';
 
   @override
   String get providerPreprocessNoneHelp => 'No preprocessing; send as is.';
@@ -6185,6 +6441,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerBuiltinBadge => 'Built-in';
 
   @override
+  String get providerBuiltinTtsName => 'TTS (Text to Speech)';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM (Large Language Model)';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR (Optical Character Recognition)';
+
+  @override
+  String get providerBuiltinAsrName => 'STT (Speech to Text)';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP (Model Context Protocol)';
+
+  @override
+  String get providerBuiltinSearchGroupName => 'Search';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => 'Other MCP Services';
+
+  @override
   String get providerConnectivityTest => 'Connectivity test';
 
   @override
@@ -6440,6 +6717,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paramTypeJsonLabel => 'JSON';
 
   @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return 'Unsupported type: $type';
+  }
+
+  @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return 'Parameter “$name” uses unsupported type “$type”. Replace it with a supported type or remove the parameter before saving.';
+  }
+
+  @override
   String get paramTypeStringHint => 'e.g. cheerful';
 
   @override
@@ -6459,6 +6746,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ankiBrowseCardsTooltip => 'Browse cards';
+
+  @override
+  String get ankiStatsTotalCards => 'Total cards';
+
+  @override
+  String get ankiStatsNewCards => 'New cards';
+
+  @override
+  String get ankiStatsLearning => 'Learning';
+
+  @override
+  String get ankiStatsDueForReview => 'Due for review';
+
+  @override
+  String get ankiStatsReviewHistory => 'Review history';
+
+  @override
+  String get ankiStatsLearningProgress => 'Study progress';
+
+  @override
+  String get ankiStatsReviewRate => 'Review rate';
+
+  @override
+  String get ankiBrowserSearchHint => 'Search cards...';
+
+  @override
+  String get ankiBrowserEmpty => 'No cards';
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb sync';
@@ -6675,6 +6989,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ankiSyncStatusLoginSuccess =>
       'Login successful. Your password was not saved; the sync key was encrypted and saved.';
+
+  @override
+  String get ankiSyncLoginSuccessPromptTitle => 'Login successful';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage =>
+      'Would you like to sync your collection now?';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => 'Sync now';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => 'Continue';
 
   @override
   String get ankiSyncStatusLoginSuccessNoSave =>
@@ -9576,6 +9903,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR request JSON size is $encodedBytes bytes, exceeding the configured limit of $budgetBytes bytes.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR failed: $details';
   }
@@ -10069,6 +10401,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get startupSafetyUpdateButton => 'Update app';
 
   @override
+  String get startupSafetyRollbackButton => 'Return to previous version';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'No direct installer was found for the recorded version. Export your data and install that version manually.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Recommended version recorded before the failed update';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Release notes';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'No release notes are available.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => 'Confirm version recovery';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'This will download and open version $version. Export your data first. The operating system may refuse to install an older build. Stroom will not bypass installer restrictions.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Continue';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.';
+
+  @override
   String get startupSafetyCheckingUpdates => 'Checking for updates...';
 
   @override
@@ -10250,6 +10615,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appLogDelete => 'Delete';
 
   @override
+  String get appLogDeleteUnconfirmed => 'Deletion could not be confirmed.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirm deletion';
 
   @override
@@ -10332,6 +10700,99 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appLogCopyDone => 'Copied all log content';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Background task';
@@ -10969,6 +11430,659 @@ class AppLocalizationsEn extends AppLocalizations {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
   }
+
+  @override
+  String get startupErrorTitle => 'App startup failed';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get renderErrorTitle => 'Interface rendering error';
+
+  @override
+  String get renderErrorDebugTitle => 'Interface rendering error (Debug mode)';
+
+  @override
+  String get renderErrorRestartMessage => 'Please try restarting the app.';
+
+  @override
+  String get batchDlgFileName => 'File name';
+
+  @override
+  String get batchDlgFolderName => 'Folder name';
+
+  @override
+  String get batchDlgFileNameConflict =>
+      'Another file in this folder has the same name';
+
+  @override
+  String get batchDlgFolderNameConflict =>
+      'A folder with the same name already exists at the target location';
+
+  @override
+  String get batchDlgFolderNameSwapConflict =>
+      'Folder names cannot be exchanged in the same batch';
+
+  @override
+  String get batchDlgControlCharacterError =>
+      'Name cannot contain control characters';
+
+  @override
+  String get batchDlgNameWhitespaceError =>
+      'Name cannot begin or end with whitespace; use the whitespace cleanup rule';
+
+  @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind cannot be empty';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind cannot end with whitespace';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind cannot exceed $count characters';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind cannot contain Windows-invalid characters';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind cannot end with a period';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind cannot use a reserved Windows name';
+  }
+
+  @override
+  String get batchDlgIntermediateNameTooLong =>
+      'An intermediate name is too long; adjust the rules';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return 'This item has no $date date; adjust the template';
+  }
+
+  @override
+  String get batchDlgCreatedDate => 'creation';
+
+  @override
+  String get batchDlgModifiedDate => 'modification';
+
+  @override
+  String get connectivityTestHttpSuccess => 'HTTP tool request succeeded';
+
+  @override
+  String get connectivityTestHttpFailure => 'HTTP tool request failed';
+
+  @override
+  String get connectivityTestInvalidMcpConfig => 'Invalid MCP configuration';
+
+  @override
+  String get connectivityTestMissingTransport =>
+      'A valid transport type configuration is missing.';
+
+  @override
+  String get connectivityTestStdioUnsupported =>
+      'stdio is not supported on this platform';
+
+  @override
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP requires starting a local process. Test it in the Stroom desktop app.';
+
+  @override
+  String get connectivityTestInvalidContent => 'Invalid test content';
+
+  @override
+  String get connectivityTestMethodMustBeString => 'method must be a string.';
+
+  @override
+  String get connectivityTestUnsupportedMethod => 'Unsupported test method';
+
+  @override
+  String get connectivityTestReadOnlyMethodOnly =>
+      'To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.';
+
+  @override
+  String get connectivityTestParamsMustBeObject =>
+      'params must be a JSON object.';
+
+  @override
+  String get connectivityTestMcpConnectionFailed =>
+      'Could not connect to the MCP service';
+
+  @override
+  String get connectivityTestCheckConnectionSettings =>
+      'Check the address, authentication, and network, or view the app log for connection details.';
+
+  @override
+  String get connectivityTestRemainingToolsOmitted =>
+      '; remaining tools omitted';
+
+  @override
+  String get connectivityTestMcpSuccess => 'MCP connectivity test succeeded';
+
+  @override
+  String connectivityTestToolNames(Object names) {
+    return ': $names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return 'Connection and tools/list request succeeded; found $count tools$names$suffix.';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked =>
+      'Test parameters would modify todo data';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      'To protect the current session todo list, omit todos or set it to null in connectivity tests.';
+
+  @override
+  String get connectivityTestUnknownBuiltin => 'Unknown built-in tool';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return 'No test executor found for tool \"$toolName\".';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => 'Built-in tool test succeeded';
+
+  @override
+  String get connectivityTestBuiltinFailure => 'Built-in tool test failed';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired =>
+      'Test content must be a top-level JSON object.';
+
+  @override
+  String get connectivityTestRequestTimeout =>
+      'Request timed out. Check the service response and network.';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP request timed out: $method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '… (result truncated)';
+
+  @override
+  String get toolResultWebSearchEmptyQuery =>
+      'Error: The search query cannot be empty.';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return 'Error: Unsupported search engine \"$source\". Supported values: google, bing, baidu.';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return 'The preferred engine $preferred $reason; switched to $fallback.';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound =>
+      'No relevant search results were found.';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return 'No relevant search results were found ($sources explicitly returned no results).';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return 'Search incomplete: $sources explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: $failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return 'Error: All search engines are unavailable. $failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return 'Search results from $source:';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => 'Link';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => 'Summary';
+
+  @override
+  String get toolResultWebSearchEmptyResults =>
+      'No relevant search results were found.';
+
+  @override
+  String get toolResultTodoInvalid =>
+      'Error: The todos parameter must be an array (omit it or pass null to read the todo list).';
+
+  @override
+  String get toolResultTodoEmpty => 'There are no todo items yet.';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return 'Active todo items: $count';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return 'Error: Could not reconnect to MCP server \"$server\".';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return 'Error: MCP server \"$server\" is currently unavailable.';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return 'Error: MCP server \"$server\" failed to connect or returned no tools. Check the server configuration.';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return 'Real tool \"$tool\" is published under the call name \"$alias\" on this server.';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return 'Tool \"$tool\" is provided by multiple MCP servers; use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return 'Error: Real tool \"$tool\" has a name conflict. Use one of the call names listed above.';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return 'Error: MCP server \"$server\" has no tool named \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return 'Tools available on this server: $tools. Use these names instead.';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return 'Error: MCP tool \"$tool\" currently has a conflicting alias. Use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return 'Error: Tool \"$tool\" is disabled.';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return 'Error: Unknown tool \"$tool\"';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => 'returned no results';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable =>
+      'is temporarily unavailable';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '(MCP server $server)';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults =>
+      'returned a page that could not be parsed';
+
+  @override
+  String get toolResultSearchTitleLabel => 'Title';
+
+  @override
+  String get toolResultSearchContentLabel => 'Content';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return 'Error: $provider API key is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return 'Error: $provider instance URL is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return 'Error: $provider request failed (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return 'Error: $provider request failed: $detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return 'Error: Unknown HTTP tool \"$provider\"';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return 'Error: MCP server \"$server\" is not connected.';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return 'Error: No response from MCP tool \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return 'Error: $detail';
+  }
+
+  @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return 'Imported $decks decks, $notes notes, and $cards cards';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return 'The selected .apkg file could not be found: $path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive =>
+      'The selected .apkg file is damaged or is not a valid archive.';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      'The .apkg file does not contain collection.anki2.';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return 'Open Anki flashcards before importing or exporting a deck: $path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt =>
+      'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return 'The .apkg operation failed while accessing this path: $path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed =>
+      'The .apkg operation failed because the file or database could not be read.';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return 'The Anki deck could not be packaged from this database: $path';
+  }
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      'The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.';
+
+  @override
+  String get ankiSyncStatusLoginRequired =>
+      'Log in to Anki sync before continuing.';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl =>
+      'Enter a valid HTTP or HTTPS sync server address.';
+
+  @override
+  String get ankiSyncStatusHttpsRequired =>
+      'Remote self-hosted sync servers must use HTTPS.';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout =>
+      'The sync request timed out. Check the server address and network, then retry.';
+
+  @override
+  String get ankiSyncStatusTlsFailure =>
+      'The server certificate could not be verified. Check the certificate or configure a custom CA.';
+
+  @override
+  String get ankiSyncStatusConnectionFailure =>
+      'Could not connect to the sync server. Check the address and network.';
+
+  @override
+  String get ankiSyncStatusRequestFailure =>
+      'The sync request failed. Check the server and network, then retry.';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return 'The sync server returned HTTP $statusCode.';
+  }
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return 'The sync response exceeded the $limitMb MB limit.';
+  }
+
+  @override
+  String get ankiSyncStatusLocalFileFailure =>
+      'A local sync file could not be read or cleaned up. Check disk access and retry.';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      'The local media sync index is corrupted. Reset media sync data and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure =>
+      'The local media sync index could not be read or updated.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
+
+  @override
+  String get ankiStatsUnsupportedPlatform =>
+      'Anki statistics are unavailable on this platform.';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed =>
+      'Incremental sync could not complete. Check the server and connection, then try again.';
+
+  @override
+  String get emojiCategorySmileys => 'Smileys';
+
+  @override
+  String get emojiCategoryPeople => 'People';
+
+  @override
+  String get emojiCategoryAnimals => 'Animals';
+
+  @override
+  String get emojiCategoryFood => 'Food';
+
+  @override
+  String get emojiCategoryActivities => 'Activities';
+
+  @override
+  String get emojiCategoryTravel => 'Travel';
+
+  @override
+  String get emojiCategoryObjects => 'Objects';
+
+  @override
+  String get emojiCategorySymbols => 'Symbols';
+
+  @override
+  String get emojiCategoryFlags => 'Flags';
+
+  @override
+  String get languageNameSpanish => 'Spanish';
+
+  @override
+  String get languageNameJapanese => 'Japanese';
+
+  @override
+  String get languageNameFrench => 'French';
+
+  @override
+  String get languageNameGerman => 'German';
+
+  @override
+  String get languageNameArabic => 'Arabic';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Its $count nested folders will also be deleted.',
+      one: 'Its 1 nested folder will also be deleted.',
+    );
+    return 'Delete empty folder “$name”? $_temp0';
+  }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'Maximum upload size must be a positive number.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Adjust each out-of-range sampling slider or turn it off before saving.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -10976,6 +12090,19 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   AppLocalizationsEnUs() : super('en_US');
 
   @override
+  String get galleryPermissionTitle => 'Photo library access required';
+
+  @override
+  String get galleryPermissionMessage =>
+      'Allow Stroom to access photos and videos in system settings.';
+
+  @override
+  String get galleryPermissionCancel => 'Cancel';
+
+  @override
+  String get galleryPermissionOpenSettings => 'Open settings';
+
+  @override
   String get languageSettingsTitle => 'Language';
 
   @override
@@ -11001,6 +12128,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get languageNameChinese => 'Chinese (Simplified)';
+
+  @override
+  String get languageNameKorean => 'Korean';
+
+  @override
+  String get languageNamePortuguese => 'Portuguese (Brazil)';
 
   @override
   String get languageSearchHint => 'Search languages';
@@ -11142,6 +12275,26 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get builtInPromptMarketTitle => 'Assistant Market';
+
+  @override
+  String get assistantAddTitle => 'Add assistant';
+
+  @override
+  String get assistantBuiltInTab => 'Built-in';
+
+  @override
+  String get assistantImportTab => 'Import';
+
+  @override
+  String get assistantBuiltInHint =>
+      'Browse ready-to-use assistants. Tap one to preview it before adding.';
+
+  @override
+  String get assistantImportHint =>
+      'Connect a remote assistant catalog or import an assistant file from its URL.';
+
+  @override
+  String get assistantImportAction => 'Connect catalog or import file';
 
   @override
   String get builtInPromptClose => 'Close';
@@ -11359,6 +12512,33 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get taskFlowUseTemplate => 'Use';
 
   @override
+  String get taskFlowOcrInputMissing =>
+      'The image file could not be found. Select the image again.';
+
+  @override
+  String get taskFlowOcrInputReadFailed =>
+      'The image file could not be read. Check file access and try again.';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      'No usable OCR model is configured. Choose an OCR provider and model in flow settings.';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR request size budget ($size MiB)';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return 'the task flow image input limit ($size MiB)';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return 'The image exceeds $limit. Choose a smaller image and try again.';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => 'Plain Text';
 
   @override
@@ -11387,7 +12567,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use \$...\$ for inline formulas and \$\$...\$\$ for display formulas. Return only the transcription; do not add explanations or inferences.';
 
   @override
-  String get ocrDefaultImagesOnly => 'Default (send images only)';
+  String get ocrDefaultImagesOnly =>
+      'Default (no custom instruction; default OCR prompt used)';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -11458,7 +12639,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ocrInstructionManageGuidance =>
-      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+      'These instructions apply to all recognition models. If none is selected, no custom instruction is added; the default OCR prompt is still used.';
 
   @override
   String get ocrInstructionManageEmpty => 'No instructions yet';
@@ -11884,6 +13065,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'The update check failed. Please try again.';
 
   @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return 'Assistant update check failed: $error';
+  }
+
+  @override
   String get aboutPrivacyContent =>
       'Stroom respects and protects the privacy of everyone who uses the service.\n\n1. Camera permission: Used only to take photos. No image data is collected or uploaded.\n\n2. Photo library permission: Used only to choose and save photos. All photos are stored locally on your device.\n\n3. Data security: All photos you take are stored locally on your device. We do not access or upload your data.\n\n4. Third-party services: This app contains no third-party analytics or advertising services.\n\nContact us if you have questions.';
 
@@ -12050,6 +13236,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get updateDownloading => 'Downloading update…';
 
   @override
+  String get updateCancelDownload => 'Cancel download';
+
+  @override
+  String get updateDownloadInBackground => 'Download in background';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return 'Network error: $details';
   }
@@ -12108,6 +13300,27 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
+
+  @override
+  String get updateRestartDialogTitle => 'App updated';
+
+  @override
+  String get updateRestartDialogBody =>
+      'The app has been updated. Restart the app to ensure stability.';
+
+  @override
+  String get updateRestartDialogLater => 'Restart Later';
+
+  @override
+  String get updateRestartDialogNow => 'Restart Now';
 
   @override
   String get contextCompactionHistoryIntro =>
@@ -12377,7 +13590,43 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get conversationTemporary => 'Temporary conversation';
 
   @override
+  String get conversationSetTemporary => 'Set as temporary conversation';
+
+  @override
   String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get conversationKeep => 'Keep conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporary';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiring soon';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.';
+
+  @override
+  String get conversationEnableTemporary => 'Enable temporary mode';
+
+  @override
+  String get chatLoadingConversation => 'Loading conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Start the conversation by sending a message.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choose or create a conversation to start chatting.';
+
+  @override
+  String get chatConversationLoadError => 'Could not load this conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Retry';
 
   @override
   String get taskListTitle => 'Task list';
@@ -12406,6 +13655,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get unifiedTaskListConfirmClearFailedMessage =>
       'Are you sure you want to clear all failed tasks?';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      'Are you sure you want to clear all completed tasks? This action cannot be undone.';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
@@ -12962,6 +14215,35 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatDataDetails => 'Data details';
+
+  @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR Diagnostics';
+
+  @override
+  String get chatErrorDetailRequestUrl => 'Request URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => 'Request Headers';
+
+  @override
+  String get chatErrorDetailRequestBody => 'Request Body';
+
+  @override
+  String get chatErrorDetailStatusCode => 'Status Code';
+
+  @override
+  String get chatErrorDetailResponseHeaders => 'Response Headers';
+
+  @override
+  String get chatErrorDetailResponseBody => 'Response Body';
+
+  @override
+  String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[middle content omitted, $count characters]';
+  }
 
   @override
   String get chatAudioPreviewClose => 'Close';
@@ -13759,6 +15041,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get unifiedTaskSynthesisText => 'Synthesized text';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => 'View full synthesized text';
+
+  @override
   String get unifiedTaskStatus => 'Status';
 
   @override
@@ -13853,6 +15138,77 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get catcatchSkipped => 'Skipped (nothing to process)';
+
+  @override
+  String catCatchDetailMediaResources(Object count) {
+    return 'Found $count media resources';
+  }
+
+  @override
+  String catCatchDetailResources(Object count) {
+    return 'Found $count resources';
+  }
+
+  @override
+  String catCatchDetailBrowserResources(Object count) {
+    return 'Browser found $count resources';
+  }
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return 'Found $total resources ($segments playlist segments)';
+  }
+
+  @override
+  String catCatchDetailChooseResource(Object count) {
+    return '$count resources found. Choose one.';
+  }
+
+  @override
+  String get catCatchDetailAutoSelectFirst =>
+      'Automatically selected result 1 and started downloading';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining =>
+      '1 result remains; started downloading automatically';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) {
+    return 'Conversion skipped for .$extension; this format needs no conversion';
+  }
+
+  @override
+  String get catCatchDetailSkipNoExtension =>
+      'Conversion skipped; this format needs no conversion';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) {
+    return 'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+  }
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return 'All $count resources match the $duration duration filter';
+  }
+
+  @override
+  String catCatchDurationHours(Object count) {
+    return '${count}h';
+  }
+
+  @override
+  String catCatchDurationMinutes(Object count) {
+    return '${count}m';
+  }
+
+  @override
+  String catCatchDurationSeconds(Object count) {
+    return '${count}s';
+  }
 
   @override
   String get catcatchRetryStep => 'Retry this step';
@@ -14051,6 +15407,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get topicItemPin => 'Pin';
 
   @override
+  String get topicItemMarkUnread => 'Mark as unread';
+
+  @override
+  String get topicItemMarkRead => 'Mark as read';
+
+  @override
   String get topicItemRename => 'Rename';
 
   @override
@@ -14077,6 +15439,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get appMediaUnreadable => 'Could not read file';
+
+  @override
+  String appMediaLoadError(Object error) {
+    return 'Could not load files: $error';
+  }
 
   @override
   String appMediaClearSelection(Object count) {
@@ -14566,6 +15933,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get folderPickerSubfolders => 'Subfolders';
+
+  @override
+  String get folderPickerNoFolders => 'No folders';
 
   @override
   String get folderPickerExistingFolders => 'Existing folders';
@@ -15853,7 +17223,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerCompressionAdpcm => 'ADPCM (~4x compression)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (lossless, ~2x)';
+  String get providerCompressionFlac => 'FLAC (lossless, ~2x, recommended)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -16011,7 +17381,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get providerPreprocessingHelp =>
-      'Reduces audio file size without affecting transcription accuracy.';
+      'Reduces audio file size, but resampling can change the audio and may affect transcription accuracy.';
 
   @override
   String get providerPreprocessingMethod => 'Preprocessing method';
@@ -16069,11 +17439,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample => 'WAV optimization (16 kHz mono)';
+  String get providerPreprocessResample => 'WAV resampling (16 kHz mono)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      'Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.';
+      'Resamples to 16 kHz and mixes to mono; this can change the audio.';
 
   @override
   String get providerPreprocessNoneHelp => 'No preprocessing; send as is.';
@@ -17151,6 +18521,27 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerBuiltinBadge => 'Built-in';
 
   @override
+  String get providerBuiltinTtsName => 'TTS (Text to Speech)';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM (Large Language Model)';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR (Optical Character Recognition)';
+
+  @override
+  String get providerBuiltinAsrName => 'STT (Speech to Text)';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP (Model Context Protocol)';
+
+  @override
+  String get providerBuiltinSearchGroupName => 'Search';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => 'Other MCP Services';
+
+  @override
   String get providerConnectivityTest => 'Connectivity test';
 
   @override
@@ -17406,6 +18797,16 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get paramTypeJsonLabel => 'JSON';
 
   @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return 'Unsupported type: $type';
+  }
+
+  @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return 'Parameter “$name” uses unsupported type “$type”. Replace it with a supported type or remove the parameter before saving.';
+  }
+
+  @override
   String get paramTypeStringHint => 'e.g. cheerful';
 
   @override
@@ -17425,6 +18826,33 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ankiBrowseCardsTooltip => 'Browse cards';
+
+  @override
+  String get ankiStatsTotalCards => 'Total cards';
+
+  @override
+  String get ankiStatsNewCards => 'New cards';
+
+  @override
+  String get ankiStatsLearning => 'Learning';
+
+  @override
+  String get ankiStatsDueForReview => 'Due for review';
+
+  @override
+  String get ankiStatsReviewHistory => 'Review history';
+
+  @override
+  String get ankiStatsLearningProgress => 'Study progress';
+
+  @override
+  String get ankiStatsReviewRate => 'Review rate';
+
+  @override
+  String get ankiBrowserSearchHint => 'Search cards...';
+
+  @override
+  String get ankiBrowserEmpty => 'No cards';
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb sync';
@@ -17641,6 +19069,19 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get ankiSyncStatusLoginSuccess =>
       'Login successful. Your password was not saved; the sync key was encrypted and saved.';
+
+  @override
+  String get ankiSyncLoginSuccessPromptTitle => 'Login successful';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage =>
+      'Would you like to sync your collection now?';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => 'Sync now';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => 'Continue';
 
   @override
   String get ankiSyncStatusLoginSuccessNoSave =>
@@ -20542,6 +21983,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR request JSON size is $encodedBytes bytes, exceeding the configured limit of $budgetBytes bytes.';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR failed: $details';
   }
@@ -21035,6 +22481,39 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get startupSafetyUpdateButton => 'Update app';
 
   @override
+  String get startupSafetyRollbackButton => 'Return to previous version';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      'No direct installer was found for the recorded version. Export your data and install that version manually.';
+
+  @override
+  String get startupSafetyRollbackRecommended =>
+      'Recommended version recorded before the failed update';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => 'Release notes';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes =>
+      'No release notes are available.';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => 'Confirm version recovery';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return 'This will download and open version $version. Export your data first. The operating system may refuse to install an older build. Stroom will not bypass installer restrictions.';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => 'Continue';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.';
+
+  @override
   String get startupSafetyCheckingUpdates => 'Checking for updates...';
 
   @override
@@ -21216,6 +22695,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get appLogDelete => 'Delete';
 
   @override
+  String get appLogDeleteUnconfirmed => 'Deletion could not be confirmed.';
+
+  @override
   String get appLogConfirmDeleteTitle => 'Confirm deletion';
 
   @override
@@ -21298,6 +22780,99 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get appLogCopyDone => 'Copied all log content';
+
+  @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Background task';
@@ -21935,4 +23510,657 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
   }
+
+  @override
+  String get startupErrorTitle => 'App startup failed';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get renderErrorTitle => 'Interface rendering error';
+
+  @override
+  String get renderErrorDebugTitle => 'Interface rendering error (Debug mode)';
+
+  @override
+  String get renderErrorRestartMessage => 'Please try restarting the app.';
+
+  @override
+  String get batchDlgFileName => 'File name';
+
+  @override
+  String get batchDlgFolderName => 'Folder name';
+
+  @override
+  String get batchDlgFileNameConflict =>
+      'Another file in this folder has the same name';
+
+  @override
+  String get batchDlgFolderNameConflict =>
+      'A folder with the same name already exists at the target location';
+
+  @override
+  String get batchDlgFolderNameSwapConflict =>
+      'Folder names cannot be exchanged in the same batch';
+
+  @override
+  String get batchDlgControlCharacterError =>
+      'Name cannot contain control characters';
+
+  @override
+  String get batchDlgNameWhitespaceError =>
+      'Name cannot begin or end with whitespace; use the whitespace cleanup rule';
+
+  @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind cannot be empty';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind cannot end with whitespace';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind cannot exceed $count characters';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind cannot contain Windows-invalid characters';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind cannot end with a period';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind cannot use a reserved Windows name';
+  }
+
+  @override
+  String get batchDlgIntermediateNameTooLong =>
+      'An intermediate name is too long; adjust the rules';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return 'This item has no $date date; adjust the template';
+  }
+
+  @override
+  String get batchDlgCreatedDate => 'creation';
+
+  @override
+  String get batchDlgModifiedDate => 'modification';
+
+  @override
+  String get connectivityTestHttpSuccess => 'HTTP tool request succeeded';
+
+  @override
+  String get connectivityTestHttpFailure => 'HTTP tool request failed';
+
+  @override
+  String get connectivityTestInvalidMcpConfig => 'Invalid MCP configuration';
+
+  @override
+  String get connectivityTestMissingTransport =>
+      'A valid transport type configuration is missing.';
+
+  @override
+  String get connectivityTestStdioUnsupported =>
+      'stdio is not supported on this platform';
+
+  @override
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP requires starting a local process. Test it in the Stroom desktop app.';
+
+  @override
+  String get connectivityTestInvalidContent => 'Invalid test content';
+
+  @override
+  String get connectivityTestMethodMustBeString => 'method must be a string.';
+
+  @override
+  String get connectivityTestUnsupportedMethod => 'Unsupported test method';
+
+  @override
+  String get connectivityTestReadOnlyMethodOnly =>
+      'To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.';
+
+  @override
+  String get connectivityTestParamsMustBeObject =>
+      'params must be a JSON object.';
+
+  @override
+  String get connectivityTestMcpConnectionFailed =>
+      'Could not connect to the MCP service';
+
+  @override
+  String get connectivityTestCheckConnectionSettings =>
+      'Check the address, authentication, and network, or view the app log for connection details.';
+
+  @override
+  String get connectivityTestRemainingToolsOmitted =>
+      '; remaining tools omitted';
+
+  @override
+  String get connectivityTestMcpSuccess => 'MCP connectivity test succeeded';
+
+  @override
+  String connectivityTestToolNames(Object names) {
+    return ': $names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return 'Connection and tools/list request succeeded; found $count tools$names$suffix.';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked =>
+      'Test parameters would modify todo data';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      'To protect the current session todo list, omit todos or set it to null in connectivity tests.';
+
+  @override
+  String get connectivityTestUnknownBuiltin => 'Unknown built-in tool';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return 'No test executor found for tool \"$toolName\".';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => 'Built-in tool test succeeded';
+
+  @override
+  String get connectivityTestBuiltinFailure => 'Built-in tool test failed';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired =>
+      'Test content must be a top-level JSON object.';
+
+  @override
+  String get connectivityTestRequestTimeout =>
+      'Request timed out. Check the service response and network.';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP request timed out: $method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '… (result truncated)';
+
+  @override
+  String get toolResultWebSearchEmptyQuery =>
+      'Error: The search query cannot be empty.';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return 'Error: Unsupported search engine \"$source\". Supported values: google, bing, baidu.';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return 'The preferred engine $preferred $reason; switched to $fallback.';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound =>
+      'No relevant search results were found.';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return 'No relevant search results were found ($sources explicitly returned no results).';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return 'Search incomplete: $sources explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: $failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return 'Error: All search engines are unavailable. $failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return 'Search results from $source:';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => 'Link';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => 'Summary';
+
+  @override
+  String get toolResultWebSearchEmptyResults =>
+      'No relevant search results were found.';
+
+  @override
+  String get toolResultTodoInvalid =>
+      'Error: The todos parameter must be an array (omit it or pass null to read the todo list).';
+
+  @override
+  String get toolResultTodoEmpty => 'There are no todo items yet.';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return 'Active todo items: $count';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return 'Error: Could not reconnect to MCP server \"$server\".';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return 'Error: MCP server \"$server\" is currently unavailable.';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return 'Error: MCP server \"$server\" failed to connect or returned no tools. Check the server configuration.';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return 'Real tool \"$tool\" is published under the call name \"$alias\" on this server.';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return 'Tool \"$tool\" is provided by multiple MCP servers; use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return 'Error: Real tool \"$tool\" has a name conflict. Use one of the call names listed above.';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return 'Error: MCP server \"$server\" has no tool named \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return 'Tools available on this server: $tools. Use these names instead.';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return 'Error: MCP tool \"$tool\" currently has a conflicting alias. Use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return 'Error: Tool \"$tool\" is disabled.';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return 'Error: Unknown tool \"$tool\"';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => 'returned no results';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable =>
+      'is temporarily unavailable';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '(MCP server $server)';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults =>
+      'returned a page that could not be parsed';
+
+  @override
+  String get toolResultSearchTitleLabel => 'Title';
+
+  @override
+  String get toolResultSearchContentLabel => 'Content';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return 'Error: $provider API key is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return 'Error: $provider instance URL is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return 'Error: $provider request failed (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return 'Error: $provider request failed: $detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return 'Error: Unknown HTTP tool \"$provider\"';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return 'Error: MCP server \"$server\" is not connected.';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return 'Error: No response from MCP tool \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return 'Error: $detail';
+  }
+
+  @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return 'Imported $decks decks, $notes notes, and $cards cards';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return 'The selected .apkg file could not be found: $path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive =>
+      'The selected .apkg file is damaged or is not a valid archive.';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      'The .apkg file does not contain collection.anki2.';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return 'Open Anki flashcards before importing or exporting a deck: $path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt =>
+      'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return 'The .apkg operation failed while accessing this path: $path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed =>
+      'The .apkg operation failed because the file or database could not be read.';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return 'The Anki deck could not be packaged from this database: $path';
+  }
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      'The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.';
+
+  @override
+  String get ankiSyncStatusLoginRequired =>
+      'Log in to Anki sync before continuing.';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl =>
+      'Enter a valid HTTP or HTTPS sync server address.';
+
+  @override
+  String get ankiSyncStatusHttpsRequired =>
+      'Remote self-hosted sync servers must use HTTPS.';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout =>
+      'The sync request timed out. Check the server address and network, then retry.';
+
+  @override
+  String get ankiSyncStatusTlsFailure =>
+      'The server certificate could not be verified. Check the certificate or configure a custom CA.';
+
+  @override
+  String get ankiSyncStatusConnectionFailure =>
+      'Could not connect to the sync server. Check the address and network.';
+
+  @override
+  String get ankiSyncStatusRequestFailure =>
+      'The sync request failed. Check the server and network, then retry.';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return 'The sync server returned HTTP $statusCode.';
+  }
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return 'The sync response exceeded the $limitMb MB limit.';
+  }
+
+  @override
+  String get ankiSyncStatusLocalFileFailure =>
+      'A local sync file could not be read or cleaned up. Check disk access and retry.';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      'The local media sync index is corrupted. Reset media sync data and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure =>
+      'The local media sync index could not be read or updated.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
+
+  @override
+  String get ankiStatsUnsupportedPlatform =>
+      'Anki statistics are unavailable on this platform.';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed =>
+      'Incremental sync could not complete. Check the server and connection, then try again.';
+
+  @override
+  String get emojiCategorySmileys => 'Smileys';
+
+  @override
+  String get emojiCategoryPeople => 'People';
+
+  @override
+  String get emojiCategoryAnimals => 'Animals';
+
+  @override
+  String get emojiCategoryFood => 'Food';
+
+  @override
+  String get emojiCategoryActivities => 'Activities';
+
+  @override
+  String get emojiCategoryTravel => 'Travel';
+
+  @override
+  String get emojiCategoryObjects => 'Objects';
+
+  @override
+  String get emojiCategorySymbols => 'Symbols';
+
+  @override
+  String get emojiCategoryFlags => 'Flags';
+
+  @override
+  String get languageNameSpanish => 'Spanish';
+
+  @override
+  String get languageNameJapanese => 'Japanese';
+
+  @override
+  String get languageNameFrench => 'French';
+
+  @override
+  String get languageNameGerman => 'German';
+
+  @override
+  String get languageNameArabic => 'Arabic';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Its $count nested folders will also be deleted.',
+      one: 'Its 1 nested folder will also be deleted.',
+    );
+    return 'Delete empty folder “$name”? $_temp0';
+  }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'Maximum upload size must be a positive number.';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.';
+
+  @override
+  String get ocrSamplingSliderRepairRequired =>
+      'Adjust each out-of-range sampling slider or turn it off before saving.';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      'Use the Responses URL configured for this provider, such as /v1/responses. Stroom sends it as configured.';
 }

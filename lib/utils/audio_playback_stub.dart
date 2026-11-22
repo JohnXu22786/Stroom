@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:just_audio/just_audio.dart';
 
+import 'audio_source_uri.dart';
+
 // ===========================================================================
 // AudioPlayerAdapter — 用于 AudioPlayerPage 的跨平台播放器
 // Native 实现：包装 just_audio 的 AudioPlayer
@@ -47,12 +49,12 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
-    _disposePlayer();
+    await _disposePlayer();
     _player = AudioPlayer();
     _setupListeners();
 
     try {
-      await _player!.setAudioSource(AudioSource.uri(Uri.file(url)));
+      await _player!.setAudioSource(AudioSource.uri(audioSourceUri(url)));
       _stateCtrl.add(null);
     } catch (e) {
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下
@@ -94,8 +96,8 @@ class AudioPlayerAdapter {
   }
 
   /// 释放资源
-  void dispose() {
-    _disposePlayer();
+  Future<void> dispose() async {
+    await _disposePlayer();
   }
 
   void _setupListeners() {
@@ -110,14 +112,14 @@ class AudioPlayerAdapter {
     });
   }
 
-  void _disposePlayer() {
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _stateSub?.cancel();
+  Future<void> _disposePlayer() async {
+    await _posSub?.cancel();
+    await _durSub?.cancel();
+    await _stateSub?.cancel();
     _posSub = null;
     _durSub = null;
     _stateSub = null;
-    _player?.dispose();
+    await _player?.dispose();
     _player = null;
   }
 }

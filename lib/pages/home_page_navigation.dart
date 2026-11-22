@@ -1,5 +1,130 @@
 part of 'home_page.dart';
 
+/// The Material NavigationBar only accepts String labels. This equivalent
+/// destination layout keeps its Material 3 sizing, colors and selection
+/// indicator while allowing the shared constrained label to reveal overflow.
+class _HomeBottomNavigationBar extends StatelessWidget {
+  const _HomeBottomNavigationBar({
+    required this.selectedIndex,
+    required this.labels,
+    required this.icons,
+    required this.onDestinationSelected,
+  });
+
+  final int selectedIndex;
+  final List<String> labels;
+  final List<IconData> icons;
+  final ValueChanged<int> onDestinationSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final labelStyle = theme.textTheme.labelMedium!;
+    final localizations = MaterialLocalizations.of(context);
+    final labelMetrics = TextPainter(
+      text: TextSpan(text: 'M', style: labelStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final navigationBarHeight = math.max(80.0, 64.0 + labelMetrics.height);
+
+    return Material(
+      color: colors.surfaceContainer,
+      elevation: 3,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      child: SafeArea(
+        child: SizedBox(
+          height: navigationBarHeight,
+          child: Semantics(
+            key: const ValueKey('home-bottom-navigation'),
+            role: SemanticsRole.tabBar,
+            explicitChildNodes: true,
+            container: true,
+            child: Row(
+              children: [
+                for (var index = 0; index < labels.length; index++)
+                  Expanded(
+                    child: MergeSemantics(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Semantics(
+                            role: SemanticsRole.tab,
+                            label: labels[index],
+                            selected: selectedIndex == index,
+                            button: true,
+                            child: Tooltip(
+                              message: labels[index],
+                              excludeFromSemantics: true,
+                              verticalOffset: 42,
+                              preferBelow: false,
+                              child: InkWell(
+                                customBorder: const StadiumBorder(),
+                                onTap: () => onDestinationSelected(index),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 500,
+                                      ),
+                                      width: 64,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: selectedIndex == index
+                                            ? colors.secondaryContainer
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Icon(
+                                        icons[index],
+                                        color: selectedIndex == index
+                                            ? colors.onSecondaryContainer
+                                            : colors.onSurfaceVariant,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ExcludeSemantics(
+                                      child: ConstrainedText(
+                                        labels[index],
+                                        style: labelStyle.copyWith(
+                                          color: selectedIndex == index
+                                              ? colors.onSurface
+                                              : colors.onSurfaceVariant,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Semantics(
+                            label: localizations.tabLabel(
+                              tabIndex: index + 1,
+                              tabCount: labels.length,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 extension _HomePageNavigationExt on _HomePageState {
   /// 获取页面对应的图标
   IconData _getPageIcon(AppPage page) {
@@ -61,7 +186,7 @@ extension _HomePageNavigationExt on _HomePageState {
             _getPageIcon(AppPage.home),
             color: Theme.of(context).colorScheme.primary,
           ),
-          label: Text(_getPageTitle(AppPage.home)),
+          label: _buildNavigationLabel(AppPage.home),
         ),
         NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.chat)),
@@ -69,7 +194,7 @@ extension _HomePageNavigationExt on _HomePageState {
             _getPageIcon(AppPage.chat),
             color: Theme.of(context).colorScheme.primary,
           ),
-          label: Text(_getPageTitle(AppPage.chat)),
+          label: _buildNavigationLabel(AppPage.chat),
         ),
         NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.files)),
@@ -77,7 +202,7 @@ extension _HomePageNavigationExt on _HomePageState {
             _getPageIcon(AppPage.files),
             color: Theme.of(context).colorScheme.primary,
           ),
-          label: Text(_getPageTitle(AppPage.files)),
+          label: _buildNavigationLabel(AppPage.files),
         ),
         NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.settings)),
@@ -85,7 +210,7 @@ extension _HomePageNavigationExt on _HomePageState {
             _getPageIcon(AppPage.settings),
             color: Theme.of(context).colorScheme.primary,
           ),
-          label: Text(_getPageTitle(AppPage.settings)),
+          label: _buildNavigationLabel(AppPage.settings),
         ),
       ],
     );
@@ -95,8 +220,10 @@ extension _HomePageNavigationExt on _HomePageState {
   Widget _buildBottomNavigationBar(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
-    return NavigationBar(
+    return _HomeBottomNavigationBar(
       selectedIndex: selectedPage.index,
+      labels: AppPage.values.map(_getPageTitle).toList(),
+      icons: AppPage.values.map(_getPageIcon).toList(),
       onDestinationSelected: (index) {
         final newPage = AppPage.values[index];
         final currentPage = ref.read(selectedPageProvider);
@@ -114,24 +241,20 @@ extension _HomePageNavigationExt on _HomePageState {
           }
         }
       },
-      destinations: [
-        NavigationDestination(
-          icon: Icon(_getPageIcon(AppPage.home)),
-          label: _getPageTitle(AppPage.home),
-        ),
-        NavigationDestination(
-          icon: Icon(_getPageIcon(AppPage.chat)),
-          label: _getPageTitle(AppPage.chat),
-        ),
-        NavigationDestination(
-          icon: Icon(_getPageIcon(AppPage.files)),
-          label: _getPageTitle(AppPage.files),
-        ),
-        NavigationDestination(
-          icon: Icon(_getPageIcon(AppPage.settings)),
-          label: _getPageTitle(AppPage.settings),
-        ),
-      ],
+    );
+  }
+
+  Widget _buildNavigationLabel(AppPage page) {
+    final title = _getPageTitle(page);
+    return Semantics(
+      label: title,
+      excludeSemantics: true,
+      child: ConstrainedText(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
@@ -200,7 +323,11 @@ extension _HomePageNavigationExt on _HomePageState {
   Widget _buildPageContent(AppPage page) {
     switch (page) {
       case AppPage.home:
-        return _buildHomeContent();
+        return TickerMode(
+          enabled: ref.read(selectedPageProvider) == AppPage.home &&
+              TickerMode.of(context),
+          child: _buildHomeContent(),
+        );
       case AppPage.chat:
         return _buildChatOrAssistantPage();
       case AppPage.files:

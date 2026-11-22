@@ -129,20 +129,29 @@ const List<int> _imaIndexTable = [-1, -1, -1, -1, 2, 4, 6, 8];
 /// Encode PCM S16LE samples to IMA ADPCM.
 ///
 /// Returns ADPCM bytes (4-bit nibbles, packed high nibble first per IMA spec).
-/// Only whole blocks of [AdpcmConfig.blockSize] samples are encoded — a
-/// trailing partial block (fewer than 256 samples) is dropped.
+/// A trailing partial block is padded by repeating its last sample.
 Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
-  final numBlocks = pcmSamples.length ~/ config.blockSize;
+  final numBlocks =
+      (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
   final nibblesPerBlock = config.blockSize;
 
   final out = BytesOutput();
   int sampleIdx = 0;
 
   for (int block = 0; block < numBlocks; block++) {
-    final blockSamples = pcmSamples.sublist(
-      sampleIdx,
-      sampleIdx + config.blockSize,
+    final actualBlockSize = (pcmSamples.length - sampleIdx).clamp(
+      0,
+      config.blockSize,
     );
+    final blockSamples = Int16List(config.blockSize);
+    blockSamples.setRange(0, actualBlockSize, pcmSamples, sampleIdx);
+    if (actualBlockSize < config.blockSize) {
+      blockSamples.fillRange(
+        actualBlockSize,
+        config.blockSize,
+        blockSamples[actualBlockSize - 1],
+      );
+    }
 
     for (int ch = 0; ch < config.channels; ch++) {
       // Block header: 2-byte predictor + 1-byte step index + 1 reserved
@@ -234,14 +243,18 @@ Future<Uint8List> encodeAdpcmWithEventLoopYield(
   }
   checkCancelled?.call();
   final output = BytesBuilder(copy: false);
-  final blockCount = pcmSamples.length ~/ config.blockSize;
+  final blockCount =
+      (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
   for (var firstBlock = 0;
       firstBlock < blockCount;
       firstBlock += yieldEveryBlocks) {
     checkCancelled?.call();
     final lastBlock = (firstBlock + yieldEveryBlocks).clamp(0, blockCount);
     final firstSample = firstBlock * config.blockSize;
-    final lastSample = lastBlock * config.blockSize;
+    final lastSample = (lastBlock * config.blockSize).clamp(
+      0,
+      pcmSamples.length,
+    );
     output.add(
       encodeAdpcm(pcmSamples.sublist(firstSample, lastSample), config),
     );
@@ -266,6 +279,7 @@ Uint8List adpcmToWav(
   required int sampleRate,
   // Matches AdpcmConfig().blockSize (the default used by encodeAdpcm).
   int samplesPerBlock = 256,
+  int? sampleCount,
 }) {
   // Mono IMA ADPCM block layout (per encodeAdpcm):
   // 4-byte header + nibbles for (samplesPerBlock - 1) samples.
@@ -274,6 +288,15 @@ Uint8List adpcmToWav(
 
   // Pad trailing partial block with a silent block (zero header + nibbles).
   final paddedLength = (adpcmBytes.length / blockAlign).ceil() * blockAlign;
+  final encodedSampleCapacity = paddedLength ~/ blockAlign * samplesPerBlock;
+  final declaredSampleCount = sampleCount ?? encodedSampleCapacity;
+  if (declaredSampleCount < 0 || declaredSampleCount > encodedSampleCapacity) {
+    throw ArgumentError.value(
+      declaredSampleCount,
+      'sampleCount',
+      'must be between 0 and the encoded sample capacity ($encodedSampleCapacity)',
+    );
+  }
   final data = Uint8List(paddedLength);
   // WAVE_FORMAT_IMA_ADPCM decoders (ffmpeg, dr_wav) read the LOW nibble of
   // each payload byte first, while [encodeAdpcm] packs the first sample's
@@ -289,7 +312,7 @@ Uint8List adpcmToWav(
 
   final out = BytesOutput();
   out.writeString('RIFF');
-  out.writeUint32LE(4 + (8 + 18 + 2) + (8 + data.length)); // file size - 8
+  out.writeUint32LE(4 + (8 + 20) + (8 + 4) + (8 + data.length));
   out.writeString('WAVE');
   out.writeString('fmt ');
   // 20 bytes of fmt data: 16 base + cbSize (2) + samplesPerBlock (2).
@@ -305,6 +328,11 @@ Uint8List adpcmToWav(
   out.writeUint16LE(4); // bits per sample (4-bit nibbles)
   out.writeUint16LE(2); // cbSize
   out.writeUint16LE(samplesPerBlock); // samples per block (extension)
+  // Compressed formats use `fact` to report the number of source samples,
+  // which may be shorter than the padded final ADPCM block.
+  out.writeString('fact');
+  out.writeUint32LE(4);
+  out.writeUint32LE(declaredSampleCount);
   out.writeString('data');
   out.writeUint32LE(data.length);
   out.addBytes(data);
@@ -408,36 +436,42 @@ void _writeStreamInfo(BytesOutput out, int totalSamples, int sampleRate) {
   out.writeByte(0x00);
   out.writeByte(0x22); // 34 bytes
 
-  // Minimum block size (16 bits)
-  out.writeUint16BE(_flacBlockSize);
-  // Maximum block size (16 bits)
-  out.writeUint16BE(_flacBlockSize);
-  // Minimum frame size (24 bits) - approximate
-  out.writeByte(0x00);
-  out.writeByte(0x01);
-  out.writeByte(0x00);
-  // Maximum frame size (24 bits) - generous estimate
-  final maxFrame = _flacBlockSize * 2 + 64;
-  out.writeByte((maxFrame >> 16) & 0xFF);
-  out.writeByte((maxFrame >> 8) & 0xFF);
-  out.writeByte(maxFrame & 0xFF);
+  // A partial final frame determines the minimum. With no frame (empty PCM),
+  // retain the encoder's nominal size in both fields.
+  final finalBlockSize = totalSamples % _flacBlockSize;
+  final minBlockSize = totalSamples == 0
+      ? _flacBlockSize
+      : (finalBlockSize == 0 ? _flacBlockSize : finalBlockSize);
+  final maxBlockSize = totalSamples == 0 || totalSamples >= _flacBlockSize
+      ? _flacBlockSize
+      : totalSamples;
+  out.writeUint16BE(minBlockSize);
+  out.writeUint16BE(maxBlockSize);
+  // Frame sizes are unknown until the frames are encoded. FLAC represents
+  // unknown minimum and maximum frame sizes with zero.
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
+  out.writeByte(0);
 
   // Sample rate (20 bits) | channels-1 (3 bits) | bps-1 (5 bits) | total samples (36 bits)
-  // Pack: sample_rate(20) << 44 | channels(3) << 41 | bps(5) << 36 | total(36)
   final sr = sampleRate;
   final ch = 0; // mono -> 1 channel -> value 0
   final bps = 15; // 16-bit -> value 15
   final ts = totalSamples;
 
+  // Write the 64-bit packed field byte-by-byte for compatibility with
+  // platforms where bitwise integers are 32-bit.
   out.writeByte((sr >> 12) & 0xFF);
   out.writeByte((sr >> 4) & 0xFF);
-  out.writeByte(((sr & 0xF) << 4) | ((ch >> 1) & 0xF));
-  out.writeByte(((ch & 0x1) << 7) | ((bps & 0x1F) << 2) | ((ts >> 34) & 0x3));
-  out.writeByte((ts >> 26) & 0xFF);
-  out.writeByte((ts >> 18) & 0xFF);
-  out.writeByte((ts >> 10) & 0xFF);
-  out.writeByte((ts >> 2) & 0xFF);
-  out.writeByte((ts & 0x3) << 6);
+  out.writeByte(((sr & 0xF) << 4) | ((ch & 0x7) << 1) | ((bps >> 4) & 0x1));
+  out.writeByte(((bps & 0xF) << 4) | ((ts ~/ 0x100000000) & 0xF));
+  out.writeByte((ts >> 24) & 0xFF);
+  out.writeByte((ts >> 16) & 0xFF);
+  out.writeByte((ts >> 8) & 0xFF);
+  out.writeByte(ts & 0xFF);
 
   // MD5 (16 bytes, all zeros - placeholder)
   for (int i = 0; i < 16; i++) {
@@ -477,14 +511,20 @@ void _writeFlacFrame(
   // Reserved: 0
   headerBits.write(0, 1);
 
-  // Frame/Sample number: UTF-8 coded
-  final frameNum = frameIdx * _flacBlockSize;
-  final utf8 = _encodeUtf8(frameNum);
+  // Fixed-blocking strategy numbers frames sequentially, not by sample offset.
+  final utf8 = _encodeUtf8(frameIdx);
   for (final b in utf8) {
     headerBits.write(b, 8);
   }
 
-  // Block size (if variable): not needed for fixed
+  // Partial blocks use an explicit size: codes 6 and 7 encode blockLen - 1
+  // in 8 and 16 bits respectively, even with the fixed-blocking strategy.
+  if (bsCode == 6) {
+    headerBits.write(blockLen - 1, 8);
+  } else if (bsCode == 7) {
+    headerBits.write(blockLen - 1, 16);
+  }
+
   // Sample rate (if variable): not needed
 
   // CRC-8 of header
@@ -608,16 +648,28 @@ int _estimateRiceBits(List<int> residuals) {
 
 /// Write residuals using Rice coding.
 void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
-  // Partition residuals into groups of ~128 samples
-  const partitionOrder = 2; // 2^2 = 4 partitions per block
-  final partitionSize = residuals.length >> partitionOrder;
+  // Keep the existing four partitions when the block permits them, and lower
+  // the order for partial blocks whose size is not divisible by that count.
+  final blockLength = residuals.length + order;
+  var partitionOrder = 2;
+  while (partitionOrder > 0) {
+    final partitionCount = 1 << partitionOrder;
+    final partitionSize = blockLength ~/ partitionCount;
+    if (blockLength % partitionCount == 0 && partitionSize >= order) break;
+    partitionOrder--;
+  }
 
-  for (int p = 0; p < (1 << partitionOrder); p++) {
-    final start = p * partitionSize;
-    final end = p == (1 << partitionOrder) - 1
-        ? residuals.length
-        : start + partitionSize;
-    if (start >= residuals.length) break;
+  final partitionCount = 1 << partitionOrder;
+  final partitionSize = blockLength ~/ partitionCount;
+  // Residual coding method 0 selects 4-bit Rice parameters.
+  bits.write(0, 2);
+  bits.write(partitionOrder, 4);
+  var start = 0;
+  for (int p = 0; p < partitionCount; p++) {
+    // FLAC's first partition omits the predictor warm-up samples; all later
+    // partitions contain the full block-derived partition size.
+    final partitionResidualCount = partitionSize - (p == 0 ? order : 0);
+    final end = start + partitionResidualCount;
 
     // Find best Rice parameter for this partition
     final n = end - start;
@@ -634,16 +686,29 @@ void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
     }
     if (k > _flacMaxRiceParam) k = _flacMaxRiceParam;
 
-    // Rice parameter (4 bits)
-    bits.write(k, 4);
-
-    // Escape code: if k == 15, use verbatim
+    // Rice parameter 15 is the Rice4 escape marker; parameter 14 remains a
+    // normal Rice code. Values that reach 14 use verbatim residuals here.
     if (k >= _flacMaxRiceParam) {
-      // Encode verbatim
+      var rawWidth = 0;
       for (int i = start; i < end; i++) {
-        bits.write(residuals[i] & 0xFFFF, 16);
+        final residual = residuals[i];
+        var width = 1;
+        while (
+            residual < -(1 << (width - 1)) || residual >= (1 << (width - 1))) {
+          width++;
+        }
+        if (width > rawWidth) rawWidth = width;
+      }
+
+      bits.write(15, 4); // Rice4 escape marker.
+      bits.write(rawWidth, 5); // Verbatim signed residual width.
+      for (int i = start; i < end; i++) {
+        bits.write(residuals[i] & ((1 << rawWidth) - 1), rawWidth);
       }
     } else {
+      // Rice parameter (4 bits)
+      bits.write(k, 4);
+
       // Rice encode each residual
       for (int i = start; i < end; i++) {
         final r = residuals[i];
@@ -661,6 +726,7 @@ void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
         bits.write(rem, k);
       }
     }
+    start = end;
   }
 }
 
@@ -680,7 +746,9 @@ int _blockSizeCode(int blockLen) {
   if (blockLen == 8192) return 13;
   if (blockLen == 16384) return 14;
   if (blockLen == 32768) return 15;
-  return 0; // get from header
+  if (blockLen >= 1 && blockLen <= 256) return 6;
+  if (blockLen > 256 && blockLen <= 65536) return 7;
+  return 0; // reserved/unsupported block size
 }
 
 int _sampleRateCode(int sr) {

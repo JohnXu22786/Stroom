@@ -6,6 +6,8 @@ import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// A direct entry to the records created by one launch.
 class TaskFlowRunPage extends ConsumerWidget {
   final List<String> executionIds;
@@ -27,7 +29,11 @@ class TaskFlowRunPage extends ConsumerWidget {
         .firstOrNull;
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.taskFlowUiRunTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.taskFlowUiRunTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           if (restoreStatus == FlowExecutionRestoreStatus.ready &&
               batchId != null &&
@@ -45,7 +51,11 @@ class TaskFlowRunPage extends ConsumerWidget {
                     ).showSnackBar(SnackBar(content: Text(error.toString())));
                 }
               },
-              child: Text(AppLocalizations.of(context)!.taskFlowUiCancelBatch),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.taskFlowUiCancelBatch,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),

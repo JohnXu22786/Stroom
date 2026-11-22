@@ -160,8 +160,14 @@ void main() {
   late Directory directory;
   late TaskFlowExecutionNotifier executions;
   late BackgroundTaskNotifier background;
+  late Set<BackgroundTaskNotifier> backgroundNotifiers;
+  final disposedBackgroundNotifiers = <BackgroundTaskNotifier>{};
   late String execId;
   late FlowSubTask subTask;
+
+  void disposeBackground(BackgroundTaskNotifier notifier) {
+    if (disposedBackgroundNotifiers.add(notifier)) notifier.dispose();
+  }
 
   setUpAll(() async {
     directory = await Directory.systemTemp.createTemp('flow_artifact_cancel_');
@@ -178,8 +184,11 @@ void main() {
     ManifestDatabase.enableTestMode();
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
+    backgroundNotifiers = <BackgroundTaskNotifier>{};
+    disposedBackgroundNotifiers.clear();
     executions = TaskFlowExecutionNotifier();
     background = BackgroundTaskNotifier();
+    backgroundNotifiers.add(background);
     execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
     subTask = FlowSubTask(
       blockTypeKey: 'asr',
@@ -193,7 +202,13 @@ void main() {
 
   tearDown(() async {
     if (executions.mounted) executions.dispose();
-    background.dispose();
+    await executions.persistenceResult;
+    for (final notifier in backgroundNotifiers) {
+      disposeBackground(notifier);
+    }
+    await Future.wait(
+      backgroundNotifiers.map((notifier) => notifier.pendingPersistence),
+    );
   });
 
   ProviderEntriesState providerFor(
@@ -284,7 +299,11 @@ void main() {
           computeTextHash(Uint8List.fromList(utf8.encode('late result')));
       expect(await TextManifest.loadRecords(), isEmpty);
       expect(await WebFileStore.exists('texts/$hash.txt'), isFalse);
-      expect(background.state.single.status, isNot(TaskStatus.completed));
+      if (isAsr) {
+        expect(background.state.single.status, isNot(TaskStatus.completed));
+      } else {
+        expect(background.state, isEmpty);
+      }
       expect(
           executions.execution(execId)?.status, FlowExecutionStatus.cancelled);
     });
@@ -542,9 +561,10 @@ void main() {
         .writeAsBytes([1]);
     final extracted = pcmToWav(Uint8List.fromList([0, 0]));
     final cancellationScheduled = Completer<void>();
-    background.dispose();
+    disposeBackground(background);
     final cancellingBackground = _CancelOnCompletedStepBackground();
     background = cancellingBackground;
+    backgroundNotifiers.add(background);
     cancellingBackground.onRunningStep = () {
       scheduleMicrotask(() {
         executions.cancelExecution(execId);
@@ -1092,9 +1112,10 @@ void main() {
 
   test('separation removes its committed record if cancellation lands next',
       () async {
-    background.dispose();
+    disposeBackground(background);
     final cancellingBackground = _CancelOnCompletedStepBackground();
     background = cancellingBackground;
+    backgroundNotifiers.add(background);
     cancellingBackground.onCompletedStep =
         () => executions.cancelExecution(execId);
     final source =

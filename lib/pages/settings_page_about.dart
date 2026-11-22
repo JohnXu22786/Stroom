@@ -1,28 +1,5 @@
 part of 'settings_page.dart';
 
-String localizeAboutUpdateError(AppLocalizations strings, String error) {
-  final networkPrefix = strings.updateCheckNetworkError('');
-  if (error.startsWith(networkPrefix)) {
-    return strings.aboutUpdateNetworkError(
-      error.substring(networkPrefix.length),
-    );
-  }
-
-  final httpPrefix = strings.updateCheckHttpFailed('');
-  if (error.startsWith(httpPrefix)) {
-    final statusCode = error.substring(httpPrefix.length);
-    if (RegExp(r'^\d+$').hasMatch(statusCode)) {
-      return strings.aboutUpdateHttpError(statusCode);
-    }
-  }
-
-  if (error == strings.updateCheckInvalidResponse) {
-    return strings.aboutUpdateInvalidResponse;
-  }
-
-  return strings.aboutUpdateCheckFailed;
-}
-
 extension _SettingsPageAboutExt on _SettingsPageState {
   // ================================================================
   // 关于
@@ -92,8 +69,14 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                   : const Icon(Icons.update, color: Colors.blue),
               title: AppLocalizations.of(context)!.aboutCheckUpdates,
               subtitle: updateState.updateAvailable
-                  ? AppLocalizations.of(context)!
-                      .aboutNewVersionFound(updateState.latestVersion!)
+                  ? updateState.isDownloading
+                      ? _downloadProgressLabel(updateState)
+                      : updateState.downloadComplete
+                          ? AppLocalizations.of(context)!.updateDownloadComplete
+                          : updateState.downloadError ??
+                              AppLocalizations.of(context)!
+                                  .aboutNewVersionFound(
+                                      updateState.latestVersion!)
                   : null,
               trailing: updateState.updateAvailable
                   ? Container(
@@ -111,7 +94,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                       ),
                     )
                   : const Icon(Icons.chevron_right),
-              onTap: updateState.isChecking ? () {} : () => _checkForUpdate(),
+              onTap: updateState.isChecking
+                  ? () {}
+                  : updateState.isDownloading ||
+                          updateState.downloadComplete ||
+                          updateState.downloadError != null
+                      ? _showUpdateDialog
+                      : () => _checkForUpdate(),
             ),
             _buildListTile(
               leading: Icon(
@@ -176,6 +165,27 @@ extension _SettingsPageAboutExt on _SettingsPageState {
     );
   }
 
+  int _downloadPercent(double progress) => (progress * 100).toInt();
+
+  String _downloadProgressLabel(UpdateState state) {
+    final strings = AppLocalizations.of(context)!;
+    final received = _formatBytes(state.downloadReceivedBytes);
+    final total = state.downloadTotalBytes;
+    if (total == null || total <= 0) {
+      return '${strings.updateDownloading} $received';
+    }
+    return '${strings.updateDownloading} $received / ${_formatBytes(total)} (${_downloadPercent(state.downloadProgress)}%)';
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
   Future<void> _checkForUpdate() async {
     // Show immediate feedback that the check is starting
     final snackBar = ScaffoldMessenger.of(context).showSnackBar(
@@ -191,7 +201,13 @@ extension _SettingsPageAboutExt on _SettingsPageState {
               ),
             ),
             SizedBox(width: 12),
-            Text(AppLocalizations.of(context)!.aboutCheckingUpdates),
+            Flexible(
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.aboutCheckingUpdates,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         duration: Duration(days: 1), // Keep visible until dismissed
@@ -206,14 +222,33 @@ extension _SettingsPageAboutExt on _SettingsPageState {
     snackBar.close();
 
     if (state.error != null) {
-      _showSnackBar(
-        localizeAboutUpdateError(AppLocalizations.of(context)!, state.error!),
-      );
+      _showSnackBar(_localizedUpdateError(state.error!));
     } else if (state.updateAvailable) {
       _showUpdateDialog();
     } else {
       _showSnackBar(AppLocalizations.of(context)!.aboutUpToDate);
     }
+  }
+
+  String _localizedUpdateError(String error) {
+    final strings = AppLocalizations.of(context)!;
+    const networkPrefix = '网络错误: ';
+    if (error.startsWith(networkPrefix)) {
+      return strings.aboutUpdateNetworkError(
+        error.substring(networkPrefix.length),
+      );
+    }
+
+    final httpStatus = RegExp(r'^检查更新失败: HTTP (\d+)$').firstMatch(error);
+    if (httpStatus != null) {
+      return strings.aboutUpdateHttpError(httpStatus.group(1)!);
+    }
+
+    if (error == '检查更新失败: 服务器返回了无法识别的数据') {
+      return strings.aboutUpdateInvalidResponse;
+    }
+
+    return strings.aboutUpdateCheckFailed;
   }
 
   void _showSnackBar(String message) {
@@ -259,18 +294,26 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.aboutPrivacyPolicy),
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.aboutPrivacyPolicy,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           content: SingleChildScrollView(
-            child: Text(
-              AppLocalizations.of(context)!.aboutPrivacyContent,
-            ),
+            child: Text(AppLocalizations.of(context)!.aboutPrivacyContent),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(AppLocalizations.of(context)!.aboutClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.aboutClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         );

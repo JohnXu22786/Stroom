@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/constrained_text.dart';
+
 /// A chip/button for selecting a reasoning parameter option.
 class OptionChip extends StatelessWidget {
   final String label;
@@ -30,8 +32,11 @@ class OptionChip extends StatelessWidget {
             width: selected ? 1.5 : 1,
           ),
         ),
-        child: Text(
+        child: ConstrainedText(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          useNaturalWidthLayout: true,
           style: TextStyle(
             fontSize: 14,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,

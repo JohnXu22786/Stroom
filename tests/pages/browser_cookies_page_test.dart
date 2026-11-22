@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_cookies_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _CookieListRacePlatform implements CookiePlatform {
   final initialReadStarted = Completer<void>();
@@ -118,6 +119,60 @@ void main() {
   });
 
   group('BrowserCookiesPage rendering', () {
+    testWidgets('long cookie paths fit beside details and the delete action',
+        (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 640);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const path =
+          '/account/preferences/security/session-settings/long-cookie-path';
+      await BrowserCookieService.persistCookiesRawForTest([
+        {
+          'domain': 'example.com',
+          'name': 'session',
+          'value': 'private-session-secret',
+          'path': path,
+        },
+      ]);
+
+      await tester.pumpWidget(
+        _chineseApp(const BrowserCookiesPage()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final pathLabel = tester
+          .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+          .singleWhere((label) => label.data == path);
+      expect(pathLabel.maxLines, 1);
+      expect(
+        tester
+            .getSize(
+              find.byWidgetPredicate(
+                (widget) => widget is ConstrainedText && widget.data == path,
+              ),
+            )
+            .width,
+        lessThan(128),
+      );
+      expect(find.textContaining('private-session-secret'), findsNothing);
+      expect(find.byTooltip('删除此 Cookie'), findsOneWidget);
+
+      final semantics = tester.ensureSemantics();
+      expect(
+        tester
+            .getSemantics(
+              find.byWidgetPredicate(
+                (widget) => widget is ConstrainedText && widget.data == path,
+              ),
+            )
+            .label,
+        contains(path),
+      );
+      semantics.dispose();
+    });
+
     testWidgets('retention toggle is off when the preference is false',
         (tester) async {
       await BrowserCookieService.setRetentionMode(false);

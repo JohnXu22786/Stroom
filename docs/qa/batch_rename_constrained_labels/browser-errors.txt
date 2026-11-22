@@ -1,0 +1,4 @@
+Browser: /usr/bin/chromium via Playwright headless.
+Viewport: 320 × 640 CSS px, device scale factor 1.
+Locale/theme/text scale: de-DE, production blue-seeded Material 3 light theme, 1×.
+Page and console errors: none

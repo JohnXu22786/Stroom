@@ -11,6 +11,8 @@ import '../widgets/folder_picker_dialog.dart';
 import 'browser_page.dart';
 import 'unified_task_list_page.dart';
 
+import '../widgets/constrained_text.dart';
+
 // =============================================================================
 // 单个任务卡片数据
 // =============================================================================
@@ -22,10 +24,8 @@ class _TaskEntry {
   final TextEditingController minuteController;
   final TextEditingController secondController;
 
-  _TaskEntry({
-    String? initialUrl,
-    int? initialDurationSec,
-  })  : urlController = TextEditingController(text: initialUrl ?? ''),
+  _TaskEntry({String? initialUrl, int? initialDurationSec})
+      : urlController = TextEditingController(text: initialUrl ?? ''),
         hourController = TextEditingController(),
         minuteController = TextEditingController(),
         secondController = TextEditingController() {
@@ -285,7 +285,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_l10n.catCatchPageTitle),
+        title: ConstrainedText(
+          _l10n.catCatchPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
@@ -448,7 +452,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.hourController,
                       decoration: InputDecoration(
-                        labelText: _l10n.catCatchHour,
+                        label: ConstrainedText(_l10n.catCatchHour, maxLines: 1),
                         hintText: '0',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -470,7 +474,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.minuteController,
                       decoration: InputDecoration(
-                        labelText: _l10n.catCatchMinute,
+                        label: ConstrainedText(
+                          _l10n.catCatchMinute,
+                          maxLines: 1,
+                        ),
                         hintText: '0',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -492,7 +499,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.secondController,
                       decoration: InputDecoration(
-                        labelText: _l10n.catCatchSecond,
+                        label: ConstrainedText(
+                          _l10n.catCatchSecond,
+                          maxLines: 1,
+                        ),
                         hintText: '0',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -525,30 +535,50 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                       color: colorScheme.primary,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.catCatchDurationPreview,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurfaceVariant,
+                    Expanded(
+                      flex: 3,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ConstrainedText(
+                              _l10n.catCatchDurationPreview,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            child: ConstrainedText(
+                              previewText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'monospace',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      previewText,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _l10n.catCatchDurationFormat,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.5,
+                    Expanded(
+                      flex: 2,
+                      child: ConstrainedText(
+                        _l10n.catCatchDurationFormat,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -626,11 +656,15 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                       color: colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.catCatchTaskCount(taskCount),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
+                    Expanded(
+                      child: ConstrainedText(
+                        _l10n.catCatchTaskCount(taskCount),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -643,12 +677,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               child: FilledButton.icon(
                 onPressed: hasValidUrl ? _startTask : null,
                 icon: const Icon(Icons.search, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _l10n.catCatchStartAnalysis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -724,25 +757,33 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             children: [
               Icon(icon, size: 16, color: colorScheme.primary),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurfaceVariant,
+              Flexible(
+                child: ConstrainedText(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 4),
-              Text(
-                currentFolder.isEmpty
-                    ? _l10n.catCatchRootFolder
-                    : currentFolder,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                flex: 2,
+                child: ConstrainedText(
+                  currentFolder.isEmpty
+                      ? _l10n.catCatchRootFolder
+                      : currentFolder,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
               Icon(
                 Icons.chevron_right,
                 size: 16,

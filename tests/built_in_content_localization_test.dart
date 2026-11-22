@@ -20,19 +20,19 @@ import 'package:stroom/task_flow/models/task_flow_templates.dart';
 void main() {
   group('built-in content localization', () {
     test('Chinese TTS instruction hint is translated', () {
-      expect(
-        AppLocalizationsZhCn().ttsInstructionHint,
-        '例如：请用愉快、兴奋的语气说话',
-      );
+      expect(AppLocalizationsZhCn().ttsInstructionHint, '例如：请用愉快、兴奋的语气说话');
     });
 
     test('ARB resources have matching keys and valid JSON', () {
-      final files = [
-        'lib/l10n/app_en.arb',
-        'lib/l10n/app_en_US.arb',
-        'lib/l10n/app_zh.arb',
-        'lib/l10n/app_zh_CN.arb',
-      ];
+      final files = Directory('lib/l10n')
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.path)
+          .where(
+            (path) => path.startsWith('lib/l10n/app_') && path.endsWith('.arb'),
+          )
+          .toList()
+        ..sort();
       final resources = files
           .map((path) => jsonDecode(File(path).readAsStringSync()) as Map)
           .toList();
@@ -50,15 +50,22 @@ void main() {
       final placeholder = RegExp(r'\{([A-Za-z][A-Za-z0-9_]*)(?:\s*,|\})');
       for (final key in templateKeys.where((key) => !key.startsWith('@'))) {
         final english = placeholder
-            .allMatches(resources[1][key] as String)
+            .allMatches(resources.first[key] as String)
             .map((match) => match.group(1))
             .toSet();
-        final chinese = placeholder
-            .allMatches(resources[3][key] as String)
-            .map((match) => match.group(1))
-            .toSet();
-        expect(chinese, english, reason: 'Placeholder mismatch for $key');
+        for (final resource in resources.skip(1)) {
+          final localized = placeholder
+              .allMatches(resource[key] as String)
+              .map((match) => match.group(1))
+              .toSet();
+          expect(localized, english, reason: 'Placeholder mismatch for $key');
+        }
       }
+      final german = resources[files.indexOf('lib/l10n/app_de.arb')];
+      final french = resources[files.indexOf('lib/l10n/app_fr.arb')];
+      expect(german['languageNameFrench'], 'Französisch');
+      expect(german['languageNameGerman'], 'Deutsch');
+      expect(french['languageNameGerman'], 'Allemand');
     });
 
     test('English count labels use singular forms for a count of one', () {
@@ -203,7 +210,7 @@ void main() {
       },
     );
 
-    testWidgets('built-in prompt market renders English and Chinese', (
+    testWidgets('built-in prompt market renders English, Chinese, and German', (
       tester,
     ) async {
       Future<void> pumpMarket(Locale locale) async {
@@ -227,20 +234,35 @@ void main() {
       }
 
       await pumpMarket(const Locale('en', 'US'));
-      expect(find.text('Assistant Market'), findsOneWidget);
+      expect(find.text('Add assistant'), findsOneWidget);
+      expect(find.text('Built-in'), findsOneWidget);
+      expect(find.text('Import'), findsOneWidget);
       expect(find.text('General Assistant'), findsOneWidget);
       expect(
         find.text(
-          'Imported prompts become regular assistants that you can edit freely.',
+          'Browse ready-to-use assistants. Tap one to preview it before adding.',
         ),
         findsOneWidget,
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await pumpMarket(const Locale('zh', 'CN'));
-      expect(find.text('助手市场'), findsOneWidget);
+      expect(find.text('添加助手'), findsOneWidget);
+      expect(find.text('内置助手'), findsOneWidget);
+      expect(find.text('导入助手'), findsOneWidget);
       expect(find.text('通用助手'), findsOneWidget);
-      expect(find.text('选择后将添加为普通助手，之后可自由编辑'), findsOneWidget);
+      expect(find.text('浏览可直接使用的内置助手，点击条目可预览后再添加。'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpMarket(const Locale('de', 'DE'));
+      expect(find.text('Assistent hinzufügen'), findsOneWidget);
+      expect(find.text('Allgemeiner Assistent'), findsOneWidget);
+      expect(
+        find.text(
+          'Durchsuche fertige Assistenten und sieh sie dir vor dem Hinzufügen an.',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

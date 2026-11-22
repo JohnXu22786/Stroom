@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
+import 'package:stroom/services/userscript_http.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 // Tests for the UserScript match-rule engine used by BrowserPage._injectScripts.
 void main() {
@@ -321,5 +325,215 @@ run();
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(confirmed, isTrue);
+  });
+
+  testWidgets('manual script labels fit without changing native text editing',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    UserScript? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.5),
+          ),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showBrowserUserScriptEditDialog(
+                context,
+                UserScript(name: 'Example', code: 'console.log("hello");'),
+              ).then((value) => saved = value),
+              child: const Text('Open editor'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open editor'));
+    await tester.pumpAndSettle();
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
+    expect(fields, hasLength(2));
+    expect(fields[0].decoration!.label, isA<ConstrainedText>());
+    expect(fields[1].decoration!.label, isA<ConstrainedText>());
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byType(TextField).first);
+    await tester.enterText(find.byType(TextField).first, 'Changed');
+    expect(
+      tester
+          .widget<EditableText>(find.byType(EditableText).first)
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    await tester.tap(find.byType(TextField).last);
+    await tester.enterText(
+      find.byType(TextField).last,
+      'console.log("edited");',
+    );
+    expect(
+      tester
+          .widget<EditableText>(find.byType(EditableText).last)
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(saved?.name, 'Changed');
+    expect(saved?.code, 'console.log("edited");');
+  });
+
+  testWidgets('URL import validates locally without making a network request',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var fetchCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showBrowserUserScriptImportDialog(
+                context,
+                fetchSource: (url) async {
+                  normalizeUserscriptUrl(url);
+                  fetchCalls++;
+                  return 'run();';
+                },
+              ),
+              child: const Text('Open import'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open import'));
+    await tester.pumpAndSettle();
+    final urlField = tester.widget<TextField>(find.byType(TextField));
+    expect(urlField.decoration!.label, isA<ConstrainedText>());
+    expect(urlField.keyboardType, TextInputType.url);
+    await tester.enterText(find.byType(TextField), 'http://example.com/a.js');
+    expect(
+      tester
+          .widget<EditableText>(find.byType(EditableText).first)
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    await tester.tap(find.byIcon(Icons.download));
+    await tester.pumpAndSettle();
+    expect(find.text('Saisissez une URL HTTPS valide.'), findsOneWidget);
+    expect(fetchCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('import preview loads mocked content and saves it',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    UserScript? saved;
+    final fetchCompleter = Completer<String>();
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showBrowserUserScriptImportDialog(
+                context,
+                fetchSource: (_) => fetchCompleter.future,
+              ).then((value) => saved = value),
+              child: const Text('Open import'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open import'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'https://raw.githubusercontent.com/example/repo/main/test.user.js',
+    );
+    await tester.tap(find.byIcon(Icons.download));
+    await tester.pump();
+    expect(tester.widget<TextField>(find.byType(TextField)).readOnly, isTrue);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    fetchCompleter.complete(
+      '// ==UserScript==\n// @name Preview test\n// ==/UserScript==\nconsole.log("preview");',
+    );
+    await tester.pumpAndSettle();
+    final preview = tester.widget<InputDecorator>(
+      find.byType(InputDecorator).last,
+    );
+    expect(preview.decoration.label, isA<ConstrainedText>());
+    expect(find.byType(SelectableText), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(saved?.name, 'Preview test');
+    expect(saved?.code, contains('console.log("preview");'));
+    expect(saved?.enabled, isFalse);
+  });
+
+  testWidgets('cancelling import discards any fetched preview', (tester) async {
+    UserScript? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showBrowserUserScriptImportDialog(
+                context,
+                fetchSource: (_) async => 'run();',
+              ).then((value) => result = value),
+              child: const Text('Open import'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open import'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'https://raw.githubusercontent.com/example/repo/main/test.user.js',
+    );
+    await tester.tap(find.byIcon(Icons.download));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(result, isNull);
   });
 }

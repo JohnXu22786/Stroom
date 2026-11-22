@@ -367,6 +367,34 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('marks an empty stream failure even when it has no error bubble',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider(
+        List.generate(6, (_) => <AIStreamEvent>[]),
+      );
+      for (var call = 1; call <= 6; call++) {
+        provider.errorsAfterCall[call] = networkFailure;
+      }
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (_) async {},
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-empty-stream-failure',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(result.assistantMessage?.isError, isTrue);
+      expect(result.failed, isTrue);
+      manager.dispose();
+    });
+
     test('cancellation during backoff prevents another request or bubble',
         () async {
       final networkFailure = DioException(

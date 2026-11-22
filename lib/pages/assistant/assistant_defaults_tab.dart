@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,8 @@ import '../../services/http_tool_service.dart';
 import '../../services/todo_tool_service.dart';
 import '../../services/web_search_service.dart';
 import '../../utils/model_order.dart' show applySavedOrder;
+
+import '../../widgets/constrained_text.dart';
 
 /// "默认设置" tab of the assistant edit dialog: the default model, the
 /// default enabled tools that NEW conversations (topics) created under this
@@ -329,7 +333,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         value: m.displayName,
-                        title: Text(
+                        title: ConstrainedText(
                           m.displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -369,14 +373,18 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         TextButton(
                           onPressed: () =>
                               widget.onDefaultToolsChanged(validToolNames),
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.assistantEnableAll,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       TextButton(
                         onPressed: () => widget.onDefaultToolsChanged(const {}),
-                        child: Text(
+                        child: ConstrainedText(
                           AppLocalizations.of(context)!.assistantDisableAll,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -408,7 +416,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                             ),
                           ),
                           subtitle: tool.description.isNotEmpty
-                              ? Text(
+                              ? ConstrainedText(
                                   tool.description,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -483,12 +491,17 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     child: TextField(
                       controller: _truncationLengthController,
                       decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context)!
-                            .assistantMaxCharacters,
+                        label: ConstrainedText(
+                          AppLocalizations.of(context)!.assistantMaxCharacters,
+                          maxLines: 1,
+                        ),
                         // 明确"字符"单位：避免用户按 token/字节理解。
-                        helperText: _lengthError == null
-                            ? AppLocalizations.of(context)!
-                                .assistantCharactersNotTokens
+                        helper: _lengthError == null
+                            ? Text(
+                                AppLocalizations.of(context)!
+                                    .assistantCharactersNotTokens,
+                                softWrap: true,
+                              )
                             : null,
                         errorText: _lengthError,
                         hintText: AppLocalizations.of(context)!
@@ -557,13 +570,17 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         color: cs.secondary,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        AppLocalizations.of(context)!
-                            .assistantNewConversationPreview,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSecondaryContainer,
+                      Expanded(
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!
+                              .assistantNewConversationPreview,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSecondaryContainer,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -705,22 +722,48 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
+    final labelStyle = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelPainter = TextPainter(
+          text: TextSpan(text: label, style: labelStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout();
+        // Preserve the label's natural width while it fits. If localization
+        // or text scaling makes it too wide, leave room for the value.
+        final minValueWidth = math.min(80.0, constraints.maxWidth * 0.35);
+        final labelWidth = math.min(
+          labelPainter.width,
+          math.max(0.0, constraints.maxWidth - 12 - minValueWidth),
+        );
+        return Row(
+          children: [
+            SizedBox(
+              width: labelWidth,
+              child: ConstrainedText(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: labelStyle,
+              ),
             ),
-          ),
-        ),
-      ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

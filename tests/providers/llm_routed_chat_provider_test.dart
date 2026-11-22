@@ -66,7 +66,6 @@ void main() {
           'opencode-zen',
           'kimi-coding',
         },
-        'google.antigravity.generate_content': {'antigravity'},
       };
 
       for (final entry in expected.entries) {
@@ -98,7 +97,6 @@ void main() {
         'opencode-zen',
         'kimi-coding',
         'vertex-partner',
-        'antigravity',
       };
       for (final protocol in expected.keys) {
         for (final connector in auditedConnectors) {
@@ -146,11 +144,11 @@ void main() {
       );
       expect(
         llmRoutedChatSupportedConnectorTypesForModelOverride(null),
-        containsAll({'antigravity', 'gitlab-duo', 'cloudflare-ai'}),
+        containsAll({'gitlab-duo', 'cloudflare-ai'}),
       );
       expect(
         LlmConnectorRegistry.chatAdapterEndpointType('antigravity'),
-        kAntigravityProtocolId,
+        isNull,
       );
       expect(
         LlmConnectorRegistry.chatAdapterEndpointType('gitlab-duo'),
@@ -170,19 +168,10 @@ void main() {
         ],
       );
       expect(
-        llmRoutedChatProtocolForAccountModel(
-          account: antiAccount,
-          upstreamModelId: 'claude-sonnet-4-5',
-          endpointType: kAntigravityProtocolId,
-        ),
-        kAntigravityProtocolId,
-      );
-      expect(
         () => llmRoutedChatProtocolForAccountModel(
           account: antiAccount,
           upstreamModelId: 'claude-sonnet-4-5',
           endpointType: kAntigravityProtocolId,
-          apiProtocolOverride: 'google.gemini.generate_content',
         ),
         throwsStateError,
       );
@@ -244,98 +233,14 @@ void main() {
         accounts: accounts,
         groups: groups,
       );
-      expect(taskFlowConfigs.map((config) => config.apiProtocol), [
-        kAntigravityProtocolId,
-        'openai.chat_completions',
-      ]);
-    },
-  );
-
-  test(
-    'routes Antigravity through its native protocol with Gemini request bodies',
-    () async {
-      const accountId = 'antigravity-provider-route';
-      const groupId = 'antigravity-provider-group';
-      const localModelId = 'antigravity-provider-model';
-      const upstreamModelId = 'claude-sonnet-4-5';
-      final preferences = _MemoryPreferences();
-      final accounts = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: _MemoryCredentialStore(),
-      );
-      await accounts.saveAccount(
-        LlmAccount(
-          id: accountId,
-          connectorType: 'antigravity',
-          authType: 'oauth',
-          displayName: 'Antigravity',
-          status: LlmAccountStatus.ready,
-          models: const [
-            LlmUpstreamModel(
-              id: 'antigravity-model',
-              upstreamModelId: upstreamModelId,
-              displayName: 'Claude Sonnet',
-              capabilities: {'chat': true},
-            ),
-          ],
-        ),
-        secret: jsonEncode({'access_token': 'test-access-token'}),
-      );
-      await accounts.saveModelGroup(
-        LlmModelGroup(
-          id: groupId,
-          displayName: 'Antigravity',
-          members: [
-            LlmModelGroupMember(
-              accountId: accountId,
-              localModelId: localModelId,
-              upstreamModelId: upstreamModelId,
-            ),
-          ],
-        ),
-      );
-      final connector = _FakeConnectorClient(
-        accounts,
-        responseBody: {
-          'candidates': [
-            {
-              'content': {
-                'parts': [
-                  {'text': 'Antigravity reply'},
-                ],
-              },
-            },
-          ],
-        },
-      );
-      final provider = LlmRoutedChatProvider(
-        runtime: Future.value(
-          LlmChatRoutingRuntime(
-            accountService: accounts,
-            routingService: LlmRoutingService(
-              accountService: accounts,
-              stateStore: LlmRoutingStateStore(preferences: preferences),
-              concurrency: LlmConcurrencyReservations(),
-            ),
-            connectorClient: connector,
-          ),
-        ),
-        groupId: groupId,
-        localModelId: localModelId,
-        endpointType: kAntigravityProtocolId,
-        apiProtocol: kAntigravityProtocolId,
-      );
-
       expect(
-        await provider.chat(const [
-          {'role': 'user', 'content': 'hello'},
-        ]),
-        'Antigravity reply',
+        taskFlowConfigs.map((config) => config.id),
+        isNot(contains('antigravity-group')),
       );
-      expect(connector.requestedAccountIds, [accountId]);
-      expect(connector.lastNativeFormat, isNull);
-      expect(connector.requestBody, contains('contents'));
-      expect(connector.requestBody, isNot(contains('messages')));
+      expect(
+        taskFlowConfigs.map((config) => config.apiProtocol),
+        ['openai.chat_completions'],
+      );
     },
   );
 

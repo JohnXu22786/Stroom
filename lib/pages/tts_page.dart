@@ -18,12 +18,16 @@ import '../utils/sort_config.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
+import '../utils/tts_audio_saver.dart';
+import '../utils/partial_import_refresh.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
 import 'tts_create_page.dart';
 import 'audio_player_page.dart';
 import 'audio_recording_page.dart';
+
+import '../widgets/constrained_text.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
   final int tabIndex;
@@ -99,6 +103,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   Future<void> _importAudio() async {
     if (_isImporting) return;
     _isImporting = true;
+    var count = 0;
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
     // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
@@ -133,41 +138,46 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       final records = ref.read(audioRecordsProvider);
       final usedInBatch = <String>{};
-      var count = 0;
-      for (final file in files) {
-        final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
+      count = await importBatchWithPartialRefresh(
+        items: files,
+        importItem: (file) async {
+          final bytes = await file.readAsBytes();
+          if (bytes.isEmpty) return false;
 
-        final hash = computeAudioHash(bytes);
-        final rawName = sanitizeFileName(file.name);
-        final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
-        final detectedFormat = detectAudioFormat(bytes);
-        // 规范化格式：aac → m4a（与 UI 显示保持一致）
-        final format = detectedFormat != 'pcm'
-            ? normalizeAudioFormat(detectedFormat)
-            : (ext.isNotEmpty ? ext : 'wav');
-        final displayName = _uniqueAudioName(
-          p.basenameWithoutExtension(rawName),
-          records,
-          usedInBatch,
-        );
-        usedInBatch.add(displayName);
-
-        await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
-          await FileManifest.writeFile('$hash.$format', bytes);
-          await FileManifest.addRecord(
-            AudioRecord(
-              name: displayName,
-              hash: hash,
-              format: format,
-              createdAt: DateTime.now(),
-              size: bytes.length,
-              folder: _currentFolder,
-            ),
+          final hash = computeAudioHash(bytes);
+          final rawName = sanitizeFileName(file.name);
+          final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
+          final detectedFormat = detectAudioFormat(bytes);
+          // 规范化格式：aac → m4a（与 UI 显示保持一致）
+          final format = detectedFormat != 'pcm'
+              ? normalizeAudioFormat(detectedFormat)
+              : (ext.isNotEmpty ? ext : 'wav');
+          final displayName = _uniqueAudioName(
+            p.basenameWithoutExtension(rawName),
+            records,
+            usedInBatch,
           );
-        });
-        count++;
-      }
+          usedInBatch.add(displayName);
+
+          final record = AudioRecord(
+            name: displayName,
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: _currentFolder,
+          );
+          await FileManifest.withStorageFileSaveLock(
+            record.storageFileName,
+            () => writeTtsAudioAndPublish(record, bytes, null),
+          );
+          return true;
+        },
+        refresh: () async {
+          await ref.read(audioRecordsProvider.notifier).loadRecords();
+          await ref.read(folderListProvider.notifier).loadFolders();
+        },
+      );
 
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -188,6 +198,12 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         );
       }
     } catch (e) {
+      if (mounted) {
+        await refreshAfterPartialImport(count, () async {
+          await ref.read(audioRecordsProvider.notifier).loadRecords();
+          await ref.read(folderListProvider.notifier).loadFolders();
+        });
+      }
       if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
@@ -277,7 +293,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.ttsConfirmRegenerate),
+        title: ConstrainedText(
+          l10n.ttsConfirmRegenerate,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,12 +328,20 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(l10n.cancel),
+            child: ConstrainedText(
+              l10n.cancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text(l10n.ttsRegenerate),
+            child: ConstrainedText(
+              l10n.ttsRegenerate,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -325,9 +353,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     final originalName = file.name;
 
     if (!mounted) return;
-    await ref.read(audioRecordsProvider.notifier).deleteRecord(file.id);
-
-    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -335,6 +360,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           initialText: sourceText.isNotEmpty ? sourceText : null,
           isOverwrite: true,
           originalTitle: originalName,
+          replaceRecordId: file.id,
           // 沿用原音频所在的文件夹，重新生成的音频落回原位
           initialFolder: file.folder.isNotEmpty ? file.folder : null,
         ),
@@ -353,46 +379,38 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   // Copy-file helper (used by onCopyFile callback)
   // ====================================================================
   Future<void> _copyFile(String id, String selectedFolder) async {
-    final l10n = AppLocalizations.of(context)!;
     final records = ref.read(audioRecordsProvider);
-    try {
-      final source = records.firstWhere((r) => r.id == id);
-      String copyName = '${source.name}_副本';
-      int copyIdx = 2;
-      while (records.any(
-        (r) => r.name == copyName && r.folder == selectedFolder,
-      )) {
-        copyName = '${source.name}_副本 ($copyIdx)';
-        copyIdx++;
-      }
-      await FileManifest.addRecord(
-        AudioRecord(
-          name: copyName,
-          hash: source.hash,
-          format: source.format,
-          createdAt: DateTime.now(),
-          size: source.size,
-          folder: selectedFolder,
-          sourceText: source.sourceText,
-        ),
-      );
-      await ref.read(audioRecordsProvider.notifier).loadRecords();
-      await ref.read(folderListProvider.notifier).loadFolders();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.ttsCopiedFailed(e.toString())),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+    final source = records.firstWhere((r) => r.id == id);
+    String copyName = '${source.name}_副本';
+    int copyIdx = 2;
+    while (records.any(
+      (r) => r.name == copyName && r.folder == selectedFolder,
+    )) {
+      copyName = '${source.name}_副本 ($copyIdx)';
+      copyIdx++;
     }
+    await FileManifest.addRecord(
+      AudioRecord(
+        name: copyName,
+        hash: source.hash,
+        format: source.format,
+        createdAt: DateTime.now(),
+        size: source.size,
+        folder: selectedFolder,
+        sourceText: source.sourceText,
+      ),
+    );
+    await ref.read(audioRecordsProvider.notifier).loadRecords();
+    await ref.read(folderListProvider.notifier).loadFolders();
   }
 
   /// 批量导出文件。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；归档导出返回 ''）。
-  Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
+  Future<String?> _exportFiles(
+    List<String> ids,
+    String targetDirectory, {
+    List<String> reservedFolders = const [],
+  }) async {
     final l10n = AppLocalizations.of(context)!;
     try {
       final useArchive = kIsWeb || SystemPickDirectories.isNativeMobile;
@@ -424,8 +442,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         selectedPaths.add(await _userVisibleExportPath(file));
       }
       validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              folders: reservedFolders,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         var data = await FileManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -447,10 +476,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (useArchive) {
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
+          await writeUserVisibleExportFile(outputPath, data);
         }
         exportedCount++;
       }
@@ -503,18 +532,30 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(l10n.ttsFolderExport),
+              title: ConstrainedText(
+                l10n.ttsFolderExport,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(l10n.ttsWebFolderExportHelp),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.cancel),
+                  child: ConstrainedText(
+                    l10n.cancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(l10n.ttsDownloadZip),
+                  child: ConstrainedText(
+                    l10n.ttsDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -627,11 +668,20 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         files: folderExportPaths,
         folders: selectedFolders,
       );
+      final resolvedOutputPaths = await resolveNonClobberingExportPaths(
+        files: folderExportPaths,
+        directory: outputDir,
+        folders: selectedFolders,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
       for (final folderName in selectedFolders) {
-        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+        await createUserVisibleExportDirectory(outputDir, folderName);
       }
 
-      for (final file in folderFiles) {
+      for (var index = 0; index < folderFiles.length; index++) {
+        final file = folderFiles[index];
         var data = await FileManifest.readFile(file.storagePath);
         if (data == null) continue;
 
@@ -649,10 +699,13 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (!exportPaths.add(relativePath)) {
           throw StateError('导出路径重复: $relativePath');
         }
-        final fileDir = p.join(outputDir, file.folder);
-        await Directory(fileDir).create(recursive: true);
-        final outputPath = p.join(fileDir, exportName);
-        await File(outputPath).writeAsBytes(data);
+        final outputPath = resolvedOutputPaths[index];
+        final fileDir = p.dirname(outputPath);
+        await createUserVisibleExportDirectory(
+          outputDir,
+          p.relative(fileDir, from: outputDir),
+        );
+        await writeUserVisibleExportFile(outputPath, data);
         exportedCount++;
       }
 
@@ -732,9 +785,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                     ),
                   ),
                   icon: const Icon(Icons.mic, size: 20),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.ttsRecord,
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -752,9 +807,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                     ),
                   ),
                   icon: const Icon(Icons.file_download_outlined, size: 20),
-                  label: Text(
+                  label: ConstrainedText(
                     AppLocalizations.of(context)!.ttsImport,
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -789,15 +846,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       onFileTap: (file) => _playAudio(file),
       extraPopupMenuItems: (file) => [
         PopupMenuItem(
-          value: 'play',
-          child: ListTile(
-            leading: const Icon(Icons.play_arrow, size: 20),
-            title: Text(AppLocalizations.of(context)!.ttsPlay),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
           value: 'regenerate',
           child: ListTile(
             leading: const Icon(Icons.refresh, size: 20),
@@ -818,8 +866,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       ],
       onExtraMenuAction: (file, value) {
         switch (value) {
-          case 'play':
-            _playAudio(file);
           case 'regenerate':
             _regenerateFile(file);
         }
@@ -886,7 +932,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         await ref.read(folderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
-      onExportFiles: _exportFiles,
+      onExportFilesWithFolders: (ids, targetDirectory, folders) =>
+          _exportFiles(ids, targetDirectory, reservedFolders: folders),
       onExportFolders: _exportFolders,
       onExportFolder: (name) async {
         return _exportFolder(name);

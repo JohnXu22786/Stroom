@@ -199,7 +199,7 @@ void main() {
     });
 
     testWidgets(
-        'provider effort values show as blocks, none selected by '
+        'provider effort values show as blocks and are selected by '
         'default', (tester) async {
       final saved = await _pumpAndSave(
         tester,
@@ -222,9 +222,9 @@ void main() {
         },
       );
 
-      // 默认全不选 → 保存的 options 为空
+      // 新模型继承 provider 时默认选中全部 provider 值。
       expect(saved, isNotNull);
-      expect(_savedEffortOptions(saved!), isEmpty);
+      expect(_savedEffortOptions(saved!), ['low', 'medium', 'high']);
     });
 
     testWidgets('selecting blocks saves only the selected values', (
@@ -239,9 +239,8 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'medium', 'high']),
         beforeSave: (tester) async {
-          // 勾选 low 和 high（medium 保持不选）
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'high');
+          // provider 值默认全选，取消 medium 后只保存 low 和 high。
+          await _tapBlock(tester, 'medium');
         },
       );
 
@@ -261,7 +260,7 @@ void main() {
           ),
           provider: _providerWithEffortOptions(['low', 'high']),
           beforeSave: (tester) async {
-            // 添加新值 max
+            // 添加新值 max（默认勾选，provider 值也保持默认选中）。
             await _scrollToReasoning(tester, find.text('添加值'));
             await tester.tap(find.text('添加值'));
             await tester.pumpAndSettle();
@@ -277,8 +276,7 @@ void main() {
         );
 
         expect(saved, isNotNull);
-        // 默认全不选：只保存勾选的新值 max
-        expect(_savedEffortOptions(saved!), ['max']);
+        expect(_savedEffortOptions(saved!), ['low', 'high', 'max']);
       },
     );
 
@@ -337,11 +335,7 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'medium', 'high']),
         beforeSave: (tester) async {
-          // 先勾选全部（默认全不选）
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'medium');
-          await _tapBlock(tester, 'high');
-          // 长按 low 胶囊拖到 medium 上（横向排列，向右拖动）
+          // provider 值默认全选；长按 low 胶囊拖到 medium 上。
           await _scrollToReasoning(tester, find.text('medium'));
           await _longPressDrag(tester, find.text('low'), const Offset(60, 0));
         },
@@ -351,10 +345,10 @@ void main() {
       expect(_savedEffortOptions(saved!), ['medium', 'low', 'high']);
     });
 
-    testWidgets('provider changes appear on reopen (unchecked by default)', (
+    testWidgets('provider changes appear on reopen (new values unchecked)', (
       tester,
     ) async {
-      // 第一次：provider [low, medium] → 默认全不选，保存 options 为空
+      // 第一次：provider [low, medium] → 默认全选并保存。
       final saved = await _pumpAndSave(
         tester,
         model: ModelConfig(
@@ -364,9 +358,9 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'medium']),
       );
-      expect(_savedEffortOptions(saved!), isEmpty);
+      expect(_savedEffortOptions(saved!), ['low', 'medium']);
 
-      // 第二次：provider 新增 high；模型打开时 high 出现（未勾选）
+      // 第二次：provider 新增 high；已保存的选择保留，新值 high 未勾选。
       await _pumpAndSave(
         tester,
         model: saved,
@@ -763,8 +757,8 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'high']),
         beforeSave: (tester) async {
-          // 勾选 low + 添加 max（自动勾选）
-          await _tapBlock(tester, 'low');
+          // 保留默认选中的 low，取消 high，再添加 max（自动勾选）。
+          await _tapBlock(tester, 'high');
           await _scrollToReasoning(tester, find.text('添加值'));
           await tester.tap(find.text('添加值'));
           await tester.pumpAndSettle();
@@ -1297,8 +1291,8 @@ void main() {
 
       expect(saved, isNotNull);
       expect(saved!.modelId, 'test-model');
-      // 新建模型：默认全不选 → 力度参数 options 为空（用户显式勾选）
-      expect(_savedEffortOptions(saved!), isEmpty);
+      // 新建模型继承的 provider 力度值默认选中。
+      expect(_savedEffortOptions(saved!), ['low', 'high']);
     });
 
     testWidgets(
@@ -1366,9 +1360,9 @@ void main() {
 
     testWidgets(
         'saved selection reappears on reopen with provider values '
-        'unchecked and no delete badges', (tester) async {
-      // 回归：模型页勾选保存后重开，供应商的值必须重新出现（未勾选、
-      // 无删除按钮），而不是全部变成「模型自定义 + 带叉号」。
+        'and no delete badges', (tester) async {
+      // 回归：模型页取消 medium 后重开，供应商值仍出现且来源不变，
+      // 而不是全部变成「模型自定义 + 带叉号」。
       final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
       final saved = await _pumpAndSave(
         tester,
@@ -1379,14 +1373,13 @@ void main() {
         ),
         provider: provider,
         beforeSave: (tester) async {
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'high');
+          await _tapBlock(tester, 'medium');
         },
       );
       expect(saved, isNotNull);
       expect(_savedEffortOptions(saved!), ['low', 'high']);
 
-      // 重开：未勾选的 medium 重新出现且无删除按钮（供应商值）
+      // 重开：未勾选的 medium 仍出现且无删除按钮（供应商值）
       await _pumpAndSave(
         tester,
         model: saved,
@@ -2223,8 +2216,8 @@ void main() {
     testWidgets('selected effort values keep the provider order on reopen', (
       tester,
     ) async {
-      // 勾选 low + high（跳过 medium）保存 → 重开后块顺序保持供应商
-      // 顺序 [low, medium, high]，而不是选中前置的 [low, high, medium]。
+      // 供应商值默认全部勾选，取消 medium 后保存 low + high → 重开后块
+      // 顺序保持供应商顺序 [low, medium, high]，而不是选中前置。
       final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
       final saved = await _pumpAndSave(
         tester,
@@ -2235,8 +2228,7 @@ void main() {
         ),
         provider: provider,
         beforeSave: (tester) async {
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'high');
+          await _tapBlock(tester, 'medium');
         },
       );
       expect(saved, isNotNull);
@@ -2257,8 +2249,8 @@ void main() {
     });
 
     testWidgets('dragged block order persists across reopen', (tester) async {
-      // 用户拖动过的块顺序保存到 optionOrder：重开后按拖动顺序恢复，
-      // 而不是退回供应商顺序。
+      // 供应商值默认全部勾选。用户拖动过的块顺序保存到 optionOrder：
+      // 重开后按拖动顺序恢复，而不是退回供应商顺序。
       final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
       final saved = await _pumpAndSave(
         tester,
@@ -2269,9 +2261,6 @@ void main() {
         ),
         provider: provider,
         beforeSave: (tester) async {
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'medium');
-          await _tapBlock(tester, 'high');
           // 长按 low 拖到末尾
           await _scrollToReasoning(tester, find.text('medium'));
           await _longPressDrag(tester, find.text('low'), const Offset(250, 0));

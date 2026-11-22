@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../l10n/app_localizations.dart';
 
@@ -23,6 +24,7 @@ class GalleryChoiceResult {
 Future<GalleryChoiceResult?> showGalleryChoiceDialog(BuildContext context) {
   return showModalBottomSheet<GalleryChoiceResult>(
     context: context,
+    constraints: modalBottomSheetWidthConstraints(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
@@ -150,8 +152,6 @@ class _ChoiceCard extends StatelessWidget {
                           .textTheme
                           .bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),

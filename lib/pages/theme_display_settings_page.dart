@@ -1,3 +1,5 @@
+import '../widgets/constrained_text.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -42,11 +44,16 @@ class _ThemeDisplaySettingsPageState
           ),
         )
         .where((language) => language.searchText.contains(normalizedQuery))
-        .toList();
+        .toList()
+      ..sort((left, right) => left.id.compareTo(right.id));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.themeDisplaySettingsTitle),
+        title: ConstrainedText(
+          strings.themeDisplaySettingsTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(

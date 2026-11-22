@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 
 import '../l10n/app_localizations.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/anthropic_chat_provider.dart' show kAnthropicApiVersion;
 import '../providers/llm_routed_chat_provider.dart';
+import '../services/llm_model_group_provider.dart';
 import '../providers/provider_config.dart';
 import '../models/ocr_batch_execution.dart';
 import '../ai_gateway/ai_gateway.dart';
@@ -90,21 +92,20 @@ class OcrConfig {
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
     int? requestSizeBudgetBytes,
-  }) =>
-      OcrConfig(
-        model: model ?? this.model,
-        apiKey: apiKey ?? this.apiKey,
-        host: host ?? this.host,
-        systemPrompt: systemPrompt ?? this.systemPrompt,
-        routingGroupId: routingGroupId ?? this.routingGroupId,
-        routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
-        routingAccountId: routingAccountId ?? this.routingAccountId,
-        routingDisplayName: routingDisplayName ?? this.routingDisplayName,
-        typeConfig: typeConfig ?? this.typeConfig,
-        customParams: customParams ?? this.customParams,
-        requestSizeBudgetBytes:
-            requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
-      );
+  }) => OcrConfig(
+    model: model ?? this.model,
+    apiKey: apiKey ?? this.apiKey,
+    host: host ?? this.host,
+    systemPrompt: systemPrompt ?? this.systemPrompt,
+    routingGroupId: routingGroupId ?? this.routingGroupId,
+    routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
+    routingAccountId: routingAccountId ?? this.routingAccountId,
+    routingDisplayName: routingDisplayName ?? this.routingDisplayName,
+    typeConfig: typeConfig ?? this.typeConfig,
+    customParams: customParams ?? this.customParams,
+    requestSizeBudgetBytes:
+        requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
+  );
 }
 
 // ============================================================================
@@ -130,9 +131,11 @@ class OcrResult {
 
 bool _isCompleteOcrFinishReason(String? finishReason) =>
     finishReason == null ||
-    const {'stop', 'end_turn', 'stop_sequence'}.contains(
-      finishReason.toLowerCase(),
-    );
+    const {
+      'stop',
+      'end_turn',
+      'stop_sequence',
+    }.contains(finishReason.toLowerCase());
 
 // ============================================================================
 // OCR Service
@@ -157,20 +160,27 @@ class OcrRequestTooLargeException implements Exception {
     required this.budgetBytes,
   });
 
+  String localizedMessage(AppLocalizations localizations) =>
+      localizations.bgTaskOcrRequestSizeExceeded(encodedBytes, budgetBytes);
+
   @override
   String toString() =>
-      'OCR 请求的 JSON 大小为 ' +
-      encodedBytes.toString() +
-      ' 字节，超过 ' +
-      budgetBytes.toString() +
-      ' 字节配置值；请调整 OCR 供应商/模型请求大小设置或图片画质';
+      'OCR request JSON size is $encodedBytes bytes, '
+      'exceeding the configured limit of $budgetBytes bytes.';
 }
 
 class OcrService {
+  static final RegExp _recognizableCredentialValue = RegExp(
+    r'(?:Bearer\s+\S+|sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9_-]{8,}|gsk_[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|AIza[a-z0-9_-]{20,})',
+    caseSensitive: false,
+  );
+
   final OcrConfig config;
   final Dio _dio;
   final bool _usesInjectedDio;
+  final bool _ownsDio;
   final Duration? _sendTimeoutOverride;
+  final String Function(List<int>) _encodeImageBytes;
   final Future<AiGatewayFacade>? _routingRuntime;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
@@ -211,12 +221,14 @@ class OcrService {
             (entry.key as String).toLowerCase() != 'authorization') {
           continue;
         }
-        final rawValues =
-            entry.value is List ? entry.value as List : [entry.value];
+        final rawValues = entry.value is List
+            ? entry.value as List
+            : [entry.value];
         for (final rawValue in rawValues) {
           if (rawValue is! String) continue;
-          final credential =
-              RegExp(r'^\S+\s+(\S+)').firstMatch(rawValue.trim())?.group(1);
+          final credential = RegExp(r'^\S+\s+(\S+)')
+              .firstMatch(rawValue.trim())
+              ?.group(1);
           if (credential != null && credential.isNotEmpty) {
             values.add(credential);
           }
@@ -226,7 +238,9 @@ class OcrService {
             final name = match.group(1)?.toLowerCase();
             final authParameter = (match.group(2) ?? match.group(3))
                 ?.replaceAllMapped(
-                    RegExp(r'\\(.)'), (match) => match.group(1)!);
+                  RegExp(r'\\(.)'),
+                  (match) => match.group(1)!,
+                );
             if (authParameter != null &&
                 authParameter.isNotEmpty &&
                 (name == 'response' ||
@@ -242,28 +256,115 @@ class OcrService {
     return values.toList(growable: false);
   }
 
+  static List<String> _recognizableCredentialValues(dynamic value) {
+    final values = <String>{};
+    void collect(dynamic current) {
+      if (current is String) {
+        for (final match in _recognizableCredentialValue.allMatches(current)) {
+          values.add(match.group(0)!);
+        }
+      } else if (current is Map) {
+        for (final entry in current.entries) {
+          collect(entry.key);
+          collect(entry.value);
+        }
+      } else if (current is Iterable) {
+        for (final item in current) {
+          collect(item);
+        }
+      }
+    }
+
+    collect(value);
+    return values.toList(growable: false);
+  }
+
+  static String _redactCredentialValues(
+    String value,
+    Iterable<String> credentialValues,
+  ) {
+    var safeValue = value;
+    for (final credential
+        in credentialValues.toList()
+          ..sort((a, b) => b.length.compareTo(a.length))) {
+      if (credential.isEmpty) continue;
+      final encodedCredential = credential.contains('%')
+          ? RegExp(RegExp.escape(credential), caseSensitive: false)
+          : null;
+      safeValue = encodedCredential == null
+          ? safeValue.replaceAll(credential, '[REDACTED]')
+          : safeValue.replaceAll(encodedCredential, '[REDACTED]');
+    }
+    return OcrDiagnosticSnapshot.redactLabeledCredentialAssignments(safeValue);
+  }
+
+  static dynamic _redactResponseDiagnosticValue(
+    dynamic value,
+    Iterable<String> credentialValues,
+  ) {
+    if (value is String) {
+      return _redactCredentialValues(
+        value,
+        credentialValues,
+      ).replaceAllMapped(_recognizableCredentialValue, (_) => '[REDACTED]');
+    }
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          _redactResponseDiagnosticValue(entry.key.toString(), credentialValues)
+              as String: _redactResponseDiagnosticValue(
+            entry.value,
+            credentialValues,
+          ),
+      };
+    }
+    if (value is Iterable) {
+      return value
+          .map((item) => _redactResponseDiagnosticValue(item, credentialValues))
+          .toList(growable: false);
+    }
+    return value;
+  }
+
+  static Map<String, List<String>>? _redactResponseDiagnosticHeaders(
+    Map<String, List<String>>? headers,
+    Iterable<String> credentialValues,
+  ) {
+    if (headers == null) return null;
+    return {
+      for (final entry in headers.entries)
+        entry.key: entry.value
+            .map(
+              (value) =>
+                  _redactResponseDiagnosticValue(value, credentialValues)
+                      as String,
+            )
+            .toList(growable: false),
+    };
+  }
+
   List<String> get _diagnosticRequestCredentialValues => {
-        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-          'headers': lastRequestHeaders,
-          'url': lastRequestUrl,
-          'body': lastRequestBody,
-        }),
-        ..._credentialValuesFromHeaders(_dio.options.headers),
-      }.toList(growable: false);
+    ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'headers': lastRequestHeaders,
+      'url': lastRequestUrl,
+      'body': lastRequestBody,
+    }),
+    ..._credentialValuesFromHeaders(_dio.options.headers),
+  }.toList(growable: false);
 
   List<String> get _diagnosticCredentialValues => [
-        config.apiKey,
-        ..._diagnosticRequestCredentialValues,
-      ];
+    config.apiKey,
+    ..._diagnosticRequestCredentialValues,
+  ];
 
   Map<String, dynamic> get diagnosticRequest => OcrDiagnosticSnapshot.request(
-        url: lastRequestUrl,
-        imageCount: _lastImageCount,
-        imageBytes: _lastImageBytes,
-        durationMs: _lastDurationMs,
-        requestId: null,
-        excludedValues: _diagnosticCredentialValues,
-      );
+    url: lastRequestUrl,
+    imageCount: _lastImageCount,
+    imageBytes: _lastImageBytes,
+    durationMs: _lastDurationMs,
+    requestId: null,
+    excludedValues: _diagnosticCredentialValues,
+  );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
       OcrDiagnosticSnapshot.response(
@@ -289,29 +390,37 @@ class OcrService {
   OcrService({
     required this.config,
     Dio? dio,
+
+    /// Set true only when an injected client is dedicated to this service.
+    /// A Dio client created internally by the service is always owned.
+    bool ownsDio = false,
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
     Future<AiGatewayFacade>? routingRuntime,
-  })  : _sendTimeoutOverride = sendTimeout,
-        _routingRuntime = config.routingGroupId == null
-            ? null
-            : routingRuntime ?? AiGateway.sharedPlatform(),
-        _usesInjectedDio = dio != null,
-        _dio = dio ??
-            Dio(
-              BaseOptions(
-                headers: {
-                  'Content-Type': 'application/json',
-                  if (config.apiKey.isNotEmpty)
-                    'Authorization': 'Bearer ${config.apiKey}',
-                  ...openRouterAppHeaders,
-                },
-                connectTimeout: connectTimeout ?? connectTimeoutDefault,
-                sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
-                receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
-              ),
-            ) {
+    @visibleForTesting String Function(List<int>)? encodeImageBytes,
+  }) : _sendTimeoutOverride = sendTimeout,
+       _routingRuntime = config.routingGroupId == null
+           ? null
+           : routingRuntime ?? AiGateway.sharedPlatform(),
+       _encodeImageBytes = encodeImageBytes ?? base64Encode,
+       _usesInjectedDio = dio != null,
+       _ownsDio = dio == null || ownsDio,
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               headers: {
+                 'Content-Type': 'application/json',
+                 if (config.apiKey.isNotEmpty)
+                   'Authorization': 'Bearer ${config.apiKey}',
+                 ...openRouterAppHeaders,
+               },
+               connectTimeout: connectTimeout ?? connectTimeoutDefault,
+               sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
+               receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
+             ),
+           ) {
     _dio.options.connectTimeout =
         connectTimeout ?? _dio.options.connectTimeout ?? connectTimeoutDefault;
     _dio.options.receiveTimeout =
@@ -337,18 +446,7 @@ class OcrService {
     if (imageBytesList.isEmpty) {
       throw ArgumentError('imageBytesList must not be empty');
     }
-    final contents = <Map<String, dynamic>>[
-      for (final (bytes, format) in imageBytesList)
-        _buildImageContent(
-          'data:image/' + format + ';base64,' + base64Encode(bytes),
-        ),
-    ];
-    final instruction = config.effectiveUserInstruction;
-    if (instruction.isNotEmpty) {
-      contents.add({'type': 'text', 'text': instruction});
-    }
-    final body = _buildRequestBody(contents);
-    return _encodedBodyLength(body);
+    return _estimateEncodedRequestSizeBytes(imageBytesList);
   }
 
   /// Largest raw image length whose base64 data URI can fit the configured
@@ -368,7 +466,13 @@ class OcrService {
   }
 
   /// Close the underlying client when this service owns its lifetime.
-  void close({bool force = false}) => _dio.close(force: force);
+  ///
+  /// Clients created by this service are always closed. For an injected
+  /// client, set the constructor's `ownsDio` option to true only when it is
+  /// dedicated to this service.
+  void close({bool force = false}) {
+    if (_ownsDio) _dio.close(force: force);
+  }
 
   /// The chat completions endpoint URL.
   /// The user provides the full endpoint URL including the path,
@@ -396,13 +500,13 @@ class OcrService {
       '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节',
     );
     final stopwatch = Stopwatch()..start();
-    var requestCredentialValues = _beginDiagnosticCapture(
-      1,
-      imageBytes.length,
-    );
+    var requestCredentialValues = _beginDiagnosticCapture(1, imageBytes.length);
 
     try {
-      final base64Image = base64Encode(imageBytes);
+      _ensureEstimatedRequestWithinSizeBudget(
+        _estimateEncodedRequestSizeBytes([(imageBytes, imageFormat)]),
+      );
+      final base64Image = _encodeImageBytes(imageBytes);
       final dataUri = 'data:image/$imageFormat;base64,$base64Image';
 
       // Images first, optional instruction text after them — matches the
@@ -427,13 +531,15 @@ class OcrService {
       final response = await _sendRequest(
         body: body,
         cancelToken: cancelToken,
-        onSendProgress: onSendProgress,
+        onSendProgress: _uploadProgress(onSendProgress, onStage),
         onStage: onStage,
       );
 
       stopwatch.stop();
 
       // Capture response diagnostics
+      final diagnosticResponseData =
+          response.extra['ocrRawResponse'] ?? response.data;
       final responseCredentialValues = {
         ...requestCredentialValues,
         ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
@@ -444,20 +550,33 @@ class OcrService {
           response.headers.map,
         ),
         ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-          'body': response.data,
+          'body': diagnosticResponseData,
         }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
-      _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
-        {'statusCode': response.statusCode},
-        excludedValues: [config.apiKey, ...responseCredentialValues],
-      )?['statusCode'] as int?;
-      final diagnosticData = response.rawData ?? response.data;
-      lastResponseData = diagnosticData is Map
-          ? Map<String, dynamic>.from(diagnosticData)
-          : <String, dynamic>{'raw': '$diagnosticData'};
-      lastResponseHeaders = response.headers.map;
-      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+      _lastDiagnosticStatusCode =
+          OcrDiagnosticSnapshot.sanitizeResponse(
+                {'statusCode': response.statusCode},
+                excludedValues: [config.apiKey, ...responseCredentialValues],
+              )?['statusCode']
+              as int?;
+      lastResponseData = diagnosticResponseData is Map
+          ? _redactResponseDiagnosticValue(
+              diagnosticResponseData,
+              responseCredentialValues,
+            ) as Map<String, dynamic>
+          : <String, dynamic>{
+              'raw': _redactResponseDiagnosticValue(
+                '$diagnosticResponseData',
+                responseCredentialValues,
+              ) as String,
+            };
+      lastResponseHeaders = _redactResponseDiagnosticHeaders(
+        response.headers.map,
+        responseCredentialValues,
+      );
+      _lastRequestId =
+          OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
           ) ??
@@ -469,10 +588,12 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
-        {'finishReason': parsed.finishReason},
-        excludedValues: [config.apiKey, ...responseCredentialValues],
-      )?['finishReason'] as String?;
+      _lastFinishReason =
+          OcrDiagnosticSnapshot.sanitizeResponse(
+                {'finishReason': parsed.finishReason},
+                excludedValues: [config.apiKey, ...responseCredentialValues],
+              )?['finishReason']
+              as String?;
 
       await AppLogService.info(
         'OcrService',
@@ -492,7 +613,10 @@ class OcrService {
         requestCredentialValues: requestCredentialValues,
       );
       if (e.type == DioExceptionType.cancel) rethrow;
-      throwWrappedDioException(e);
+      _throwWrappedDioException(
+        e,
+        requestCredentialValues: requestCredentialValues,
+      );
     } finally {
       _finishDiagnosticCapture(stopwatch);
     }
@@ -526,12 +650,15 @@ class OcrService {
     );
 
     try {
+      _ensureEstimatedRequestWithinSizeBudget(
+        _estimateEncodedRequestSizeBytes(imageBytesList),
+      );
       // Consecutive image parts (image identity is conveyed by array order,
       // per official docs), then the optional instruction text last.
       final contents = <Map<String, dynamic>>[
         for (final (bytes, format) in imageBytesList)
           _buildImageContent(
-            'data:image/$format;base64,${base64Encode(bytes)}',
+            'data:image/$format;base64,${_encodeImageBytes(bytes)}',
           ),
       ];
       final instruction = config.effectiveUserInstruction;
@@ -553,13 +680,15 @@ class OcrService {
       final response = await _sendRequest(
         body: body,
         cancelToken: cancelToken,
-        onSendProgress: onSendProgress,
+        onSendProgress: _uploadProgress(onSendProgress, onStage),
         onStage: onStage,
       );
 
       stopwatch.stop();
 
       // Capture response diagnostics
+      final diagnosticResponseData =
+          response.extra['ocrRawResponse'] ?? response.data;
       final responseCredentialValues = {
         ...requestCredentialValues,
         ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
@@ -570,19 +699,33 @@ class OcrService {
           response.headers.map,
         ),
         ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-          'body': response.data,
+          'body': diagnosticResponseData,
         }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
-      _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
-        {'statusCode': response.statusCode},
-        excludedValues: [config.apiKey, ...responseCredentialValues],
-      )?['statusCode'] as int?;
-      lastResponseData = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '${response.data}'};
-      lastResponseHeaders = response.headers.map;
-      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+      _lastDiagnosticStatusCode =
+          OcrDiagnosticSnapshot.sanitizeResponse(
+                {'statusCode': response.statusCode},
+                excludedValues: [config.apiKey, ...responseCredentialValues],
+              )?['statusCode']
+              as int?;
+      lastResponseData = diagnosticResponseData is Map
+          ? _redactResponseDiagnosticValue(
+              diagnosticResponseData,
+              responseCredentialValues,
+            ) as Map<String, dynamic>
+          : <String, dynamic>{
+              'raw': _redactResponseDiagnosticValue(
+                '$diagnosticResponseData',
+                responseCredentialValues,
+              ) as String,
+            };
+      lastResponseHeaders = _redactResponseDiagnosticHeaders(
+        response.headers.map,
+        responseCredentialValues,
+      );
+      _lastRequestId =
+          OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
           ) ??
@@ -594,10 +737,12 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
-        {'finishReason': parsed.finishReason},
-        excludedValues: [config.apiKey, ...responseCredentialValues],
-      )?['finishReason'] as String?;
+      _lastFinishReason =
+          OcrDiagnosticSnapshot.sanitizeResponse(
+                {'finishReason': parsed.finishReason},
+                excludedValues: [config.apiKey, ...responseCredentialValues],
+              )?['finishReason']
+              as String?;
 
       await AppLogService.info(
         'OcrService',
@@ -617,7 +762,10 @@ class OcrService {
         requestCredentialValues: requestCredentialValues,
       );
       if (e.type == DioExceptionType.cancel) rethrow;
-      throwWrappedDioException(e);
+      _throwWrappedDioException(
+        e,
+        requestCredentialValues: requestCredentialValues,
+      );
     } finally {
       _finishDiagnosticCapture(stopwatch);
     }
@@ -655,6 +803,43 @@ class OcrService {
   int _encodedBodyLength(Map<String, dynamic> body) =>
       utf8.encode(jsonEncode(body)).length;
 
+  int _estimateEncodedRequestSizeBytes(
+    List<(Uint8List bytes, String format)> imageBytesList,
+  ) {
+    final contents = <Map<String, dynamic>>[
+      for (final (_, format) in imageBytesList)
+        _buildImageContent('data:image/$format;base64,'),
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
+    }
+    final bodyBytes = _encodedBodyLength(_buildRequestBody(contents));
+    return imageBytesList.fold<int>(
+      bodyBytes,
+      (total, image) => total + _base64EncodedLength(image.$1.length),
+    );
+  }
+
+  int _base64EncodedLength(int rawLength) => ((rawLength + 2) ~/ 3) * 4;
+
+  int _ensureEstimatedRequestWithinSizeBudget(int encodedBytes) {
+    if (config.requestSizeBudgetBytes <= 0) {
+      throw ArgumentError.value(
+        config.requestSizeBudgetBytes,
+        'requestSizeBudgetBytes',
+        'OCR request size budget must be greater than zero',
+      );
+    }
+    if (encodedBytes > config.requestSizeBudgetBytes) {
+      throw OcrRequestTooLargeException(
+        encodedBytes: encodedBytes,
+        budgetBytes: config.requestSizeBudgetBytes,
+      );
+    }
+    return encodedBytes;
+  }
+
   int _ensureRequestWithinSizeBudget(Map<String, dynamic> body) {
     if (config.requestSizeBudgetBytes <= 0) {
       throw ArgumentError.value(
@@ -673,7 +858,35 @@ class OcrService {
     return encodedBytes;
   }
 
-  Future<_OcrResponse> _sendRequest({
+  Options _requestOptions({required int encodedBytes}) => Options(
+    headers: _requestAuthorizationHeaders,
+    sendTimeout:
+        _sendTimeoutOverride ??
+        (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
+        sendTimeoutForBytes(encodedBytes),
+    receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+  );
+
+  Map<String, dynamic>? get _requestAuthorizationHeaders {
+    final hasCallerAuthorization = _dio.options.headers.keys.any(
+      (header) => header.toLowerCase() == 'authorization',
+    );
+    if (hasCallerAuthorization || config.apiKey.isEmpty) return null;
+    return {'Authorization': 'Bearer ${config.apiKey}'};
+  }
+
+  ProgressCallback _uploadProgress(
+    ProgressCallback? progress,
+    void Function(OcrRequestStage)? stage,
+  ) => (sent, total) {
+    stage?.call(OcrRequestStage.uploading);
+    progress?.call(sent, total);
+    if (total > 0 && sent >= total) {
+      stage?.call(OcrRequestStage.waiting);
+    }
+  };
+
+  Future<Response<dynamic>> _sendRequest({
     required Map<String, dynamic> body,
     CancelToken? cancelToken,
     ProgressCallback? onSendProgress,
@@ -688,12 +901,7 @@ class OcrService {
         cancelToken: cancelToken,
         onSendProgress: _uploadProgress(onSendProgress, onStage),
       );
-      return _OcrResponse(
-        statusCode: response.statusCode ?? 0,
-        data: response.data,
-        headers: response.headers.map,
-        requestOptions: response.requestOptions,
-      );
+      return response;
     }
 
     final runtime = await _routingRuntime!;
@@ -711,7 +919,7 @@ class OcrService {
       );
     }
     onStage?.call(OcrRequestStage.uploading);
-    final execution = await runtime.executeForGroupId<_OcrResponse>(
+    final execution = await runtime.executeForGroupId<Response<dynamic>>(
       groupId: groupId,
       localModelId: localModelId,
       requiredCapabilities: const {'vision'},
@@ -722,9 +930,7 @@ class OcrService {
         ...llmRoutedChatSupportedConnectorTypes(
           'google.gemini.generate_content',
         ),
-        ...llmRoutedChatSupportedConnectorTypes(
-          'google.gemini.interactions',
-        ),
+        ...llmRoutedChatSupportedConnectorTypes('google.gemini.interactions'),
         ...llmRoutedChatSupportedConnectorTypes('ollama.chat'),
       },
       candidateFilter: (candidate) {
@@ -756,12 +962,10 @@ class OcrService {
         );
         final routedBody = protocolRequest.body;
         _ensureRequestWithinSizeBudget(routedBody);
-        onSendProgress?.call(
-          0,
-          utf8.encode(jsonEncode(routedBody)).length,
-        );
+        onSendProgress?.call(0, utf8.encode(jsonEncode(routedBody)).length);
         lastRequestBody = routedBody;
-        final baseUrl = candidate.account.endpointConfig['baseUrl'] ??
+        final baseUrl =
+            candidate.account.endpointConfig['baseUrl'] ??
             candidate.account.endpointConfig['host'] ??
             candidate.account.endpointConfig['apiBase'];
         lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -789,7 +993,8 @@ class OcrService {
             onRequestSent: progress.markRequestSent,
             connectTimeout:
                 _dio.options.connectTimeout ?? connectTimeoutDefault,
-            sendTimeout: _sendTimeoutOverride ??
+            sendTimeout:
+                _sendTimeoutOverride ??
                 sendTimeoutForBytes(utf8.encode(jsonEncode(routedBody)).length),
             receiveTimeout:
                 _dio.options.receiveTimeout ?? receiveTimeoutFallback,
@@ -824,11 +1029,11 @@ class OcrService {
           runtime: runtime,
           accountId: candidate.account.id,
         );
-        return _OcrResponse(
+        return Response<dynamic>(
           statusCode: response.statusCode,
           data: data,
-          rawData: responseData,
-          headers: response.headers,
+          headers: Headers.fromMap(response.headers),
+          extra: {'ocrRawResponse': responseData},
           requestOptions: RequestOptions(
             path: lastRequestUrl ?? _chatUrl,
             data: routedBody,
@@ -875,8 +1080,9 @@ class OcrService {
       response['usage'],
     );
     if (usage == null) return;
-    final observedUnit =
-        reported.isKnown && reported.value != null ? reported.unit : null;
+    final observedUnit = reported.isKnown && reported.value != null
+        ? reported.unit
+        : null;
     final input = usage['inputTokens'];
     final output = usage['outputTokens'];
     if ((input is num || output is num) && observedUnit != 'tokens') {
@@ -998,8 +1204,8 @@ class OcrService {
           final incomplete = data['incomplete_details'];
           finishReason =
               incomplete is Map && incomplete['reason'] == 'max_output_tokens'
-                  ? 'length'
-                  : 'incomplete';
+              ? 'length'
+              : 'incomplete';
         }
         usage = _normalizeProtocolUsage(data['usage']);
       case 'anthropic.messages':
@@ -1113,33 +1319,8 @@ class OcrService {
     return usage;
   }
 
-  Options _requestOptions({required int encodedBytes}) => Options(
-        headers: _requestAuthorizationHeaders,
-        sendTimeout: _sendTimeoutOverride ??
-            (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
-            sendTimeoutForBytes(encodedBytes),
-        receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
-      );
-
-  Map<String, dynamic>? get _requestAuthorizationHeaders {
-    final hasCallerAuthorization = _dio.options.headers.keys.any(
-      (header) => header.toLowerCase() == 'authorization',
-    );
-    if (hasCallerAuthorization || config.apiKey.isEmpty) return null;
-    return {'Authorization': 'Bearer ${config.apiKey}'};
-  }
-
-  ProgressCallback _uploadProgress(
-    ProgressCallback? progress,
-    void Function(OcrRequestStage)? stage,
-  ) =>
-      (sent, total) {
-        stage?.call(OcrRequestStage.uploading);
-        progress?.call(sent, total);
-        if (total > 0 && sent >= total) {
-          stage?.call(OcrRequestStage.waiting);
-        }
-      };
+  /// Capture response-level diagnostic fields from a [DioException].
+  /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
 
   /// Capture response-level diagnostic fields from a [DioException].
   /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
@@ -1149,9 +1330,7 @@ class OcrService {
   }) {
     final responseCredentialValues = {
       ...requestCredentialValues,
-      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-        'body': e.requestOptions.data,
-      }),
+      ..._credentialValuesFromRequestOptions(e.requestOptions),
       ..._credentialValuesFromHeaders(e.requestOptions.headers),
       ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
         e.response?.headers.map,
@@ -1159,21 +1338,37 @@ class OcrService {
       ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
         'body': e.response?.data,
       }),
+      ..._recognizableCredentialValues(e.response?.data),
+      ..._recognizableCredentialValues(e.response?.headers.map),
     }.toList(growable: false);
     if (e.response?.data is Map) {
-      lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+      lastResponseData = _redactResponseDiagnosticValue(
+        e.response!.data,
+        responseCredentialValues,
+      ) as Map<String, dynamic>;
     } else if (e.response?.data is String) {
-      lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
+      lastResponseData = <String, dynamic>{
+        'raw': _redactResponseDiagnosticValue(
+          e.response!.data,
+          responseCredentialValues,
+        ) as String,
+      };
     } else {
       lastResponseData = null;
     }
     lastResponseStatusCode = e.response?.statusCode;
-    _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
-      {'statusCode': e.response?.statusCode},
-      excludedValues: [config.apiKey, ...responseCredentialValues],
-    )?['statusCode'] as int?;
-    lastResponseHeaders = e.response?.headers.map;
-    _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+    _lastDiagnosticStatusCode =
+        OcrDiagnosticSnapshot.sanitizeResponse(
+              {'statusCode': e.response?.statusCode},
+              excludedValues: [config.apiKey, ...responseCredentialValues],
+            )?['statusCode']
+            as int?;
+    lastResponseHeaders = _redactResponseDiagnosticHeaders(
+      e.response?.headers.map,
+      responseCredentialValues,
+    );
+    _lastRequestId =
+        OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
           excludedValues: [config.apiKey, ...responseCredentialValues],
         ) ??
@@ -1181,11 +1376,112 @@ class OcrService {
           e.response?.data,
           excludedValues: [config.apiKey, ...responseCredentialValues],
         );
-    _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
-      {'data': e.response?.data},
-      excludedValues: [config.apiKey, ...responseCredentialValues],
-    )?['finishReason'] as String?;
+    _lastFinishReason =
+        OcrDiagnosticSnapshot.sanitizeResponse(
+              {'data': e.response?.data},
+              excludedValues: [config.apiKey, ...responseCredentialValues],
+            )?['finishReason']
+            as String?;
     _lastErrorType = e.type.name;
+  }
+
+  Never _throwWrappedDioException(
+    DioException error, {
+    required List<String> requestCredentialValues,
+  }) {
+    final credentials = <String>{
+      config.apiKey,
+      ...requestCredentialValues,
+      ..._credentialValuesFromHeaders(error.requestOptions.headers),
+      ..._credentialValuesFromRequestOptions(error.requestOptions),
+      ..._credentialValuesFromHeaders(_dio.options.headers),
+      ..._credentialValuesFromHeaders(error.response?.headers.map),
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'body': error.response?.data,
+      }),
+      ..._recognizableCredentialValues(error.response?.data),
+      ..._recognizableCredentialValues(error.response?.headers.map),
+    }..removeWhere((credential) => credential.isEmpty);
+
+    throwWrappedDioException(
+      error,
+      messageBuilder: (statusCode, detail) {
+        final safeDetail = _redactCredentialValues(detail, credentials);
+        return statusCode == null
+            ? '请求失败: $safeDetail'
+            : '请求失败 (HTTP $statusCode): $safeDetail';
+      },
+    );
+  }
+
+  List<String> _credentialValuesFromRequestOptions(RequestOptions options) {
+    final uri = options.uri;
+    final url = uri.toString();
+    final urlCredentials = OcrDiagnosticSnapshot.credentialValuesFromUrl(url)
+        .toSet();
+    final encodedUrlCredentials = <String>{};
+    // Keep the URI's original escapes too, including noncanonical forms like
+    // `%6f` for an unreserved character.
+    final rawUrl =
+        options.path.startsWith(RegExp(r'https?://', caseSensitive: false))
+        ? options.path
+        : '${options.baseUrl}${options.path}';
+    final queryStart = rawUrl.indexOf('?');
+    final fragmentStart = rawUrl.indexOf('#', queryStart + 1);
+    final rawQuery = queryStart < 0
+        ? ''
+        : rawUrl.substring(
+            queryStart + 1,
+            fragmentStart < 0 ? rawUrl.length : fragmentStart,
+          );
+    for (final query in {uri.query, rawQuery}) {
+      for (final component in query.split('&')) {
+        final separator = component.indexOf('=');
+        if (separator < 0) continue;
+        final rawValue = component.substring(separator + 1);
+        try {
+          final value = Uri.decodeQueryComponent(rawValue);
+          if (urlCredentials.contains(value)) {
+            encodedUrlCredentials.add(rawValue);
+          }
+        } on FormatException {
+          // Malformed query components are not credential text.
+        }
+      }
+    }
+    final schemeEnd = rawUrl.indexOf('://');
+    if (schemeEnd >= 0) {
+      final authorityStart = schemeEnd + 3;
+      final authorityEnd = rawUrl.indexOf(RegExp(r'[/?#]'), authorityStart);
+      final authority = rawUrl.substring(
+        authorityStart,
+        authorityEnd < 0 ? rawUrl.length : authorityEnd,
+      );
+      final userInfoEnd = authority.lastIndexOf('@');
+      if (userInfoEnd >= 0) {
+        for (final component
+            in authority.substring(0, userInfoEnd).split(':')) {
+          try {
+            final value = Uri.decodeComponent(component);
+            if (urlCredentials.contains(value)) {
+              encodedUrlCredentials.add(component);
+            }
+          } on FormatException {
+            // Malformed user-info components are not credential text.
+          }
+        }
+      }
+    }
+    return <String>{
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'url': url,
+        'body': options.data,
+      }),
+      ...encodedUrlCredentials,
+      for (final credential in urlCredentials)
+        Uri.encodeQueryComponent(credential),
+      for (final credential in urlCredentials) Uri.encodeComponent(credential),
+    }.toList(growable: false);
   }
 
   /// Build the standard OpenAI-compatible request body.
@@ -1255,12 +1551,12 @@ class OcrService {
       final rawValue = param.type == 'json'
           ? param.defaultValue
           : param.options.isNotEmpty
-              ? param.options.first
-              : param.defaultValue.trim().isNotEmpty
-                  ? param.defaultValue
-                  : param.type == 'boolean'
-                      ? 'true'
-                      : '';
+          ? param.options.first
+          : param.defaultValue.trim().isNotEmpty
+          ? param.defaultValue
+          : param.type == 'boolean'
+          ? 'true'
+          : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
       if (const {'max_tokens', 'temperature', 'top_p'}.contains(name)) {
@@ -1441,20 +1737,4 @@ OcrService createOcrServiceFromConfig({
       ),
     ),
   );
-}
-
-class _OcrResponse {
-  final int statusCode;
-  final Object? data;
-  final Object? rawData;
-  final Headers headers;
-  final RequestOptions requestOptions;
-
-  _OcrResponse({
-    required this.statusCode,
-    required this.data,
-    this.rawData,
-    required Map<String, List<String>> headers,
-    required this.requestOptions,
-  }) : headers = Headers.fromMap(headers);
 }

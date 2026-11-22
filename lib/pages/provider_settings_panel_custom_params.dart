@@ -43,8 +43,10 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
               child: SyncedValueField(
                 value: value,
                 decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context)!
-                      .providerOptionIndexLabel((j + 1).toString()),
+                  label: _buildProviderInputLabel(
+                    AppLocalizations.of(context)!
+                        .providerOptionIndexLabel((j + 1).toString()),
+                  ),
                   hintText: AppLocalizations.of(context)!
                       .providerOptionExampleHint('low, enabled, true, max'),
                   border: const OutlineInputBorder(),
@@ -106,9 +108,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
         const SizedBox(height: 4),
         TextButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: Text(
+          label: ConstrainedText(
             AppLocalizations.of(context)!.providerAddOption,
             style: const TextStyle(fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: () {
             setState(() {
@@ -163,20 +167,46 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
 
   List<Widget> _buildCustomParamsSection(ColorScheme cs) {
     return [
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.chatCustomParameters,
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          TextButton.icon(
-            icon: const Icon(Icons.add, size: 18),
-            label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
-            onPressed: _addCustomParam,
-          ),
-        ],
-      ),
+      if (MediaQuery.sizeOf(context).width < 800)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              AppLocalizations.of(context)!.chatCustomParameters,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.providerAddCustomParam,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onPressed: _addCustomParam,
+            ),
+          ],
+        )
+      else
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                AppLocalizations.of(context)!.chatCustomParameters,
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.providerAddCustomParam,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onPressed: _addCustomParam,
+            ),
+          ],
+        ),
       const SizedBox(height: 8),
       if (_customParams.isEmpty)
         Padding(
@@ -210,16 +240,24 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         child: TextFormField(
                           initialValue: param.paramName,
                           decoration: InputDecoration(
-                            labelText: AppLocalizations.of(context)!
-                                .providerParamNameLabel,
+                            label: ConstrainedText(
+                              AppLocalizations.of(context)!
+                                  .providerParamNameLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            errorText: hasInvalidName
-                                ? AppLocalizations.of(context)!
-                                    .providerParamNameInvalid(name)
+                            error: hasInvalidName
+                                ? Text(
+                                    AppLocalizations.of(context)!
+                                        .providerParamNameInvalid(name),
+                                  )
                                 : isDuplicate
-                                    ? AppLocalizations.of(context)!
-                                        .providerParamAlreadyExists(name)
+                                    ? Text(
+                                        AppLocalizations.of(context)!
+                                            .providerParamAlreadyExists(name),
+                                      )
                                     : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
@@ -243,14 +281,19 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             borderRadius: StroomMenuStyle.borderRadius,
                             value: param.type,
                             isDense: true,
+                            isExpanded: true,
                             items: ParamType.values
                                 .map(
                                   (t) => DropdownMenuItem(
                                     value: t.value,
-                                    child: Text(
+                                    child: ConstrainedText(
                                       localizedParamTypeLabel(
-                                          AppLocalizations.of(context)!, t),
+                                        AppLocalizations.of(context)!,
+                                        t,
+                                      ),
                                       style: const TextStyle(fontSize: 13),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 )
@@ -309,11 +352,16 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                             ),
                             inputFormatters: const [CodeSmartInputFormatter()],
                             decoration: InputDecoration(
-                              labelText: AppLocalizations.of(context)!
-                                  .providerParamDefaultValueLabel,
+                              label: ConstrainedText(
+                                AppLocalizations.of(context)!
+                                    .providerParamDefaultValueLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                               hintText: localizedParamTypeDefaultValueHint(
-                                  AppLocalizations.of(context)!,
-                                  param.paramType),
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
                               border: const OutlineInputBorder(),
                               errorBorder: OutlineInputBorder(
                                 borderSide: BorderSide(
@@ -325,8 +373,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               focusedErrorBorder: OutlineInputBorder(
                                 borderSide: const BorderSide(color: Colors.red),
                               ),
-                              errorText: _jsonErrors[i],
-                              errorMaxLines: 3,
+                              error: _jsonErrors[i] == null
+                                  ? null
+                                  : Text(_jsonErrors[i]!),
                               alignLabelWithHint: true,
                             ),
                             onChanged: (v) {
@@ -346,8 +395,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               context,
                               initialValue: param.defaultValue,
                               hintText: localizedParamTypeDefaultValueHint(
-                                  AppLocalizations.of(context)!,
-                                  param.paramType),
+                                AppLocalizations.of(context)!,
+                                param.paramType,
+                              ),
                               type: param.type,
                               onSave: (result) {
                                 param.defaultValue = result;

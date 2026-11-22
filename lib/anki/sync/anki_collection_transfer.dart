@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../database/anki_database.dart';
 import '../database/anki_schema.dart';
+import '../database/sqlite_error_classifier.dart';
 import 'anki_sync_protocol_client.dart';
 import 'anki_sync_destination_state.dart';
 import 'anki_full_download_recovery.dart';
@@ -87,7 +88,10 @@ class AnkiCollectionTransfer {
     await AnkiDatabase.closeOpenedInstance();
     final collection = File(collectionPath);
     if (!await collection.exists()) {
-      throw const AnkiSyncException('本地还没有 collection.anki2');
+      throw const AnkiSyncException.appGenerated(
+        '本地还没有 collection.anki2',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
     }
 
     await _validateCollection(collectionPath);
@@ -119,7 +123,10 @@ class AnkiCollectionTransfer {
     try {
       await client.downloadCollectionToFile(tempFile);
       if (!await tempFile.exists() || await tempFile.length() == 0) {
-        throw const AnkiSyncException('服务器返回了空 collection');
+        throw const AnkiSyncException.appGenerated(
+          '服务器返回了空 collection',
+          failureCode: AnkiSyncFailureCode.protocolFailure,
+        );
       }
       await _validateCollection(tempPath);
       await _markFullDownloadSynced(tempPath, client.destinationIdentity);
@@ -213,7 +220,10 @@ class AnkiCollectionTransfer {
     }
     final backup = File(backupPath);
     if (!await backup.exists()) {
-      throw const AnkiSyncException('本地 collection 备份不存在，无法回滚');
+      throw const AnkiSyncException.appGenerated(
+        '本地 collection 备份不存在，无法回滚',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
     }
     final restorePath = '$collectionPath.restore.tmp';
     final restore = File(restorePath);
@@ -271,25 +281,62 @@ class AnkiCollectionTransfer {
       db = await openDatabase(path, readOnly: true, singleInstance: false);
       final integrity = await db.rawQuery('PRAGMA integrity_check');
       if (integrity.isEmpty || integrity.first.values.first != 'ok') {
-        throw const AnkiSyncException('collection 未通过 SQLite 完整性检查');
+        throw const AnkiSyncException.appGenerated(
+          'collection 未通过 SQLite 完整性检查',
+          failureCode: AnkiSyncFailureCode.collectionInvalid,
+        );
       }
       for (final entry in _requiredColumns.entries) {
         final info = await db.rawQuery('PRAGMA table_info(${entry.key})');
         final actual = info.map((column) => column['name'] as String).toSet();
         if (!actual.containsAll(entry.value)) {
-          throw const AnkiSyncException('collection 缺少同步所需的表或字段');
+          throw const AnkiSyncException.appGenerated(
+            'collection 缺少同步所需的表或字段',
+            failureCode: AnkiSyncFailureCode.collectionInvalid,
+          );
         }
       }
       final rows = await db.query('col', columns: ['ver'], where: 'id = 1');
       if (rows.isEmpty || (rows.first['ver'] as num?)?.toInt() != 11) {
-        throw const AnkiSyncException('collection 不是 schema 11');
+        throw const AnkiSyncException.appGenerated(
+          'collection 不是 schema 11',
+          failureCode: AnkiSyncFailureCode.collectionInvalid,
+        );
       }
     } on AnkiSyncException {
       rethrow;
+    } on FileSystemException {
+      throw const AnkiSyncException.appGenerated(
+        'collection 文件无法读取',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
+    } on DatabaseException catch (error) {
+      if (isSqliteLocalFileFailure(error)) {
+        throw const AnkiSyncException.appGenerated(
+          'collection 文件无法读取',
+          failureCode: AnkiSyncFailureCode.localFileFailure,
+        );
+      }
+      throw const AnkiSyncException.appGenerated(
+        'collection 无法打开或结构不兼容',
+        failureCode: AnkiSyncFailureCode.collectionInvalid,
+      );
     } catch (_) {
-      throw const AnkiSyncException('collection 无法打开或结构不兼容');
+      throw const AnkiSyncException.appGenerated(
+        'collection 无法打开或结构不兼容',
+        failureCode: AnkiSyncFailureCode.collectionInvalid,
+      );
     } finally {
-      await db?.close();
+      try {
+        await db?.close();
+      } on FileSystemException {
+        throw const AnkiSyncException.appGenerated(
+          'collection 文件无法读取',
+          failureCode: AnkiSyncFailureCode.localFileFailure,
+        );
+      } on DatabaseException catch (error) {
+        throw _collectionDatabaseFailure(error);
+      }
     }
   }
 
@@ -305,10 +352,48 @@ class AnkiCollectionTransfer {
         await txn.execute(AnkiSchema.syncDestinationStatement);
         await AnkiSyncDestinationState.mark(txn, destination);
       });
+    } on FileSystemException {
+      throw const AnkiSyncException.appGenerated(
+        '无法更新下载 collection 的同步时间',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
+    } on DatabaseException catch (error) {
+      if (isSqliteLocalFileFailure(error)) {
+        throw const AnkiSyncException.appGenerated(
+          '无法更新下载 collection 的同步时间',
+          failureCode: AnkiSyncFailureCode.localFileFailure,
+        );
+      }
+      throw const AnkiSyncException.appGenerated(
+        '无法更新下载 collection 的同步时间',
+        failureCode: AnkiSyncFailureCode.collectionInvalid,
+      );
     } catch (_) {
-      throw const AnkiSyncException('无法更新下载 collection 的同步时间');
+      throw const AnkiSyncException.appGenerated(
+        '无法更新下载 collection 的同步时间',
+        failureCode: AnkiSyncFailureCode.collectionInvalid,
+      );
     } finally {
-      await db?.close();
+      try {
+        await db?.close();
+      } on FileSystemException {
+        throw const AnkiSyncException.appGenerated(
+          '无法更新下载 collection 的同步时间',
+          failureCode: AnkiSyncFailureCode.localFileFailure,
+        );
+      } on DatabaseException catch (error) {
+        throw _collectionDatabaseFailure(error);
+      }
     }
   }
+
+  static AnkiSyncException _collectionDatabaseFailure(
+    DatabaseException error,
+  ) =>
+      AnkiSyncException.appGenerated(
+        'collection 无法打开、读取或更新',
+        failureCode: isSqliteLocalFileFailure(error)
+            ? AnkiSyncFailureCode.localFileFailure
+            : AnkiSyncFailureCode.collectionInvalid,
+      );
 }

@@ -1,9 +1,13 @@
+import '../../widgets/constrained_text.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/anki_provider.dart';
 import '../database/anki_database.dart';
 import '../database/col_dao.dart';
 import '../database/card_dao.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Statistics page — queries SQLite directly for aggregate numbers.
 class AnkiStatsPage extends ConsumerWidget {
@@ -11,18 +15,33 @@ class AnkiStatsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final dbAsync = ref.watch(ankiDatabaseProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('学习统计'), centerTitle: true),
+      appBar: AppBar(
+        title: ConstrainedText(
+          l10n.ankiStatsTooltip,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        centerTitle: true,
+      ),
       body: dbAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => Center(
+          child: Text(
+            e is AnkiStatsUnsupportedException
+                ? l10n.ankiStatsUnsupportedPlatform
+                : l10n.ankiDeckLoadError(e.toString()),
+          ),
+        ),
         data: (db) => _buildStats(context, db),
       ),
     );
   }
 
   Widget _buildStats(BuildContext context, AnkiDatabase db) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final todayStart =
         DateTime(now.year, now.month, now.day).millisecondsSinceEpoch ~/ 1000;
@@ -50,45 +69,50 @@ class AnkiStatsPage extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           children: [
             _StatCard(
-                icon: Icons.auto_stories,
-                color: Colors.teal,
-                title: '总卡片数',
-                value: '$total'),
+              icon: Icons.auto_stories,
+              color: Colors.teal,
+              title: l10n.ankiStatsTotalCards,
+              value: '$total',
+            ),
             const SizedBox(height: 12),
             _StatCard(
-                icon: Icons.fiber_new,
-                color: Colors.blue,
-                title: '待学习',
-                value: '$newCount'),
+              icon: Icons.fiber_new,
+              color: Colors.blue,
+              title: l10n.ankiStatsNewCards,
+              value: '$newCount',
+            ),
             const SizedBox(height: 12),
             _StatCard(
-                icon: Icons.timelapse,
-                color: Colors.orange,
-                title: '学习中',
-                value: '$learning'),
+              icon: Icons.timelapse,
+              color: Colors.orange,
+              title: l10n.ankiStatsLearning,
+              value: '$learning',
+            ),
             const SizedBox(height: 12),
             _StatCard(
-                icon: Icons.replay,
-                color: Colors.green,
-                title: '待复习',
-                value: '$review'),
+              icon: Icons.replay,
+              color: Colors.green,
+              title: l10n.ankiStatsDueForReview,
+              value: '$review',
+            ),
             const SizedBox(height: 12),
             _StatCard(
-                icon: Icons.history,
-                color: Colors.purple,
-                title: '历史复习次数',
-                value: '$revlogCount'),
+              icon: Icons.history,
+              color: Colors.purple,
+              title: l10n.ankiStatsReviewHistory,
+              value: '$revlogCount',
+            ),
             const SizedBox(height: 12),
             if (total > 0)
               _ProgressBar(
-                label: '学习进度',
+                label: l10n.ankiStatsLearningProgress,
                 value: (review + learning) / total,
                 color: Colors.teal,
               ),
             const SizedBox(height: 12),
             if (total > 0)
               _ProgressBar(
-                label: '复习率',
+                label: l10n.ankiStatsReviewRate,
                 value: revlogCount > 0
                     ? (revlogCount / (revlogCount + total)).clamp(0, 1)
                     : 0,
@@ -106,34 +130,46 @@ class _StatCard extends StatelessWidget {
   final Color color;
   final String title;
   final String value;
-  const _StatCard(
-      {required this.icon,
-      required this.color,
-      required this.title,
-      required this.value});
+  const _StatCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.value,
+  });
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-              child: Text(title,
-                  style: TextStyle(fontSize: 15, color: cs.onSurface))),
-          Text(value,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(fontSize: 15, color: cs.onSurface),
+              ),
+            ),
+            Text(
+              value,
               style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-        ]),
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -143,8 +179,11 @@ class _ProgressBar extends StatelessWidget {
   final String label;
   final double value;
   final Color color;
-  const _ProgressBar(
-      {required this.label, required this.value, required this.color});
+  const _ProgressBar({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -159,14 +198,17 @@ class _ProgressBar extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
-                  value: value,
-                  minHeight: 12,
-                  backgroundColor: cs.surfaceContainerHighest,
-                  valueColor: AlwaysStoppedAnimation(color)),
+                value: value,
+                minHeight: 12,
+                backgroundColor: cs.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation(color),
+              ),
             ),
             const SizedBox(height: 4),
-            Text('${(value * 100).round()}%',
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+            Text(
+              '${(value * 100).round()}%',
+              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            ),
           ],
         ),
       ),

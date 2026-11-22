@@ -148,7 +148,8 @@ Set<String> supportedApiProtocolsForSupplier(
     'uncloseai' => const {'openai.chat_completions'},
     'cline' || 'clinepass' => const {'openai.chat_completions'},
     'github' || 'ghe-copilot' => kCustomHttpApiProtocols,
-    'antigravity' => const {kAntigravityProtocolId},
+    // Keep legacy protocol IDs readable without advertising a usable route.
+    'antigravity' => const <String>{},
     'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
     'kimi' ||
     'kimi-ai' ||

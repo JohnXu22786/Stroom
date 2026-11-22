@@ -10,6 +10,8 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Editor Mode
 // ============================================================================
@@ -324,7 +326,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Icon(mode.icon, size: 20),
               const SizedBox(width: 12),
-              Text(mode.label(AppLocalizations.of(context)!)),
+              Flexible(
+                child: ConstrainedText(
+                  mode.label(AppLocalizations.of(context)!),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               if (mode == _editorMode) ...[
                 const Spacer(),
                 const Icon(Icons.check, size: 16, color: Colors.green),
@@ -603,7 +611,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
     final scaffold = Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.mermaidEditorTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.mermaidEditorTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           // Three-state editor mode selector (popup menu)
           IconButton(
@@ -649,7 +661,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                       ),
                       child: FilterChip(
                         selected: isSelected,
-                        label: Text(
+                        label: ConstrainedText(
                           type.label,
                           style: TextStyle(
                             fontSize: 12,
@@ -657,6 +669,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                 ? FontWeight.w600
                                 : FontWeight.normal,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         avatar: Icon(type.icon, size: 16),
                         onSelected: _isSaving
@@ -689,9 +703,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                         vertical: 6,
                       ),
                       child: ActionChip(
-                        label: Text(
+                        label: ConstrainedText(
                           label,
                           style: const TextStyle(fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         onPressed: _isSaving
                             ? null
@@ -760,18 +776,28 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(AppLocalizations.of(dialogContext)!.modelDiscardTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(dialogContext)!.modelDiscardTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(AppLocalizations.of(dialogContext)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(AppLocalizations.of(dialogContext)!.cancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(dialogContext)!.cancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(dialogContext)!.textPreviewDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -924,9 +950,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
               const SizedBox(width: 4),
-              Text(
-                AppLocalizations.of(context)!.mermaidEditorSplitCodeLabel,
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.mermaidEditorSplitCodeLabel,
+                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Expanded(child: Divider(thickness: 0.5)),
             ],
@@ -944,7 +974,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 contentPadding: const EdgeInsets.all(10),
-                labelText: AppLocalizations.of(context)!.mermaidEditorCodeLabel,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.mermaidEditorCodeLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 isDense: true,
               ),
               maxLines: null,
@@ -976,7 +1010,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           contentPadding: const EdgeInsets.all(12),
           hintText: AppLocalizations.of(context)!.mermaidEditorCodeHint,
-          labelText: AppLocalizations.of(context)!.mermaidEditorCodeLabel,
+          label: ConstrainedText(
+            AppLocalizations.of(context)!.mermaidEditorCodeLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         maxLines: null,
         expands: true,

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../l10n/app_localizations.dart';
 import '../utils/audio_separation.dart';
@@ -17,9 +18,12 @@ import '../utils/file_manifest.dart';
 import '../utils/pop_animation.dart';
 import '../utils/system_pick_utils.dart';
 import '../widgets/folder_picker_dialog.dart';
+import '../widgets/save_to_folder_selector.dart';
 import 'tts_page.dart';
 import 'audio_separation_shared.dart';
 import 'chat/composer/video_album_picker_dialog.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 视频音频分离页面
 ///
@@ -42,11 +46,7 @@ class SelectedVideo {
   final String name;
   final String format;
 
-  SelectedVideo({
-    required this.bytes,
-    required this.name,
-    this.format = 'mp4',
-  });
+  SelectedVideo({required this.bytes, required this.name, this.format = 'mp4'});
 }
 
 // ====================================================================
@@ -61,10 +61,14 @@ class SelectedVideo {
 /// metadata.  The caller awaits the returned [Future] — during the
 /// isolate's CPU work the main thread is free to process frames.
 Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
-    Uint8List videoBytes, String videoFormat) {
+  Uint8List videoBytes,
+  String videoFormat,
+) {
   return Isolate.run(() {
-    final audioBytes =
-        extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
+    final audioBytes = extractAudioSync(
+      videoBytes: videoBytes,
+      videoFormat: videoFormat,
+    );
     final hash = computeAudioHash(audioBytes);
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
     return (audioBytes: audioBytes, hash: hash, format: format);
@@ -86,8 +90,8 @@ Future<void> _runAudioSeparation({
   required String saveFolder,
   required String errorPrefix,
   Future<({Uint8List audioBytes, String hash, String format})> Function(
-          SelectedVideo video)?
-      workerExtract,
+    SelectedVideo video,
+  )? workerExtract,
 }) async {
   final throttler = _BgThrottler(bgNotifier);
   final taskIds = <String>{};
@@ -173,13 +177,15 @@ Future<void> runAudioSeparationForTesting({
     );
 
 Future<Map<String, dynamic>> _computeAudioSeparationRetryData(
-    SelectedVideo video) async {
+  SelectedVideo video,
+) async {
   try {
     return await Isolate.run(() => _serializeAudioSeparationRetryData(video));
   } catch (e) {
     // Isolate may be unavailable on some Flutter platforms.
     debugPrint(
-        '[AudioSeparation] Retry-data isolate failed, falling back to main thread: $e');
+      '[AudioSeparation] Retry-data isolate failed, falling back to main thread: $e',
+    );
     return _serializeAudioSeparationRetryData(video);
   }
 }
@@ -208,20 +214,31 @@ class _BgThrottler {
 
   _BgThrottler(this._notifier);
 
-  void updateStep(String taskId, int index,
-          {bool? completed, bool? running, bool? failed, bool? skipped}) =>
+  void updateStep(
+    String taskId,
+    int index, {
+    bool? completed,
+    bool? running,
+    bool? failed,
+    bool? skipped,
+  }) =>
       _enqueue(
+        taskId,
+        () => _notifier.updateStep(
           taskId,
-          () => _notifier.updateStep(taskId, index,
-              completed: completed,
-              running: running,
-              failed: failed,
-              skipped: skipped));
+          index,
+          completed: completed,
+          running: running,
+          failed: failed,
+          skipped: skipped,
+        ),
+      );
 
   void completeTask(String taskId, {String? downloadedFilePath}) => _enqueue(
-      taskId,
-      () => _notifier.completeTask(taskId,
-          downloadedFilePath: downloadedFilePath));
+        taskId,
+        () => _notifier.completeTask(taskId,
+            downloadedFilePath: downloadedFilePath),
+      );
 
   void failTask(String taskId, {String? error}) =>
       _enqueue(taskId, () => _notifier.failTask(taskId, error: error));
@@ -289,12 +306,12 @@ Future<String?> saveAudioSeparationFile(
   );
 
   var skipped = false;
-  await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
+  await FileManifest.withStorageFileSaveLock(record.storageFileName, () async {
     if (shouldSave != null && !shouldSave()) {
       skipped = true;
       return;
     }
-    await FileManifest.writeFile('$hash.$format', audioBytes);
+    await FileManifest.writeFile(record.storageFileName, audioBytes);
     if (shouldSave != null && !shouldSave()) {
       skipped = true;
       await _deleteUnreferencedAudioFile(record);
@@ -308,7 +325,8 @@ Future<String?> saveAudioSeparationFile(
           await FileManifest.deleteRecord(record.id, preserveFiles: true);
         } catch (cleanupError) {
           debugPrint(
-              '[AudioSeparation] Failed to remove cancelled record ${record.id}: $cleanupError');
+            '[AudioSeparation] Failed to remove cancelled record ${record.id}: $cleanupError',
+          );
         }
         await _deleteUnreferencedAudioFile(record);
       }
@@ -323,14 +341,15 @@ Future<String?> saveAudioSeparationFile(
   final resolvePath = resolveFilePath ?? FileManifest.readFilePath;
   late final String? filePath;
   try {
-    filePath = await resolvePath('$hash.$format');
+    filePath = await resolvePath(record.storageFileName);
   } catch (error, stackTrace) {
     if (shouldSave != null && !shouldSave()) {
       try {
         await _rollbackCancelledAudioSave(record);
       } catch (cleanupError) {
         debugPrint(
-            '[AudioSeparation] Failed to clean cancelled save ${record.storageFileName}: $cleanupError');
+          '[AudioSeparation] Failed to clean cancelled save ${record.storageFileName}: $cleanupError',
+        );
       }
     }
     Error.throwWithStackTrace(error, stackTrace);
@@ -349,7 +368,8 @@ Future<void> _rollbackCancelledAudioSave(AudioRecord record) async {
       await FileManifest.deleteRecord(record.id, preserveFiles: true);
     } catch (cleanupError) {
       debugPrint(
-          '[AudioSeparation] Failed to remove cancelled record ${record.id}: $cleanupError');
+        '[AudioSeparation] Failed to remove cancelled record ${record.id}: $cleanupError',
+      );
     }
     await _deleteUnreferencedAudioFile(record);
   });
@@ -364,11 +384,13 @@ Future<void> _deleteUnreferencedAudioFile(AudioRecord record) async {
     if (!isReferenced &&
         !await FileManifest.deleteFile(record.storageFileName)) {
       debugPrint(
-          '[AudioSeparation] Failed to remove unregistered audio file: ${record.storageFileName}');
+        '[AudioSeparation] Failed to remove unregistered audio file: ${record.storageFileName}',
+      );
     }
   } catch (cleanupError) {
     debugPrint(
-        '[AudioSeparation] Failed to check references for ${record.storageFileName}: $cleanupError');
+      '[AudioSeparation] Failed to check references for ${record.storageFileName}: $cleanupError',
+    );
   }
 }
 
@@ -411,11 +433,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           if (bytesStr != null) {
             try {
               final bytes = base64Decode(bytesStr);
-              _selectedVideos.add(SelectedVideo(
-                bytes: bytes,
-                name: videoData['name'] as String? ?? 'video',
-                format: videoData['format'] as String? ?? 'mp4',
-              ));
+              _selectedVideos.add(
+                SelectedVideo(
+                  bytes: bytes,
+                  name: videoData['name'] as String? ?? 'video',
+                  format: videoData['format'] as String? ?? 'mp4',
+                ),
+              );
             } catch (e) {
               debugPrint('Failed to decode retry video: $e');
             }
@@ -447,42 +471,52 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final appBarActionWidth =
+        (MediaQuery.sizeOf(context).width / 3).clamp(64.0, 120.0).toDouble();
+    final scrollableEmptyState = _selectedVideos.isEmpty &&
+        MediaQuery.textScalerOf(context).scale(1) > 1;
+    final bodyChildren = <Widget>[
+      _buildVideoSourceBar(cs),
+      if (_engineChecked && !_engineAvailable && !kIsWeb)
+        _buildEngineWarning(cs),
+      if (scrollableEmptyState)
+        _buildEmptyState(cs)
+      else
+        Expanded(child: _buildContent(cs)),
+      if (_hasError) _buildErrorBanner(cs),
+      if (_success) _buildSuccessBanner(cs),
+      _buildBottomBar(cs),
+    ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_l10n.audioSeparationTitle),
+        title: ConstrainedText(
+          _l10n.audioSeparationTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           if (_selectedVideos.isNotEmpty && !_isProcessing)
-            TextButton.icon(
-              onPressed: _clearAll,
-              icon: const Icon(Icons.clear_all, size: 18),
-              label: Text(_l10n.clear),
+            SizedBox(
+              width: appBarActionWidth,
+              child: TextButton.icon(
+                onPressed: _clearAll,
+                icon: const Icon(Icons.clear_all, size: 18),
+                label: ConstrainedText(
+                  _l10n.clear,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Video source button
-          _buildVideoSourceBar(cs),
-
-          // FFmpeg status
-          if (_engineChecked && !_engineAvailable && !kIsWeb)
-            _buildEngineWarning(cs),
-
-          // Content area
-          Expanded(child: _buildContent(cs)),
-
-          // Error message
-          if (_hasError) _buildErrorBanner(cs),
-
-          // Success message
-          if (_success) _buildSuccessBanner(cs),
-
-          // Bottom action bar
-          _buildBottomBar(cs),
-        ],
-      ),
+      body: scrollableEmptyState
+          ? SingleChildScrollView(
+              child: Column(children: bodyChildren),
+            )
+          : Column(children: bodyChildren),
     );
   }
 
@@ -502,9 +536,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   ),
                 ),
                 icon: const Icon(Icons.video_file_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _l10n.audioSeparationChooseVideoSource,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -519,6 +555,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final cs = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -539,9 +576,10 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(height: 24),
               Text(
                 _l10n.audioSeparationChooseVideoSource,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -579,8 +617,10 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   /// Pick from video library - shows folder-navigable video album picker.
   Future<void> _pickFromVideoLibrary() async {
     try {
-      final results =
-          await showAppVideoPickerDialog(context, multiSelect: true);
+      final results = await showAppVideoPickerDialog(
+        context,
+        multiSelect: true,
+      );
       if (results == null || results.isEmpty || !mounted) return;
 
       final newVideos = <SelectedVideo>[];
@@ -602,11 +642,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-            content:
-                Text(_l10n.audioSeparationChooseVideoFailure(e.toString()))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _l10n.audioSeparationChooseVideoFailure(e.toString()),
+            ),
+          ),
+        );
       }
     }
   }
@@ -724,7 +766,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ConstrainedText(
                         video.name,
                         style: TextStyle(
                           fontSize: 14,
@@ -747,8 +789,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                 ),
                 if (!_isProcessing)
                   IconButton(
-                    icon:
-                        Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                    icon: Icon(
+                      Icons.close,
+                      size: 18,
+                      color: cs.onSurfaceVariant,
+                    ),
                     onPressed: () => _removeVideo(index),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -813,8 +858,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
             ),
           ),
           TextButton(
-              onPressed: _goToAudioLibrary,
-              child: Text(_l10n.audioSeparationView)),
+            onPressed: _goToAudioLibrary,
+            child: ConstrainedText(
+              _l10n.audioSeparationView,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           IconButton(
             icon: Icon(Icons.close, color: cs.onPrimaryContainer, size: 18),
             onPressed: () => setState(() => _success = false),
@@ -840,24 +890,25 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Save-to folder selector (above start button)
-            _buildSaveToSelector(cs),
+            _buildSaveToSelector(),
             if (_selectedVideos.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 4, top: 4),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.videocam,
-                      size: 14,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    Icon(Icons.videocam, size: 14, color: cs.onSurfaceVariant),
                     const SizedBox(width: 4),
-                    Text(
-                      _l10n.audioSeparationSelectedVideoCount(
-                          _selectedVideos.length),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                    Flexible(
+                      child: ConstrainedText(
+                        _l10n.audioSeparationSelectedVideoCount(
+                          _selectedVideos.length,
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -881,7 +932,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                         ),
                       )
                     : const Icon(Icons.audio_file, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _isProcessing
                       ? _l10n.audioSeparationExtracting
                       : _l10n.audioSeparationExtractAudio,
@@ -889,6 +940,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -902,41 +955,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // Save-to Folder Selector
   // ==================================================================
 
-  Widget _buildSaveToSelector(ColorScheme cs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: _pickSaveFolder,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                _l10n.audioSeparationSaveTo,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _saveFolder.isEmpty ? _l10n.rootFolder : _saveFolder,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildSaveToSelector() {
+    return SaveToFolderSelector(
+      label: _l10n.audioSeparationSaveTo,
+      folder: _saveFolder.isEmpty ? _l10n.rootFolder : _saveFolder,
+      onTap: _pickSaveFolder,
     );
   }
 
@@ -988,10 +1011,9 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
       if (newVideos.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(
-              content: Text(_l10n.audioSeparationCannotReadVideoFile)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_l10n.audioSeparationCannotReadVideoFile)),
+          );
         }
         return;
       }
@@ -1004,11 +1026,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text(
-                _l10n.audioSeparationChooseVideoFileFailure(e.toString()))));
+              _l10n.audioSeparationChooseVideoFileFailure(e.toString()),
+            ),
+          ),
+        );
       }
     }
   }
@@ -1039,15 +1063,18 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     final unsupportedFormats = _selectedVideos
         .where((video) => !_engine.canHandleVideoFormat(video.format))
-        .map((video) => video.format.trim().isEmpty
-            ? _l10n.audioSeparationUnknownFormat
-            : video.format.trim().toUpperCase())
+        .map(
+          (video) => video.format.trim().isEmpty
+              ? _l10n.audioSeparationUnknownFormat
+              : video.format.trim().toUpperCase(),
+        )
         .toSet();
     if (unsupportedFormats.isNotEmpty) {
       setState(() {
         _hasError = true;
-        _errorMessage = _l10n
-            .audioSeparationUnsupportedFormats(unsupportedFormats.join(', '));
+        _errorMessage = _l10n.audioSeparationUnsupportedFormats(
+          unsupportedFormats.join(', '),
+        );
       });
       return;
     }
@@ -1090,12 +1117,14 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // Route transition is complete — now fire-and-forget the pipeline.
     // _runAudioSeparation is a top-level function with no access to
     // `this`, `ref`, or `context`, so it's safe to call after dispose.
-    unawaited(_runAudioSeparation(
-      videos: videosToProcess,
-      bgNotifier: bgNotifier,
-      saveFolder: saveFolder,
-      errorPrefix: errorPrefix,
-    ));
+    unawaited(
+      _runAudioSeparation(
+        videos: videosToProcess,
+        bgNotifier: bgNotifier,
+        saveFolder: saveFolder,
+        errorPrefix: errorPrefix,
+      ),
+    );
   }
 
   void _goToAudioLibrary() {

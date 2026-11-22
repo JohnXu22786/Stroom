@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -16,6 +18,18 @@ class _Flows extends TaskFlowNotifier {
   Future<bool> persist() async {
     writes++;
     return true;
+  }
+}
+
+class _Entries extends ProviderEntriesNotifier {
+  _Entries() {
+    state = const ProviderEntriesState();
+  }
+}
+
+class _Assistants extends AssistantsNotifier {
+  _Assistants() {
+    state = const [];
   }
 }
 
@@ -156,6 +170,93 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(flows.getFlow(flow.id)!.inputType, IOType.file);
+  });
+
+  testWidgets('run-mode parameter labels follow the selected locale',
+      (tester) async {
+    final flows = _Flows();
+    final flow = TaskFlowDefinition(
+      name: 'Localized parameters',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': ''},
+        ),
+        TaskFlowBlock(
+          typeKey: BlockType.tts,
+          params: {
+            'modelRef': 'deleted-model',
+            'voice': 'deleted-voice',
+            'saveFolder': '',
+          },
+        ),
+      ],
+    );
+    await flows.saveFlow(flow);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        taskFlowListProvider.overrideWith((_) => flows),
+        providerEntriesProvider.overrideWith((_) => _Entries()),
+        assistantProvider.overrideWith((_) => _Assistants()),
+      ],
+      child: MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TaskFlowBuilderPage(flowId: flow.id, startInRunMode: true),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FlowBlockCard).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Assistant: '), findsOneWidget);
+    expect(find.text('(Not set)'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+
+    final ttsCard = find.byType(FlowBlockCard).last;
+    await tester.ensureVisible(ttsCard);
+    await tester.pumpAndSettle();
+    await tester.tap(ttsCard);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    final modelLabel = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Synthesis model'),
+    );
+    await tester.ensureVisible(modelLabel);
+    expect(modelLabel, findsOneWidget);
+    final modelValue = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Select another model.'),
+    );
+    await tester.ensureVisible(modelValue);
+    expect(modelValue, findsOneWidget);
+    final voiceLabel = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Voice:'),
+    );
+    await tester.ensureVisible(voiceLabel);
+    expect(voiceLabel, findsOneWidget);
+    final voiceValue = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Voice is unavailable.'),
+    );
+    await tester.ensureVisible(voiceValue);
+    expect(voiceValue, findsOneWidget);
+    final folderLabel = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Save folder:'),
+    );
+    await tester.ensureVisible(folderLabel);
+    expect(folderLabel, findsOneWidget);
+    final folderValue = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Root folder'),
+    );
+    await tester.ensureVisible(folderValue);
+    expect(folderValue, findsOneWidget);
   });
 
   testWidgets('an initial template stays an independent unsaved draft',

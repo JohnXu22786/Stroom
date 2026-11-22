@@ -64,56 +64,57 @@ class AnkiActions {
     String tags = '',
   }) async {
     final col = await _col;
-    final models = col.modelList;
-    final int mid;
+    final noteId = await col.addNoteAndCard(() {
+      final models = col.modelList;
+      final int mid;
+      final createdModels = <Notetype>[];
 
-    // Ensure model exists; if not, seed both Basic and Cloze
-    if (models.isEmpty) {
-      final basic = Notetype.createBasic();
-      col.addModel(basic);
-      mid = basic.id;
-    } else {
-      // A dialog opened before the model-list provider finished loading may
-      // still pass its placeholder ID. Resolve it against the current models.
-      mid = modelId != null && models.any((model) => model.id == modelId)
-          ? modelId
-          : models.first.id;
-    }
-    // Ensure Cloze model exists
-    if (!col.modelList.any((m) => m.name == 'Cloze')) {
-      col.addModel(Notetype.createCloze());
-    }
-    if (col.getModel(mid) == null) {
-      throw StateError('The note type $mid is unavailable.');
-    }
-    if (models.isEmpty) {
-      // NoteDao derives sort fields from the persisted notetype JSON.
-      await col.save();
-    }
-
-    final tagList = tags.trim().isEmpty
-        ? <String>[]
-        : tags.trim().split(' ').where((t) => t.isNotEmpty).toList();
-    final note = Note.createNew(
-      notetype_id: mid,
-      fields: [front, back],
-      tags: tagList,
-    );
-    await col.notes.insert(note);
-    final card = Card.createNew(note_id: note.id, deck_id: did);
-    await col.cards.insert(card);
-    await col.save();
+      // Ensure model exists; if not, seed both Basic and Cloze
+      if (models.isEmpty) {
+        final basic = Notetype.createBasic();
+        col.addModel(basic);
+        createdModels.add(basic);
+        mid = basic.id;
+      } else {
+        // A dialog opened before the model-list provider finished loading may
+        // still pass its placeholder ID. Resolve it against the current models.
+        mid = modelId != null && models.any((model) => model.id == modelId)
+            ? modelId
+            : models.first.id;
+      }
+      // Ensure Cloze model exists
+      if (!col.modelList.any((m) => m.name == 'Cloze')) {
+        final cloze = Notetype.createCloze();
+        col.addModel(cloze);
+        createdModels.add(cloze);
+      }
+      if (col.getModel(mid) == null) {
+        throw StateError('The note type $mid is unavailable.');
+      }
+      final tagList = tags.trim().isEmpty
+          ? <String>[]
+          : tags.trim().split(' ').where((t) => t.isNotEmpty).toList();
+      final note = Note.createNew(
+        notetype_id: mid,
+        fields: [front, back],
+        tags: tagList,
+      );
+      return (
+        note,
+        Card.createNew(note_id: note.id, deck_id: did),
+        createdModels,
+      );
+    });
     _refresh();
-    return note.id;
+    return noteId;
   }
 
   Future<void> removeNote(int nid) async {
     final noteDao = await _noteDao;
-    final cardDao = await _cardDao;
-    final cards = await cardDao.listByNote(nid);
-    for (final c in cards) {
-      await cardDao.delete(c.id);
-    }
+    // NoteDao deletes the note, its cards, review history, and sync graves in
+    // one transaction. Deleting cards here first would commit each card
+    // separately and could leave a partially deleted note if a later delete
+    // fails.
     await noteDao.delete(nid);
     _refresh();
   }
