@@ -282,10 +282,19 @@ void main() {
     Widget home, {
     Locale locale = const Locale('de'),
     ThemeData? theme,
+    TextScaler? textScaler,
   }) =>
       MaterialApp(
         locale: locale,
         theme: theme,
+        builder: textScaler == null
+            ? null
+            : (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: textScaler,
+                  ),
+                  child: child!,
+                ),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -394,6 +403,134 @@ void main() {
     expect(find.text('JSON'), findsOneWidget);
     expect(find.byIcon(Icons.format_align_left), findsOneWidget);
     expect(find.byTooltip('Abbrechen'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('invalid JSON status wraps beside actions in a narrow layout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{ invalid',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        locale: const Locale('fr'),
+        theme: ThemeData(useMaterial3: true),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Dialog)))!
+          .codeEditorInvalidJson),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '{ invalid');
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(find.byTooltip('Annuler'), findsOneWidget);
+    final dialogFinder = find.byType(Dialog);
+    final dialogSurface = find
+        .descendant(of: dialogFinder, matching: find.byType(Material))
+        .first;
+    final statusText = AppLocalizations.of(tester.element(dialogFinder))!
+        .codeEditorInvalidJson;
+    final statusFinder = find.text(statusText);
+    final dialogRect = tester.getRect(dialogSurface);
+    final statusRect = tester.getRect(statusFinder);
+    expect(tester.widget<Text>(statusFinder).maxLines, isNull);
+    expect(tester.widget<Text>(statusFinder).overflow, isNull);
+    expect(statusRect.top, greaterThanOrEqualTo(dialogRect.top));
+    expect(statusRect.bottom, lessThanOrEqualTo(dialogRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('invalid JSON status stays visible with large text and keyboard',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(() => tester.view.viewInsets = FakeViewPadding.zero);
+
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{ invalid',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        locale: const Locale('fr'),
+        theme: ThemeData(useMaterial3: true),
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final dialogFinder = find.byType(Dialog);
+    final dialogSurfaceFinder = find
+        .descendant(
+          of: dialogFinder,
+          matching: find.byType(Material),
+        )
+        .first;
+    final status = AppLocalizations.of(tester.element(dialogFinder))!
+        .codeEditorInvalidJson;
+    final statusFinder = find.text(status);
+    await tester.ensureVisible(statusFinder);
+    await tester.pumpAndSettle();
+    final statusRect = tester.getRect(statusFinder);
+    final dialogSurfaceRect = tester.getRect(dialogSurfaceFinder);
+    expect(statusRect.top, greaterThanOrEqualTo(dialogSurfaceRect.top));
+    expect(statusRect.bottom, lessThanOrEqualTo(dialogSurfaceRect.bottom));
+    expect(dialogSurfaceRect.bottom, lessThanOrEqualTo(640 - 240));
+    final cancelButton = find.widgetWithText(
+      TextButton,
+      AppLocalizations.of(tester.element(dialogFinder))!.codeEditorCancel,
+    );
+    await tester.ensureVisible(cancelButton);
+    await tester.pumpAndSettle();
+    final cancelRect = tester.getRect(cancelButton);
+    expect(cancelRect.top, greaterThanOrEqualTo(dialogSurfaceRect.top));
+    expect(cancelRect.bottom, lessThanOrEqualTo(dialogSurfaceRect.bottom));
+    final confirmFinder = find.byType(FilledButton);
+    await tester.ensureVisible(confirmFinder);
+    await tester.pumpAndSettle();
+    final confirmRect = tester.getRect(confirmFinder);
+    expect(confirmRect.top, greaterThanOrEqualTo(dialogSurfaceRect.top));
+    expect(confirmRect.bottom, lessThanOrEqualTo(dialogSurfaceRect.bottom));
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '{ invalid');
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(find.byTooltip('Annuler'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
