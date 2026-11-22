@@ -387,26 +387,33 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_expandedSegments.contains(task.id) &&
-                        _getMediaSelectionData(task)
-                            .selectableMedia
-                            .any((media) => media.isPlaylistSegment))
+                    if (_getMediaSelectionData(task)
+                        .selectableMedia
+                        .any((media) => media.isPlaylistSegment))
                       _buildSegmentCollapseControl(task),
                     Flexible(
                       fit: FlexFit.loose,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: CustomScrollView(
+                        key: const Key('catcatch_resource_scroll_view'),
+                        shrinkWrap: true,
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 8),
                               child: _buildStepTimeline(task, colorScheme),
                             ),
-                            if (task.metadata['pendingConfirm'] ==
-                                'special_format')
-                              _buildSpecialFormatConfirm(task, colorScheme),
-                            _buildMediaSelection(task, colorScheme),
-                          ],
-                        ),
+                          ),
+                          if (task.metadata['pendingConfirm'] ==
+                              'special_format')
+                            SliverToBoxAdapter(
+                              child: _buildSpecialFormatConfirm(
+                                task,
+                                colorScheme,
+                              ),
+                            ),
+                          ..._buildMediaSelectionSlivers(task, colorScheme),
+                        ],
                       ),
                     ),
                     _buildMediaSelectionAction(task),
@@ -737,14 +744,14 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     );
   }
 
-  Widget _buildMediaSelection(
+  List<Widget> _buildMediaSelectionSlivers(
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
     final selection = _getMediaSelectionData(task);
     final mediaList = selection.mediaList;
     final splitGroups = selection.splitGroups;
-    if (mediaList.isEmpty) return const SizedBox.shrink();
+    if (mediaList.isEmpty) return const [];
 
     final selectedIdentities = _getSelectedIdentities(task.id);
     final rawPageTitle = task.metadata['pageTitle'];
@@ -758,59 +765,62 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final visibleResources = segments.isEmpty || segmentsExpanded
         ? selectableMedia
         : selectableMedia.where((media) => !isSegment(media)).toList();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ConstrainedText(
-            pageTitle.isNotEmpty ? pageTitle : task.url,
-            key: const Key('catcatch_selection_title'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ConstrainedText(
+                pageTitle.isNotEmpty ? pageTitle : task.url,
+                key: const Key('catcatch_selection_title'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                selectedIdentities.isNotEmpty
+                    ? AppLocalizations.of(context)!.catcatchSelectedResources(
+                        selectedIdentities.length,
+                        mediaList.length,
+                      )
+                    : AppLocalizations.of(context)!
+                            .catcatchDetectedMediaResources(mediaList.length) +
+                        (widget.isFlowManaged
+                            ? AppLocalizations.of(context)!
+                                .catcatchFlowSelectOrCombine
+                            : AppLocalizations.of(context)!.catcatchSelectMultiple),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              if (splitGroups.isNotEmpty) ...[
+                for (final entry in splitGroups.entries)
+                  _buildSplitTrackGroup(context, task, entry.value, colorScheme),
+                const SizedBox(height: 12),
+              ],
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            selectedIdentities.isNotEmpty
-                ? AppLocalizations.of(context)!.catcatchSelectedResources(
-                    selectedIdentities.length,
-                    mediaList.length,
-                  )
-                : AppLocalizations.of(context)!
-                        .catcatchDetectedMediaResources(mediaList.length) +
-                    (widget.isFlowManaged
-                        ? AppLocalizations.of(context)!
-                            .catcatchFlowSelectOrCombine
-                        : AppLocalizations.of(context)!.catcatchSelectMultiple),
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          if (splitGroups.isNotEmpty) ...[
-            for (final entry in splitGroups.entries)
-              _buildSplitTrackGroup(context, task, entry.value, colorScheme),
-            const SizedBox(height: 12),
-          ],
-          if (segments.isNotEmpty && !segmentsExpanded)
-            _buildSegmentCollapseControl(task),
-          if (visibleResources.isNotEmpty)
-            ListView.builder(
-              key: const Key('catcatch_resource_list'),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: visibleResources.length,
-              itemBuilder: (context, index) =>
-                  _buildMediaItem(visibleResources[index], task, colorScheme),
-            ),
-        ],
+        ),
       ),
-    );
+      if (visibleResources.isNotEmpty)
+        SliverPadding(
+          padding: const EdgeInsets.only(bottom: 8),
+          sliver: SliverList.builder(
+            key: const Key('catcatch_resource_list'),
+            itemCount: visibleResources.length,
+            itemBuilder: (context, index) =>
+                _buildMediaItem(visibleResources[index], task, colorScheme),
+          ),
+        ),
+    ];
   }
 
   Widget _buildMediaSelectionAction(catcatch.CatCatchTask task) {
