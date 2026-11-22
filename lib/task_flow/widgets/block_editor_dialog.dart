@@ -681,21 +681,32 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         if (voiceOptions.isEmpty) {
           // No model has voices configured — the user can still type an
           // explicit voice id (some providers accept arbitrary ids).
-          return TextField(
-            controller: _controllers[param.key],
-            onChanged: (v) => _params[param.key] = v,
-            decoration: InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _controllers[param.key],
+                onChanged: (v) => _params[param.key] = v,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                ),
+                style: const TextStyle(fontSize: 13),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
+              const SizedBox(height: 8),
+              Text(
+                AppLocalizations.of(context)!.taskFlowUiTtsVoiceMissing,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
-              hintText: AppLocalizations.of(context)!.taskFlowUiTtsVoiceMissing,
-            ),
-            style: const TextStyle(fontSize: 13),
+            ],
           );
         }
         final selected = resolveProviderModel(
