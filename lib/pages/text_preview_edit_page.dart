@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
@@ -65,6 +66,24 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     _contentController = TextEditingController(text: _originalContent);
     _contentController.addListener(_onContentChanged);
     _loadPersistedFontSize();
+    if (_currentFile.format == 'html') {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openHtmlPreview());
+    }
+  }
+
+  Future<void> _openHtmlPreview() async {
+    if (!mounted) return;
+    final editSource = await showHtmlPreviewDialog(
+      context: context,
+      htmlCode: _contentController.text,
+      showEditSourceAction: true,
+    );
+    if (!mounted) return;
+    if (editSource == true) {
+      _enterEditMode();
+    } else {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -351,8 +370,21 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       }
 
       if (mounted) {
-        setState(() => _isSaving = false);
-        Navigator.pop(context, 'saved');
+        if (_currentFile.format == 'html') {
+          setState(() {
+            _isSaving = false;
+            _currentFile = updatedRecord;
+            _originalContent = newContent;
+            _isEditMode = false;
+            _hasChanges = false;
+            _undoStack.clear();
+            _redoStack.clear();
+          });
+          _openHtmlPreview();
+        } else {
+          setState(() => _isSaving = false);
+          Navigator.pop(context, 'saved');
+        }
       }
     } catch (e) {
       if (mounted) {

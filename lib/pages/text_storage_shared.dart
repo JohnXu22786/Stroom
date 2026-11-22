@@ -11,7 +11,7 @@ import '../utils/text_manifest.dart';
 import '../widgets/constrained_text.dart';
 
 /// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
-const List<String> kTextFileFormats = ['txt', 'md', 'mmd'];
+const List<String> kTextFileFormats = ['txt', 'md', 'mmd', 'html'];
 
 /// Generates a text-record name not already used by the same format in folder.
 String uniqueTextRecordName(
