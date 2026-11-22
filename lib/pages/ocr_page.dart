@@ -2041,6 +2041,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     subtitle:
                         AppLocalizations.of(context)!.ocrAppAlbumDescription,
                     color: Colors.green,
+                    expandSubtitle: true,
                     onTap: () {
                       Navigator.pop(ctx);
                       _pickFromAppAlbum();
@@ -2053,6 +2054,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     subtitle:
                         AppLocalizations.of(context)!.ocrSystemAlbumDescription,
                     color: Colors.blue,
+                    expandSubtitle: true,
                     onTap: () {
                       Navigator.pop(ctx);
                       _pickFromSystemGallery();
