@@ -75,6 +75,7 @@ Future<void> pumpTaskListPage(
   List<SynthesisTask> synthesisTasks = const [],
   List<BackgroundTask> backgroundTasks = const [],
   int initialTab = 0,
+  double textScale = 1,
 }) async {
   final bgNotifier = BackgroundTaskNotifier();
   bgNotifier.state = backgroundTasks;
@@ -99,6 +100,12 @@ Future<void> pumpTaskListPage(
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+          ),
+          child: child!,
+        ),
         home: UnifiedTaskListPage(initialTab: initialTab),
       ),
     ),
@@ -112,6 +119,54 @@ Future<void> pumpTaskListPage(
 // =============================================================================
 void main() {
   group('UnifiedTaskListPage - Tabs', () {
+    testWidgets(
+        'tab icons and labels fit and remain reachable at large text scale',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await pumpTaskListPage(tester);
+      expect(tester.getSize(find.byType(TabBar)).height, 48);
+
+      await pumpTaskListPage(tester, textScale: 3);
+
+      final tabBar = find.byType(TabBar);
+      final tabBarRect = tester.getRect(tabBar);
+      const labels = ['全部', '进行中', '已完成', '失败', '已停止'];
+      const icons = [
+        Icons.list,
+        Icons.play_circle_outline,
+        Icons.check_circle_outline,
+        Icons.error_outline,
+        Icons.stop_circle_outlined,
+      ];
+
+      expect(tabBarRect.height, greaterThan(48));
+      for (var i = 0; i < labels.length; i++) {
+        final label = find.descendant(
+          of: tabBar,
+          matching: find.text(labels[i]),
+        );
+        final icon = find.descendant(
+          of: tabBar,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Icon && widget.icon == icons[i],
+          ),
+        );
+        expect(label, findsOneWidget);
+        expect(icon, findsOneWidget);
+        expect(tabBarRect.contains(tester.getRect(label).topLeft), isTrue);
+        expect(tabBarRect.contains(tester.getRect(label).bottomRight), isTrue);
+        expect(tabBarRect.contains(tester.getRect(icon).topLeft), isTrue);
+        expect(tabBarRect.contains(tester.getRect(icon).bottomRight), isTrue);
+
+        await tester.tap(label);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+    });
     testWidgets('初始 tab 参数为 0（全部）时默认显示所有任务', (tester) async {
       await pumpTaskListPage(
         tester,
