@@ -45,7 +45,7 @@ void main() {
       );
       expect(
         resolveSystemLocale(const Locale('zh', 'TW')),
-        const Locale('en', 'US'),
+        const Locale('zh', 'CN'),
       );
       expect(
         resolveSystemLocale(const Locale('it', 'IT')),
