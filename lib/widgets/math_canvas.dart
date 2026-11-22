@@ -721,7 +721,8 @@ class GraphPainter extends CustomPainter {
         textPainter.paint(
           canvas,
           Offset(
-            screenX - textPainter.width / 2,
+            (screenX - textPainter.width / 2)
+                .clamp(0.0, dart_math.max(0.0, size.width - textPainter.width)),
             y0 + 4,
           ),
         );
@@ -754,8 +755,10 @@ class GraphPainter extends CustomPainter {
         textPainter.paint(
           canvas,
           Offset(
-            x0 - textPainter.width - 6,
-            screenY - textPainter.height / 2,
+            (x0 - textPainter.width - 6)
+                .clamp(0.0, dart_math.max(0.0, size.width - textPainter.width)),
+            (screenY - textPainter.height / 2).clamp(
+                0.0, dart_math.max(0.0, size.height - textPainter.height)),
           ),
         );
 
