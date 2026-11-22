@@ -194,14 +194,16 @@ extension _ChatPageStreamingExt on _ChatPageState {
             .read(chatStreamManagerProvider)
             .toolCallRoundStartsFor(activeConvId),
       );
-      ref.read(streamingToolCallsProvider(activeConvId).notifier).state =
-          List<ToolCallData>.from(
+      ref
+          .read(streamingToolCallsProvider(activeConvId).notifier)
+          .state = List<ToolCallData>.from(
         ref.read(chatStreamManagerProvider).toolCallsFor(activeConvId),
       );
       ref.read(streamingHasFirstTokenProvider(activeConvId).notifier).state =
           ref.read(chatStreamManagerProvider).hasFirstTokenFor(activeConvId);
-      ref.read(streamingReasoningProvider(activeConvId).notifier).state =
-          ref.read(chatStreamManagerProvider).reasoningBufferFor(activeConvId);
+      ref.read(streamingReasoningProvider(activeConvId).notifier).state = ref
+          .read(chatStreamManagerProvider)
+          .reasoningBufferFor(activeConvId);
     } catch (e) {
       debugPrint('[ChatPage] _restoreStreamingState provider set failed: $e');
     }
@@ -268,24 +270,24 @@ extension _ChatPageStreamingExt on _ChatPageState {
         final latestFullReply = manager.fullReplyFor(activeConvId);
         restoreController
             ?.insertMessage(
-          Message.text(
-            id: msgId,
-            authorId: _aiUser.id,
-            text: latestFullReply,
-            createdAt: DateTime.now(),
-          ),
-        )
+              Message.text(
+                id: msgId,
+                authorId: _aiUser.id,
+                text: latestFullReply,
+                createdAt: DateTime.now(),
+              ),
+            )
             .then((_) {
-          if (!mounted ||
-              _controller != restoreController ||
-              ref.read(activeConversationIdProvider) != activeConvId ||
-              !manager.isStreamingFor(activeConvId) ||
-              manager.streamingMsgIdFor(activeConvId) != msgId) {
-            return;
-          }
-          _rebuildLiveSegments(msgId);
-          setState(() {});
-        });
+              if (!mounted ||
+                  _controller != restoreController ||
+                  ref.read(activeConversationIdProvider) != activeConvId ||
+                  !manager.isStreamingFor(activeConvId) ||
+                  manager.streamingMsgIdFor(activeConvId) != msgId) {
+                return;
+              }
+              _rebuildLiveSegments(msgId);
+              setState(() {});
+            });
       } else {
         AppLogService.info(
           'ChatPage',
@@ -411,8 +413,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
     }
     final allTools = _adapter.getAllToolDefinitions();
     final enabledTools = ref.read(enabledToolNamesProvider);
-    final filteredTools =
-        allTools.where((tool) => enabledTools.contains(tool.name)).toList();
+    final filteredTools = allTools
+        .where((tool) => enabledTools.contains(tool.name))
+        .toList();
     final reasoning = ref.read(reasoningEnabledProvider);
     final reasoningEffort = ref.read(reasoningEffortProvider);
     final reasoningParamValues = ref.read(reasoningParamValuesProvider);
@@ -508,6 +511,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
         reasoningEffort: reasoningEffort,
         reasoningParamValues: reasoningParamValues,
         customParamValues: customParamValues,
+        assistant: selectedAssistant,
         streamingMsgId: aiMsgId,
       );
       _attachStreamPage(manager, effectiveConvId, aiMsgId);
@@ -546,14 +550,16 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // Guard: only update if the user is still viewing this conversation.
     // If they switched away mid-stream, _history now holds the OTHER
     // conversation's data and overwriting it would corrupt the display.
-    final pageOwnedStream = _streamingMsgId == aiMsgId &&
+    final pageOwnedStream =
+        _streamingMsgId == aiMsgId &&
         ref.read(activeConversationIdProvider) == effectiveConvId;
     // Stop clears the page-owned id immediately so an aborted manager result
     // cannot overwrite the live partial response with an incomplete result.
     // Once the real manager returns its persisted cancellation message, apply
     // that result too; otherwise edit/regenerate leaves _history stale after
     // the stop and subsequent actions cannot find the newly saved message.
-    final finalizedStoppedStream = _streamingMsgId == null &&
+    final finalizedStoppedStream =
+        _streamingMsgId == null &&
         result.assistantMessage?.isError == true &&
         ref.read(activeConversationIdProvider) == effectiveConvId;
     final shouldApplyStreamResult = pageOwnedStream || finalizedStoppedStream;
@@ -586,20 +592,23 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(streamingFullReplyProvider(effectiveConvId).notifier).state =
             '';
         ref
-            .read(streamingHasFirstTokenProvider(effectiveConvId).notifier)
-            .state = false;
+                .read(streamingHasFirstTokenProvider(effectiveConvId).notifier)
+                .state =
+            false;
         ref.read(streamingReasoningProvider(effectiveConvId).notifier).state =
             '';
         ref
-            .read(
-              streamingReasoningAppendProvider(effectiveConvId).notifier,
-            )
-            .state = null;
+                .read(
+                  streamingReasoningAppendProvider(effectiveConvId).notifier,
+                )
+                .state =
+            null;
         ref
-            .read(
-              streamingReasoningSectionsProvider(effectiveConvId).notifier,
-            )
-            .state = [];
+                .read(
+                  streamingReasoningSectionsProvider(effectiveConvId).notifier,
+                )
+                .state =
+            [];
         ref.read(streamingToolCallsProvider(effectiveConvId).notifier).state =
             [];
         ref
@@ -608,10 +617,12 @@ extension _ChatPageStreamingExt on _ChatPageState {
           '',
         ];
         ref
-            .read(
-              streamingToolCallRoundStartsProvider(effectiveConvId).notifier,
-            )
-            .state = [];
+                .read(
+                  streamingToolCallRoundStartsProvider(effectiveConvId)
+                      .notifier,
+                )
+                .state =
+            [];
       } catch (e) {
         debugPrint('[ChatPage] post-stream provider cleanup failed: $e');
       }
@@ -720,12 +731,14 @@ extension _ChatPageStreamingExt on _ChatPageState {
       toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
     );
     rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
-    final hasCanonicalFields = msg.toolCallRoundStarts != null ||
+    final hasCanonicalFields =
+        msg.toolCallRoundStarts != null ||
         ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
             !(msg.blocks?.any((block) => block is ToolCallBlock) ?? false) &&
             (msg.reasoningSections != null || msg.textSections != null));
-    final blocks =
-        hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
+    final blocks = hasCanonicalFields
+        ? rebuiltBlocks
+        : (msg.blocks ?? rebuiltBlocks);
     final segments = blocksToSegments(blocks);
 
     // Fallback: no blocks produced anything, use content as single block
@@ -748,7 +761,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (convId == null) return;
 
     final segments = buildAgentChainSegments(
-      reasoningSections: _reasoningContents[msgId] ??
+      reasoningSections:
+          _reasoningContents[msgId] ??
           ref.read(streamingReasoningSectionsProvider(convId)),
       textChunks: ref.read(streamingTextSectionsProvider(convId)),
       toolCalls: ref.read(streamingToolCallsProvider(convId)),
@@ -817,10 +831,12 @@ extension _ChatPageStreamingExt on _ChatPageState {
       // id leaves the normal history reload to read that saved result instead
       // of replacing this live message with an incomplete result object.
       if (stoppedMsgId != null && convId != null && _controller != null) {
-        final partial =
-            ref.read(chatStreamManagerProvider).fullReplyFor(convId);
-        final textChunks =
-            ref.read(chatStreamManagerProvider).textChunksFor(convId);
+        final partial = ref
+            .read(chatStreamManagerProvider)
+            .fullReplyFor(convId);
+        final textChunks = ref
+            .read(chatStreamManagerProvider)
+            .textChunksFor(convId);
         final segments = List<MessageSegment>.from(
           _chatSegments[stoppedMsgId] ?? const [],
         );

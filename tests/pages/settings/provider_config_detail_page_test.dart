@@ -68,6 +68,23 @@ class _PersistingProviderEntriesNotifier extends ProviderEntriesNotifier {
   _PersistingProviderEntriesNotifier(ProviderEntry entry) {
     state = ProviderEntriesState(entries: [entry]);
   }
+
+  @override
+  Future<void> update(
+    String id,
+    ProviderEntry updated, {
+    bool requirePersistence = false,
+  }) async {
+    final entries = state.entries
+        .map((entry) => entry.id == id ? updated : entry)
+        .toList();
+    state = ProviderEntriesState(entries: entries);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode(entries.map((entry) => entry.toMap()).toList()),
+    );
+  }
 }
 
 /// Extension to present the page for testing
@@ -172,7 +189,7 @@ void main() {
           'params': {'cursor': 'saved-cursor', 'limit': 7},
           'metadata': [
             'first',
-            {'enabled': true}
+            {'enabled': true},
           ],
         };
         final entry = _createTestEntry(
@@ -200,10 +217,7 @@ void main() {
               locale: const Locale('zh', 'CN'),
               supportedLocales: AppLocalizations.supportedLocales,
               localizationsDelegates: AppLocalizations.localizationsDelegates,
-              home: ProviderConfigDetailPage(
-                entryId: entry.id,
-                configIndex: 0,
-              ),
+              home: ProviderConfigDetailPage(entryId: entry.id, configIndex: 0),
             ),
           ),
         );
@@ -212,10 +226,7 @@ void main() {
         await tester.tap(find.text('Original model'));
         await tester.pumpAndSettle();
         expect(find.byType(LlmModelConfigPage), findsOneWidget);
-        await tester.enterText(
-          find.byType(TextField).at(1),
-          'edited-model-id',
-        );
+        await tester.enterText(find.byType(TextField).at(1), 'edited-model-id');
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
         expect(find.byType(LlmModelConfigPage), findsNothing);
@@ -247,7 +258,8 @@ void main() {
 
       final compressionDropdown = tester
           .widgetList<DropdownButton<String>>(
-              find.byType(DropdownButton<String>))
+            find.byType(DropdownButton<String>),
+          )
           .where((dropdown) => dropdown.value == 'flac');
       expect(
         compressionDropdown,
@@ -257,7 +269,8 @@ void main() {
 
       final fallbackDropdown = tester
           .widgetList<DropdownButton<String>>(
-              find.byType(DropdownButton<String>))
+            find.byType(DropdownButton<String>),
+          )
           .where((dropdown) => dropdown.value == 'all');
       expect(
         fallbackDropdown,
@@ -359,8 +372,12 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ProviderConfigDetailPage)),
       );
-      final savedConfig =
-          container.read(providerEntriesProvider).entries.single.configs.single;
+      final savedConfig = container
+          .read(providerEntriesProvider)
+          .entries
+          .single
+          .configs
+          .single;
       expect(savedConfig.typeConfig['chunking'], 'none');
       expect(savedConfig.typeConfig['compression'], 'adpcm');
       expect(savedConfig.typeConfig['fallbackMethod'], 'specific');
@@ -388,8 +405,8 @@ void main() {
       await tester.pumpAndSettle();
 
       final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
-      final anthropicLabel =
-          AppLocalizations.of(pageContext)!.providerEndpointAnthropic;
+      final anthropicLabel = AppLocalizations.of(pageContext)!
+          .providerEndpointAnthropic;
       await tester.tap(find.text(anthropicLabel).last);
       await tester.pumpAndSettle();
 
@@ -414,8 +431,7 @@ void main() {
       expect(savedConfig.endpointType, 'anthropic');
     });
 
-    testWidgets(
-        'saving a new config stays on the model list page instead of '
+    testWidgets('saving a new config stays on the model list page instead of '
         'popping back to the provider list', (tester) async {
       await tester.pumpDetailPage(configIndex: -1);
       await tester.pumpAndSettle();
@@ -453,8 +469,7 @@ void main() {
       expect(state.entries.single.configs.first.key, 'new-key');
     });
 
-    testWidgets(
-        'models added after saving a new config are persisted into the '
+    testWidgets('models added after saving a new config are persisted into the '
         'newly created config (not dropped or routed to the old config)', (
       tester,
     ) async {
@@ -609,8 +624,7 @@ void main() {
       expect(find.text('voice-1'), findsOneWidget);
     });
 
-    testWidgets(
-        'dragging a model updates the combined order, keeping other '
+    testWidgets('dragging a model updates the combined order, keeping other '
         'providers in place', (tester) async {
       SharedPreferences.setMockInitialValues({
         'model_order': [
