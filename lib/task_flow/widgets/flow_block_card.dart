@@ -66,7 +66,9 @@ class FlowBlockCard extends ConsumerWidget {
     final strings = AppLocalizations.of(context)!;
     final def = block.getDefinition();
     final temporaryOutput =
-        !isLast && hasFileOutput(block) && isFlowTemporaryOutputEnabled(block);
+        !isLast &&
+        producesTemporaryOutputFile(block) &&
+        isFlowTemporaryOutputEnabled(block);
 
     if (def == null) {
       return _buildUnknownBlock(context, cs);
@@ -165,7 +167,7 @@ class FlowBlockCard extends ConsumerWidget {
                       ),
                       if (!readOnly &&
                           !isLast &&
-                          hasFileOutput(block) &&
+                          producesTemporaryOutputFile(block) &&
                           onTemporaryOutputChanged != null)
                         Tooltip(
                           message: AppLocalizations.of(context)!

@@ -11,10 +11,12 @@ import 'package:path/path.dart' as p;
 
 import '../../services/attachment_storage.dart';
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
+import '../../providers/provider_config.dart';
 import '../../utils/duration_parser.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/image_manifest.dart';
 import '../../utils/video_manifest.dart';
+import '../../utils/provider_models.dart';
 import '../../utils/web_file_store.dart';
 import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
@@ -638,6 +640,25 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       for (final p in def.params) {
         if (!p.required) continue;
         final raw = block.params[p.key]?.toString() ?? '';
+        final selectedModel = p.type == BlockParamType.modelSelector
+            ? resolveProviderModel(
+                ref.read(providerEntriesProvider),
+                p.configType,
+                block.params[p.key],
+              )
+            : null;
+        if (p.type == BlockParamType.modelSelector &&
+            (selectedModel == null ||
+                selectedModel.model.modelId.trim().isEmpty)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.taskFlowUiModelUnavailable,
+              ),
+            ),
+          );
+          return;
+        }
         if (raw.trim().isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

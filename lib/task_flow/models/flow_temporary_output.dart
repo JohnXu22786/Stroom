@@ -19,10 +19,20 @@ bool hasFileOutput(TaskFlowBlock block) {
   return block.possibleOutputTypes.any(FlowPayload.isFileType);
 }
 
-/// Only non-final processing blocks with a file output can be temporary.
+/// ASR and OCR produce text values but also save a text-gallery file when
+/// their output is retained. Temporary mode suppresses that intermediate
+/// file just as it stages media-file outputs privately.
+bool producesTemporaryOutputFile(TaskFlowBlock block) =>
+    hasFileOutput(block) ||
+    block.typeKey == BlockType.asr ||
+    block.typeKey == BlockType.ocr;
+
+/// Only non-final processing blocks that persist an output file can be temporary.
 /// The task-flow's initial source card is not in [blocks].
 bool isFlowTemporaryOutputEligible(List<TaskFlowBlock> blocks, int index) =>
-    index >= 0 && index < blocks.length - 1 && hasFileOutput(blocks[index]);
+    index >= 0 &&
+    index < blocks.length - 1 &&
+    producesTemporaryOutputFile(blocks[index]);
 
 bool isFlowBlockTemporary(List<TaskFlowBlock> blocks, int index) =>
     isFlowTemporaryOutputEligible(blocks, index) &&

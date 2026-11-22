@@ -146,6 +146,7 @@ Future<String> executeOcrBlock({
   required ProviderEntriesState providerEntries,
   AppLocalizations? localizations,
   CancelToken? cancelToken,
+  bool temporaryOutput = false,
 
   /// Allows the response to be held and released in cancellation tests.
   Future<String> Function(Uint8List, String)? requestOcr,
@@ -575,13 +576,15 @@ Future<String> executeOcrBlock({
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, result);
 
-    final textPath = await saveTextForFlow(
-      result,
-      saveFolder: saveFolder,
-      title: title,
-      // Guard against a flow cancelled or deleted mid-save.
-      shouldCommit: () => isFlowExecutionActive(execNotifier, execId),
-    );
+    final textPath = temporaryOutput
+        ? null
+        : await saveTextForFlow(
+            result,
+            saveFolder: saveFolder,
+            title: title,
+            // Guard against a flow cancelled or deleted mid-save.
+            shouldCommit: () => isFlowExecutionActive(execNotifier, execId),
+          );
     if (!isFlowExecutionActive(execNotifier, execId)) {
       throw BlockExecutionException(
         '任务流已结束或删除',
