@@ -289,22 +289,19 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              height: 32,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  ref
-                      .read(taskListProvider.notifier)
-                      .resumeTask(widget.task.id);
-                },
-                icon: const Icon(Icons.play_arrow, size: 16),
-                label: Text(
-                  AppLocalizations.of(context)!.unifiedTaskContinue,
-                  style: TextStyle(fontSize: 13),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                ),
+            ElevatedButton.icon(
+              onPressed: () {
+                ref
+                    .read(taskListProvider.notifier)
+                    .resumeTask(widget.task.id);
+              },
+              icon: const Icon(Icons.play_arrow, size: 16),
+              label: Text(
+                AppLocalizations.of(context)!.unifiedTaskContinue,
+                style: TextStyle(fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
               ),
             ),
             PopupMenuButton<String>(
@@ -343,25 +340,22 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              height: 32,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TTSCreatePage(retryTask: widget.task),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.refresh, size: 16),
-                label: Text(
-                  AppLocalizations.of(context)!.unifiedTaskRetry,
-                  style: TextStyle(fontSize: 13),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TTSCreatePage(retryTask: widget.task),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh, size: 16),
+              label: Text(
+                AppLocalizations.of(context)!.unifiedTaskRetry,
+                style: TextStyle(fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
               ),
             ),
             PopupMenuButton<String>(
@@ -401,20 +395,17 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.task.downloadedFilePath != null)
-              SizedBox(
-                height: 32,
-                child: TextButton.icon(
-                  onPressed: () =>
-                      openFile(widget.task.downloadedFilePath!, context),
-                  icon: const Icon(Icons.folder_open, size: 16),
-                  label: Text(
-                    AppLocalizations.of(context)!.unifiedTaskOpenFile,
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
+              TextButton.icon(
+                onPressed: () =>
+                    openFile(widget.task.downloadedFilePath!, context),
+                icon: const Icon(Icons.folder_open, size: 16),
+                label: Text(
+                  AppLocalizations.of(context)!.unifiedTaskOpenFile,
+                  style: TextStyle(fontSize: 13),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.green,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
               ),
             PopupMenuButton<String>(
