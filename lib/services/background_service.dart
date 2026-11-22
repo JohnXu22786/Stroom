@@ -154,8 +154,6 @@ Future<void> _createNotificationChannel() async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) {
-  Timer? timer;
-
   // 在所有平台上注册停止监听（包括 iOS）。
   //
   // iOS 上 FlutterBackgroundService 的前台 worker 会把
@@ -163,7 +161,6 @@ void onStart(ServiceInstance service) {
   // 如果不注册监听，iOS 上的服务将永远无法停止，
   // isRunning() 会一直返回 true。
   service.on('stopService').listen((_) {
-    timer?.cancel();
     // Android 与 iOS 的 ServiceInstance 都实现了 stopSelf()。
     service.stopSelf();
   });
@@ -171,32 +168,10 @@ void onStart(ServiceInstance service) {
   if (service is AndroidServiceInstance) {
     // Set foreground notification immediately to ensure the foreground
     // service is properly recognized by the system from the start.
-    // The periodic timer below keeps the notification updated, but the
-    // first call should be immediate to avoid any window where the
-    // foreground notification info is not yet set on the native side.
     service.setForegroundNotificationInfo(
       title: _serviceTitle,
       content: _serviceContent,
     );
-  }
-
-  // Update every 2 seconds to keep the foreground notification
-  // visibly active. Frequent updates signal to the OS that the
-  // service is important and should not be killed.
-  //
-  // Android only: iOS 没有前台通知，不需要定时刷新。
-  if (service is AndroidServiceInstance) {
-    timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-      try {
-        service.setForegroundNotificationInfo(
-          title: _serviceTitle,
-          content: _serviceContent,
-        );
-      } catch (e) {
-        // 通知刷新失败不影响服务本身运行，仅记录日志。
-        debugPrint('[BackgroundService] Failed to update notification: $e');
-      }
-    });
   }
 }
 
