@@ -539,7 +539,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         )) {
           throw StateError(
             'Cannot persist provider configuration before corrupt data is backed up.',
-        );
+          );
         }
         _corruptProviderEntriesAwaitingBackup = null;
       }
@@ -554,9 +554,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       );
       if (persistMcpGroups &&
           !_jsonPreferenceEquals(
-        prefs.getString('mcp_provider_groups'),
-        mcpGroupsBeforeMigration,
-      )) {
+            prefs.getString('mcp_provider_groups'),
+            mcpGroupsBeforeMigration,
+          )) {
         throw StateError('Provider settings changed during persistence.');
       }
 
@@ -637,9 +637,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       );
       final mcpGroupsMatch = !persistMcpGroups ||
           _jsonPreferenceEquals(
-        prefs.getString('mcp_provider_groups'),
+            prefs.getString('mcp_provider_groups'),
             mcpGroupsBeforeMigration,
-      );
+          );
       if (!providerEntriesMatch || !mcpGroupsMatch) {
         if (!providerEntriesMatch) {
           _providerEntriesSourceConflictGeneration++;
@@ -693,11 +693,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         rollbackFailed = !entriesRolledBack;
         if (persistMcpGroups) {
           final groupsRolledBack = await _rollbackPairedPreferenceWrite(
-          prefsForRollback,
-          'mcp_provider_groups',
-          mcpGroupsBeforeMigration,
-          attemptedMcpGroups,
-        );
+            prefsForRollback,
+            'mcp_provider_groups',
+            mcpGroupsBeforeMigration,
+            attemptedMcpGroups,
+          );
           rollbackFailed = rollbackFailed || !groupsRolledBack;
         }
       }
