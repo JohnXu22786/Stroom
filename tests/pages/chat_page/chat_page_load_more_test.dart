@@ -1561,6 +1561,77 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('sending from the latest page includes the full transcript', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'paged-send-full-context',
+      });
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        ConversationRecordAdapter.fromLegacyMap({
+          'id': 'paged-send-full-context',
+          'title': 'Paged send full context',
+          'messages': [
+            for (var index = 0; index < 45; index++)
+              ChatMessage(
+                id: 'm$index',
+                role: index.isEven ? 'user' : 'assistant',
+                content: 'Message $index content',
+                createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
+              ).toMap(),
+          ],
+        }),
+      );
+      addTearDown(repository.close);
+      final manager = _CompletingStreamManager();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationRepositoryProvider.overrideWithValue(repository),
+            chatStreamManagerProvider.overrideWith((ref) => manager),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'paged-send-full-context',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ChatPage(),
+          ),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      final initialChat = tester.widget<Chat>(find.byType(Chat));
+      expect(initialChat.chatController.messages, hasLength(20));
+      await tester.enterText(find.byType(TextField), 'hello');
+      await tester.pump();
+      final sendButton = tester
+          .widgetList<IconButton>(
+            find.widgetWithIcon(IconButton, Icons.send_rounded),
+          )
+          .firstWhere((button) => button.onPressed != null);
+      await tester.tap(find.byWidget(sendButton));
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(manager.receivedHistories, hasLength(1));
+      expect(manager.receivedHistories.single, hasLength(46));
+      expect(manager.receivedHistories.single.first.id, 'm0');
+      expect(manager.receivedHistories.single[44].id, 'm44');
+      expect(manager.receivedHistories.single.last.content, 'hello');
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets(
       'spinner exists only while actually loading and is removed from the '
       'tree when the load ends',

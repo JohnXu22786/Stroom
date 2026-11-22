@@ -503,15 +503,22 @@ extension _ChatPageEditingExt on _ChatPageState {
       }
     }
 
+    final otherMessageAttachmentPaths = activeId == null
+        ? const <String>{}
+        : await ref
+              .read(conversationsProvider.notifier)
+              .getOtherMessageAttachmentPaths(activeId, messageId);
     final attachmentsToDelete = <Attachment>[];
     for (final att in msg.attachments) {
-      final isReferencedElsewhere = _history.asMap().entries.any(
-        (entry) =>
-            entry.key != index &&
-            entry.value.attachments.any(
-              (a) => a.storagePath == att.storagePath,
-            ),
-      );
+      final isReferencedElsewhere =
+          otherMessageAttachmentPaths.contains(att.storagePath) ||
+          _history.asMap().entries.any(
+            (entry) =>
+                entry.key != index &&
+                entry.value.attachments.any(
+                  (a) => a.storagePath == att.storagePath,
+                ),
+          );
       if (!isReferencedElsewhere) {
         attachmentsToDelete.add(att);
       }
