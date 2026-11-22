@@ -32,6 +32,76 @@ class _LongOrderLocalizationsDelegate
 }
 
 void main() {
+  testWidgets('long German separator stays within a narrow card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // The existing German page title reports a separate app-bar overflow.
+    // Clear it so this regression assertion covers the separator card.
+    tester.takeException();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'while selector is open');
+    await tester.tap(find.text('Senkrechter Strich (|)').last);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull, reason: 'after selecting separator');
+    final card = find.byType(Card).first;
+    expect(
+      tester.getRect(dropdown).right,
+      lessThanOrEqualTo(tester.getRect(card).right),
+    );
+    expect(
+      find.bySemanticsLabel('Senkrechter Strich (|)'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('wide separator control stays inline after selection', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(700, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Senkrechter Strich (|)').last);
+    await tester.pumpAndSettle();
+
+    final label = find.text('Trennzeichen:');
+    expect(tester.getRect(dropdown).center.dy, tester.getRect(label).center.dy);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Senkrechter Strich (|)'), findsOneWidget);
+  });
+
   testWidgets('separator dropdown uses the shared rounded surface', (
     tester,
   ) async {
