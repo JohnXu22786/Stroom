@@ -3,6 +3,10 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../l10n/app_localizations.dart';
+import 'ocr_page_failure_summary.dart';
+import 'ocr_request_size_failure_summary.dart';
+
 /// Creates small OCR diagnostic maps suitable for task persistence and display.
 class OcrDiagnosticSnapshot {
   OcrDiagnosticSnapshot._();
@@ -27,7 +31,88 @@ class OcrDiagnosticSnapshot {
   static const _knownSafeStoredTaskErrorSummaries = {
     'OCR 图片格式无法识别',
     'OCR 任务因格式问题未完成',
+    'Die Bilddatei wurde nicht gefunden. Wähle das Bild erneut aus.',
+    'Die Bilddatei konnte nicht gelesen werden. Prüfe den Dateizugriff und versuche es erneut.',
+    'Es ist kein verwendbares OCR-Modell eingerichtet. Wähle in den Ablauf-Einstellungen einen OCR-Anbieter und ein Modell aus.',
+    'Das Bild ist leer. Wähle es erneut aus.',
+    'Dieses Bildformat wird nicht unterstützt. Konvertiere das Bild in PNG, JPEG oder WebP und versuche es erneut.',
+    'HEIC-, SVG- und TIFF-Bilder werden noch nicht unterstützt. Konvertiere das Bild in PNG, JPEG oder WebP und versuche es erneut.',
+    'Das Bild ist beschädigt oder kann nicht decodiert werden. Wähle es erneut aus oder konvertiere es in PNG, JPEG oder WebP und versuche es erneut.',
+    'Die Bildauflösung ist zu hoch. OCR unterstützt bis zu 50 Millionen Pixel pro Bild. Verkleinere das Bild und versuche es erneut.',
+    'Die PNG-Datei zur Korrektur der Bildausrichtung würde das OCR-Anfragegrößenlimit überschreiten. Verkleinere das Bild und versuche es erneut.',
+    'Die Bildausrichtung konnte nicht korrigiert werden. Konvertiere das Bild in PNG, JPEG oder WebP und versuche es erneut.',
+    'Das Bild konnte nicht verarbeitet werden. Wähle es erneut aus und versuche es noch einmal.',
+    '이미지 파일을 찾을 수 없습니다. 이미지를 다시 선택하세요.',
+    '이미지 파일을 읽을 수 없습니다. 파일 접근 권한을 확인하고 다시 시도하세요.',
+    '사용 가능한 OCR 모델이 설정되지 않았습니다. 흐름 설정에서 OCR 제공업체와 모델을 선택하세요.',
+    '이미지가 비어 있습니다. 다시 선택하세요.',
+    '지원하지 않는 이미지 형식입니다. PNG, JPEG 또는 WebP로 변환한 뒤 다시 시도하세요.',
+    'HEIC, SVG, TIFF 이미지는 아직 지원되지 않습니다. PNG, JPEG 또는 WebP로 변환한 뒤 다시 시도하세요.',
+    '이미지가 손상되었거나 디코딩할 수 없습니다. 다시 선택하거나 PNG, JPEG 또는 WebP로 변환한 뒤 다시 시도하세요.',
+    '이미지 해상도가 너무 큽니다. OCR은 이미지당 최대 5천만 픽셀을 지원합니다. 크기를 줄인 뒤 다시 시도하세요.',
+    '이미지 방향을 바로잡는 데 필요한 PNG가 OCR 요청 크기 한도를 초과합니다. 이미지 크기를 줄인 뒤 다시 시도하세요.',
+    '이미지 방향을 바로잡을 수 없습니다. PNG, JPEG 또는 WebP로 변환한 뒤 다시 시도하세요.',
+    '이미지를 처리할 수 없습니다. 다시 선택한 뒤 재시도하세요.',
+    '找不到图片文件，请重新选择图片。',
+    '无法读取图片文件，请检查文件访问权限后重试。',
+    '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。',
+    'The image file could not be found. Select the image again.',
+    'The image file could not be read. Check file access and try again.',
+    'No usable OCR model is configured. Choose an OCR provider and model in flow settings.',
+    '图片为空，请重新选择。',
+    '不支持此图片格式，请先转换为 PNG、JPEG 或 WebP 后重试。',
+    '暂不支持 HEIC、SVG 或 TIFF 图片，请先转换为 PNG、JPEG 或 WebP 后重试。',
     '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
+    '图片分辨率过大，OCR 每张图片最多支持 5000 万像素，请缩小图片后重试。',
+    '校正图片方向后的 PNG 会超过 OCR 请求大小上限，请先缩小图片后重试。',
+    '无法校正图片方向，请转换为 PNG、JPEG 或 WebP 后重试。',
+    'The image is empty. Select it again.',
+    'This image format is not supported. Convert it to PNG, JPEG, or WebP and try again.',
+    'HEIC, SVG, and TIFF images are not supported yet. Convert the image to PNG, JPEG, or WebP and try again.',
+    'The image is damaged or cannot be decoded. Select it again, or convert it to PNG, JPEG, or WebP and try again.',
+    'The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.',
+    'The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.',
+    'The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.',
+    'La imagen está vacía. Selecciónelo nuevamente.',
+    'Este formato de imagen no es compatible. Conviértelo a PNG, JPEG o WebP e inténtalo de nuevo.',
+    'Las imágenes HEIC, SVG y TIFF aún no son compatibles. Convierta la imagen a PNG, JPEG o WebP e inténtelo de nuevo.',
+    'La imagen está dañada o no se puede decodificar. Selecciónelo nuevamente o conviértalo a PNG, JPEG o WebP e inténtelo nuevamente.',
+    'La resolución de la imagen es demasiado grande. OCR admite hasta 50 millones de píxeles por imagen. Cambie su tamaño e inténtelo de nuevo.',
+    'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
+    'Não foi possível encontrar o arquivo de imagem. Selecione a imagem novamente.',
+    'Não foi possível ler o arquivo de imagem. Verifique o acesso ao arquivo e tente novamente.',
+    'Nenhum modelo de OCR utilizável está configurado. Escolha um provedor e um modelo de OCR nas configurações do fluxo.',
+    'A imagem está vazia. Selecione-a novamente.',
+    'Este formato de imagem não é compatível. Converta a imagem para PNG, JPEG ou WebP e tente novamente.',
+    'Imagens HEIC, SVG e TIFF ainda não são compatíveis. Converta a imagem para PNG, JPEG ou WebP e tente novamente.',
+    'A imagem está danificada ou não pode ser decodificada. Selecione-a novamente ou converta-a para PNG, JPEG ou WebP e tente de novo.',
+    'A resolução da imagem é muito alta. O OCR aceita até 50 milhões de pixels por imagem. Redimensione-a e tente novamente.',
+    'O PNG necessário para corrigir a orientação desta imagem excederia o limite de tamanho da solicitação de OCR. Redimensione a imagem e tente novamente.',
+    'Não foi possível corrigir a orientação da imagem. Converta-a para PNG, JPEG ou WebP e tente novamente.',
+    'Não foi possível processar a imagem. Selecione-a novamente e tente mais uma vez.',
+    'Le fichier image est introuvable. Sélectionne à nouveau l’image.',
+    'Impossible de lire le fichier image. Vérifie les droits d’accès, puis réessaie.',
+    'Aucun modèle OCR utilisable n’est configuré. Choisis un fournisseur et un modèle OCR dans les paramètres du flux.',
+    'L’image est vide. Sélectionnez-la à nouveau.',
+    'Ce format d’image n’est pas pris en charge. Convertissez-la au format PNG, JPEG ou WebP, puis réessayez.',
+    'Les images HEIC, SVG et TIFF ne sont pas encore prises en charge. Convertissez l’image au format PNG, JPEG ou WebP, puis réessayez.',
+    'L’image est endommagée ou ne peut pas être décodée. Sélectionnez-la à nouveau, ou convertissez-la au format PNG, JPEG ou WebP, puis réessayez.',
+    'La résolution de l’image est trop élevée. L’OCR prend en charge jusqu’à 50 millions de pixels par image. Réduisez sa taille, puis réessayez.',
+    'Le PNG nécessaire pour corriger l’orientation de cette image dépasserait la limite de taille des requêtes OCR. Réduisez la taille de l’image, puis réessayez.',
+    'L’orientation de l’image n’a pas pu être corrigée. Convertissez-la au format PNG, JPEG ou WebP, puis réessayez.',
+    'L’image n’a pas pu être traitée. Sélectionnez-la à nouveau, puis réessayez.',
+    'No se pudo encontrar el archivo de imagen. Seleccione la imagen nuevamente.',
+    'No se pudo leer el archivo de imagen. Verifique el acceso al archivo e inténtelo nuevamente.',
+    'No se pudo corregir la orientación de la imagen. Conviértelo a PNG, JPEG o WebP e inténtalo de nuevo.',
+    '画像は空です。もう一度選択してください。',
+    'この画像形式はサポートされていません。 PNG、JPEG、または WebP に変換して、再試行してください。',
+    'HEIC、SVG、TIFF 画像はまだサポートされていません。画像を PNG、JPEG、または WebP に変換して、再試行してください。',
+    '画像が破損しているか、デコードできません。再度選択するか、PNG、JPEG、または WebP に変換して再試行してください。',
+    '画像の解像度が大きすぎます。 OCR は、画像あたり最大 5,000 万ピクセルをサポートします。サイズを変更して再試行してください。',
+    'この画像の方向を修正するために必要な PNG は、OCR リクエストのサイズ制限を超えます。画像のサイズを変更して再試行してください。',
+    '画像の向きを補正できませんでした。 PNG、JPEG、または WebP に変換して、再試行してください。',
+    '画像ファイルが見つかりませんでした。再度画像を選択してください。',
+    '画像ファイルを読み取れませんでした。ファイルアクセスを確認して、再試行してください。',
     'OCR request failed',
     'OCR失败',
     '上传超时',
@@ -55,6 +140,20 @@ class OcrDiagnosticSnapshot {
     'OCR 未识别到文字内容',
     'OCR 未识别到文字内容（content 列表为空）',
     'OCR 返回了异常内容（仅包含 JSON 括号），请检查 API 返回格式或更换模型',
+    'تعذّر العثور على ملف الصورة. اختر الصورة مرة أخرى.',
+    'تعذّرت قراءة ملف الصورة. تحقّق من صلاحية الوصول ثم أعد المحاولة.',
+    'لم يتم إعداد نموذج OCR صالح. اختر موفّر OCR ونموذجًا من إعدادات المسار.',
+    'الصورة فارغة. اخترها مرة أخرى.',
+    'تنسيق الصورة هذا غير مدعوم. حوّلها إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'لم يتم دعم صور HEIC وSVG وTIFF بعد. حوّل الصورة إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'الصورة تالفة أو يتعذّر فك ترميزها. اخترها مرة أخرى، أو حوّلها إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'دقة الصورة كبيرة جدًا. يدعم OCR ما يصل إلى 50 مليون بكسل للصورة. غيّر حجمها ثم أعد المحاولة.',
+    'سيتجاوز حجم ملف PNG اللازم لتصحيح اتجاه الصورة حد طلب OCR. غيّر حجم الصورة ثم أعد المحاولة.',
+    'تعذّر تصحيح اتجاه الصورة. حوّلها إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'تعذّرت معالجة الصورة. اخترها مرة أخرى ثم أعد المحاولة.',
+  };
+  static const _longSafeStoredTaskErrorSummaries = {
+    'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
   };
   static const _storedTaskErrorWrappers = [
     'OCR识别失败: ',
@@ -66,6 +165,10 @@ class OcrDiagnosticSnapshot {
     r'''(?:api[\s_-]*key|private[_-]?key|client[_-]?secret|secret[_-]?key|(?:^|[^a-z0-9])key|token|access[_-]?token|refresh[_-]?token|authorization|bearer|password|secret)["']?\s*[:=]''',
     caseSensitive: false,
   );
+  static final _labeledCredentialAssignment = RegExp(
+    r'''((?:^|[^a-z0-9])(?:api[\s_-]*key|private[_-]?key|client[_-]?secret|secret[_-]?key|key|access[_-]?token|refresh[_-]?token|token|authorization|bearer|password|secret)["']?\s*[:=]\s*)(?:Bearer\s+\S+|Basic\s+\S+|"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)''',
+    caseSensitive: false,
+  );
   static final _credentialValue = RegExp(
     r'(?:Bearer\s+\S+|sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})',
     caseSensitive: false,
@@ -74,6 +177,20 @@ class OcrDiagnosticSnapshot {
     r'(?:(?:api|access|private|secret(?:[_-]?access)?|subscription|client)[_-]?key|(?:^|[-_.])key(?:$|[-_.])|(?:^|[-_.])(?:access|refresh|id)?[_-]?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?token(?:$|[-_.])|(?:^|[-_.])auth(?:orization)?(?:$|[-_.])|(?:^|[-_.])(?:client[_-]?)?secret(?:$|[-_.])|(?:^|[-_.])(?:pass(?:word|phrase)?|passwd|credentials?|cookie|signature|sig|jwt)(?:$|[-_.]))',
     caseSensitive: false,
   );
+  static final _tokenMetadataQueryParameter = RegExp(
+    r'(?:^|[-_.])(?:access|refresh|id)?[_-]?token[-_](?:expires?(?:[-_](?:at|in))?|expiry|expiration|issued(?:[-_]at)?|type|scope)(?:$|[-_.])',
+    caseSensitive: false,
+  );
+
+  static String _normalizeCredentialQueryParameterName(String name) => name
+      .replaceAllMapped(
+        RegExp(r'([A-Z]+)([A-Z][a-z])'),
+        (match) => '${match[1]}_${match[2]}',
+      )
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (match) => '${match[1]}_${match[2]}',
+      );
 
   /// Extracted values may contain full secrets. Use them only as transient
   /// sanitizer exclusions; never expose or persist the returned values.
@@ -100,7 +217,10 @@ class OcrDiagnosticSnapshot {
           separator < 0 ? component : component.substring(0, separator);
       if (rawKey.isEmpty) continue;
       try {
-        final key = Uri.decodeQueryComponent(rawKey);
+        final key = _normalizeCredentialQueryParameterName(
+          Uri.decodeQueryComponent(rawKey),
+        );
+        if (_tokenMetadataQueryParameter.hasMatch(key)) continue;
         if (!_credentialQueryParameter.hasMatch(key)) continue;
 
         final rawValue =
@@ -125,6 +245,13 @@ class OcrDiagnosticSnapshot {
     }.toList(growable: false);
   }
 
+  /// Redacts recognizable credential assignments in opaque provider text.
+  static String redactLabeledCredentialAssignments(String value) =>
+      value.replaceAllMapped(
+        _labeledCredentialAssignment,
+        (match) => '${match[1]}[REDACTED]',
+      );
+
   static List<String> _credentialValuesFromBody(dynamic rawBody) {
     final values = <String>{};
     var body = rawBody;
@@ -136,23 +263,38 @@ class OcrDiagnosticSnapshot {
       }
     }
 
-    void collect(dynamic value, {bool credentialField = false}) {
+    void collect(
+      dynamic value, {
+      bool credentialField = false,
+      String credentialPath = '',
+    }) {
       if (credentialField && value is String) {
         _addCredentialValue(values, value);
       }
       if (value is Map) {
         for (final entry in value.entries) {
           if (entry.key is String) {
+            final key = _normalizeCredentialQueryParameterName(
+              entry.key as String,
+            );
+            final path =
+                credentialPath.isEmpty ? key : '${credentialPath}_$key';
+            if (_tokenMetadataQueryParameter.hasMatch(path)) continue;
             collect(
               entry.value,
-              credentialField: credentialField ||
-                  _credentialQueryParameter.hasMatch(entry.key as String),
+              credentialField:
+                  credentialField || _credentialQueryParameter.hasMatch(key),
+              credentialPath: path,
             );
           }
         }
       } else if (value is List) {
         for (final item in value) {
-          collect(item, credentialField: credentialField);
+          collect(
+            item,
+            credentialField: credentialField,
+            credentialPath: credentialPath,
+          );
         }
       }
     }
@@ -176,7 +318,7 @@ class OcrDiagnosticSnapshot {
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return const [];
     final credentialHeader = RegExp(
-      r'(?:authorization|auth.?token|(?:^|[-_.])auth(?:$|[-_.])|(?:^|[-_.])token|api.?key|api.?secret|api.?token|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|credentials?|password|cookie)',
+      r'(?:authorization|auth.?token|(?:^|[-_.])auth(?:$|[-_.])|(?:^|[-_.])token|api.?key|api.?secret|api.?token|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?key|client.?secret|credentials?|password|cookie)',
       caseSensitive: false,
     );
     final values = <String>{};
@@ -301,6 +443,13 @@ class OcrDiagnosticSnapshot {
     return _bounded(result);
   }
 
+  /// Returns an allowlisted provider finish reason safe for display/storage.
+  static String? safeFinishReason(
+    String? value, {
+    Iterable<String> excludedValues = const [],
+  }) =>
+      _safeReason(value, excludedValues: excludedValues);
+
   static Map<String, dynamic> request({
     required String? url,
     required int imageCount,
@@ -373,20 +522,34 @@ class OcrDiagnosticSnapshot {
   static String safeTaskError(
     Object error, {
     Iterable<String> excludedValues = const [],
+    AppLocalizations? localizations,
   }) {
     late final String message;
     if (error is DioException) {
-      message = 'OCR 请求失败（${error.type.name}）';
+      message = localizations == null
+          ? 'OCR 请求失败（${error.type.name}）'
+          : localizations.bgTaskOcrErrorDetailsHidden;
     } else if (error is FormatException) {
-      message = 'OCR 返回格式无效';
+      message = localizations == null
+          ? 'OCR 返回格式无效'
+          : localizations.ocrProcessingOcrFailed;
     } else if (error is FileSystemException) {
-      message = 'OCR 结果保存失败';
+      message = localizations == null
+          ? 'OCR 结果保存失败'
+          : localizations.bgTaskOcrErrorDetailsHidden;
     } else {
       final type = error.runtimeType.toString();
-      message =
-          'OCR 处理失败（${type.substring(0, type.length.clamp(0, 64).toInt())}）';
+      message = localizations == null
+          ? 'OCR 处理失败（${type.substring(0, type.length.clamp(0, 64).toInt())}）'
+          : localizations.bgTaskOcrErrorDetailsHidden;
     }
     if (containsCredential(message, excludedValues: excludedValues)) {
+      if (localizations != null) {
+        final fallback = localizations.bgTaskOcrErrorDetailsHidden;
+        return containsCredential(fallback, excludedValues: excludedValues)
+            ? ''
+            : fallback;
+      }
       return _hiddenTaskError(excludedValues: excludedValues);
     }
     return message;
@@ -406,10 +569,6 @@ class OcrDiagnosticSnapshot {
         return candidate;
       }
     }
-    if (detailsText.isNotEmpty &&
-        !containsCredential(detailsText, excludedValues: exclusions)) {
-      return detailsText;
-    }
     return '';
   }
 
@@ -421,6 +580,11 @@ class OcrDiagnosticSnapshot {
   }) {
     if (value == null || value.isEmpty) return value;
     final credentialValues = excludedValues.toList(growable: false);
+    final safeHiddenSummary = _sanitizeSafeHiddenTaskErrorSummary(
+      value,
+      excludedValues: credentialValues,
+    );
+    if (safeHiddenSummary != null) return safeHiddenSummary;
     if (value.length <= _maxTextLength) {
       var safeDioCandidate = value;
       while (true) {
@@ -451,7 +615,9 @@ class OcrDiagnosticSnapshot {
       value,
       excludedValues: credentialValues,
     );
-    if (value.length <= _maxTextLength &&
+    if ((value.length <= _maxTextLength ||
+            _longSafeStoredTaskErrorSummaries.contains(value) ||
+            OcrPageFailureSummary.isKnownLocalizedSummary(value)) &&
         !containsProviderBody &&
         !containsCredentialValue &&
         _isKnownSafeStoredTaskErrorSummary(
@@ -466,8 +632,13 @@ class OcrDiagnosticSnapshot {
       caseSensitive: false,
     ).firstMatch(value)?.group(1);
     final details = <String>[
+      // Keep parsed bounded status metadata only when it does not match an
+      // explicitly excluded credential value.
       if (statusCode != null &&
-          !containsCredential(statusCode, excludedValues: credentialValues))
+          !containsCredential(
+            'HTTP $statusCode',
+            excludedValues: credentialValues,
+          ))
         'HTTP $statusCode',
       if (_safeReason(
         RegExp(
@@ -491,6 +662,37 @@ class OcrDiagnosticSnapshot {
     var candidate = value;
     while (candidate.isNotEmpty) {
       if (_knownSafeStoredTaskErrorSummaries.contains(candidate) ||
+          _isKnownLocalizedOcrTaskErrorSummary(
+            candidate,
+            excludedValues: excludedValues,
+          ) ||
+          RegExp(
+            r'^The image exceeds (?:OCR request size budget \([\d.]+ MiB\)|the task flow image input limit \([\d.]+ MiB\))\. Choose a smaller image and try again\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^Das Bild überschreitet (?:OCR-Anfragegrößenlimit \([\d.]+ MiB\)|das Größenlimit für Bildeingaben im Aufgabenablauf \([\d.]+ MiB\))\. Wähle ein kleineres Bild aus und versuche es erneut\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^图片超过(?:OCR 请求大小预算（[\d.]+ MiB）|任务流图片输入上限（[\d.]+ MiB）)，请缩小图片后重试。$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^La imagen supera (?:Presupuesto de tamaño de solicitud de OCR \([\d.]+ MiB\)|el límite de entrada de imagen de flujo de tareas \([\d.]+ MiB\))\. Elija una imagen más pequeña e inténtelo de nuevo\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^A imagem excede o limite de (?:Limite de tamanho da solicitação de OCR \([\d.]+ MiB\)|limite de tamanho da imagem de entrada do fluxo de tarefas \([\d.]+ MiB\))\. Escolha uma imagem menor e tente novamente\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^L’image dépasse la limite de (?:Budget de taille de la requête OCR \([\d.]+ MiB\)|la limite de taille des images d’entrée du flux de tâches \([\d.]+ MiB\))\. Choisis une image plus petite, puis réessaie\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^画像は(?:OCR リクエスト サイズの予算 \([\d.]+ MiB\)|タスク フロー イメージの入力制限 \([\d.]+ MiB\))を超えています。より小さい画像を選択して、もう一度試してください。$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^이미지가 (?:OCR 요청 크기 한도|작업 흐름 이미지 입력 한도)\([\d.]+ MiB\)을\(를\) 초과합니다\. 더 작은 이미지를 선택하고 다시 시도하세요\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^تتجاوز الصورة الحد (?:حد حجم طلب OCR|حد حجم صور مسار المهام) \([\d.]+ ميبي بايت\)\. اختر صورة أصغر ثم أعد المحاولة\.$',
+          ).hasMatch(candidate) ||
           RegExp(
             r'^HTTP\s+[1-5]\d{2}$',
             caseSensitive: false,
@@ -498,27 +700,9 @@ class OcrDiagnosticSnapshot {
           RegExp(
             r'^OCR 请求的 JSON 大小为 \d+ 字节，超过 \d+ 字节上限$',
           ).hasMatch(candidate) ||
-          RegExp(
-            r'^部分图片 OCR 未完成：第 \d+ 张图片(?:识别失败|结果不完整)(?:；第 \d+ 张图片(?:识别失败|结果不完整))*$',
-          ).hasMatch(candidate) ||
-          RegExp(
-            r'^Some images were not fully recognized: Image \d+: (?:recognition failed|incomplete result)(?:; Image \d+: (?:recognition failed|incomplete result))*$',
-          ).hasMatch(candidate)) {
-        return true;
-      }
-
-      final incompleteResult = RegExp(
-        r'^OCR 返回了不完整结果（finish_reason=([A-Za-z0-9_-]{1,48})）$',
-      ).firstMatch(candidate);
-      final englishIncompleteResult = RegExp(
-        r'^OCR returned an incomplete result \(finish_reason=([A-Za-z0-9_-]{1,48})\)$',
-      ).firstMatch(candidate);
-      final finishReason =
-          incompleteResult?.group(1) ?? englishIncompleteResult?.group(1);
-      if (finishReason == 'unknown' ||
-          (finishReason != null &&
-              _safeReason(finishReason, excludedValues: excludedValues) ==
-                  finishReason)) {
+          OcrPageFailureSummary.isKnownLocalizedSummary(candidate) ||
+          OcrRequestSizeFailureSummary.isKnownLocalizedSummary(candidate) ||
+          _isKnownLocalizedOcrRequestSizeTaskErrorSummary(candidate)) {
         return true;
       }
 
@@ -542,11 +726,72 @@ class OcrDiagnosticSnapshot {
     return false;
   }
 
+  static bool _isKnownLocalizedOcrTaskErrorSummary(
+    String value, {
+    required Iterable<String> excludedValues,
+  }) {
+    const finishReasonMarker = '__OCR_FINISH_REASON__';
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      if (value == strings.ocrImagePreparationFailed ||
+          value == strings.taskFlowOcrModelUnavailable ||
+          value == strings.ocrProcessingOcrFailed ||
+          value == strings.bgTaskOcrErrorDetailsHidden) {
+        return true;
+      }
+
+      final template = strings.bgTaskOcrResultIncomplete(finishReasonMarker);
+      final markerOffset = template.indexOf(finishReasonMarker);
+      if (markerOffset < 0) continue;
+      final prefix = template.substring(0, markerOffset);
+      final suffix =
+          template.substring(markerOffset + finishReasonMarker.length);
+      if (!value.startsWith(prefix) || !value.endsWith(suffix)) continue;
+      if (value.length < prefix.length + suffix.length) continue;
+
+      final finishReason = value.substring(
+        prefix.length,
+        value.length - suffix.length,
+      );
+      if (finishReason == 'unknown' ||
+          _safeReason(finishReason, excludedValues: excludedValues) ==
+              finishReason) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isKnownLocalizedOcrRequestSizeTaskErrorSummary(String value) {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      final prefix = strings.bgTaskOcrError('');
+      if (value.startsWith(prefix) &&
+          OcrRequestSizeFailureSummary.isKnownLocalizedSummary(
+            value.substring(prefix.length),
+          )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static bool _isSafeHiddenTaskErrorSummary(
     String value, {
     Iterable<String> excludedValues = const [],
   }) {
-    const prefixes = ['OCR 错误详情已隐藏', '错误详情已隐藏', '请求失败', '请重试'];
+    const prefixes = [
+      'OCR 错误详情已隐藏',
+      'OCR error details were hidden',
+      'Los detalles del error de OCR estaban ocultos',
+      'OCR エラーの詳細は非表示になりました',
+      '错误详情已隐藏',
+      'Error details were hidden',
+      'Los detalles del error estaban ocultos',
+      'エラーの詳細は非表示になりました',
+      '请求失败',
+      '请重试',
+    ];
     for (final prefix in prefixes) {
       if (value == prefix) return true;
       if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
@@ -570,6 +815,56 @@ class OcrDiagnosticSnapshot {
       });
     }
     return false;
+  }
+
+  static String? _sanitizeSafeHiddenTaskErrorSummary(
+    String value, {
+    required Iterable<String> excludedValues,
+  }) {
+    if (value.length > _maxTextLength) return null;
+    const prefixes = [
+      'OCR 错误详情已隐藏',
+      'OCR error details were hidden',
+      'Los detalles del error de OCR estaban ocultos',
+      'OCR エラーの詳細は非表示になりました',
+      '错误详情已隐藏',
+      'Error details were hidden',
+      'Los detalles del error estaban ocultos',
+      'エラーの詳細は非表示になりました',
+    ];
+    for (final prefix in prefixes) {
+      if (containsCredential(prefix, excludedValues: excludedValues)) {
+        continue;
+      }
+      if (value == prefix) return value;
+      if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
+
+      final details = value.substring(prefix.length + 1, value.length - 1);
+      final parts = details.split('，');
+      if (parts.isEmpty || parts.length > 2) return null;
+      final safeParts = <String>[];
+      for (final part in parts) {
+        if (RegExp(
+          r'^HTTP\s+[1-5]\d{2}$',
+          caseSensitive: false,
+        ).hasMatch(part)) {
+          if (!containsCredential(part, excludedValues: excludedValues)) {
+            safeParts.add(part);
+          }
+          continue;
+        }
+        final finishReason = RegExp(
+          r'^finish_reason=([A-Za-z0-9_-]{1,48})$',
+        ).firstMatch(part)?.group(1);
+        if (finishReason != null &&
+            _safeReason(finishReason, excludedValues: excludedValues) ==
+                finishReason) {
+          safeParts.add(part);
+        }
+      }
+      return safeParts.isEmpty ? prefix : '$prefix（${safeParts.join('，')}）';
+    }
+    return null;
   }
 
   /// Whether text contains a credential-shaped value or a supplied secret.

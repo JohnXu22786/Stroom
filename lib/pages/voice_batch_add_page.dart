@@ -5,6 +5,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 import 'voice_batch_add_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // 批量添加音色页面
 // ============================================================================
@@ -219,7 +221,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.voiceBatchTitle),
+        title: ConstrainedText(
+          l10n.voiceBatchTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -227,9 +233,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         actions: [
           TextButton(
             onPressed: _canConfirm ? _onConfirm : null,
-            child: Text(
+            child: ConstrainedText(
               l10n.voiceBatchConfirm,
               style: TextStyle(color: _canConfirm ? null : Colors.grey),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -360,7 +368,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                       .map(
                         (opt) => DropdownMenuItem(
                           value: opt,
-                          child: Text(_separatorLabel(opt, l10n)),
+                          child: ConstrainedText(
+                            _separatorLabel(opt, l10n),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       )
                       .toList(),
@@ -396,12 +408,21 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             // 名称/ID 顺序
             Text(l10n.voiceBatchFieldOrder),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                _buildOrderChip(true, l10n.voiceBatchNameThenId),
-                const SizedBox(width: 8),
-                _buildOrderChip(false, l10n.voiceBatchIdThenName),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: _buildOrderChip(true, l10n.voiceBatchNameThenId),
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: _buildOrderChip(false, l10n.voiceBatchIdThenName),
+                  ),
+                ],
+              ),
             ),
             // 多列选择器
             if (_detectedColumns > 2) ...[

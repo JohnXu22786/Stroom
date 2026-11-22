@@ -62,6 +62,35 @@ ProviderConfigItem _baseConfig() => ProviderConfigItem(
     );
 
 void main() {
+  group('ProviderSettingsPanel connectivity test persistence', () {
+    testWidgets(
+      'saving provider settings retains provider-level test content',
+      (tester) async {
+        const connectivityTest = {
+          'method': 'tools/list',
+          'params': {'cursor': 'saved-cursor', 'limit': 7},
+          'metadata': [
+            'first',
+            {'enabled': true}
+          ],
+        };
+        final saved = await _openAndSave(
+          tester,
+          config: ProviderConfigItem(
+            providerName: 'Test Provider',
+            host: 'https://api.example.com/v1',
+            key: 'sk-test',
+            typeConfig: {'connectivityTest': connectivityTest},
+          ),
+        );
+
+        expect(saved, isNotNull);
+        expect(saved!.models, isEmpty);
+        expect(saved.typeConfig['connectivityTest'], connectivityTest);
+      },
+    );
+  });
+
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
     testWidgets('trims surrounding whitespace from saved custom-param names', (
       tester,

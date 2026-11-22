@@ -1388,6 +1388,75 @@ void main() {
       expect(info.dataSize, lessThan(wav.length));
     });
 
+    test('resampling preserves opposite-polarity stereo channels', () {
+      final wav = _buildWavFromFrames(
+        List<List<int>>.generate(48, (_) => [12000, -12000]),
+        sampleRate: 48000,
+      );
+
+      final processed = WavPreprocessor(
+        config: const AudioPreprocessConfig(
+          targetSampleRate: 24000,
+          forceMono: false,
+        ),
+      ).process(wav);
+
+      final info = parseWavHeader(processed);
+      final samples = _readPcmValues(processed);
+      expect(info.sampleRate, 24000);
+      expect(info.numChannels, 2);
+      expect(info.totalSamples, 24);
+      for (var frame = 0; frame < info.totalSamples; frame++) {
+        expect(samples[frame * 2], greaterThan(10000));
+        expect(samples[frame * 2 + 1], lessThan(-10000));
+      }
+    });
+
+    test('resampling keeps stereo output on complete frame boundaries', () {
+      final wav = _buildWavFromFrames(
+        [
+          [12000, -12000],
+          [12000, -12000],
+          [12000, -12000],
+        ],
+        sampleRate: 48000,
+      );
+
+      final processed = WavPreprocessor(
+        config: const AudioPreprocessConfig(
+          targetSampleRate: 24000,
+          forceMono: false,
+        ),
+      ).process(wav);
+
+      final info = parseWavHeader(processed);
+      expect(info.numChannels, 2);
+      expect(info.totalSamples, 2);
+      expect(info.dataSize % info.blockAlign, 0);
+    });
+
+    test('resampling keeps distinct stereo channel levels isolated', () {
+      final wav = _buildWavFromFrames(
+        List<List<int>>.generate(48, (_) => [12000, 3000]),
+        sampleRate: 48000,
+      );
+
+      final processed = WavPreprocessor(
+        config: const AudioPreprocessConfig(
+          targetSampleRate: 24000,
+          forceMono: false,
+        ),
+      ).process(wav);
+
+      final info = parseWavHeader(processed);
+      final samples = _readPcmValues(processed);
+      expect(info.numChannels, 2);
+      for (var frame = 0; frame < info.totalSamples; frame++) {
+        expect(samples[frame * 2], inInclusiveRange(11000, 12000));
+        expect(samples[frame * 2 + 1], inInclusiveRange(2500, 3000));
+      }
+    });
+
     test('converts stereo to mono', () {
       final wav = _buildTestWav(
         numChannels: 2,

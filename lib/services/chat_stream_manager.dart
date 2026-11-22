@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart'
@@ -18,11 +19,11 @@ import '../providers/system_assistant_provider.dart';
 import '../providers/locale_provider.dart'
     show appLocalizationsForLocale, localeProvider;
 import '../providers/provider_config.dart';
-import 'conversation_media_storage.dart' show sanitizeConversationMediaJson;
 import '../ai_gateway/ai_gateway.dart' show AiGateway;
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
+import 'attachment_storage.dart';
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 import 'chat_retry_policy.dart'
@@ -361,6 +362,7 @@ class ChatStreamManager {
     required List<ChatMessage> history,
     List<ChatMessage>? requestHistoryOverride,
     List<ChatMessage>? historyOnSuccess,
+    bool replaceHistoryOnError = false,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -390,6 +392,8 @@ class ChatStreamManager {
       }
     }
 
+    final operationClock = Stopwatch()..start();
+
     // Each conversation gets its own ChatService via the adapter, so
     // multiple conversations can stream concurrently. No need to
     // abandon other conversations' streams.
@@ -404,6 +408,7 @@ class ChatStreamManager {
     state.historyOnSuccess = historyOnSuccess == null
         ? null
         : List<ChatMessage>.from(historyOnSuccess);
+    state.replaceHistoryOnError = replaceHistoryOnError;
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
@@ -565,6 +570,12 @@ class ChatStreamManager {
       }
     } catch (e, s) {
       debugPrint('[ChatStreamManager] 上下文管理失败: $e\n$s');
+      await AppLogService.error(
+        'ChatStreamManager',
+        '请求前上下文管理失败, convId=$convId',
+        e.runtimeType,
+        s,
+      );
     }
 
     // Start the provider stream BEFORE yielding to the event loop so
@@ -606,8 +617,12 @@ class ChatStreamManager {
 
     try {
       try {
-        await AppLogService.info('ChatStreamManager',
-            '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+        await AppLogService.info(
+          'ChatStreamManager',
+          '[STREAM-MGR] startStreaming: begin, convId=$convId, '
+              'historyLen=${history.length}, requestHistoryLen=${requestHistory.length}, '
+              'toolCount=${tools.length}, reasoning=$reasoning',
+        );
       } catch (_) {
         // 日志失败不能误判为流错误（否则主请求已发出但响应
         // 永不被消费，回复丢失）
@@ -646,6 +661,12 @@ class ChatStreamManager {
 
           transportRetries++;
           final wait = _transportRetryPolicy.delayForRetry(transportRetries);
+          await AppLogService.info(
+            'ChatStreamManager',
+            '[STREAM-MGR] transport retry scheduled, convId=$convId, '
+                'attempt=$transportRetries/${_transportRetryPolicy.maxRetries}, '
+                'delayMs=${wait.inMilliseconds}, partialReply=$hasPartialOutput',
+          );
           await waitForRetryOrCancellation(
             wait,
             delay: _retryDelay,
@@ -735,6 +756,7 @@ class ChatStreamManager {
       streamError: streamError,
       snappedChatService: snappedChatService,
       finalTextChunks: finalTextChunks,
+      operationClock: operationClock,
     );
   }
 
@@ -802,6 +824,32 @@ class ChatStreamManager {
       // Cancel all services.
       _adapter.cancelAllServices();
     }
+  }
+
+  /// Releases a stream whose result future failed before normal finalization.
+  ///
+  /// The message ID guard prevents an older failed attempt from clearing a
+  /// replacement stream for the same conversation.
+  void recoverUnexpectedStreamFailure(String convId, String streamingMsgId) {
+    final state = _streams[convId];
+    if (state != null && state.streamingMsgId != streamingMsgId) return;
+    final providerMsgId = _ref?.read(streamingMsgIdProvider(convId));
+    if (providerMsgId != null && providerMsgId != streamingMsgId) return;
+
+    if (state != null) {
+      state.persistTimer?.cancel();
+      state.persistTimer = null;
+      state.cancelByUser();
+      _streams.remove(convId);
+      state.resultCompleter = null;
+    }
+    _clearProvidersFor(convId);
+    final activeConversations = <String>{
+      ..._ref?.read(streamingConversationsProvider) ?? const {},
+    };
+    activeConversations.remove(convId);
+    _setProvider(streamingConversationsProvider, activeConversations);
+    _adapter.cancelService(convId);
   }
 
   /// 释放资源。

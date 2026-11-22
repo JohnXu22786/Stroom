@@ -1,35 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
-// ═══════════════════════════════════════════════════════════════
-// Character-based truncation helpers
-// ═══════════════════════════════════════════════════════════════
-
-const int _maxModelLength = 25;
-const int _maxProviderLength = 10;
-
-/// Truncates a single part to at most [maxLength] characters,
-/// with "..." counting toward the limit.
-String _truncatePart(String part, int maxLength) {
-  if (part.length <= maxLength) return part;
-  return '${part.substring(0, maxLength - 3)}...';
-}
-
-/// Truncates a display name in "modelName | providerName" format: the model
-/// part is at most [_maxModelLength] characters and the provider part at most
-/// [_maxProviderLength] characters (with "..." counting toward each limit).
-/// Falls back to model-part truncation if no " | " separator.
-String truncateDisplayName(String displayName) {
-  const separator = ' | ';
-  final sepIdx = displayName.lastIndexOf(separator);
-  if (sepIdx <= 0) return _truncatePart(displayName, _maxModelLength);
-
-  final modelPart = displayName.substring(0, sepIdx);
-  final providerPart = displayName.substring(sepIdx + separator.length);
-
-  return '${_truncatePart(modelPart, _maxModelLength)}'
-      '$separator${_truncatePart(providerPart, _maxProviderLength)}';
-}
+import '../../../widgets/constrained_text.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // SettingsChip
@@ -84,18 +56,24 @@ class SettingsChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 16,
-                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color),
+            Icon(
+              icon,
+              size: 16,
+              color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color,
+            ),
             const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isDisabled
-                    ? Colors.grey.withValues(alpha: 0.4)
-                    : cs.onSurface,
+            Flexible(
+              child: ConstrainedText(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isDisabled
+                      ? Colors.grey.withValues(alpha: 0.4)
+                      : cs.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (showBadge) ...[
@@ -123,23 +101,20 @@ class ChipBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = count > 99 ? '99+' : count.toString();
     return Container(
-      width: 14,
-      height: 14,
+      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
       alignment: Alignment.center,
+      padding: EdgeInsets.symmetric(horizontal: text.length == 1 ? 0 : 2),
       decoration: BoxDecoration(
         color: color,
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(7),
       ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
         ),
       ),
     );
@@ -150,12 +125,9 @@ class ChipBadge extends StatelessWidget {
 // ModelNameChip
 // ═══════════════════════════════════════════════════════════════
 
-/// A chip that displays the current model name with automatic proportional
-/// truncation for long names. When [displayName] is empty, it shows the localized
-/// model fallback.
-///
-/// Uses [Flexible] + [LayoutBuilder] internally so the text always fits within
-/// the available width, regardless of how the chip is constrained by its parent.
+/// A chip that displays the current model name. When [displayName] is empty,
+/// it shows the localized model fallback. Long names remain complete and move
+/// within the available width when clipped.
 class ModelNameChip extends StatelessWidget {
   final String displayName;
   final Color color;
@@ -179,8 +151,6 @@ class ModelNameChip extends StatelessWidget {
     final label = displayName.isNotEmpty
         ? displayName
         : AppLocalizations.of(context)!.chatModelFallback;
-    // Pre-truncate to fixed max length per part (character-based).
-    final displayText = truncateDisplayName(label);
     final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w500,
@@ -207,15 +177,19 @@ class ModelNameChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 16,
-                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color),
+            Icon(
+              Icons.smart_toy_outlined,
+              size: 16,
+              color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color,
+            ),
             const SizedBox(width: 4),
-            Text(
-              displayText,
-              style: style,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: ConstrainedText(
+                label,
+                style: style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

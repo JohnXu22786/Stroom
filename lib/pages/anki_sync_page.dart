@@ -16,6 +16,8 @@ import '../anki/sync/anki_media_sync.dart';
 import '../anki/sync/anki_sync_protocol_client.dart';
 import '../anki/sync/anki_sync_provider.dart';
 
+import '../widgets/constrained_text.dart';
+
 class AnkiSyncSettingsPage extends ConsumerStatefulWidget {
   const AnkiSyncSettingsPage({super.key});
 
@@ -180,16 +182,20 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       await _saveSelfHostedSettings();
     } catch (error) {
       if (mounted)
-        setState(() => _status = AppLocalizations.of(context)!
-            .ankiSyncStatusSettingsNotSaved(_safeMessage(context, error)));
+        setState(
+          () => _status = AppLocalizations.of(context)!
+              .ankiSyncStatusSettingsNotSaved(_safeMessage(context, error)),
+        );
       return null;
     }
     if (!mounted) return null;
     final updated = ref.read(ankiSyncProvider);
     if (_hostKey == null || _loadedIdentity != updated.secureStorageKey) {
       if (mounted) {
-        setState(() => _status =
-            AppLocalizations.of(context)!.ankiSyncStatusServerAddressChanged);
+        setState(
+          () => _status =
+              AppLocalizations.of(context)!.ankiSyncStatusServerAddressChanged,
+        );
       }
       return null;
     }
@@ -216,6 +222,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       _hostKey = null;
       _remoteMeta = null;
     });
+    var offerSyncPrompt = false;
     try {
       final client = _clientFor(config);
       final key = await client.login(
@@ -231,22 +238,96 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         persisted = false;
       }
       if (!mounted) return;
+      final persistenceWarning = persisted
+          ? null
+          : AppLocalizations.of(context)!.ankiSyncStatusLoginSuccessNoSave;
       setState(() {
         _hostKey = key;
         _loadedIdentity = config.secureStorageKey;
-        _status = persisted
-            ? AppLocalizations.of(context)!.ankiSyncStatusLoginSuccess
-            : AppLocalizations.of(context)!.ankiSyncStatusLoginSuccessNoSave;
+        _status = persistenceWarning ??
+            AppLocalizations.of(context)!.ankiSyncStatusLoginSuccess;
       });
+      try {
+        final meta = await client.checkStatus();
+        if (!mounted) return;
+        setState(() {
+          _remoteMeta = meta;
+          final status = meta.shouldContinue
+              ? (meta.isEmpty
+                  ? AppLocalizations.of(context)!
+                      .ankiSyncStatusConnectedCollectionEmpty
+                  : AppLocalizations.of(context)!
+                      .ankiSyncStatusConnectedStatusRead)
+              : (meta.message.isEmpty
+                  ? AppLocalizations.of(context)!.ankiSyncStatusUpgradeClient
+                  : meta.message);
+          _status = persistenceWarning == null
+              ? status
+              : '$persistenceWarning\n$status';
+        });
+        offerSyncPrompt = meta.shouldContinue;
+      } catch (error) {
+        if (!mounted) return;
+        final status = AppLocalizations.of(context)!
+            .ankiSyncStatusCheckFailed(_safeMessage(context, error));
+        setState(
+          () => _status = persistenceWarning == null
+              ? status
+              : '$persistenceWarning\n$status',
+        );
+      }
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = AppLocalizations.of(context)!
-          .ankiSyncStatusLoginFailed(_safeMessage(context, error)));
+      setState(
+        () => _status = AppLocalizations.of(context)!
+            .ankiSyncStatusLoginFailed(_safeMessage(context, error)),
+      );
     } finally {
       _closeClientIfDisposed();
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (offerSyncPrompt) {
+          final syncNow = await _showLoginSuccessSyncPrompt();
+          if (mounted && syncNow == true) await _syncBothWays(config);
+        }
+      }
     }
   }
+
+  Future<bool?> _showLoginSuccessSyncPrompt() => showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: ConstrainedText(
+            AppLocalizations.of(dialogContext)!.ankiSyncLoginSuccessPromptTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          content: Text(
+            AppLocalizations.of(dialogContext)!
+                .ankiSyncLoginSuccessPromptMessage,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: ConstrainedText(
+                AppLocalizations.of(dialogContext)!
+                    .ankiSyncLoginSuccessPromptLater,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: ConstrainedText(
+                AppLocalizations.of(dialogContext)!
+                    .ankiSyncLoginSuccessPromptSync,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
 
   Future<Map<String, String>?> _showLoginDialog(AnkiSyncMode mode) async {
     final formKey = GlobalKey<FormState>();
@@ -267,10 +348,12 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       return await showDialog<Map<String, String>>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(
+          title: ConstrainedText(
             mode == AnkiSyncMode.ankiWeb
                 ? AppLocalizations.of(dialogContext)!.ankiSyncLoginAnkiWeb
                 : AppLocalizations.of(dialogContext)!.ankiSyncLoginSelfHosted,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           content: Form(
             key: formKey,
@@ -281,8 +364,12 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   autofocus: true,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: AppLocalizations.of(dialogContext)!
-                        .ankiSyncEmailOrUsername,
+                    label: ConstrainedText(
+                      AppLocalizations.of(dialogContext)!
+                          .ankiSyncEmailOrUsername,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (value) => value == null || value.trim().isEmpty
@@ -295,8 +382,11 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                 TextFormField(
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText:
-                        AppLocalizations.of(dialogContext)!.ankiSyncPassword,
+                    label: ConstrainedText(
+                      AppLocalizations.of(dialogContext)!.ankiSyncPassword,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     prefixIcon: Icon(Icons.lock_outline),
                   ),
                   validator: (value) => value == null || value.isEmpty
@@ -312,11 +402,19 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text(AppLocalizations.of(dialogContext)!.actionCancel),
+              child: ConstrainedText(
+                AppLocalizations.of(dialogContext)!.actionCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () => submit(dialogContext),
-              child: Text(AppLocalizations.of(dialogContext)!.ankiSyncLogin),
+              child: ConstrainedText(
+                AppLocalizations.of(dialogContext)!.ankiSyncLogin,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -357,8 +455,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = AppLocalizations.of(context)!
-          .ankiSyncStatusCheckFailed(_safeMessage(context, error)));
+      setState(
+        () => _status = AppLocalizations.of(context)!
+            .ankiSyncStatusCheckFailed(_safeMessage(context, error)),
+      );
     } finally {
       _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
@@ -389,8 +489,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       );
       if (confirmed != true) return;
       transferStarted = true;
-      setState(() => _status =
-          AppLocalizations.of(context)!.ankiSyncStatusBackingUpUploading);
+      setState(
+        () => _status =
+            AppLocalizations.of(context)!.ankiSyncStatusBackingUpUploading,
+      );
       await AnkiDatabase.closeOpenedInstance();
       final client = _clientFor(config);
       backupPath = await AnkiCollectionTransfer.uploadLocalCollection(client);
@@ -405,9 +507,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           media.deletedFiles,
           backupPath.isEmpty
               ? ''
-              : AppLocalizations.of(context)!.ankiSyncStatusBackupPath(
-                  p.basename(backupPath),
-                ),
+              : AppLocalizations.of(context)!
+                  .ankiSyncStatusBackupPath(p.basename(backupPath)),
         );
       });
     } catch (error) {
@@ -448,8 +549,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       );
       if (confirmed != true) return;
       transferStarted = true;
-      setState(() => _status =
-          AppLocalizations.of(context)!.ankiSyncStatusDownloadingValidating);
+      setState(
+        () => _status =
+            AppLocalizations.of(context)!.ankiSyncStatusDownloadingValidating,
+      );
       final client = _clientFor(config);
       await AnkiDatabase.closeOpenedInstance();
       recovery = await AnkiFullDownloadRecovery.begin(
@@ -477,9 +580,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           media.deletedFiles,
           backupPath.isEmpty
               ? ''
-              : AppLocalizations.of(context)!.ankiSyncStatusBackupPath(
-                  p.basename(backupPath),
-                ),
+              : AppLocalizations.of(context)!
+                  .ankiSyncStatusBackupPath(p.basename(backupPath)),
         );
       });
     } catch (error) {
@@ -489,8 +591,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         // The durable journal retries rollback before the next collection open.
       }
       if (!mounted) return;
-      setState(() => _status = AppLocalizations.of(context)!
-          .ankiSyncStatusDownloadFailed(_safeMessage(context, error)));
+      setState(
+        () => _status = AppLocalizations.of(context)!
+            .ankiSyncStatusDownloadFailed(_safeMessage(context, error)),
+      );
     } finally {
       if (transferStarted) _invalidateAnkiDatabase(container);
       _closeClientIfDisposed();
@@ -511,8 +615,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (!mounted || actionConfig == null) return;
       config = actionConfig;
       if (mounted)
-        setState(() => _status =
-            AppLocalizations.of(context)!.ankiSyncStatusMergingChanges);
+        setState(
+          () => _status =
+              AppLocalizations.of(context)!.ankiSyncStatusMergingChanges,
+        );
       final client = _clientFor(config);
       final database = await container.read(ankiDatabaseProvider.future);
       final collectionResult = await AnkiIncrementalSync.sync(database, client);
@@ -521,8 +627,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       // even if the subsequent media phase fails.
       container.read(ankiRefreshProvider.notifier).refresh();
       if (mounted) {
-        setState(() => _status =
-            AppLocalizations.of(context)!.ankiSyncStatusMergeCompleteSyncMedia);
+        setState(
+          () => _status = AppLocalizations.of(context)!
+              .ankiSyncStatusMergeCompleteSyncMedia,
+        );
       }
       final mediaResult = await AnkiMediaSync.sync(client, database: database);
       if (!mounted) return;
@@ -563,16 +671,28 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: Text(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(AppLocalizations.of(dialogContext)!.actionCancel),
+              child: ConstrainedText(
+                AppLocalizations.of(dialogContext)!.actionCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(action),
+              child: ConstrainedText(
+                action,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -598,8 +718,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       });
     } catch (_) {
       if (mounted)
-        setState(() => _status =
-            AppLocalizations.of(context)!.ankiSyncStatusClearLoginFailed);
+        setState(
+          () => _status =
+              AppLocalizations.of(context)!.ankiSyncStatusClearLoginFailed,
+        );
     } finally {
       _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
@@ -623,12 +745,17 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     _closeClientWhenIdle = false;
   }
 
-  String _safeMessage(BuildContext context, Object error) =>
-      error is AnkiSyncException
-          ? error.message
-          : error is AnkiSyncFullTransferRequired
-              ? error.message
-              : AppLocalizations.of(context)!.ankiSyncStatusOperationIncomplete;
+  String _safeMessage(BuildContext context, Object error) {
+    final l10n = AppLocalizations.of(context)!;
+    if (error is AnkiSyncException) return error.localizedMessage(l10n);
+    if (error is AnkiSyncFullTransferRequired) {
+      return error.localizedMessage(l10n);
+    }
+    if (error is AnkiStatsUnsupportedException) {
+      return l10n.ankiWebSyncUnsupportedPlatform;
+    }
+    return l10n.ankiSyncStatusOperationIncomplete;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -648,7 +775,13 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         : l10n.ankiSyncSelfHostedMode;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.ankiSyncPageTitle)),
+      appBar: AppBar(
+        title: ConstrainedText(
+          l10n.ankiSyncPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
         children: [
@@ -711,8 +844,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(l10n.ankiSyncServerAddress,
-                      style: Theme.of(context).textTheme.titleSmall),
+                  Text(
+                    l10n.ankiSyncServerAddress,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _urlController,
@@ -727,7 +862,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                           setState(
                             () => _status = AppLocalizations.of(context)!
                                 .ankiSyncStatusSettingsNotSaved(
-                                    _safeMessage(context, error)),
+                              _safeMessage(context, error),
+                            ),
                           );
                         }
                       }
@@ -844,18 +980,30 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                       ? () => _login(config)
                       : null,
                   icon: const Icon(Icons.login),
-                  label: Text(l10n.ankiSyncLoginForService(title)),
+                  label: ConstrainedText(
+                    l10n.ankiSyncLoginForService(title),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 )
               else ...[
                 FilledButton.icon(
                   onPressed: !_busy ? () => _checkStatus(config) : null,
                   icon: const Icon(Icons.fact_check_outlined),
-                  label: Text(l10n.ankiSyncCheckServerStatus),
+                  label: ConstrainedText(
+                    l10n.ankiSyncCheckServerStatus,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 OutlinedButton.icon(
                   onPressed: !_busy ? () => _logout(config) : null,
                   icon: const Icon(Icons.logout),
-                  label: Text(l10n.ankiSyncLogout),
+                  label: ConstrainedText(
+                    l10n.ankiSyncLogout,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ],
@@ -872,7 +1020,11 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   FilledButton.icon(
                     onPressed: !_busy ? () => _syncBothWays(config) : null,
                     icon: const Icon(Icons.sync_rounded),
-                    label: Text(l10n.ankiSyncBothWays),
+                    label: ConstrainedText(
+                      l10n.ankiSyncBothWays,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: !_busy ? () => _upload(config) : null,
@@ -883,7 +1035,11 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     OutlinedButton.icon(
                       onPressed: !_busy ? () => _download(config) : null,
                       icon: const Icon(Icons.cloud_download_outlined),
-                      label: Text(l10n.ankiSyncReplaceLocal),
+                      label: ConstrainedText(
+                        l10n.ankiSyncReplaceLocal,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
               ),
@@ -952,13 +1108,17 @@ class _RemoteStatus extends StatelessWidget {
                 color: colors.primary,
               ),
               const SizedBox(width: 10),
-              Text(
-                meta.isEmpty
-                    ? AppLocalizations.of(context)!
-                        .ankiSyncServerCollectionEmpty
-                    : AppLocalizations.of(context)!
-                        .ankiSyncServerCollectionAvailable,
-                style: Theme.of(context).textTheme.titleSmall,
+              Expanded(
+                child: ConstrainedText(
+                  meta.isEmpty
+                      ? AppLocalizations.of(context)!
+                          .ankiSyncServerCollectionEmpty
+                      : AppLocalizations.of(context)!
+                          .ankiSyncServerCollectionAvailable,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

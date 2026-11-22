@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -30,6 +30,8 @@ import 'package:stroom/services/chat_protocol.dart';
 import 'chat_setting_panels.dart';
 import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 part 'chat_composer_widget_draft.dart';
 part 'chat_composer_widget_attachments.dart';
@@ -140,11 +142,66 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
 
 class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     with WidgetsBindingObserver {
+  late final ConversationsNotifier _conversationsNotifier;
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   final List<Attachment> _pendingAttachments = [];
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
+  int _pendingAttachmentDraftGeneration = 0;
+  int _pendingAttachmentEditRequestId = 0;
+  final Map<String, int> _pendingAttachmentEditRequests = {};
+  String? _editSessionConversationId;
+
+  @visibleForTesting
+  Future<void> addPendingAttachmentForTesting(
+    String fileName,
+    Uint8List bytes, {
+    bool scheduleDraftSave = true,
+  }) =>
+      _addPendingAttachment(
+        fileName,
+        bytes,
+        scheduleDraftSave: scheduleDraftSave,
+      );
+
+  @visibleForTesting
+  Future<void> removePendingAttachmentForTesting(int index) =>
+      _removePendingAttachment(index);
+
+  @visibleForTesting
+  List<Attachment> get pendingAttachmentsForTesting =>
+      List.unmodifiable(_pendingAttachments);
+
+  @visibleForTesting
+  void setPreCompressFutureForTesting(String hash, Future<void> future) {
+    _preCompressFutures[hash] = future;
+  }
+
+  @visibleForTesting
+  Future<void> waitForPendingPreCompressionForTesting() async {
+    await Future.wait(_preCompressFutures.values.toList());
+  }
+
+  @visibleForTesting
+  Future<void> updatePendingAttachmentAfterEditForTesting(
+    int index,
+    Uint8List bytes,
+  ) =>
+      _updatePendingAttachmentAfterEdit(index, bytes);
+
+  @visibleForTesting
+  void reorderPendingAttachmentsForTesting(int oldIndex, int newIndex) =>
+      _onReorderPendingAttachment(oldIndex, newIndex);
+
+  @visibleForTesting
+  Future<void> addPendingAttachmentAfterPickerForTesting(
+    String fileName,
+    Future<Uint8List> selectedBytes,
+  ) async {
+    final origin = _capturePendingAttachmentOrigin();
+    await _addPendingAttachment(fileName, await selectedBytes, origin: origin);
+  }
 
   // ── Edit data-loss warning state ──
   /// Whether the warning pill is currently shown in the edit capsule's
@@ -237,6 +294,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @override
   void initState() {
     super.initState();
+    _conversationsNotifier = ref.read(conversationsProvider.notifier);
+
+    if (widget.editingMessageId != null) {
+      _editSessionConversationId = widget.conversationId ??
+          (widget.editingMessageAttachments?.isNotEmpty == true
+              ? widget.editingMessageAttachments!.first.conversationId
+              : null);
+    }
 
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
@@ -312,6 +377,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       if (widget.editingMessageId != null &&
           widget.editingMessageText != null) {
         // Entering edit mode (or switching to a different message)
+        if (oldWidget.editingMessageId != null) {
+          _discardPendingEditReplacements(
+            oldWidget.editingMessageAttachments,
+            conversationId: _editSessionConversationId,
+          );
+        }
+        _editSessionConversationId = widget.conversationId ??
+            (widget.editingMessageAttachments?.isNotEmpty == true
+                ? widget.editingMessageAttachments!.first.conversationId
+                : null);
         _textController.text = widget.editingMessageText!;
         _lastSavedDraft = widget.editingMessageText!;
         _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
@@ -335,6 +410,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _lastSavedDraft = '';
         _lastSavedDraftAttSignature = const [];
         _lastHadText = false;
+        _discardPendingEditReplacements(
+          oldWidget.editingMessageAttachments,
+          conversationId: _editSessionConversationId,
+        );
+        _editSessionConversationId = null;
         _clearPendingAttachments();
         _disarmEditWarning();
         if (widget.initialDraftText.isNotEmpty) {
@@ -366,6 +446,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Detect conversation change: save draft for old conversation,
     // then restore draft for the new one
     if (oldWidget.conversationId != widget.conversationId) {
+      // In edit mode the page clears the edit session asynchronously, so this
+      // branch does not restore a draft (which normally advances the draft
+      // generation). Still invalidate imports from the previous conversation
+      // immediately, including if the user switches away and back before an
+      // import finishes.
+      if (oldWidget.editingMessageId != null) {
+        _pendingAttachmentDraftGeneration++;
+      }
       // The warning refers to the previous conversation's messages — a
       // stale pill would be misleading after switching conversations.
       _disarmEditWarning();
@@ -479,10 +567,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
-    // Save draft before disposing. Use try-catch because ref may
-    // already be disposed during teardown, especially in tests.
+    if (widget.editingMessageId != null) {
+      _discardPendingEditReplacements(
+        widget.editingMessageAttachments,
+        conversationId: _editSessionConversationId,
+      );
+    }
+    // Defer the provider mutation until teardown has finished; Riverpod rejects
+    // synchronous state updates while Flutter is deactivating this subtree.
     try {
-      _saveDraftImmediately(widget);
+      _saveDraftAfterDispose(widget);
     } catch (e) {
       // Non-critical: draft is best-effort during disposal.
       // Log unexpected errors so they are visible during development

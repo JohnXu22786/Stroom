@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/providers/text_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
@@ -240,6 +241,182 @@ void main() {
   });
 
   group('TextManifest hash-locked content changes', () {
+    test('removes new content when manifest registration fails', () async {
+      const content = 'unregistered external text';
+      final record = _textRecordWithContent('external-save-failure', content);
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecord(record, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readFilePath(record.storageFileName), isNull);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
+    test('removes unique text content when manifest registration fails',
+        () async {
+      const content = 'unregistered unique text';
+      final record = _textRecordWithContent('unique-save-failure', content);
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecordIfUnique(record, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readText(record.storageFileName), isNull);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
+    test('preserves insertion failure when cleanup cannot check references',
+        () async {
+      const content = 'unregistered unique text with cleanup failure';
+      final record =
+          _textRecordWithContent('unique-save-cleanup-failure', content);
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          throw StateError('simulated manifest read failure');
+        };
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecordIfUnique(record, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readText(record.storageFileName), content);
+      expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    });
+
+    test(
+        'preserves content referenced by another record on unique save failure',
+        () async {
+      const content = 'shared unique-save text';
+      final existing = _textRecordWithContent('existing-reference', content);
+      final candidate =
+          _textRecordWithContent('unique-save-candidate', content);
+      await TextManifest.saveTextRecord(existing, content);
+
+      final failure = StateError('simulated manifest write failure');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        TextManifest.saveTextRecordIfUnique(candidate, content),
+        throwsA(same(failure)),
+      );
+
+      expect(await TextManifest.readText(existing.storageFileName), content);
+      expect(
+        (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+        [existing.id],
+      );
+    });
+
+    test(
+      'cleans up converted content when a format rename update fails',
+      () async {
+        const content = 'plain text';
+        final record = _textRecordWithContent('rename-failure', content)
+            .copyWithFormat('txt');
+        await TextManifest.saveTextRecord(record, content);
+        final oldPath = record.storageFileName;
+        final newPath = record.copyWithFormat('srt').storageFileName;
+
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw StateError('simulated manifest write failure');
+        };
+
+        await expectLater(
+          TextRecordsNotifier().renameRecord(
+            record.id,
+            record.name,
+            format: 'srt',
+          ),
+          throwsStateError,
+        );
+
+        expect(await TextManifest.readFilePath(newPath), isNull);
+        expect(await TextManifest.readFile(oldPath), isNotNull);
+        final saved = await TextManifest.loadRecordsUncached();
+        expect(saved.single.storageFileName, oldPath);
+      },
+    );
+
+    test(
+      'preserves converted content referenced by another record on failure',
+      () async {
+        const content = 'shared text';
+        final record = _textRecordWithContent('rename-shared', content)
+            .copyWithFormat('txt');
+        final sharedDestination = _textRecordWithContent(
+          'rename-shared-destination',
+          content,
+        ).copyWithFormat('srt');
+        await TextManifest.saveTextRecord(record, content);
+        await TextManifest.saveTextRecord(sharedDestination, content);
+
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw StateError('simulated manifest write failure');
+        };
+
+        await expectLater(
+          TextRecordsNotifier().renameRecord(
+            record.id,
+            record.name,
+            format: 'srt',
+          ),
+          throwsStateError,
+        );
+
+        expect(
+          await TextManifest.readFile(sharedDestination.storageFileName),
+          isNotNull,
+        );
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((saved) => saved.id),
+          containsAll([record.id, sharedDestination.id]),
+        );
+      },
+    );
+
+    test('updates the record after a successful format rename', () async {
+      const content = 'rename content';
+      final record = _textRecordWithContent('rename-success', content)
+          .copyWithFormat('txt');
+      await TextManifest.saveTextRecord(record, content);
+
+      await TextRecordsNotifier().renameRecord(
+        record.id,
+        'renamed',
+        format: 'srt',
+      );
+
+      final saved = (await TextManifest.loadRecordsUncached()).single;
+      expect(saved.name, 'renamed');
+      expect(saved.format, 'srt');
+      expect(await TextManifest.readFile(saved.storageFileName), isNotNull);
+    });
+
     test(
       'keeps old content when another record references it before cleanup',
       () async {

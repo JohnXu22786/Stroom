@@ -16,9 +16,15 @@ extension _SettingsPageContextManagementExt on _SettingsPageState {
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(AppLocalizations.of(context)!.contextToolPruneTitle),
-              subtitle: Text(
+              title: ConstrainedText(
+                AppLocalizations.of(context)!.contextToolPruneTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: ConstrainedText(
                 AppLocalizations.of(context)!.contextToolPruneDescription,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               value: settings.pruneEnabled,
               onChanged: notifier.setPruneEnabled,
@@ -107,8 +113,11 @@ class _CompactionSettingsPanelState
 
     return Scaffold(
       appBar: AppBar(
-        title:
-            Text(AppLocalizations.of(context)!.contextCompressionTriggerTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.contextCompressionTriggerTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -139,7 +148,9 @@ class _CompactionSettingsPanelState
                 Text(
                   AppLocalizations.of(context)!.contextGlobalTriggerDescription,
                   style: TextStyle(
-                      fontSize: 12, color: colorScheme.onSurfaceVariant),
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -221,20 +232,26 @@ class _CompactionSettingsPanelState
           providerName: config.providerName,
         );
         if (!seen.add(modelKey)) continue;
-        result.add(_PanelModel(
-          modelKey: modelKey,
-          displayName:
-              '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}',
-        ));
+        result.add(
+          _PanelModel(
+            modelKey: modelKey,
+            displayName:
+                '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}',
+          ),
+        );
       }
     }
     final savedOrder = _savedModelOrder;
     if (savedOrder != null && savedOrder.isNotEmpty && result.length > 1) {
       final ordered = applySavedOrder(
-          result.map((m) => m.displayName).toList(), savedOrder);
-      result.sort((a, b) => ordered
-          .indexOf(a.displayName)
-          .compareTo(ordered.indexOf(b.displayName)));
+        result.map((m) => m.displayName).toList(),
+        savedOrder,
+      );
+      result.sort(
+        (a, b) => ordered
+            .indexOf(a.displayName)
+            .compareTo(ordered.indexOf(b.displayName)),
+      );
     }
     return result;
   }
@@ -278,7 +295,11 @@ class _PerModelRow extends StatelessWidget {
       children: [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(displayName, overflow: TextOverflow.ellipsis),
+          title: ConstrainedText(
+            displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           subtitle: Text(
             perModelEnabled
                 ? (threshold != null
@@ -329,8 +350,9 @@ class _TokenField extends StatefulWidget {
 }
 
 class _TokenFieldState extends State<_TokenField> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.value?.toString() ?? '');
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value?.toString() ?? '',
+  );
 
   /// 最近一次被 provider 接受的值（非法/过小输入失焦时回退显示）。
   String _lastValidText = '';
@@ -381,7 +403,11 @@ class _TokenFieldState extends State<_TokenField> {
       controller: _controller,
       enabled: widget.enabled,
       decoration: InputDecoration(
-        labelText: AppLocalizations.of(context)!.contextThresholdField,
+        label: ConstrainedText(
+          AppLocalizations.of(context)!.contextThresholdField,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         hintText: AppLocalizations.of(context)!.contextThresholdHint,
         border: OutlineInputBorder(),
         isDense: true,
@@ -434,8 +460,9 @@ class _PercentField extends StatefulWidget {
 }
 
 class _PercentFieldState extends State<_PercentField> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.value.toString());
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value.toString(),
+  );
 
   /// 最近一次被 provider 接受的值（非法/越界输入失焦时回退显示）。
   late String _lastValidText;
@@ -490,7 +517,11 @@ class _PercentFieldState extends State<_PercentField> {
       controller: _controller,
       enabled: widget.enabled,
       decoration: InputDecoration(
-        labelText: AppLocalizations.of(context)!.contextPercentField,
+        label: ConstrainedText(
+          AppLocalizations.of(context)!.contextPercentField,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         hintText: AppLocalizations.of(context)!
             .contextPercentHint(kDefaultCompactionPercent),
         suffixText: '%',

@@ -70,6 +70,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     Map<String, dynamic>? trimPreset,
     String? taskId,
     String folder = '',
+    String? replaceRecordId,
   }) {
     final id = taskId ?? _uuid.v4();
     final task = SynthesisTask(
@@ -81,6 +82,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       customParams: customParams,
       trimPreset: trimPreset,
       folder: folder,
+      replaceRecordId: replaceRecordId,
     );
 
     state = [task, ...state];
@@ -93,7 +95,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   }
 
   /// 在后台执行合成任务
-  Future<void> _executeTask(SynthesisTask task) async {
+  Future<void> _executeTask(
+    SynthesisTask task, {
+    bool syncVoiceFromModel = false,
+  }) async {
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
@@ -104,6 +109,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         state.any((t) => t.id == task.id && t.status == TaskStatus.running);
 
     try {
+      if (syncVoiceFromModel) {
+        await _syncVoiceFromModelConfig(task.modelConfig);
+        if (!isCurrent()) return;
+      }
       final synthConfig = ref.read(synthesisConfigProvider);
 
       final provider = tts_provider_base.createProviderFromConfig(
@@ -192,7 +201,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         final temporaryPath = await FlowTemporaryArtifactStorage.writeBytes(
           executionId: temporaryExecutionId!,
           blockId: temporaryBlockId!,
-          fileName: '${computeAudioHash(audioData)}.$actualFormat',
+          fileName: AudioRecord.storageFileNameFor(
+            hash: computeAudioHash(audioData),
+            format: actualFormat,
+          ),
           bytes: audioData,
         );
         if (cancelToken.isCancelled || !isCurrent()) {
@@ -213,7 +225,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       // 保存音频文件
       final saveFolder = task.customParams?['saveFolder'] ?? '';
       final savedFilePath = await FileManifest.withStorageFileSaveLock(
-        '${computeAudioHash(audioData)}.$actualFormat',
+        AudioRecord.storageFileNameFor(
+          hash: computeAudioHash(audioData),
+          format: actualFormat,
+        ),
         () async {
           final saved = await _saveAudioFile(
             audioData,
@@ -250,6 +265,16 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       );
 
       if (savedFilePath == null) return;
+
+      // Keep the original audio until the replacement record and bytes have
+      // both been committed. A cleanup failure leaves both versions intact.
+      if (task.replaceRecordId != null) {
+        try {
+          await FileManifest.deleteRecord(task.replaceRecordId!);
+        } catch (e) {
+          debugPrint('[TaskListNotifier] Failed to remove replaced audio: $e');
+        }
+      }
 
       // 刷新文件列表
       ref.read(audioRecordsProvider.notifier).loadRecords();
@@ -385,13 +410,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     state = newState;
     _persistTasks();
 
-    if (providerConfig == null) {
-      // Persisted task configs redact credentials. Rehydrate the original
-      // config after provider settings load when no replacement was selected.
-      unawaited(_executeWithCurrentProviderConfig(taskId));
-    } else {
-      _executeTask(updated);
-    }
+    _executeTask(updated);
   }
 
   /// 重试失败的任务
@@ -413,71 +432,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     state = newState;
     _persistTasks();
 
-    // 确保 SynthesisConfig 使用当前模型的 voice ID，而非过期的 voice name
-    _syncVoiceFromModelConfig(updated.modelConfig);
-
-    // Task persistence redacts provider credentials. Resolve the live TTS
-    // config after provider settings finish loading so restored tasks do not
-    // retry with an empty key.
-    unawaited(_executeWithCurrentProviderConfig(taskId));
-  }
-
-  Future<void> _executeWithCurrentProviderConfig(String taskId) async {
-    try {
-      await ref.read(providerEntriesProvider.notifier).ready;
-    } catch (error) {
-      _failRunningTask(taskId, '无法加载语音供应商配置：$error');
-      return;
-    }
-
-    if (!mounted) return;
-    final index = state.indexWhere(
-      (task) => task.id == taskId && task.status == TaskStatus.running,
-    );
-    if (index == -1) return;
-
-    final task = state[index];
-    final matchingConfigs = ref
-        .read(providerEntriesProvider)
-        .entries
-        .where((entry) => entry.type == 'tts')
-        .expand((entry) => entry.configs)
-        .where((config) => config.id == task.providerConfig.id)
-        .toList();
-    if (matchingConfigs.length != 1) {
-      _failRunningTask(taskId, '无法找到任务使用的语音供应商配置');
-      return;
-    }
-
-    final updated = task.copyWith(providerConfig: matchingConfigs.single);
-    final newState = [...state];
-    newState[index] = updated;
-    state = newState;
-    _persistTasks();
-    _executeTask(updated);
-  }
-
-  void _failRunningTask(String taskId, String error) {
-    if (!mounted) return;
-    final index = state.indexWhere(
-      (task) => task.id == taskId && task.status == TaskStatus.running,
-    );
-    if (index == -1) return;
-    final newState = [...state];
-    newState[index] = state[index].copyWith(
-      status: TaskStatus.failed,
-      error: error,
-      completedAt: DateTime.now(),
-    );
-    state = newState;
-    _persistTasks();
+    // 确保合成使用已成功保存的模型 voice ID。
+    _executeTask(updated, syncVoiceFromModel: true);
   }
 
   /// 从模型配置中同步 voice ID 到 SynthesisConfig（防止过期的 voice name 被发送）
-  void _syncVoiceFromModelConfig(ModelConfig modelConfig) {
+  Future<void> _syncVoiceFromModelConfig(ModelConfig modelConfig) async {
     if (modelConfig.voices.isNotEmpty) {
       final notifier = ref.read(synthesisConfigProvider.notifier);
-      notifier.updateVoice(modelConfig.voices.first.id);
+      await notifier.updateVoice(modelConfig.voices.first.id);
     }
   }
 
@@ -619,12 +582,21 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     String folder = '',
   }) async {
     final hash = computeAudioHash(audioData);
-    final audioName = '$hash.$format';
     final textName = '$hash.txt';
     // 如果未提供标题，使用文本的前几个字
     final displayName = name.isNotEmpty
         ? name
         : (text.length > 20 ? text.substring(0, 20) : text);
+    final record = AudioRecord(
+      name: displayName,
+      hash: hash,
+      format: format,
+      createdAt: DateTime.now(),
+      size: audioData.length,
+      sourceText: text,
+      folder: folder,
+    );
+    final audioName = record.storageFileName;
 
     // Two attempts can produce the same hash. Keep the old save and its
     // rollback together so a resumed attempt never loses its new files.
@@ -648,16 +620,6 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       final audioExisted = await FileManifest.readFilePath(audioName) != null;
       final previousText = await FileManifest.readFile(textName);
       if (!isCurrent()) return null;
-
-      final record = AudioRecord(
-        name: displayName,
-        hash: hash,
-        format: format,
-        createdAt: DateTime.now(),
-        size: audioData.length,
-        sourceText: text,
-        folder: folder,
-      );
 
       var wroteAudio = false;
       var wroteText = false;

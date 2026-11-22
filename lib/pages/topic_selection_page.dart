@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../pages/assistant_selection_page.dart';
 import '../models/assistant.dart';
@@ -18,6 +19,8 @@ import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
 import '../services/attachment_storage.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// Merged page: after selecting an assistant, choose or create a conversation.
 /// Features: card-based UI, selection mode, pin, rename, reorder, search panel.
@@ -58,18 +61,32 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         final apply = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: Text(isZh ? '助手有更新' : 'Assistant update available'),
-            content: Text(isZh
-                ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
-                : '${assistant.name} has version ${update.definition.version}. Review and update now?'),
+            title: ConstrainedText(
+              isZh ? '助手有更新' : 'Assistant update available',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            content: Text(
+              isZh
+                  ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
+                  : '${assistant.name} has version ${update.definition.version}. Review and update now?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: Text(isZh ? '稍后' : 'Later'),
+                child: ConstrainedText(
+                  isZh ? '稍后' : 'Later',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(isZh ? '更新' : 'Update'),
+                child: ConstrainedText(
+                  isZh ? '更新' : 'Update',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -80,7 +97,12 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Assistant update check failed: $error')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .topicAssistantUpdateCheckFailed(error.toString()),
+            ),
+          ),
         );
       }
     }
@@ -113,12 +135,20 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           await showDialog<void>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: Text(isZh ? '安全审查未通过' : 'Safety review rejected update'),
+              title: ConstrainedText(
+                isZh ? '安全审查未通过' : 'Safety review rejected update',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(review.reason),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(isZh ? '关闭' : 'Close'),
+                  child: ConstrainedText(
+                    isZh ? '关闭' : 'Close',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -203,121 +233,247 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     });
   }
 
+  Future<List<String>> _cleanupConversationFiles(
+    List<Conversation> conversations, {
+    required ConversationsNotifier notifier,
+    required List<Conversation> fallbackCurrentConversations,
+    Set<String> retainedPaths = const {},
+  }) async {
+    final attachmentPaths = conversations
+        .expand(_conversationAttachmentPaths)
+        .toSet()
+        .where(
+          (path) => !AttachmentStorage.deletionIdentities(path)
+              .any(retainedPaths.contains),
+        )
+        .toList();
+    final failedPaths = <String>{};
+    try {
+      await AttachmentStorage.deleteFilesWithRollback(
+        attachmentPaths,
+        onCleanupFailure: failedPaths.add,
+        shouldDelete: (path) {
+          final currentConversations = notifier.mounted
+              ? notifier.currentConversations
+              : fallbackCurrentConversations;
+          final currentRetainedPaths = currentConversations
+              .expand(_conversationAttachmentPaths)
+              .expand(AttachmentStorage.deletionIdentities)
+              .toSet();
+          return !AttachmentStorage.deletionIdentities(path)
+              .any(currentRetainedPaths.contains);
+        },
+      );
+    } catch (_) {
+      if (failedPaths.isEmpty) {
+        final currentConversations = notifier.mounted
+            ? notifier.currentConversations
+            : fallbackCurrentConversations;
+        final currentRetainedPaths = currentConversations
+            .expand(_conversationAttachmentPaths)
+            .expand(AttachmentStorage.deletionIdentities)
+            .toSet();
+        failedPaths.addAll(
+          attachmentPaths.where(
+            (path) => !AttachmentStorage.deletionIdentities(path)
+                .any(currentRetainedPaths.contains),
+          ),
+        );
+      }
+    }
+    if (failedPaths.isNotEmpty) return failedPaths.toList();
+    for (final conversation in conversations) {
+      try {
+        await AttachmentStorage.deleteConversationCompressedImages(
+          conversation.id,
+        );
+      } catch (_) {
+        // 非关键清理
+      }
+    }
+    return failedPaths.toList();
+  }
+
   Future<void> _batchDelete() async {
     if (_selectedIds.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.conversationDeleteTitle),
+        title: ConstrainedText(
+          l10n.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.conversationDeleteMany(_selectedIds.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(l10n.actionCancel),
+            child: ConstrainedText(
+              l10n.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: Text(l10n.actionDelete),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: ConstrainedText(
+              l10n.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
 
-    final convs = ref.read(conversationsProvider);
-    for (final id in _selectedIds) {
-      final conv = convs.where((c) => c.id == id).firstOrNull;
-      if (conv != null) {
-        for (final msg in conv.messages) {
-          for (final att in msg.attachments) {
-            await AttachmentStorage.deleteFile(att.storagePath);
-          }
+    final notifier = ref.read(conversationsProvider.notifier);
+    final convs = notifier.currentConversations;
+    final selectedIds = Set<String>.from(_selectedIds);
+    final fallbackCurrentConversations = convs
+        .where((conversation) => !selectedIds.contains(conversation.id))
+        .toList();
+    final activeConversationId = ref.read(activeConversationIdProvider);
+    final deleted = await notifier.batchDelete(selectedIds.toList());
+    if (deleted) {
+      final deletedConversations =
+          convs.where((conv) => selectedIds.contains(conv.id)).toList();
+      final currentConversations = notifier.mounted
+          ? notifier.currentConversations
+          : fallbackCurrentConversations;
+      final retainedPaths = currentConversations
+          .expand(_conversationAttachmentPaths)
+          .expand(AttachmentStorage.deletionIdentities)
+          .toSet();
+      final failedPaths = await _cleanupConversationFiles(
+        deletedConversations,
+        notifier: notifier,
+        fallbackCurrentConversations: fallbackCurrentConversations,
+        retainedPaths: retainedPaths,
+      );
+      if (failedPaths.isNotEmpty) {
+        await notifier.restoreDeletedConversations(
+          deletedConversations,
+          originalOrder: convs,
+          previousActiveConversationId: activeConversationId,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                l10n.fileManagerBatchDeleteFailed(failedPaths.join(', ')),
+              ),
+            ),
+          );
         }
-        // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
-        for (final att in conv.draftAttachments) {
-          try {
-            await AttachmentStorage.deleteFile(att.storagePath);
-          } catch (_) {
-            // 非关键清理
-          }
-        }
-      }
-      // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
-      // （派生缓存，best-effort：失败不影响对话删除）
-      try {
-        await AttachmentStorage.deleteConversationCompressedImages(id);
-      } catch (_) {
-        // 非关键清理
       }
     }
-
-    await ref
-        .read(conversationsProvider.notifier)
-        .batchDelete(_selectedIds.toList());
-    setState(() {
-      _selectedIds.clear();
-      _selectionMode = false;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedIds.clear();
+        _selectionMode = false;
+      });
+    }
   }
 
   void _deleteTopic(Conversation topic) async {
     final l10n = AppLocalizations.of(context)!;
-    final convs = ref.read(conversationsProvider);
-    final conv = convs.where((c) => c.id == topic.id).firstOrNull;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.conversationDeleteTitle),
-        content: Text(l10n.conversationDeleteNamed(
-          topic.title.isEmpty ? l10n.conversationNew : topic.title,
-        )),
+        title: ConstrainedText(
+          l10n.conversationDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: Text(
+          l10n.conversationDeleteNamed(
+            topic.title.isEmpty ? l10n.conversationNew : topic.title,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.actionCancel),
+            child: ConstrainedText(
+              l10n.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx, true);
             },
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: Text(l10n.actionDelete),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: ConstrainedText(
+              l10n.actionDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
 
-    if (conv != null) {
-      for (final msg in conv.messages) {
-        for (final att in msg.attachments) {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        }
-      }
-      // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
-      for (final att in conv.draftAttachments) {
-        try {
-          await AttachmentStorage.deleteFile(att.storagePath);
-        } catch (_) {
-          // 非关键清理
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == topic.id).firstOrNull;
+    if (conv == null) return;
+    final notifier = ref.read(conversationsProvider.notifier);
+    final fallbackCurrentConversations =
+        convs.where((conversation) => conversation.id != topic.id).toList();
+    final activeConversationId = ref.read(activeConversationIdProvider);
+    final deleted = await notifier.deleteConversation(topic.id);
+    if (deleted) {
+      final currentConversations = notifier.mounted
+          ? notifier.currentConversations
+          : fallbackCurrentConversations;
+      final retainedPaths = currentConversations
+          .expand(_conversationAttachmentPaths)
+          .expand(AttachmentStorage.deletionIdentities)
+          .toSet();
+      final failedPaths = await _cleanupConversationFiles(
+        [conv],
+        notifier: notifier,
+        fallbackCurrentConversations: fallbackCurrentConversations,
+        retainedPaths: retainedPaths,
+      );
+      if (failedPaths.isNotEmpty) {
+        await notifier.restoreDeletedConversations(
+          [conv],
+          originalOrder: convs,
+          previousActiveConversationId: activeConversationId,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                l10n.fileManagerDeleteFailed(failedPaths.join(', ')),
+              ),
+            ),
+          );
         }
       }
     }
-    // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
-    // （派生缓存，best-effort：失败不影响对话删除）
-    try {
-      await AttachmentStorage.deleteConversationCompressedImages(topic.id);
-    } catch (_) {
-      // 非关键清理
-    }
-
-    await ref.read(conversationsProvider.notifier).deleteConversation(topic.id);
   }
+
+  Iterable<String> _conversationAttachmentPaths(Conversation conversation) => [
+        ...conversation.messages.expand(
+          (message) => message.attachments.map(
+            (attachment) => attachment.storagePath,
+          ),
+        ),
+        ...conversation.draftAttachments.map(
+          (attachment) => attachment.storagePath,
+        ),
+      ];
 
   void _renameTopic(String id, String currentTitle) {
     final l10n = AppLocalizations.of(context)!;
@@ -325,7 +481,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.conversationRename),
+        title: ConstrainedText(
+          l10n.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -349,7 +509,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(l10n.actionCancel),
+            child: ConstrainedText(
+              l10n.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -362,7 +526,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: Text(l10n.actionConfirm),
+            child: ConstrainedText(
+              l10n.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -391,6 +559,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
@@ -412,18 +581,24 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.chat_bubble_outline,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             l10n.topicSelectionEmptyTitle,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          Text(l10n.topicSelectionEmptyMessage,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+          Text(
+            l10n.topicSelectionEmptyMessage,
+            style: TextStyle(
+              fontSize: 13,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
@@ -445,9 +620,13 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(_selectionMode
-            ? l10n.conversationSelected(_selectedIds.length)
-            : l10n.conversationSelectTitle),
+        title: ConstrainedText(
+          _selectionMode
+              ? l10n.conversationSelected(_selectedIds.length)
+              : l10n.conversationSelectTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: false,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -465,9 +644,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
             ),
           IconButton(
-            icon: Icon(
-              _selectionMode ? Icons.close : Icons.checklist,
-            ),
+            icon: Icon(_selectionMode ? Icons.close : Icons.checklist),
             tooltip: _selectionMode ? l10n.actionUnselect : l10n.actionSelect,
             onPressed: _toggleSelectionMode,
           ),
@@ -478,12 +655,16 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 48,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
                   const SizedBox(height: 16),
-                  Text(l10n.topicSelectionNoAssistant,
-                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(
+                    l10n.topicSelectionNoAssistant,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -491,7 +672,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           null;
                       Navigator.pop(context);
                     },
-                    child: Text(l10n.topicSelectionBackToAssistants),
+                    child: ConstrainedText(
+                      l10n.topicSelectionBackToAssistants,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -505,10 +690,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: cs.primaryContainer,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: cs.primaryContainer, width: 0.5),
                   ),
                   child: Row(
                     children: [
@@ -530,7 +712,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               ),
                             ),
                             if (selectedAssistant.description.isNotEmpty)
-                              Text(
+                              ConstrainedText(
                                 selectedAssistant.description,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -547,7 +729,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         tooltip: l10n.topicSelectionEditAssistant,
                         onPressed: () {
                           showAssistantFullEditDialog(
-                              context, ref, selectedAssistant);
+                            context,
+                            ref,
+                            selectedAssistant,
+                          );
                         },
                       ),
                     ],
@@ -556,8 +741,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
                 // Fixed hint: long-press drag to reorder
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
                   child: Text(
                     l10n.topicSelectionReorderHint,
                     style: TextStyle(
@@ -581,20 +768,24 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           ? _buildEmptyState(cs)
                           : ReorderableListView.builder(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                               itemCount: sorted.length,
                               buildDefaultDragHandles: false,
                               onReorderItem: (oldIndex, newIndex) {
                                 final convs = ref.read(conversationsProvider);
                                 final item = sorted[oldIndex];
-                                final realOld =
-                                    convs.indexWhere((c) => c.id == item.id);
+                                final realOld = convs.indexWhere(
+                                  (c) => c.id == item.id,
+                                );
                                 // onReorderItem 的 newIndex 已是移除后的索引
                                 // （框架会先移除 oldIndex 再计算插入位置），
                                 // 不需要再手动减一。
                                 final target = sorted[newIndex];
-                                final realNew =
-                                    convs.indexWhere((c) => c.id == target.id);
+                                final realNew = convs.indexWhere(
+                                  (c) => c.id == target.id,
+                                );
                                 if (realOld >= 0 && realNew >= 0) {
                                   ref
                                       .read(conversationsProvider.notifier)
@@ -611,13 +802,23 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               itemBuilder: (context, index) {
                                 final topic = sorted[index];
                                 final isRunning =
-                                    streamingConversations.contains(topic.id);
+                                    streamingConversations.contains(
+                                  topic.id,
+                                );
                                 final latestMessage = topic.messages.isEmpty
                                     ? null
                                     : topic.messages.last;
                                 final isFailed = !isRunning &&
                                     latestMessage?.role == 'assistant' &&
                                     latestMessage?.isError == true;
+                                final isUnread = topic.isManuallyUnread ||
+                                    (!isRunning &&
+                                        !isFailed &&
+                                        latestMessage?.role == 'assistant' &&
+                                        latestMessage?.isStreaming == false &&
+                                        latestMessage?.isError == false &&
+                                        latestMessage?.id !=
+                                            topic.lastReadMessageId);
                                 final itemWidget = TopicItem(
                                   key: ValueKey('topic_${topic.id}'),
                                   topic: topic,
@@ -626,14 +827,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   isActive: topic.id == activeConversationId,
                                   isRunning: isRunning,
                                   isFailed: isFailed,
-                                  isUnread: !isRunning &&
-                                      !isFailed &&
-                                      topic.id != activeConversationId &&
-                                      latestMessage?.role == 'assistant' &&
-                                      latestMessage?.isStreaming == false &&
-                                      latestMessage?.isError == false &&
-                                      latestMessage?.id !=
-                                          topic.lastReadMessageId,
+                                  isUnread: isUnread,
                                   onTap: () {
                                     if (_selectionMode) {
                                       _toggleSelection(topic.id);
@@ -654,8 +848,19 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                         .read(conversationsProvider.notifier)
                                         .autoRenameConversation(topic.id);
                                   },
+                                  onReadStateToggle: () {
+                                    ref
+                                        .read(conversationsProvider.notifier)
+                                        .toggleConversationReadState(
+                                          topic.id,
+                                          isUnread: isUnread,
+                                        );
+                                  },
                                   onSelectionToggle: () =>
                                       _toggleSelection(topic.id),
+                                  onTemporaryToggle: () => ref
+                                      .read(conversationsProvider.notifier)
+                                      .toggleTemporary(topic.id),
                                 );
                                 // When NOT in selection mode, wrap in long-press drag listener
                                 if (!_selectionMode) {
@@ -679,7 +884,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         width: double.infinity,
                         child: FilledButton.icon(
                           icon: const Icon(Icons.add),
-                          label: Text(l10n.topicSelectionNewTopic),
+                          label: ConstrainedText(
+                            l10n.topicSelectionNewTopic,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           onPressed: _createNewTopic,
                         ),
                       ),

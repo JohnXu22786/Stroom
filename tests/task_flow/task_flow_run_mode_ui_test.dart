@@ -1,16 +1,20 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:stroom/services/storage_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../fake_file_picker.dart';
 
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
@@ -19,8 +23,11 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/task_flow/services/task_flow_input_cleanup.dart';
+import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
-import '../fake_file_picker.dart';
+import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/image_manifest.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -31,18 +38,10 @@ class _Documents extends PathProviderPlatform {
 }
 
 class _InputPicker extends FilePickerPlatform {
-  _InputPicker(
-    this.path, {
-    this.pending,
-    this.reportedSize = 6,
-    this.onPick,
-    this.bytes,
-  });
-  final String? path;
+  _InputPicker(this.path, {this.pending, this.reportedSize = 6});
+  final String path;
   final Completer<List<PlatformFile>>? pending;
   final int reportedSize;
-  final Completer<void>? onPick;
-  final Uint8List? bytes;
 
   @override
   Future<List<PlatformFile>> pickFiles({
@@ -59,14 +58,12 @@ class _InputPicker extends FilePickerPlatform {
     WebOptions webOptions = const WebOptions(),
   }) async {
     expect(type, FileType.any);
-    if (onPick != null && !onPick!.isCompleted) onPick!.complete();
     if (pending != null) return pending!.future;
     return [
       FakePlatformFile(
         name: 'notes.pdf',
-        bytes: bytes,
-        reportedLength: reportedSize,
         localPath: path,
+        reportedLength: reportedSize,
       ),
     ];
   }
@@ -78,7 +75,9 @@ class _CaptureControl implements TaskFlowExecutionService {
 
   @override
   Future<List<String>> launchFlowMany(
-      String flowId, List<FlowRunInput> inputs) async {
+    String flowId,
+    List<FlowRunInput> inputs,
+  ) async {
     submitted = inputs;
     if (pending != null) return pending!.future;
     return const [];
@@ -89,10 +88,13 @@ class _CaptureControl implements TaskFlowExecutionService {
 }
 
 /// Pumps the builder page in run mode with a preloaded single-block flow.
-Future<String> _pumpRunMode(WidgetTester tester, TaskFlowBlock block,
-    {IOType? inputType,
-    _CaptureControl? control,
-    FlowRunInput? initialInput}) async {
+Future<String> _pumpRunMode(
+  WidgetTester tester,
+  TaskFlowBlock block, {
+  IOType? inputType,
+  _CaptureControl? control,
+  FlowRunInput? initialInput,
+}) async {
   final flowNotifier = TaskFlowNotifier();
   final flowId = flowNotifier.addFlow(
     name: '测试流程',
@@ -109,8 +111,8 @@ Future<String> _pumpRunMode(WidgetTester tester, TaskFlowBlock block,
       ],
       child: MaterialApp(
         locale: const Locale('zh', 'CN'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: TaskFlowBuilderPage(
           flowId: flowId,
           startInRunMode: true,
@@ -131,13 +133,144 @@ bool _startButtonEnabled(WidgetTester tester) {
 }
 
 void main() {
-  // Each widget test may install a different documents directory.
-  setUp(AppStorage.resetCache);
-  tearDown(AppStorage.resetCache);
+  tearDown(TaskFlowInputCleanup.resetOverridesForTesting);
 
   group('Task flow run-mode input adapts to the FIRST block', () {
-    testWidgets('a restored generic file input stays a picked file',
+    testWidgets(
+      'OCR rejects a valid image selection when another manifest record is unresolved',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        ImageManifest.invalidateCache();
+        final folderName =
+            'ocr_picker_${DateTime.now().microsecondsSinceEpoch}';
+        final pictureRoot = Directory('${Directory.current.path}/pictures');
+        final pictureRootExisted = pictureRoot.existsSync();
+        final pictureDirectory = Directory('${pictureRoot.path}/$folderName');
+        pictureDirectory.createSync(recursive: true);
+        final now = DateTime(2026, 1, 1);
+        final validRecord = ImageRecord(
+          id: 'valid-image',
+          name: 'Available image',
+          hash: '$folderName/available',
+          format: 'png',
+          createdAt: now,
+          size: 4,
+        );
+        final unresolvedRecord = ImageRecord(
+          id: 'unresolved-image',
+          name: 'Missing image',
+          hash: '$folderName/missing',
+          format: 'png',
+          createdAt: now,
+          size: 4,
+        );
+        addTearDown(() async {
+          await ImageManifest.deleteFile(validRecord.storagePath);
+          await ManifestDatabase.clearAllData();
+          ImageManifest.invalidateCache();
+          if (pictureDirectory.existsSync()) {
+            pictureDirectory.deleteSync(recursive: true);
+          }
+          if (!pictureRootExisted &&
+              pictureRoot.existsSync() &&
+              pictureRoot.listSync().isEmpty) {
+            pictureRoot.deleteSync();
+          }
+        });
+        await ImageManifest.addRecord(validRecord);
+        await ImageManifest.addRecord(unresolvedRecord);
+        await ImageManifest.writeFile(
+          validRecord.storagePath,
+          Uint8List.fromList([1, 2, 3, 4]),
+        );
+        File('${pictureDirectory.path}/available.png')
+            .writeAsBytesSync([1, 2, 3, 4]);
+
+        final control = _CaptureControl();
+        await _pumpRunMode(
+          tester,
+          TaskFlowBlock(typeKey: BlockType.ocr),
+          control: control,
+        );
+        await tester.tap(find.text('选择图片（可多选）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Available image'));
+        await tester.tap(find.text('Missing image'));
+        await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1 个已选文件无法找到或读取'), findsOneWidget);
+        expect(_startButtonEnabled(tester), isFalse);
+        expect(control.submitted, isNull);
+      },
+    );
+
+    testWidgets('app image picker submits its durable manifest identity',
         (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      ManifestDatabase.enableTestMode();
+      ImageManifest.invalidateCache();
+      final previousDocuments = PathProviderPlatform.instance;
+      final directory =
+          Directory.systemTemp.createTempSync('flow_manifest_picker_');
+      PathProviderPlatform.instance = _Documents(directory.path);
+      final record = ImageRecord(
+        id: 'picked-image',
+        name: 'Picked image',
+        hash: 'task-flow-picker/image',
+        format: 'png',
+        createdAt: DateTime(2026, 1, 1),
+        size: 4,
+      );
+      addTearDown(() async {
+        await ImageManifest.deleteFile(record.storagePath);
+        await ManifestDatabase.clearAllData();
+        ImageManifest.invalidateCache();
+        PathProviderPlatform.instance = previousDocuments;
+        directory.deleteSync(recursive: true);
+      });
+      await ImageManifest.addRecord(record);
+      await ImageManifest.writeFile(
+        record.storagePath,
+        Uint8List.fromList([1, 2, 3, 4]),
+      );
+      final persistedRecord = (await ImageManifest.loadRecords()).single;
+      final resolvedPath =
+          await ImageManifest.readFilePath(persistedRecord.storagePath);
+      expect(resolvedPath, isNotNull);
+
+      final control = _CaptureControl();
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.ocr),
+        control: control,
+      );
+      await tester.tap(find.text('选择图片（可多选）'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(find.text('Picked image'), findsOneWidget);
+      await tester.tap(find.text('Picked image'));
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
+      // Starting pushes the run page, which may keep scheduled frames active.
+      await tester.pump();
+
+      final submitted = control.submitted!.single;
+      expect(submitted.text, resolvedPath);
+      expect(submitted.manifestStoragePath, persistedRecord.storagePath);
+      expect(submitted.manifestType, FlowInputManifestType.image);
+      expect(submitted.ownedStoragePath, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a restored generic file input stays a picked file', (
+      tester,
+    ) async {
       await _pumpRunMode(
         tester,
         TaskFlowBlock(typeKey: BlockType.chat),
@@ -150,8 +283,9 @@ void main() {
       expect(_startButtonEnabled(tester), isTrue);
     });
 
-    testWidgets('a pending file picker disables starting and removing inputs',
-        (tester) async {
+    testWidgets('a pending file picker disables starting and removing inputs', (
+      tester,
+    ) async {
       final originalPicker = FilePickerPlatform.instance;
       final pending = Completer<List<PlatformFile>>();
       FilePickerPlatform.instance = _InputPicker('', pending: pending);
@@ -167,17 +301,24 @@ void main() {
       await tester.pump();
       expect(_startButtonEnabled(tester), isFalse);
       expect(
-          tester
-              .widget<OutlinedButton>(
-                  find.widgetWithText(OutlinedButton, '选择文件（可多选）'))
-              .onPressed,
-          isNull);
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, '选择文件（可多选）'),
+            )
+            .onPressed,
+        isNull,
+      );
       expect(
-          tester
-              .widget<IconButton>(find.ancestor(
-                  of: find.byTooltip('移除'), matching: find.byType(IconButton)))
-              .onPressed,
-          isNull);
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byTooltip('移除'),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
       pending.complete(const []);
       await tester.pumpAndSettle();
       expect(_startButtonEnabled(tester), isTrue);
@@ -196,57 +337,162 @@ void main() {
       await tester.pump();
       expect(control.submitted!.single.text, '/stored/previous.pdf');
       expect(
-          tester
-              .widget<OutlinedButton>(
-                  find.widgetWithText(OutlinedButton, '选择文件（可多选）'))
-              .onPressed,
-          isNull);
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, '选择文件（可多选）'),
+            )
+            .onPressed,
+        isNull,
+      );
       expect(
-          tester
-              .widget<IconButton>(find.ancestor(
-                  of: find.byTooltip('移除'), matching: find.byType(IconButton)))
-              .onPressed,
-          isNull);
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byTooltip('移除'),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
       control.pending!.complete(const []);
       await tester.pump();
     });
 
     testWidgets(
-        'generic file input picks a real document for the submitted run',
+      'generic file input picks a real document for the submitted run',
+      (tester) async {
+        final directory = Directory.systemTemp.createTempSync('flow_file_ui_');
+        final sharedAttachmentDirectory = Directory(
+          '${directory.path}/attachments',
+        )..createSync();
+        final source = File('${sharedAttachmentDirectory.path}/notes.pdf');
+        source.writeAsStringSync('report');
+        final originalPicker = FilePickerPlatform.instance;
+        final originalDocuments = PathProviderPlatform.instance;
+        FilePickerPlatform.instance = _InputPicker(source.path);
+        PathProviderPlatform.instance = _Documents(directory.path);
+        addTearDown(() {
+          FilePickerPlatform.instance = originalPicker;
+          PathProviderPlatform.instance = originalDocuments;
+          directory.deleteSync(recursive: true);
+        });
+        final control = _CaptureControl();
+        await _pumpRunMode(
+          tester,
+          TaskFlowBlock(typeKey: BlockType.chat),
+          inputType: IOType.file,
+          control: control,
+        );
+
+        expect(find.text('选择文件（可多选）'), findsOneWidget);
+        expect(find.text('输入文本或链接'), findsNothing);
+        expect(_startButtonEnabled(tester), isFalse);
+        final storage = Directory('${directory.path}/attachments');
+        Future<void> pickFile() async {
+          await tester.runAsync(() async {
+            await tester.tap(find.text('选择文件（可多选）'));
+            for (var attempt = 0; attempt < 100; attempt++) {
+              if (storage.existsSync() &&
+                  storage.listSync().whereType<File>().any((file) =>
+                      file.path != source.path && file.lengthSync() == 6)) {
+                await Future<void>.delayed(const Duration(milliseconds: 10));
+                return;
+              }
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
+            fail('The selected document was not copied into app storage');
+          });
+          await tester.pumpAndSettle();
+        }
+
+        await pickFile();
+        expect(find.text('notes.pdf'), findsOneWidget);
+        expect(_startButtonEnabled(tester), isTrue);
+        final firstCopy = storage
+            .listSync()
+            .whereType<File>()
+            .singleWhere((file) => file.path != source.path);
+        expect(firstCopy.path, isNot(source.path));
+        await tester.runAsync(() async {
+          await tester.tap(find.byTooltip('移除'));
+          for (var attempt = 0;
+              attempt < 100 && firstCopy.existsSync();
+              attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        });
+        await tester.pumpAndSettle();
+        expect(firstCopy.existsSync(), isFalse);
+        expect(
+          source.existsSync(),
+          isTrue,
+          reason:
+              'Removing the flow-owned copy must preserve the shared attachment',
+        );
+        expect(_startButtonEnabled(tester), isFalse);
+
+        await pickFile();
+        expect(find.text('notes.pdf'), findsOneWidget);
+        await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
+        await tester.pump();
+        final submitted = control.submitted;
+        expect(submitted, hasLength(1));
+        expect(p.isAbsolute(submitted!.single.text), isTrue,
+            reason: 'native run inputs keep a usable local path');
+        expect(submitted.single.text, isNot(source.path));
+        expect(File(submitted.single.text).readAsStringSync(), 'report');
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets('failed removal retains ownership for dispose cleanup',
         (tester) async {
-      final directory = Directory.systemTemp.createTempSync('flow_file_ui_');
-      final source = File('${directory.path}/notes.pdf');
-      source.writeAsStringSync('report');
+      SharedPreferences.setMockInitialValues({});
+      final directory =
+          Directory.systemTemp.createTempSync('flow_file_cleanup_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('report');
       final originalPicker = FilePickerPlatform.instance;
       final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
+      final deletedPaths = <String>[];
+      final queuedReferences = <String>[];
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deletedPaths.add(path);
+        if (deletedPaths.length == 1) throw StateError('disk unavailable');
+        return true;
+      };
       addTearDown(() {
+        AttachmentStorage.resetOverridesForTesting();
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
         directory.deleteSync(recursive: true);
       });
-      final control = _CaptureControl();
+
       await _pumpRunMode(
         tester,
         TaskFlowBlock(typeKey: BlockType.chat),
         inputType: IOType.file,
-        control: control,
       );
-
-      expect(find.text('选择文件（可多选）'), findsOneWidget);
-      expect(find.text('输入文本或链接'), findsNothing);
-      expect(_startButtonEnabled(tester), isFalse);
       final storage = Directory('${directory.path}/attachments');
       Future<void> pickFile() async {
         await tester.runAsync(() async {
           await tester.tap(find.text('选择文件（可多选）'));
           for (var attempt = 0; attempt < 100; attempt++) {
             if (storage.existsSync() &&
-                storage
-                    .listSync()
-                    .whereType<File>()
-                    .any((file) => file.lengthSync() == 6)) {
+                storage.listSync().whereType<File>().any(
+                      (file) => file.lengthSync() == 6,
+                    )) {
               await Future<void>.delayed(const Duration(milliseconds: 10));
               return;
             }
@@ -258,43 +504,98 @@ void main() {
       }
 
       await pickFile();
-      expect(find.text('notes.pdf'), findsOneWidget);
-      expect(_startButtonEnabled(tester), isTrue);
-      final firstCopy = storage.listSync().whereType<File>().single;
-      await tester.runAsync(() async {
-        await tester.tap(find.byTooltip('移除'));
-        for (var attempt = 0;
-            attempt < 100 && firstCopy.existsSync();
-            attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      await tester.pumpAndSettle();
-      expect(firstCopy.existsSync(), isFalse);
-      expect(_startButtonEnabled(tester), isFalse);
 
-      await pickFile();
-      expect(find.text('notes.pdf'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
-      await tester.pump();
-      final submitted = control.submitted;
-      expect(submitted, hasLength(1));
-      expect(submitted!.single.text, isNot(source.path));
-      expect(File(submitted.single.text).readAsStringSync(), 'report');
+      await tester.tap(find.byTooltip('移除'));
+      await tester.pumpAndSettle();
+      expect(deletedPaths, hasLength(1));
+      expect(find.text('notes.pdf'), findsNothing);
+
       await tester.pumpWidget(const SizedBox.shrink());
+      expect(queuedReferences, [deletedPaths.single]);
     });
 
-    testWidgets('oversized document metadata is rejected before copying',
+    testWidgets('failed dispose cleanup is retried by the next builder',
         (tester) async {
-      final directory = Directory.systemTemp.createTempSync('flow_file_size_');
+      SharedPreferences.setMockInitialValues({});
+      final directory =
+          Directory.systemTemp.createTempSync('flow_dispose_cleanup_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('report');
       final originalPicker = FilePickerPlatform.instance;
       final originalDocuments = PathProviderPlatform.instance;
-      final pickerCalled = Completer<void>();
+      FilePickerPlatform.instance = _InputPicker(source.path);
+      PathProviderPlatform.instance = _Documents(directory.path);
+      final queuedReferences = <String>[];
+      var retryCount = 0;
+      TaskFlowInputCleanup.retryPendingOverrideForTesting = () {
+        retryCount++;
+        return Future<void>.value();
+      };
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
+      addTearDown(() {
+        FilePickerPlatform.instance = originalPicker;
+        PathProviderPlatform.instance = originalDocuments;
+        directory.deleteSync(recursive: true);
+      });
+
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
+      );
+      await tester.runAsync(() async {
+        await tester.tap(find.text('选择文件（可多选）'));
+        final storage = Directory('${directory.path}/attachments');
+        for (var attempt = 0; attempt < 100; attempt++) {
+          if (storage.existsSync() &&
+              storage.listSync().whereType<File>().any(
+                    (file) => file.lengthSync() == 6,
+                  )) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        fail('The selected document was not copied into app storage');
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('notes.pdf'), findsOneWidget);
+      final copyPath = Directory('${directory.path}/attachments')
+          .listSync()
+          .whereType<File>()
+          .single
+          .path;
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(queuedReferences, ['attachments/${p.basename(copyPath)}']);
+      expect(retryCount, 1);
+
+      await _pumpRunMode(
+        tester,
+        TaskFlowBlock(typeKey: BlockType.chat),
+        inputType: IOType.file,
+      );
+      expect(retryCount, 2);
+    });
+
+    testWidgets('oversized document metadata is rejected before copying', (
+      tester,
+    ) async {
+      final directory = Directory.systemTemp.createTempSync('flow_file_size_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('document');
+      final originalPicker = FilePickerPlatform.instance;
+      final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(
-        null,
+        source.path,
         reportedSize: maxAttachmentBytes + 1,
-        onPick: pickerCalled,
-        bytes: Uint8List(32),
       );
       PathProviderPlatform.instance = _Documents(directory.path);
       addTearDown(() {
@@ -308,28 +609,26 @@ void main() {
         inputType: IOType.file,
       );
 
-      await tester.tap(find.text('选择文件（可多选）'));
-      await tester.pump();
       await tester.runAsync(() async {
-        await pickerCalled.future.timeout(const Duration(seconds: 2));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.tap(find.text('选择文件（可多选）'));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
       });
-      // Keep the transient error snackbar visible for the assertion instead
-      // of settling through its auto-dismiss timeout.
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
       expect(find.textContaining('超过 10 MB'), findsOneWidget);
       expect(_startButtonEnabled(tester), isFalse);
       expect(Directory('${directory.path}/attachments').existsSync(), isFalse);
     });
 
-    testWidgets('oversized PNG data can be picked as a generic file',
-        (tester) async {
+    testWidgets('oversized PNG data can be picked as a generic file', (
+      tester,
+    ) async {
       final directory = Directory.systemTemp.createTempSync('flow_file_png_');
       final source = File('${directory.path}/picture.png');
       // A valid 1x1 PNG followed by a sparse tail keeps the fixture cheap
       // while exercising actual PNG signature detection past 10 MB.
       final png = base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=');
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+      );
       final handle = source.openSync(mode: FileMode.write);
       handle.writeFromSync(png);
       handle.setPositionSync(maxAttachmentBytes);
@@ -361,10 +660,9 @@ void main() {
         await tester.tap(find.text('选择文件（可多选）'));
         for (var attempt = 0; attempt < 200; attempt++) {
           if (storage.existsSync() &&
-              storage
-                  .listSync()
-                  .whereType<File>()
-                  .any((file) => file.lengthSync() == maxAttachmentBytes + 1)) {
+              storage.listSync().whereType<File>().any(
+                    (file) => file.lengthSync() == maxAttachmentBytes + 1,
+                  )) {
             await Future<void>.delayed(const Duration(milliseconds: 10));
             return;
           }
@@ -378,6 +676,8 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
       await tester.pump();
       final reference = control.submitted!.single.text;
+      expect(p.isAbsolute(reference), isTrue,
+          reason: 'native run inputs keep a usable local path');
       final copy = File(reference);
       expect(copy.lengthSync(), maxAttachmentBytes + 1);
       final copied = copy.openSync();
@@ -386,14 +686,17 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('PNG above the flow image limit is rejected before copying',
-        (tester) async {
+    testWidgets('PNG above the flow image limit is rejected before copying', (
+      tester,
+    ) async {
       const imageLimit = 20 * 1024 * 1024;
-      final directory =
-          Directory.systemTemp.createTempSync('flow_file_huge_png_');
+      final directory = Directory.systemTemp.createTempSync(
+        'flow_file_huge_png_',
+      );
       final source = File('${directory.path}/picture.png');
       final png = base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=');
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+      );
       final handle = source.openSync(mode: FileMode.write);
       handle.writeFromSync(png);
       handle.setPositionSync(imageLimit);
@@ -427,8 +730,9 @@ void main() {
       expect(Directory('${directory.path}/attachments').existsSync(), isFalse);
     });
 
-    testWidgets('real file length is checked before reading or copying',
-        (tester) async {
+    testWidgets('real file length is checked before reading or copying', (
+      tester,
+    ) async {
       final directory = Directory.systemTemp.createTempSync('flow_file_real_');
       final source = File('${directory.path}/notes.pdf');
       final handle = source.openSync(mode: FileMode.write);
@@ -437,13 +741,8 @@ void main() {
       handle.closeSync();
       final originalPicker = FilePickerPlatform.instance;
       final originalDocuments = PathProviderPlatform.instance;
-      final pickerCalled = Completer<void>();
       // Picker metadata can be stale; the on-disk file is over the limit.
-      FilePickerPlatform.instance = _InputPicker(
-        source.path,
-        reportedSize: 6,
-        onPick: pickerCalled,
-      );
+      FilePickerPlatform.instance = _InputPicker(source.path, reportedSize: 6);
       PathProviderPlatform.instance = _Documents(directory.path);
       addTearDown(() {
         FilePickerPlatform.instance = originalPicker;
@@ -456,36 +755,20 @@ void main() {
         inputType: IOType.file,
       );
 
-      await tester.tap(find.text('选择文件（可多选）'));
-      await tester.pump();
-      await tester.runAsync(
-          () => pickerCalled.future.timeout(const Duration(seconds: 2)));
-      var pickerEnabled = false;
-      for (var attempt = 0; attempt < 200; attempt++) {
-        await tester.pump(const Duration(milliseconds: 10));
-        final picker = tester.widget<OutlinedButton>(
-          find.byKey(const Key('taskflow_pick_media_input')),
-        );
-        if (picker.onPressed != null) {
-          pickerEnabled = true;
-          break;
-        }
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 10)),
-        );
-      }
-      expect(pickerEnabled, isTrue,
-          reason: 'file validation should finish before checking the error');
-      // Keep the transient error snackbar visible instead of settling through
-      // its auto-dismiss timeout.
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(() async {
+        await tester.tap(find.text('选择文件（可多选）'));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      await tester.pumpAndSettle();
       expect(find.textContaining('超过 10 MB'), findsOneWidget);
       expect(_startButtonEnabled(tester), isFalse);
       expect(Directory('${directory.path}/attachments').existsSync(), isFalse);
     });
 
-    testWidgets('leaving an unsubmitted file run removes its copied input',
-        (tester) async {
+    testWidgets('leaving an unsubmitted file run removes its copied input', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
       final directory = Directory.systemTemp.createTempSync('flow_file_exit_');
       final source = File('${directory.path}/notes.pdf')
         ..writeAsStringSync('report');
@@ -493,6 +776,17 @@ void main() {
       final originalDocuments = PathProviderPlatform.instance;
       FilePickerPlatform.instance = _InputPicker(source.path);
       PathProviderPlatform.instance = _Documents(directory.path);
+      final queuedReferences = <String>[];
+      TaskFlowInputCleanup.retryPendingOverrideForTesting =
+          () => Future<void>.value();
+      TaskFlowInputCleanup.enqueueAndRetryOverrideForTesting = (
+        references, {
+        onQueued,
+      }) {
+        queuedReferences.addAll(references);
+        onQueued?.call();
+        return Future<void>.value();
+      };
       addTearDown(() {
         FilePickerPlatform.instance = originalPicker;
         PathProviderPlatform.instance = originalDocuments;
@@ -509,10 +803,9 @@ void main() {
         await tester.tap(find.text('选择文件（可多选）'));
         for (var attempt = 0; attempt < 100; attempt++) {
           if (storage.existsSync() &&
-              storage
-                  .listSync()
-                  .whereType<File>()
-                  .any((file) => file.lengthSync() == 6)) {
+              storage.listSync().whereType<File>().any(
+                    (file) => file.lengthSync() == 6,
+                  )) {
             await Future<void>.delayed(const Duration(milliseconds: 10));
             return;
           }
@@ -524,13 +817,8 @@ void main() {
       final copy = storage.listSync().whereType<File>().single;
       expect(find.text('notes.pdf'), findsOneWidget);
 
-      await tester.runAsync(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
-        for (var attempt = 0; attempt < 100 && copy.existsSync(); attempt++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      expect(copy.existsSync(), isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(queuedReferences, ['attachments/${p.basename(copy.path)}']);
     });
 
     testWidgets(
@@ -591,8 +879,9 @@ void main() {
       expect(find.textContaining('路径或标识'), findsNothing);
     });
 
-    testWidgets('AudioSeparation first: multi-select video picker button',
-        (tester) async {
+    testWidgets('AudioSeparation first: multi-select video picker button', (
+      tester,
+    ) async {
       await _pumpRunMode(
         tester,
         TaskFlowBlock(typeKey: BlockType.audioSeparation),

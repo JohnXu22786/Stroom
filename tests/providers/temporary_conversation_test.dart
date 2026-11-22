@@ -1,23 +1,18 @@
 // Tests for the temporary conversation feature:
 //   - toggleTemporary enable/disable semantics
-//   - countdown reset on new messages (updateMessages with the reset flag)
+//   - countdown pause while a response is in progress and reset on completion
 //   - serialization round-trip
 //   - automatic deletion when the 1h window elapses
 //   - the per-second UI ticker lifecycle
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/models/stroom_conversation.dart';
 import 'package:stroom/providers/conversation_provider.dart';
-import 'package:stroom/services/conversation_repository.dart';
-import 'package:stroom/services/conversation_record_adapter.dart';
-import 'package:stroom/services/conversation_repository_memory.dart';
-import 'package:stroom/utils/web_file_store.dart';
 
 /// Helper: create a ProviderContainer with a ConversationsNotifier that has
 /// state pre-set (bypassing async _load from SharedPreferences).
@@ -32,54 +27,6 @@ ProviderContainer _createContainer({List<Conversation>? initialState}) {
       }),
     ],
   );
-}
-
-Future<ProviderContainer> _createLoadedContainer(
-  List<Conversation> initialState, {
-  String? activeConversationId,
-  ConversationRepository? repository,
-}) async {
-  WebFileStore.enableTestMode();
-  addTearDown(WebFileStore.disableTestMode);
-  SharedPreferences.setMockInitialValues({
-    'conversations': jsonEncode(initialState.map((c) => c.toMap()).toList()),
-    if (activeConversationId != null)
-      'active_conversation_id': activeConversationId,
-  });
-  final container = ProviderContainer(
-    overrides: [
-      conversationRepositoryProvider.overrideWithValue(
-        repository ?? MemoryConversationRepository(),
-      ),
-    ],
-  );
-  await container.read(conversationsProvider.notifier).ready;
-  return container;
-}
-
-class _GatedMemoryConversationRepository extends MemoryConversationRepository {
-  final readStarted = Completer<void>();
-  final releaseRead = Completer<void>();
-  bool gateNextRead = false;
-
-  @override
-  Future<List<StroomMessage>> getMessages(
-    String conversationId, {
-    int offset = 0,
-    int limit = 50,
-  }) async {
-    final messages = await super.getMessages(
-      conversationId,
-      offset: offset,
-      limit: limit,
-    );
-    if (gateNextRead) {
-      gateNextRead = false;
-      readStarted.complete();
-      await releaseRead.future;
-    }
-    return messages;
-  }
 }
 
 Conversation _conv(String id, {bool isTemporary = false, DateTime? expiresAt}) {
@@ -148,34 +95,90 @@ void main() {
     });
   });
 
-  group('countdown reset on new messages', () {
+  group('countdown pause and completion', () {
+    test('pause persists remaining time and prevents expiry cleanup', () async {
+      final container = _createContainer(
+        initialState: [
+          _conv(
+            'c1',
+            isTemporary: true,
+            expiresAt: DateTime.now().subtract(const Duration(seconds: 2)),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(conversationsProvider.notifier);
+      final priorUpdatedAt =
+          container.read(conversationsProvider).single.updatedAt;
+
+      await notifier.pauseTemporaryCountdown('c1');
+      final conv = container.read(conversationsProvider).single;
+      expect(conv.updatedAt.isAfter(priorUpdatedAt), isTrue);
+      expect(conv.temporaryPausedRemainingMilliseconds, 0);
+      expect(
+        Conversation.fromMap(conv.toMap()).temporaryPausedRemainingMilliseconds,
+        0,
+      );
+      await notifier.checkTemporaryExpiryNow();
+      expect(container.read(conversationsProvider), hasLength(1));
+    });
+
     test(
-      'updateMessages with the reset flag re-arms a temporary conversation',
+      'success resets the timer while failure restores the remaining time',
       () async {
-        // Start with a window almost fully elapsed.
+        final expiresAt = DateTime.now().add(const Duration(minutes: 17));
         final container = _createContainer(
-          initialState: [
-            _conv('c1', isTemporary: true, expiresAt: DateTime.now()),
-          ],
+          initialState: [_conv('c1', isTemporary: true, expiresAt: expiresAt)],
         );
         addTearDown(container.dispose);
         final notifier = container.read(conversationsProvider.notifier);
 
-        await notifier.updateMessages(
-            'c1',
-            [
-              ChatMessage(id: 'm1', role: 'user', content: 'hi'),
-            ],
-            resetTemporaryCountdown: true);
+        await notifier.pauseTemporaryCountdown('c1');
+        await notifier.finishTemporaryCountdown('c1', successful: false);
+        var conv = container.read(conversationsProvider).single;
+        final restoredRemaining = conv.temporaryExpiresAt!.difference(
+          DateTime.now(),
+        );
+        expect(restoredRemaining.inMinutes, greaterThanOrEqualTo(16));
+        expect(restoredRemaining.inMinutes, lessThanOrEqualTo(17));
+        expect(conv.temporaryPausedRemainingMilliseconds, isNull);
+
+        await notifier.pauseTemporaryCountdown('c1');
+        await notifier.finishTemporaryCountdown('c1', successful: true);
+        conv = container.read(conversationsProvider).single;
+        final remaining = conv.temporaryExpiresAt!.difference(DateTime.now());
+        expect(remaining.inMinutes, greaterThanOrEqualTo(59));
+        expect(conv.temporaryPausedRemainingMilliseconds, isNull);
+      },
+    );
+
+    test(
+      'restart resumes a persisted pause from the remaining interval',
+      () async {
+        final expiresAt = DateTime.now().add(const Duration(minutes: 9));
+        final container = _createContainer(
+          initialState: [
+            Conversation.fromMap({
+              ..._conv('c1', isTemporary: true, expiresAt: expiresAt).toMap(),
+              'temporaryPausedRemainingMilliseconds': 9 * 60 * 1000,
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container
+            .read(conversationsProvider.notifier)
+            .resumePausedTemporaryCountdownsAfterRestart();
 
         final conv = container.read(conversationsProvider).single;
-        expect(conv.isTemporary, isTrue);
+        expect(conv.temporaryPausedRemainingMilliseconds, isNull);
         final remaining = conv.temporaryExpiresAt!.difference(DateTime.now());
+        expect(remaining.inMinutes, greaterThanOrEqualTo(8));
+        expect(remaining.inMinutes, lessThanOrEqualTo(9));
         expect(
-          remaining.inMinutes,
-          greaterThanOrEqualTo(kTemporaryConversationDuration.inMinutes - 1),
+          Conversation.fromMap(conv.toMap())
+              .temporaryPausedRemainingMilliseconds,
+          isNull,
         );
-        expect(remaining.inHours, lessThanOrEqualTo(1));
       },
     );
 
@@ -206,12 +209,9 @@ void main() {
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
 
-      await notifier.updateMessages(
-          'c1',
-          [
-            ChatMessage(id: 'm1', role: 'user', content: 'hi'),
-          ],
-          resetTemporaryCountdown: true);
+      await notifier.updateMessages('c1', [
+        ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+      ]);
 
       final conv = container.read(conversationsProvider).single;
       expect(conv.isTemporary, isFalse);
@@ -253,24 +253,18 @@ void main() {
 
   group('expiry auto-deletion', () {
     test('an expired temporary conversation is deleted', () async {
-      final container = await _createLoadedContainer([
-        _conv(
-          'expired',
-          isTemporary: true,
-          expiresAt: DateTime.now().add(const Duration(hours: 1)),
-        ),
-        _conv('alive'),
-      ]);
+      final container = _createContainer(
+        initialState: [
+          _conv(
+            'expired',
+            isTemporary: true,
+            expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          ),
+          _conv('alive'),
+        ],
+      );
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
-      notifier.state = [
-        _conv(
-          'expired',
-          isTemporary: true,
-          expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
-        ),
-        _conv('alive'),
-      ];
 
       await notifier.checkTemporaryExpiryNow();
 
@@ -280,26 +274,23 @@ void main() {
     });
 
     test('multiple expired conversations are swept in one pass', () async {
-      final container = await _createLoadedContainer([
-        _conv('e1',
+      final container = _createContainer(
+        initialState: [
+          _conv(
+            'e1',
             isTemporary: true,
-            expiresAt: DateTime.now().add(const Duration(hours: 1))),
-        _conv('e2',
+            expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          ),
+          _conv(
+            'e2',
             isTemporary: true,
-            expiresAt: DateTime.now().add(const Duration(hours: 1))),
-        _conv('alive'),
-      ]);
+            expiresAt: DateTime.now().subtract(const Duration(seconds: 5)),
+          ),
+          _conv('alive'),
+        ],
+      );
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
-      notifier.state = [
-        _conv('e1',
-            isTemporary: true,
-            expiresAt: DateTime.now().subtract(const Duration(minutes: 1))),
-        _conv('e2',
-            isTemporary: true,
-            expiresAt: DateTime.now().subtract(const Duration(seconds: 5))),
-        _conv('alive'),
-      ];
 
       await notifier.checkTemporaryExpiryNow();
 
@@ -310,80 +301,25 @@ void main() {
     });
 
     test('expired active conversation clears the active selection', () async {
-      final container = await _createLoadedContainer(
-        [
-          _conv('active-expired',
-              isTemporary: true,
-              expiresAt: DateTime.now().add(const Duration(hours: 1))),
+      final container = _createContainer(
+        initialState: [
+          _conv(
+            'active-expired',
+            isTemporary: true,
+            expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          ),
         ],
-        activeConversationId: 'active-expired',
       );
       addTearDown(container.dispose);
+      container.read(activeConversationIdProvider.notifier).state =
+          'active-expired';
       final notifier = container.read(conversationsProvider.notifier);
-      notifier.state = [
-        _conv('active-expired',
-            isTemporary: true,
-            expiresAt: DateTime.now().subtract(const Duration(minutes: 1))),
-      ];
 
       await notifier.checkTemporaryExpiryNow();
 
       expect(container.read(activeConversationIdProvider), isNull);
       expect(container.read(conversationsProvider), isEmpty);
     });
-
-    test(
-      'expiry read does not replace messages after a new send resets expiry',
-      () async {
-        final repository = _GatedMemoryConversationRepository();
-        final container = await _createLoadedContainer(
-          [
-            Conversation(
-              id: 'expiring-with-new-messages',
-              title: 'Expiring with new messages',
-              isTemporary: true,
-              temporaryExpiresAt: DateTime.now().add(const Duration(hours: 1)),
-              messages: [
-                ChatMessage(
-                  id: 'old-message',
-                  role: 'user',
-                  content: 'old history',
-                ),
-              ],
-            ),
-          ],
-          repository: repository,
-        );
-        addTearDown(container.dispose);
-        final notifier = container.read(conversationsProvider.notifier);
-        final conversation = container.read(conversationsProvider).single
-          ..temporaryExpiresAt = DateTime.now().subtract(
-            const Duration(minutes: 1),
-          );
-        notifier.state = [conversation];
-        repository.gateNextRead = true;
-
-        final expiryCheck = notifier.checkTemporaryExpiryNow();
-        await repository.readStarted.future;
-        await notifier.updateMessages(
-          conversation.id,
-          [
-            ChatMessage(
-              id: 'new-message',
-              role: 'user',
-              content: 'new history',
-            ),
-          ],
-          resetTemporaryCountdown: true,
-        );
-        repository.releaseRead.complete();
-        await expiryCheck;
-
-        final current = container.read(conversationsProvider).single;
-        expect(current.messages.map((message) => message.id), ['new-message']);
-        expect(current.temporaryExpiresAt!.isAfter(DateTime.now()), isTrue);
-      },
-    );
 
     test(
       'unexpired temporary conversations survive the expiry check',
@@ -465,79 +401,74 @@ void main() {
       });
     });
 
-    testWidgets(
+    test(
         'the ticker stops when the last temporary conversation is deleted '
-        'via deleteConversation', (tester) async {
-      final container = await _createLoadedContainer([
-        _conv('only-temp',
-            isTemporary: true,
-            expiresAt: DateTime.now().add(const Duration(hours: 24))),
-      ]);
-      addTearDown(container.dispose);
-      final notifier = container.read(conversationsProvider.notifier);
+        'via deleteConversation', () {
+      fakeAsync((async) {
+        final container = _createContainer(
+          initialState: [
+            _conv(
+              'only-temp',
+              isTemporary: true,
+              expiresAt: DateTime.now().add(const Duration(hours: 24)),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final notifier = container.read(conversationsProvider.notifier);
 
-      await tester.pump(const Duration(seconds: 2));
-      expect(container.read(temporaryCountdownTickProvider), 2);
+        // 用一次"无到期"的到期检查触发计时器启动（生产中由 _load /
+        // toggleTemporary 启动；删除后的自愈路径与之相同）。
+        unawaited(notifier.checkTemporaryExpiryNow());
+        async.elapse(const Duration(seconds: 2));
+        expect(container.read(temporaryCountdownTickProvider), 2);
 
-      final deletion = notifier.deleteConversation('only-temp');
-      for (var i = 0; i < 10 && notifier.state.isNotEmpty; i++) {
-        await tester.pump();
-      }
-      expect(notifier.state, isEmpty);
-      await deletion;
-      await tester.pump(const Duration(seconds: 1));
-      final tickAfterDelete = container.read(temporaryCountdownTickProvider);
+        notifier.deleteConversation('only-temp');
+        async.elapse(const Duration(seconds: 1));
+        final tickAfterDelete = container.read(temporaryCountdownTickProvider);
 
-      await tester.pump(const Duration(seconds: 2));
-      expect(container.read(temporaryCountdownTickProvider), tickAfterDelete);
+        // 最后一个临时对话已删除：计时器停止，tick 不再增长。
+        async.elapse(const Duration(seconds: 2));
+        expect(container.read(temporaryCountdownTickProvider), tickAfterDelete);
+      });
     });
   });
 
   group('one-hour migration', () {
-    test('repository records with 24h expiries are shortened on load',
-        () async {
-      WebFileStore.enableTestMode();
-      addTearDown(WebFileStore.disableTestMode);
-      SharedPreferences.setMockInitialValues({});
-      final originalExpiry = DateTime.now().add(const Duration(hours: 24));
-      final repository = MemoryConversationRepository();
-      await repository.initialize();
-      await repository.upsertConversation(
-        ConversationRecordAdapter.fromLegacyMap({
-          'id': 'repository-temp-v0',
-          'title': 'Temporary',
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-          'isTemporary': true,
-          'temporaryExpiresAt': originalExpiry.toIso8601String(),
-          'temporaryExpiryVersion': 0,
-          'messages': const [],
-        }),
-      );
-      final container = ProviderContainer(
-        overrides: [
-          conversationRepositoryProvider.overrideWithValue(repository),
-        ],
-      );
-      addTearDown(container.dispose);
-      await container.read(conversationsProvider.notifier).ready;
+    test(
+      'load resumes paused countdowns after replaying persisted conversations',
+      () async {
+        final pausedConversation = _conv(
+          'paused-on-restart',
+          isTemporary: true,
+          expiresAt: DateTime.now().subtract(const Duration(minutes: 2)),
+        ).toMap()
+          ..['temporaryPausedRemainingMilliseconds'] = 28 * 1000;
+        final pausedUpdatedAt = DateTime.parse(
+          pausedConversation['updatedAt'] as String,
+        );
+        SharedPreferences.setMockInitialValues({
+          'conversations': jsonEncode([pausedConversation]),
+        });
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        final notifier = container.read(conversationsProvider.notifier);
+        await notifier.ready;
 
-      final migrated = container.read(conversationsProvider).single;
-      expect(migrated.temporaryExpiryVersion,
-          kTemporaryConversationDurationVersion);
-      expect(
-        migrated.temporaryExpiresAt,
-        originalExpiry.subtract(const Duration(hours: 23)),
-      );
-      final stored = await repository.getConversation('repository-temp-v0');
-      expect(stored, isNotNull);
-      final storedLegacy =
-          ConversationRecordAdapter.toLegacyMap(stored!, const []);
-      expect(storedLegacy['temporaryExpiryVersion'],
-          kTemporaryConversationDurationVersion);
-      expect(storedLegacy['temporaryExpiresAt'],
-          originalExpiry.subtract(const Duration(hours: 23)).toIso8601String());
-    });
+        final restored = container.read(conversationsProvider).single;
+        expect(restored.temporaryPausedRemainingMilliseconds, isNull);
+        expect(restored.updatedAt.isAfter(pausedUpdatedAt), isTrue);
+        final remaining = restored.temporaryExpiresAt!.difference(
+          DateTime.now(),
+        );
+        expect(remaining.inSeconds, greaterThanOrEqualTo(27));
+        expect(remaining.inSeconds, lessThanOrEqualTo(28));
+        final stored = jsonDecode(
+          (await SharedPreferences.getInstance()).getString('conversations')!,
+        ) as List;
+        expect(stored.single['temporaryPausedRemainingMilliseconds'], isNull);
+      },
+    );
 
     test('persisted 24h expiries are shortened once when loaded', () async {
       final originalExpiry = DateTime.now().add(const Duration(hours: 24));

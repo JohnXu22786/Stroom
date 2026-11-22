@@ -104,59 +104,64 @@ function migrateWebManifestData(
         },
       };
     }
-    if (videoRecords.length > 0) {
-      setVideoFlag = true;
-    } else {
-      const videoFormats = new Set([
-        'mp4',
-        'mov',
-        'avi',
-        'mkv',
-        'webm',
-        'flv',
-        'wmv',
-        'm4v',
-        '3gp',
-        'gif',
-      ]);
-      const toMigrate = [];
-      const remaining = [];
-      for (const item of audioRecords) {
-        if (!isRecord(item) ||
-            (item.format != null && typeof item.format !== 'string')) {
-          return {
-            metadata: {
-              status: 'videoError',
-              error: 'Audio record has an invalid shape.',
-            },
-          };
-        }
-        if (videoFormats.has(item.format)) {
-          toMigrate.push(item);
-        } else {
-          remaining.push(item);
-        }
+    const videoFormats = new Set([
+      'mp4',
+      'mov',
+      'avi',
+      'mkv',
+      'webm',
+      'flv',
+      'wmv',
+      'm4v',
+      '3gp',
+      'gif',
+    ]);
+    const toMigrate = [];
+    const remaining = [];
+    for (const item of audioRecords) {
+      if (!isRecord(item) ||
+          (item.format != null && typeof item.format !== 'string')) {
+        return {
+          metadata: {
+            status: 'videoError',
+            error: 'Audio record has an invalid shape.',
+          },
+        };
       }
-      if (toMigrate.length > 0) {
-        data.audio_records = remaining;
-        for (const record of toMigrate) {
-          videoRecords.push({
-            id: record.id,
-            name: record.name,
-            hash: record.hash,
-            format: record.format,
-            createdAt: record.createdAt,
-            size: record.size,
-            folder: record.folder,
-            duration: record.duration,
-          });
-        }
-        data.video_records = videoRecords;
-        changed = true;
-        videoChanged = true;
+      if (videoFormats.has(item.format)) {
+        toMigrate.push(item);
+      } else {
+        remaining.push(item);
       }
-      setVideoFlag = true;
     }
+    if (toMigrate.length > 0) {
+      data.audio_records = remaining;
+      for (const record of toMigrate) {
+        const videoRecord = {
+          id: record.id,
+          name: record.name,
+          hash: record.hash,
+          format: record.format,
+          createdAt: record.createdAt,
+          modifiedAt: record.modifiedAt,
+          size: record.size,
+          folder: record.folder,
+          duration: record.duration,
+        };
+        const existingIndex = videoRecords.findIndex((existing) =>
+          isRecord(existing) && existing.id === videoRecord.id,
+        );
+        if (existingIndex === -1) {
+          videoRecords.push(videoRecord);
+        } else {
+          videoRecords[existingIndex] = videoRecord;
+        }
+      }
+      data.video_records = videoRecords;
+      changed = true;
+      videoChanged = true;
+    }
+    setVideoFlag = true;
   }
 
   const videoPayload = videoChanged ? JSON.stringify(data) : null;
@@ -301,7 +306,9 @@ function prepareLegacyChatConfigs(json) {
     const rawModels = oldItem.models;
     const oldModels = Array.isArray(rawModels) ? rawModels.filter(isRecord) : [];
     const models = oldModels.map(function (model) {
-      const typeConfig = {};
+      const typeConfig = isRecord(model.typeConfig)
+        ? {...model.typeConfig}
+        : {};
       if (model.temperature != null) typeConfig.temperature = model.temperature;
       const context = model.maxTokens != null ? model.maxTokens : model.context;
       if (context != null) typeConfig.context = context;
@@ -315,7 +322,7 @@ function prepareLegacyChatConfigs(json) {
         typeConfig,
       };
     });
-    const migratedConfig = {
+    return {
       providerName: typeof oldItem.providerName === 'string'
         ? oldItem.providerName
         : '',
@@ -323,20 +330,7 @@ function prepareLegacyChatConfigs(json) {
       key: typeof oldItem.key === 'string' ? oldItem.key : '',
       models,
     };
-    for (const field of ['credentialRef', 'publicKey']) {
-      const value = oldItem[field];
-      if (value != null) {
-        if (typeof value !== 'string' || value.trim().length === 0) {
-          return null;
-        }
-        migratedConfig[field] = value;
-      }
-    }
-    return migratedConfig;
   });
-  if (migratedConfigs.some((config) => config == null)) {
-    return { metadata: { status: 'invalid' } };
-  }
 
   return {
     metadata: { status: 'ready', legacyConfigCount: oldList.length },
@@ -345,7 +339,20 @@ function prepareLegacyChatConfigs(json) {
 }
 
 function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
-  const migratedConfigs = JSON.parse(migratedConfigsJson);
+  const decodedMigratedConfigs = JSON.parse(migratedConfigsJson);
+  const migratedConfigs = [];
+  const migratedIdentities = new Set();
+  if (Array.isArray(decodedMigratedConfigs)) {
+    for (const config of decodedMigratedConfigs) {
+      if (!isRecord(config)) continue;
+      const identity = legacyChatConfigIdentity(config);
+      if (!migratedIdentities.has(identity)) {
+        migratedIdentities.add(identity);
+        migratedConfigs.push(config);
+      }
+    }
+  }
+
   let existingEntries = [];
   let corruptExisting = false;
   if (typeof existingJson === 'string' && existingJson.length > 0) {
@@ -361,142 +368,185 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
     }
   }
 
-  const llmEntries = existingEntries.filter((entry) =>
-    entry.type === 'llm' && entry.id !== 'builtin_llm',
-  );
-  if (llmEntries.length === 0) {
-    const priorLegacyConfigs = [];
-    for (const legacy of migratedConfigs) {
-      if (!isRecord(legacy)) {
-        return { metadata: { status: 'conflict', corruptExisting } };
-      }
-      for (const prior of priorLegacyConfigs) {
-        if (sameLegacyProviderConfig(prior, legacy) &&
-            mergeLegacySafeMetadata({ ...prior }, legacy) == null) {
-          return { metadata: { status: 'conflict', corruptExisting } };
-        }
-      }
-      priorLegacyConfigs.push(legacy);
+  const usableLlmEntryIndex = existingEntries.findIndex((entry) => {
+    if (!isRecord(entry) || entry.type !== 'llm' ||
+        entry.id === 'builtin_llm' || typeof entry.id !== 'string' ||
+        !isOptionalType(entry.type, 'string') ||
+        !isOptionalType(entry.name, 'string')) return false;
+    if (!Object.prototype.hasOwnProperty.call(entry, 'configs')) {
+      return isOptionalType(entry.providerName, 'string') &&
+        isOptionalType(entry.host, 'string') &&
+        isOptionalType(entry.key, 'string') &&
+        isList(entry.models, isUsableModel) &&
+        [entry.providerName, entry.host, entry.key]
+          .some((value) => typeof value === 'string' && value.length > 0);
     }
-    existingEntries.push({
-      id: 'migrated_llm',
-      type: 'llm',
-      name: 'LLM供应商',
-      configs: migratedConfigs,
+    return isOptionalType(entry.enabled, 'boolean') &&
+      Array.isArray(entry.configs) && entry.configs.length > 0 &&
+      entry.configs.every(isUsableProviderConfig);
+  });
+  if (usableLlmEntryIndex >= 0) {
+    const existingEntry = existingEntries[usableLlmEntryIndex];
+    const configs = Array.isArray(existingEntry.configs)
+      ? existingEntry.configs
+      : JSON.parse(prepareLegacyChatConfigs(JSON.stringify([existingEntry])).payload);
+    const representedConfigs = Array.isArray(existingEntry.configs)
+      ? configs
+      : [existingEntry];
+    const representedIdentities = new Set(
+      representedConfigs.filter(isRecord).map((config) =>
+        legacyChatConfigIdentity(
+          config,
+          !Array.isArray(existingEntry.configs),
+        ),
+      ),
+    );
+    const unrepresentedConfigs = migratedConfigs.filter((config) => {
+      const identity = legacyChatConfigIdentity(config);
+      if (representedIdentities.has(identity)) return false;
+      representedIdentities.add(identity);
+      return true;
     });
+    if (unrepresentedConfigs.length === 0) {
+      return { metadata: { status: 'alreadyMigrated', corruptExisting } };
+    }
+    if (Array.isArray(existingEntry.configs)) {
+      existingEntry.configs.push(...unrepresentedConfigs);
+    } else {
+      existingEntry.configs = [...configs, ...unrepresentedConfigs];
+    }
     return {
       metadata: { status: 'write', corruptExisting },
       payload: JSON.stringify(existingEntries),
     };
   }
 
-  const destination = llmEntries[0];
-  const hasTopLevelConfig = Object.keys(destination).some((key) =>
-    key !== 'configs' && !['id', 'type', 'name', 'enabled'].includes(key),
-  );
-  if (!Array.isArray(destination.configs) &&
-      (destination.configs != null || hasTopLevelConfig)) {
-    return { metadata: { status: 'conflict', corruptExisting } };
-  }
-  if (!Array.isArray(destination.configs)) destination.configs = [];
-  let changed = false;
-  for (const legacy of migratedConfigs) {
-    if (!isRecord(legacy)) {
-      return { metadata: { status: 'conflict', corruptExisting } };
-    }
-    const matches = [];
-    llmEntries.forEach(function (entry) {
-      if (!Array.isArray(entry.configs)) return;
-      entry.configs.forEach(function (existing, index) {
-        if (isRecord(existing) && sameLegacyProviderConfig(existing, legacy)) {
-          matches.push({ configs: entry.configs, index, existing });
-        }
-      });
-    });
-    if (matches.length > 1) {
-      return { metadata: { status: 'conflict', corruptExisting } };
-    }
-    if (matches.length === 0) {
-      destination.configs.push(legacy);
-      changed = true;
-      continue;
-    }
-    const match = matches[0];
-    const merged = mergeLegacySafeMetadata(match.existing, legacy);
-    if (merged == null) {
-      return { metadata: { status: 'conflict', corruptExisting } };
-    }
-    if (merged.changed) {
-      match.configs[match.index] = match.existing;
-      changed = true;
-    }
-  }
-  if (!changed) {
-    return { metadata: { status: 'alreadyMigrated', corruptExisting } };
-  }
+  existingEntries.push({
+    id: 'migrated_llm',
+    type: 'llm',
+    name: 'LLM供应商',
+    configs: migratedConfigs,
+  });
   return {
     metadata: { status: 'write', corruptExisting },
     payload: JSON.stringify(existingEntries),
   };
 }
 
-function sameLegacyProviderConfig(existing, legacy) {
-  const providerName = (value) =>
-    typeof value.providerName === 'string' ? value.providerName : '';
-  const host = (value) => typeof value.host === 'string' ? value.host : '';
-  if (providerName(existing) !== providerName(legacy) ||
-      host(existing) !== host(legacy)) return false;
-  const modelIds = (value) => {
-    if (!Array.isArray(value.models)) return null;
-    const result = [];
-    for (const model of value.models) {
-      if (!isRecord(model)) return null;
-      result.push(typeof model.modelId === 'string'
-        ? model.modelId
-        : (typeof model.name === 'string' ? model.name : ''));
-    }
-    return result;
-  };
-  const existingIds = modelIds(existing);
-  const legacyIds = modelIds(legacy);
-  return existingIds != null && legacyIds != null &&
-    JSON.stringify(existingIds) === JSON.stringify(legacyIds);
+function legacyChatConfigIdentity(config, legacyFormat = false) {
+  const models = Array.isArray(config.models) ? config.models : [];
+  return JSON.stringify([
+    typeof config.providerName === 'string' ? config.providerName : '',
+    typeof config.host === 'string' ? config.host : '',
+    typeof config.key === 'string' ? config.key : '',
+    models.filter(isRecord).map((model) => {
+      const typeConfig = isRecord(model.typeConfig)
+        ? {...model.typeConfig}
+        : {};
+      if (model.temperature != null) typeConfig.temperature = model.temperature;
+      const context = model.maxTokens ?? model.context;
+      if (context != null) typeConfig.context = context;
+      return [
+        typeof model.modelId === 'string' ? model.modelId : '',
+        typeof model.supportStream === 'boolean'
+          ? model.supportStream
+          : legacyFormat,
+        canonicalLegacyIdentityValue(typeConfig),
+      ];
+    }),
+  ]);
 }
 
-function mergeLegacySafeMetadata(existing, legacy) {
-  const existingKey = existing.key;
-  const legacyKey = legacy.key;
-  if ((existingKey != null && typeof existingKey !== 'string') ||
-      (legacyKey != null && typeof legacyKey !== 'string') ||
-      (typeof existingKey === 'string' && existingKey.length > 0 &&
-       typeof legacyKey === 'string' && legacyKey.length > 0 &&
-       existingKey !== legacyKey)) return null;
-  if ((existingKey == null || existingKey === '') &&
-      typeof existing.credentialRef === 'string' &&
-      existing.credentialRef.length > 0 &&
-      typeof legacyKey === 'string' && legacyKey.length > 0) return null;
-  let changed = false;
-  if ((existingKey == null || existingKey === '') &&
-      typeof legacyKey === 'string' && legacyKey.length > 0) {
-    existing.key = legacyKey;
-    changed = true;
-  }
-  for (const field of ['credentialRef', 'publicKey']) {
-    const current = existing[field];
-    const incoming = legacy[field];
-    if ((current != null &&
-         (typeof current !== 'string' || current.trim().length === 0)) ||
-        (incoming != null &&
-         (typeof incoming !== 'string' || incoming.trim().length === 0)) ||
-        (current != null && incoming != null && current !== incoming)) {
-      return null;
+function canonicalLegacyIdentityValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalLegacyIdentityValue);
+  if (isRecord(value)) {
+    const canonical = {};
+    for (const key of Object.keys(value).sort()) {
+      canonical[key] = canonicalLegacyIdentityValue(value[key]);
     }
-    if (current == null && incoming != null) {
-      existing[field] = incoming;
-      changed = true;
-    }
+    return canonical;
   }
-  return { changed };
+  return value;
+}
+
+function isUsableProviderConfig(config) {
+  if (!isRecord(config) ||
+      !isOptionalType(config.id, 'string') ||
+      !isOptionalType(config.providerName, 'string') ||
+      !isOptionalType(config.host, 'string') ||
+      !isOptionalType(config.key, 'string') ||
+      !isOptionalType(config.endpointType, 'string') ||
+      (config.typeConfig != null && !isRecord(config.typeConfig))) {
+    return false;
+  }
+  if (!isList(config.customParams, isUsableCustomParam) ||
+      !isList(config.reasoningParams, isUsableReasoningParam)) return false;
+  if (config.models == null) return true;
+  return Array.isArray(config.models) && config.models.every(isUsableModel);
+}
+
+function isUsableModel(model) {
+  return isRecord(model) &&
+    isOptionalType(model.id, 'string') &&
+    isOptionalType(model.name, 'string') &&
+    isOptionalType(model.modelId, 'string') &&
+    isOptionalType(model.selectedTrimPresetId, 'string') &&
+    isOptionalType(model.endpointType, 'string') &&
+    ['volumeMin', 'volumeMax', 'speedMin', 'speedMax', 'maxWordsPerRequest']
+      .every((key) => model[key] == null || typeof model[key] === 'number') &&
+    ['hasVolume', 'hasSpeed', 'supportStream']
+      .every((key) => model[key] == null || typeof model[key] === 'boolean') &&
+    (model.typeConfig == null || isRecord(model.typeConfig)) &&
+    isList(model.voices, isUsableVoice) &&
+    isList(model.customParams, isUsableCustomParam) &&
+    isList(model.reasoningParams, isUsableReasoningParam);
+}
+
+function isUsableVoice(voice) {
+  return isRecord(voice) &&
+    isOptionalType(voice.name, 'string') &&
+    isOptionalType(voice.id, 'string');
+}
+
+function isUsableCustomParam(param) {
+  return isRecord(param) &&
+    isOptionalType(param.paramName, 'string') &&
+    isOptionalType(param.defaultValue, 'string') &&
+    isOptionalType(param.type, 'string') &&
+    isOptionalType(param.typeDefaultOverridden, 'boolean') &&
+    isStringList(param.options) &&
+    isStringList(param.optionOrder);
+}
+
+function isUsableReasoningParam(param) {
+  if (!isRecord(param) || !isOptionalType(param.paramName, 'string')) {
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(param, 'defaultValue') &&
+      !Object.prototype.hasOwnProperty.call(param, 'options')) {
+    return true;
+  }
+  return isOptionalType(param.enabled, 'boolean') &&
+    isOptionalType(param.isReasoningToggle, 'boolean') &&
+    isOptionalType(param.isEffortParam, 'boolean') &&
+    isOptionalType(param.onValue, 'string') &&
+    isOptionalType(param.offValue, 'string') &&
+    isOptionalType(param.type, 'string') &&
+    (param.options == null || Array.isArray(param.options)) &&
+    (param.optionOrder == null || Array.isArray(param.optionOrder));
+}
+
+function isList(value, isValidItem) {
+  return value == null || (Array.isArray(value) && value.every(isValidItem));
+}
+
+function isStringList(value) {
+  return value == null ||
+    (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+}
+
+function isOptionalType(value, type) {
+  return value == null || typeof value === type;
 }
 
 function fixProviderEntries(json) {

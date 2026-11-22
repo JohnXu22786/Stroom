@@ -11,11 +11,13 @@ import 'package:flutter/foundation.dart'
         visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/startup_preferences.dart';
+import '../startup/startup_update_recovery.dart';
 import '../utils/app_version.dart';
 import 'locale_provider.dart';
 import 'update_provider_shared.dart';
@@ -38,6 +40,9 @@ class UpdateState {
   // Download fields
   final bool isDownloading;
   final double downloadProgress;
+  final int downloadReceivedBytes;
+  final int? downloadTotalBytes;
+  final bool downloadInBackground;
   final bool downloadComplete;
   final String? downloadError;
   final String? downloadedFilePath;
@@ -68,6 +73,9 @@ class UpdateState {
     this.updateAvailable = false,
     this.isDownloading = false,
     this.downloadProgress = 0.0,
+    this.downloadReceivedBytes = 0,
+    this.downloadTotalBytes,
+    this.downloadInBackground = false,
     this.downloadComplete = false,
     this.downloadError,
     this.downloadedFilePath,
@@ -86,8 +94,13 @@ class UpdateState {
     bool? updateAvailable,
     bool? isDownloading,
     double? downloadProgress,
+    int? downloadReceivedBytes,
+    int? downloadTotalBytes,
+    bool clearDownloadTotalBytes = false,
+    bool? downloadInBackground,
     bool? downloadComplete,
     String? downloadError,
+    bool clearDownloadError = false,
     String? downloadedFilePath,
     bool? isInstalling,
     bool? acceptPreRelease,
@@ -103,8 +116,15 @@ class UpdateState {
       updateAvailable: updateAvailable ?? this.updateAvailable,
       isDownloading: isDownloading ?? this.isDownloading,
       downloadProgress: downloadProgress ?? this.downloadProgress,
+      downloadReceivedBytes:
+          downloadReceivedBytes ?? this.downloadReceivedBytes,
+      downloadTotalBytes: clearDownloadTotalBytes
+          ? null
+          : downloadTotalBytes ?? this.downloadTotalBytes,
+      downloadInBackground: downloadInBackground ?? this.downloadInBackground,
       downloadComplete: downloadComplete ?? this.downloadComplete,
-      downloadError: downloadError ?? this.downloadError,
+      downloadError:
+          clearDownloadError ? null : downloadError ?? this.downloadError,
       downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
       isInstalling: isInstalling ?? this.isInstalling,
       acceptPreRelease: acceptPreRelease ?? this.acceptPreRelease,
@@ -177,6 +197,9 @@ void setPendingRestartInMemory(bool value) {
 class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
   final AppLocalizations Function() _localizations;
+  CancelToken? _downloadCancelToken;
+  String? _downloadTargetVersion;
+  bool _recordStartupAttempt = true;
 
   UpdateNotifier({Dio? dio, AppLocalizations Function()? localizations})
       : _dio = dio ??
@@ -233,22 +256,50 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   static String? getPlatformDownloadUrl(List<dynamic> assets) {
     if (kIsWeb) return null;
 
-    String platformKey;
+    final platformKey = currentPlatformKey;
+    return platformKey == null
+        ? null
+        : findAssetDownloadUrl(assets, platformKey);
+  }
+
+  static String? get currentPlatformKey {
+    if (kIsWeb) return null;
     if (defaultTargetPlatform == TargetPlatform.android) {
-      platformKey = 'android';
-    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-      platformKey = 'ios';
-    } else if (Platform.isWindows) {
-      platformKey = 'windows';
-    } else if (Platform.isMacOS) {
-      platformKey = 'macos';
-    } else if (Platform.isLinux) {
-      platformKey = 'linux';
-    } else {
+      return 'android';
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) return 'ios';
+    if (Platform.isWindows) return 'windows';
+    if (Platform.isMacOS) return 'macos';
+    if (Platform.isLinux) return 'linux';
+    return null;
+  }
+
+  /// Finds the exact recorded source release without changing normal update
+  /// selection or its cached pending-update state.
+  Future<StartupRollbackCandidate?> findStartupRollbackCandidate(
+      String sourceVersion) async {
+    final platformKey = currentPlatformKey;
+    if (platformKey == null ||
+        // iOS requires an OS-managed app installation path; opening a local
+        // IPA through the generic file handler cannot safely install it.
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        !StartupUpdateAttempt.isExactVersion(sourceVersion)) {
       return null;
     }
-
-    return findAssetDownloadUrl(assets, platformKey);
+    try {
+      final response = await _dio.get(_kAllReleasesUrl);
+      final releases = response.data;
+      if (releases is! List) return null;
+      return StartupRollbackCandidate.fromReleases(
+        sourceVersion: sourceVersion,
+        platformKey: platformKey,
+        releases: releases,
+      );
+    } catch (error) {
+      debugPrint(
+          '[UpdateNotifier] Startup rollback release lookup failed: $error');
+      return null;
+    }
   }
 
   /// Attempts to load the persisted [acceptPreRelease] preference
@@ -430,7 +481,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
 
     final releases = response.data as List<dynamic>;
-    final currentVersionStr = debugAppVersionOverride ?? appVersion;
+    final currentVersionStr =
+        (debugAppVersionOverride ?? appVersion).replaceFirst(RegExp(r'^v'), '');
 
     SharedPreferences? prefs;
     String? skippedVersion;
@@ -710,16 +762,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = _resetState();
   }
 
-  /// Downloads the update file to a local temp directory, then
-  /// automatically installs it.
-  ///
-  /// Uses [dio.get] with [ResponseType.bytes] to download the file,
-  /// then writes the bytes to a local file. Tracks download progress
-  /// through [UpdateState.downloadProgress].
-  ///
-  /// After the file is saved, [installDownloadedFile] is called
-  /// automatically so the user does not need to click a separate
-  /// install button.
+  /// Downloads the update to an app-private staging file and atomically
+  /// publishes it when complete. Foreground downloads install automatically;
+  /// a download sent to the background remains ready for manual installation.
   ///
   /// On success, saves the file path to [UpdateState.downloadedFilePath]
   /// and sets [UpdateState.downloadComplete] to true.
@@ -727,8 +772,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   ///
   /// The [downloadDir] parameter is optional and used primarily for testing
   /// to avoid dependency on platform path providers.
-  Future<void> downloadUpdate({String? downloadDir}) async {
-    final url = state.downloadUrl;
+  Future<void> downloadUpdate({
+    String? downloadDir,
+    String? downloadUrlOverride,
+    String? targetVersion,
+    bool recordStartupAttempt = true,
+  }) async {
+    final url = downloadUrlOverride ?? state.downloadUrl;
     if (url == null || url.isEmpty) {
       state = state.copyWith(
         isDownloading: false,
@@ -739,11 +789,16 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     // 防止重复下载
     if (state.isDownloading) return;
+    _downloadTargetVersion = targetVersion ?? state.latestVersion;
+    _recordStartupAttempt = recordStartupAttempt;
 
     state = state.copyWith(
       isDownloading: true,
       downloadProgress: 0.0,
-      downloadError: null,
+      downloadReceivedBytes: 0,
+      clearDownloadTotalBytes: true,
+      downloadInBackground: false,
+      clearDownloadError: true,
       downloadComplete: false,
       downloadedFilePath: null,
       isInstalling: false,
@@ -760,61 +815,125 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
 
     try {
+      final cancelToken = CancelToken();
+      _downloadCancelToken = cancelToken;
       final tempDir = downloadDir ?? await _getDownloadDirectory();
       final uri = Uri.parse(url);
       final fileName =
           uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'update';
-      final filePath = '$tempDir/$fileName';
+      if (fileName.isEmpty ||
+          fileName == '.' ||
+          fileName == '..' ||
+          fileName.contains('/') ||
+          fileName.contains(r'\')) {
+        throw ArgumentError.value(fileName, 'fileName', 'Invalid filename');
+      }
+      final downloadDirectory =
+          p.normalize(await Directory(tempDir).resolveSymbolicLinks());
+      final filePath = p.normalize(p.join(downloadDirectory, fileName));
+      if (!p.isWithin(downloadDirectory, filePath)) {
+        throw ArgumentError.value(fileName, 'fileName', 'Invalid filename');
+      }
 
-      final response = await _dio.get(
-        url,
-        options: Options(
-          responseType: ResponseType.bytes,
-        ),
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            final progress = received / total;
-            state = state.copyWith(downloadProgress: progress);
-          }
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final bytes = response.data as List<int>;
-        final file = File(filePath);
-        await file.writeAsBytes(bytes);
-
-        state = state.copyWith(
-          isDownloading: false,
-          downloadProgress: 1.0,
-          downloadComplete: true,
-          downloadedFilePath: filePath,
-          isInstalling: true,
+      final stagingDirectory =
+          await Directory(downloadDirectory).createTemp('.stroom-update-');
+      final stagedFile = File(p.join(stagingDirectory.path, fileName));
+      Response<dynamic>? response;
+      var published = false;
+      try {
+        response = await _dio.download(
+          url,
+          stagedFile.path,
+          cancelToken: cancelToken,
+          onReceiveProgress: (received, total) {
+            state = state.copyWith(
+              downloadReceivedBytes: received,
+              downloadTotalBytes: total > 0 ? total : null,
+              clearDownloadTotalBytes: total <= 0,
+              downloadProgress:
+                  total > 0 ? (received / total).clamp(0.0, 1.0) : 0.0,
+            );
+          },
         );
 
-        // 持久化文件路径，以便下次启动时清理残留安装包
-        await _saveDownloadedFilePath();
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
 
-        // 自动安装：下载完成后立即安装，无需用户点击安装按钮
-        try {
-          await installDownloadedFile();
-        } catch (e) {
-          // 捕获 installDownloadedFile 未处理到的异常
-          state = state.copyWith(
-            downloadError: _localizations().updateAutomaticInstallFailed(e),
-          );
-        } finally {
-          state = state.copyWith(isInstalling: false);
+        if (response.statusCode == 200) {
+          await stagedFile.rename(filePath);
+          published = true;
         }
-      } else {
+      } finally {
+        if (await stagingDirectory.exists()) {
+          await stagingDirectory.delete(recursive: true);
+        }
+      }
+
+      if (cancelToken.isCancelled) {
+        if (published) await File(filePath).delete();
+        throw cancelToken.cancelError!;
+      }
+
+      if (response!.statusCode != 200) {
+        _downloadCancelToken = null;
         state = state.copyWith(
           isDownloading: false,
           downloadError: _localizations().updateDownloadHttpFailed(
             response.statusCode.toString(),
           ),
         );
+        return;
       }
+
+      final downloadedBytes = await File(filePath).length();
+      if (cancelToken.isCancelled) {
+        if (published) await File(filePath).delete();
+        throw cancelToken.cancelError!;
+      }
+      _downloadCancelToken = null;
+      state = state.copyWith(
+        isDownloading: false,
+        downloadProgress: 1.0,
+        downloadReceivedBytes: downloadedBytes,
+        downloadTotalBytes: downloadedBytes,
+        downloadComplete: true,
+        downloadedFilePath: filePath,
+        isInstalling: !state.downloadInBackground,
+      );
+
+      // Persist the path for cleanup on the next app startup.
+      await _saveDownloadedFilePath();
+
+      try {
+        if (!state.downloadInBackground) await installDownloadedFile();
+      } catch (e) {
+        state = state.copyWith(
+          downloadError: _localizations().updateAutomaticInstallFailed(e),
+        );
+      } finally {
+        state = state.copyWith(isInstalling: false);
+      }
+    } on DioException catch (e) {
+      _downloadCancelToken = null;
+      if (CancelToken.isCancel(e)) {
+        state = state.copyWith(
+          isDownloading: false,
+          downloadProgress: 0.0,
+          downloadReceivedBytes: 0,
+          clearDownloadTotalBytes: true,
+          downloadComplete: false,
+          downloadedFilePath: null,
+          clearDownloadError: true,
+          isInstalling: false,
+          downloadInBackground: false,
+        );
+        return;
+      }
+      state = state.copyWith(
+        isDownloading: false,
+        downloadError: _localizations().updateDownloadFailed(e),
+      );
     } catch (e) {
+      _downloadCancelToken = null;
       state = state.copyWith(
         isDownloading: false,
         downloadError: _localizations().updateDownloadFailed(e),
@@ -822,12 +941,26 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  Future<String> _getDownloadDirectory() async {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      final dir = await getApplicationCacheDirectory();
-      return dir.path;
+  /// Aborts the active request. The staging directory is removed by the
+  /// download's `finally` block before the state becomes retryable.
+  void cancelDownload() {
+    _downloadCancelToken?.cancel('Update download cancelled by user');
+  }
+
+  /// Keeps the current download alive after its dialog is dismissed and
+  /// leaves the completed package ready for an explicit install action.
+  void downloadInBackground() {
+    if (state.isDownloading) {
+      state = state.copyWith(downloadInBackground: true);
     }
-    final dir = await getTemporaryDirectory();
+  }
+
+  Future<String> _getDownloadDirectory() async {
+    // A system temporary directory may be shared with other processes (for
+    // example, /tmp on Linux). Keep update publication in the app's own cache
+    // directory so an unrelated process cannot replace the parent directory
+    // while a download is in flight.
+    final dir = await getApplicationCacheDirectory();
     return dir.path;
   }
 
@@ -844,7 +977,20 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (kIsWeb) return;
 
     // Clear previous error before attempting installation
-    state = state.copyWith(downloadError: null);
+    state = state.copyWith(clearDownloadError: true);
+
+    final targetVersion = _downloadTargetVersion ?? state.latestVersion;
+    if (_recordStartupAttempt &&
+        (targetVersion == null ||
+            !await StartupUpdateAttempt.record(
+              sourceVersion: appVersion,
+              targetVersion: targetVersion,
+            ))) {
+      state = state.copyWith(
+        downloadError: _localizations().startupSafetyUpdateAttemptUnavailable,
+      );
+      return;
+    }
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {
@@ -964,24 +1110,57 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final executablePath = Platform.resolvedExecutable;
     final installDir = File(executablePath).parent;
 
+    await _runZipUpdate(
+      zipPath,
+      installDir.path,
+      createScript: (installDir, updateDir, extractedExe) => Platform.isWindows
+          ? _createWindowsUpdateScript(installDir, updateDir, extractedExe)
+          : _createUnixUpdateScript(installDir, updateDir, extractedExe),
+      startScript: (scriptPath) async {
+        if (Platform.isWindows) {
+          await Process.start(scriptPath, [], runInShell: true);
+        } else {
+          await Process.start('/bin/bash', [scriptPath], runInShell: false);
+        }
+      },
+    );
+  }
+
+  @visibleForTesting
+  Future<void> selfUpdateFromZipForTesting(
+    String zipPath,
+    String installDir, {
+    required Future<String> Function(
+            String installDir, String updateDir, String extractedExe)
+        createScript,
+    required Future<void> Function(String scriptPath) startScript,
+  }) =>
+      _runZipUpdate(
+        zipPath,
+        installDir,
+        createScript: createScript,
+        startScript: startScript,
+      );
+
+  Future<void> _runZipUpdate(
+    String zipPath,
+    String installDir, {
+    required Future<String> Function(
+            String installDir, String updateDir, String extractedExe)
+        createScript,
+    required Future<void> Function(String scriptPath) startScript,
+  }) async {
     // 2. 解压到临时更新目录
     final updateDir = Directory.systemTemp.createTempSync('stroom_update_');
-    await _extractZip(zipPath, updateDir.path);
-    final extractedExe = _findExecutable(updateDir.path);
+    final extractedExe =
+        await _extractAndFindExecutable(zipPath, updateDir.path);
 
     // 3. 创建更新脚本
-    final scriptPath = Platform.isWindows
-        ? await _createWindowsUpdateScript(
-            installDir.path, updateDir.path, extractedExe)
-        : await _createUnixUpdateScript(
-            installDir.path, updateDir.path, extractedExe);
+    final scriptPath =
+        await createScript(installDir, updateDir.path, extractedExe);
 
     // 4. 启动脚本
-    if (Platform.isWindows) {
-      await Process.start(scriptPath, [], runInShell: true);
-    } else {
-      await Process.start('/bin/bash', [scriptPath], runInShell: false);
-    }
+    await startScript(scriptPath);
 
     // 5. 弹出更新脚本后退出应用
     // 脚本会：等待 → 杀掉当前进程 → 替换文件 → 启动新版本
@@ -991,47 +1170,427 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   Future<void> _extractZip(String zipPath, String outputDir) async {
     final bytes = await File(zipPath).readAsBytes();
     final archive = ZipDecoder().decodeBytes(bytes);
+    final outputRoot = p.normalize(p.absolute(outputDir));
 
     for (final entry in archive) {
-      final entryPath = '$outputDir/${entry.name}';
+      // ZIP names use forward slashes, but treat backslashes as separators too
+      // so archives cannot traverse paths when extracted on another platform.
+      final entryName = entry.name.replaceAll('\\', '/');
+      if (p.posix.isAbsolute(entryName) || p.windows.isAbsolute(entry.name)) {
+        throw FormatException('ZIP entry path is absolute: ${entry.name}');
+      }
+
+      final entryPath = p.normalize(p.join(outputRoot, entryName));
+      final relativePath = p.relative(entryPath, from: outputRoot);
+      // Windows removes trailing dots and spaces from path components, so
+      // validate that interpretation too (for example, ".. \\outside.txt").
+      final windowsEntryName = entryName
+          .split('/')
+          .map((part) => part.replaceFirst(RegExp(r'[ .]+$'), ''))
+          .join('/');
+      final windowsEntryPath =
+          p.normalize(p.join(outputRoot, windowsEntryName));
+      final windowsRelativePath =
+          p.relative(windowsEntryPath, from: outputRoot);
+      if (_escapesDirectory(relativePath) ||
+          _escapesDirectory(windowsRelativePath)) {
+        throw FormatException(
+            'ZIP entry path escapes extraction directory: ${entry.name}');
+      }
+
       if (entry.isFile) {
         final file = File(entryPath);
         await file.parent.create(recursive: true);
         await file.writeAsBytes(entry.content as List<int>);
+        if (!Platform.isWindows && entry.mode & 0x49 != 0) {
+          await Process.run('chmod', ['+x', file.path]);
+        }
       } else {
         await Directory(entryPath).create(recursive: true);
       }
     }
   }
 
+  bool _escapesDirectory(String relativePath) =>
+      relativePath == '..' ||
+      relativePath.startsWith('..${p.separator}') ||
+      p.isAbsolute(relativePath);
+
+  @visibleForTesting
+  Future<void> extractZipForTesting(String zipPath, String outputDir) =>
+      _extractZip(zipPath, outputDir);
+
+  Future<String> _extractAndFindExecutable(
+      String zipPath, String outputDir) async {
+    await _extractZip(zipPath, outputDir);
+    return _findExecutable(outputDir);
+  }
+
   String _fileName(String path) => path.split(Platform.pathSeparator).last;
 
   /// 在提取目录中查找主可执行文件
-  String _findExecutable(String dirPath) {
+  String _findExecutable(String dirPath, {String? currentExecutableName}) {
     final dir = Directory(dirPath);
-    final exts = Platform.isWindows ? ['.exe'] : [''];
-    final files = dir.listSync(recursive: true);
+    final files = dir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where(_isApplicationExecutable)
+        .toList();
 
     // 查找第一个可执行文件（优先与当前 exe 同名的）
-    final currentExeName = _fileName(Platform.resolvedExecutable);
+    final currentExeName =
+        currentExecutableName ?? _fileName(Platform.resolvedExecutable);
     for (final file in files) {
       final name = _fileName(file.path);
-      if (exts.any((e) => name.toLowerCase().endsWith(e)) &&
-          !name.contains('msvcp') &&
-          !name.contains('vcruntime')) {
+      if (_isUpdateExecutableName(name) &&
+          !name.toLowerCase().contains('msvcp') &&
+          !name.toLowerCase().contains('vcruntime')) {
         if (name == currentExeName) return file.path;
       }
     }
     // 没找到同名，返回第一个 exe
     for (final file in files) {
       final name = _fileName(file.path);
-      if (exts.any((e) => name.toLowerCase().endsWith(e))) {
+      if (_isUpdateExecutableName(name) &&
+          !name.toLowerCase().contains('msvcp') &&
+          !name.toLowerCase().contains('vcruntime')) {
         return file.path;
       }
     }
-    // 还找不到，返回解压目录本身
-    return dirPath;
+    throw const FormatException(
+        'ZIP update does not contain a valid application executable.');
   }
+
+  bool _isApplicationExecutable(File file) {
+    if (Platform.isWindows) {
+      return _fileName(file.path).toLowerCase().endsWith('.exe') &&
+          _hasValidPeHeader(file);
+    }
+    if (file.statSync().mode & 0x49 == 0) return false;
+    if (Platform.isMacOS) return _hasValidMachOHeader(file);
+    if (Platform.isLinux) return _hasValidElfHeader(file);
+    return false;
+  }
+
+  bool _hasValidElfHeader(File file) {
+    final prefix = _readBytesAt(file, 0, 16);
+    if (prefix.length < 16 ||
+        !_bytesStartWith(prefix, const [0x7f, 0x45, 0x4c, 0x46])) {
+      return false;
+    }
+    final is64Bit = prefix[4] == 2;
+    if ((!is64Bit && prefix[4] != 1) ||
+        (prefix[5] != 1 && prefix[5] != 2) ||
+        prefix[6] != 1) {
+      return false;
+    }
+    final littleEndian = prefix[5] == 1;
+    final headerSize = is64Bit ? 64 : 52;
+    if (file.lengthSync() < headerSize) return false;
+    final header = _readBytesAt(file, 0, headerSize);
+    final programOffset = _readUnsigned(
+        header, is64Bit ? 32 : 28, is64Bit ? 8 : 4,
+        littleEndian: littleEndian);
+    final programEntrySize =
+        _readUnsigned(header, is64Bit ? 54 : 42, 2, littleEndian: littleEndian);
+    final programCount =
+        _readUnsigned(header, is64Bit ? 56 : 44, 2, littleEndian: littleEndian);
+    final expectedEntrySize = is64Bit ? 56 : 32;
+    final elfType = _readUnsigned(header, 16, 2, littleEndian: littleEndian);
+    final entryPoint =
+        _readUnsigned(header, 24, is64Bit ? 8 : 4, littleEndian: littleEndian);
+    final declaredHeaderSize =
+        _readUnsigned(header, is64Bit ? 52 : 40, 2, littleEndian: littleEndian);
+    if ((elfType != 2 && elfType != 3) ||
+        entryPoint == 0 ||
+        declaredHeaderSize != headerSize ||
+        programCount == 0 ||
+        programEntrySize != expectedEntrySize ||
+        programOffset < headerSize ||
+        programOffset + programEntrySize * programCount > file.lengthSync()) {
+      return false;
+    }
+    final programHeaders =
+        _readBytesAt(file, programOffset, programEntrySize * programCount);
+    var hasExecutableLoadSegment = false;
+    var hasInterpreter = false;
+    for (var i = 0; i < programCount; i++) {
+      final offset = i * programEntrySize;
+      final type =
+          _readUnsigned(programHeaders, offset, 4, littleEndian: littleEndian);
+      final flags = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 4 : 24),
+        4,
+        littleEndian: littleEndian,
+      );
+      final dataOffset = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 8 : 4),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final dataSize = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 32 : 16),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final hasFileData =
+          dataSize > 0 && dataOffset + dataSize <= file.lengthSync();
+      final virtualAddress = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 16 : 8),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final memorySize = _readUnsigned(
+        programHeaders,
+        offset + (is64Bit ? 40 : 20),
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      hasExecutableLoadSegment |= type == 1 &&
+          flags & 1 != 0 &&
+          hasFileData &&
+          entryPoint >= virtualAddress &&
+          entryPoint - virtualAddress < dataSize &&
+          entryPoint < virtualAddress + memorySize;
+      hasInterpreter |= type == 3 && hasFileData;
+    }
+    return hasExecutableLoadSegment && (elfType != 3 || hasInterpreter);
+  }
+
+  bool _hasValidMachOHeader(File file) {
+    if (_hasValidMachOExecutableAt(file, 0, file.lengthSync())) return true;
+    final magic = _readBytesAt(file, 0, 8);
+    final fatFormats = <(List<int>, bool, bool)>[
+      ([0xca, 0xfe, 0xba, 0xbe], false, false),
+      ([0xbe, 0xba, 0xfe, 0xca], true, false),
+      ([0xca, 0xfe, 0xba, 0xbf], false, true),
+      ([0xbf, 0xba, 0xfe, 0xca], true, true),
+    ];
+    final fatFormat =
+        fatFormats.where((format) => _bytesStartWith(magic, format.$1));
+    if (fatFormat.isEmpty || magic.length < 8) return false;
+    final (_, littleEndian, is64Bit) = fatFormat.first;
+    final architectureCount =
+        _readUnsigned(magic, 4, 4, littleEndian: littleEndian);
+    final architectureSize = is64Bit ? 32 : 20;
+    final tableEnd = 8 + architectureCount * architectureSize;
+    if (architectureCount == 0 ||
+        architectureCount > 32 ||
+        tableEnd > file.lengthSync()) {
+      return false;
+    }
+    for (var i = 0; i < architectureCount; i++) {
+      final offset = 8 + i * architectureSize;
+      final architecture = _readBytesAt(file, offset, architectureSize);
+      final sliceOffset = _readUnsigned(
+        architecture,
+        8,
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      final sliceSize = _readUnsigned(
+        architecture,
+        is64Bit ? 16 : 4,
+        is64Bit ? 8 : 4,
+        littleEndian: littleEndian,
+      );
+      if (sliceOffset < tableEnd ||
+          sliceSize == 0 ||
+          sliceOffset + sliceSize > file.lengthSync()) {
+        return false;
+      }
+      if (_hasValidMachOExecutableAt(file, sliceOffset, sliceSize)) return true;
+    }
+    return false;
+  }
+
+  bool _hasValidMachOExecutableAt(File file, int offset, int sliceSize) {
+    final magic = _readBytesAt(file, offset, 4);
+    final formats = <(List<int>, bool, bool)>[
+      ([0xfe, 0xed, 0xfa, 0xce], false, false),
+      ([0xce, 0xfa, 0xed, 0xfe], true, false),
+      ([0xfe, 0xed, 0xfa, 0xcf], false, true),
+      ([0xcf, 0xfa, 0xed, 0xfe], true, true),
+    ];
+    final format = formats.where((format) => _bytesStartWith(magic, format.$1));
+    if (format.isEmpty) return false;
+    final (_, littleEndian, is64Bit) = format.first;
+    final headerSize = is64Bit ? 32 : 28;
+    if (sliceSize < headerSize) return false;
+    final header = _readBytesAt(file, offset, headerSize);
+    final fileType = _readUnsigned(header, 12, 4, littleEndian: littleEndian);
+    final commandCount =
+        _readUnsigned(header, 16, 4, littleEndian: littleEndian);
+    final commandBytes =
+        _readUnsigned(header, 20, 4, littleEndian: littleEndian);
+    if (fileType != 2 ||
+        commandCount == 0 ||
+        commandBytes < 24 ||
+        headerSize + commandBytes > sliceSize) {
+      return false;
+    }
+    final commandsEnd = offset + headerSize + commandBytes;
+    var commandOffset = offset + headerSize;
+    var entryOffset = -1;
+    final executableRanges = <(int, int)>[];
+    for (var i = 0; i < commandCount; i++) {
+      final command = _readBytesAt(file, commandOffset, 8);
+      if (command.length < 8) return false;
+      final commandType =
+          _readUnsigned(command, 0, 4, littleEndian: littleEndian);
+      final commandSize =
+          _readUnsigned(command, 4, 4, littleEndian: littleEndian);
+      if (commandSize < 8 || commandOffset + commandSize > commandsEnd) {
+        return false;
+      }
+      if (commandType == 0x80000028 && commandSize >= 24) {
+        final mainCommand = _readBytesAt(file, commandOffset, 24);
+        entryOffset =
+            _readUnsigned(mainCommand, 8, 8, littleEndian: littleEndian);
+      } else if (commandType == 0x19 && is64Bit && commandSize >= 72) {
+        final segment = _readBytesAt(file, commandOffset, 72);
+        final fileOffset =
+            _readUnsigned(segment, 40, 8, littleEndian: littleEndian);
+        final fileSize =
+            _readUnsigned(segment, 48, 8, littleEndian: littleEndian);
+        final protections =
+            _readUnsigned(segment, 60, 4, littleEndian: littleEndian);
+        if (protections & 4 != 0 &&
+            fileSize > 0 &&
+            fileOffset + fileSize <= sliceSize) {
+          executableRanges.add((fileOffset, fileOffset + fileSize));
+        }
+      } else if (commandType == 0x1 && !is64Bit && commandSize >= 56) {
+        final segment = _readBytesAt(file, commandOffset, 56);
+        final fileOffset =
+            _readUnsigned(segment, 32, 4, littleEndian: littleEndian);
+        final fileSize =
+            _readUnsigned(segment, 36, 4, littleEndian: littleEndian);
+        final protections =
+            _readUnsigned(segment, 44, 4, littleEndian: littleEndian);
+        if (protections & 4 != 0 &&
+            fileSize > 0 &&
+            fileOffset + fileSize <= sliceSize) {
+          executableRanges.add((fileOffset, fileOffset + fileSize));
+        }
+      }
+      commandOffset += commandSize;
+    }
+    return commandOffset == commandsEnd &&
+        entryOffset >= 0 &&
+        executableRanges
+            .any((range) => entryOffset >= range.$1 && entryOffset < range.$2);
+  }
+
+  bool _hasValidPeHeader(File file) {
+    final fileLength = file.lengthSync();
+    if (fileLength < 64) return false;
+    final handle = file.openSync();
+    try {
+      final dosHeader = handle.readSync(64);
+      if (!_bytesStartWith(dosHeader, const [0x4d, 0x5a])) return false;
+      final peOffset = _readUnsigned(dosHeader, 60, 4, littleEndian: true);
+      if (peOffset < 64 || peOffset + 24 > fileLength) return false;
+      handle.setPositionSync(peOffset);
+      final peHeader = handle.readSync(24);
+      if (!_bytesStartWith(peHeader, const [0x50, 0x45, 0, 0])) return false;
+      final sectionCount = _readUnsigned(peHeader, 6, 2, littleEndian: true);
+      final optionalSize = _readUnsigned(peHeader, 20, 2, littleEndian: true);
+      final imageCharacteristics =
+          _readUnsigned(peHeader, 22, 2, littleEndian: true);
+      final optionalOffset = peOffset + 24;
+      if (sectionCount == 0 ||
+          imageCharacteristics & 0x0002 == 0 ||
+          imageCharacteristics & 0x2000 != 0 ||
+          optionalSize < 96 ||
+          optionalOffset + optionalSize > fileLength) {
+        return false;
+      }
+      handle.setPositionSync(optionalOffset);
+      final optionalHeader = handle.readSync(optionalSize);
+      final optionalMagic =
+          _readUnsigned(optionalHeader, 0, 2, littleEndian: true);
+      final entryPoint =
+          _readUnsigned(optionalHeader, 16, 4, littleEndian: true);
+      final minimumOptionalSize = optionalMagic == 0x10b
+          ? 96
+          : optionalMagic == 0x20b
+              ? 112
+              : optionalSize + 1;
+      if (optionalSize < minimumOptionalSize || entryPoint == 0) return false;
+      final sectionOffset = optionalOffset + optionalSize;
+      final sectionTableSize = sectionCount * 40;
+      if (sectionOffset + sectionTableSize > fileLength) return false;
+      handle.setPositionSync(sectionOffset);
+      final sections = handle.readSync(sectionTableSize);
+      for (var i = 0; i < sectionCount; i++) {
+        final offset = i * 40;
+        final rawSize =
+            _readUnsigned(sections, offset + 16, 4, littleEndian: true);
+        final rawOffset =
+            _readUnsigned(sections, offset + 20, 4, littleEndian: true);
+        final virtualSize =
+            _readUnsigned(sections, offset + 8, 4, littleEndian: true);
+        final virtualAddress =
+            _readUnsigned(sections, offset + 12, 4, littleEndian: true);
+        final characteristics =
+            _readUnsigned(sections, offset + 36, 4, littleEndian: true);
+        if (characteristics & 0x20000000 != 0 &&
+            rawSize > 0 &&
+            rawOffset + rawSize <= fileLength &&
+            entryPoint >= virtualAddress &&
+            entryPoint - virtualAddress < rawSize &&
+            entryPoint <
+                virtualAddress +
+                    (virtualSize > rawSize ? virtualSize : rawSize)) {
+          return true;
+        }
+      }
+      return false;
+    } finally {
+      handle.closeSync();
+    }
+  }
+
+  List<int> _readBytesAt(File file, int offset, int length) {
+    if (offset < 0 || length < 0 || offset + length > file.lengthSync()) {
+      return const [];
+    }
+    final handle = file.openSync();
+    try {
+      handle.setPositionSync(offset);
+      return handle.readSync(length);
+    } finally {
+      handle.closeSync();
+    }
+  }
+
+  bool _bytesStartWith(List<int> bytes, List<int> prefix) =>
+      bytes.length >= prefix.length &&
+      List.generate(prefix.length, (index) => bytes[index] == prefix[index])
+          .every((matches) => matches);
+
+  int _readUnsigned(List<int> bytes, int offset, int length,
+      {required bool littleEndian}) {
+    var value = 0;
+    for (var i = 0; i < length; i++) {
+      final byte = bytes[offset + (littleEndian ? i : length - i - 1)];
+      value |= byte << (i * 8);
+    }
+    return value;
+  }
+
+  bool _isUpdateExecutableName(String name) =>
+      Platform.isWindows ? name.toLowerCase().endsWith('.exe') : true;
+
+  @visibleForTesting
+  String findExecutableForTesting(String dirPath,
+          {String? currentExecutableName}) =>
+      _findExecutable(dirPath, currentExecutableName: currentExecutableName);
 
   /// Windows 更新脚本 (.bat)
   Future<String> _createWindowsUpdateScript(
@@ -1041,6 +1600,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 timeout /t 3 /nobreak > nul
 taskkill /f /im $exeName 2>nul
 xcopy /E /Y "$updateDir\\*" "$installDir\\"
+if errorlevel 1 exit /b %errorlevel%
+rmdir /S /Q "$updateDir"
 start "" "$installDir\\$exeName"
 del "%~f0"
 ''';
@@ -1048,6 +1609,11 @@ del "%~f0"
     await scriptFile.writeAsString(scriptContent);
     return scriptFile.path;
   }
+
+  @visibleForTesting
+  Future<String> createWindowsUpdateScriptForTesting(
+          String installDir, String updateDir, String extractedExe) =>
+      _createWindowsUpdateScript(installDir, updateDir, extractedExe);
 
   /// macOS/Linux 更新脚本 (.sh)
   Future<String> _createUnixUpdateScript(
@@ -1057,7 +1623,8 @@ del "%~f0"
     final scriptContent = '''#!/bin/bash
 sleep 3
 pkill -9 "$exeName" 2>/dev/null
-cp -R "$updateDir/"* "$installDir/"
+cp -R "$updateDir/"* "$installDir/" || exit \$?
+rm -rf -- "$updateDir"
 chmod +x "$exePath"
 "$exePath" &
 rm -- "\$0"
@@ -1069,6 +1636,11 @@ rm -- "\$0"
     return scriptFile.path;
   }
 
+  @visibleForTesting
+  Future<String> createUnixUpdateScriptForTesting(
+          String installDir, String updateDir, String extractedExe) =>
+      _createUnixUpdateScript(installDir, updateDir, extractedExe);
+
   /// Retries installation of the already-downloaded file.
   ///
   /// Sets [UpdateState.isInstalling] to provide visual feedback in the UI,
@@ -1079,7 +1651,7 @@ rm -- "\$0"
   /// when auto-install fails or the user wants to re-open the installer —
   /// the file is already on disk and only needs to be re-triggered.
   Future<void> retryInstall() async {
-    state = state.copyWith(isInstalling: true, downloadError: null);
+    state = state.copyWith(isInstalling: true, clearDownloadError: true);
     try {
       await installDownloadedFile();
     } finally {
@@ -1158,8 +1730,8 @@ rm -- "\$0"
   /// Android 专用：通过 FileProvider 生成 content:// URI 并触发安装
   ///
   /// Native side ([MainActivity.kt]) returns `"ok"` on success or throws a
-  /// [PlatformException] on failure with a Chinese error message in the
-  /// exception details. The error message is displayed directly in the dialog.
+  /// [PlatformException] on failure. Its stable error code is mapped to a
+  /// localized message here; platform exception prose is never shown to users.
   ///
   /// Before launching the installer, saves a [pending_update_restart] flag in
   /// SharedPreferences AND sets the in-memory flag.  These are checked by the
@@ -1190,8 +1762,13 @@ rm -- "\$0"
       // Install failed — clear both flags to prevent false "update complete" dialog
       await _clearPendingRestartFlags();
       state = state.copyWith(
-        downloadError:
-            e.message ?? _localizations().updateApkInstallFailedNoDetails,
+        downloadError: switch (e.code) {
+          'ACTIVITY_NOT_FOUND' =>
+            _localizations().updateApkInstallerUnavailable,
+          'SECURITY_EXCEPTION' =>
+            _localizations().updateApkInstallPermissionDenied,
+          _ => _localizations().updateApkInstallFailedNoDetails,
+        },
       );
     } catch (e) {
       // Install failed — clear both flags

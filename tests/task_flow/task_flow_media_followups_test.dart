@@ -90,6 +90,7 @@ class _Manager extends ChatStreamManager {
     required List<ChatMessage> history,
     List<ChatMessage>? requestHistoryOverride,
     List<ChatMessage>? historyOnSuccess,
+    bool replaceHistoryOnError = false,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -1000,6 +1001,9 @@ void main() {
     await service.startFlowMany(flowId, inputs);
     expect(received.map((payload) => payload.fileName),
         ['first.pdf', 'second.pdf']);
+    expect(received.map((payload) => payload.fileReference),
+        inputs.map((input) => input.text),
+        reason: 'native execution resolves the durable key to its local file');
     final original = executions.executions
         .where((entry) => entry.inputFileName == 'first.pdf')
         .single;
@@ -1022,7 +1026,11 @@ void main() {
     await expectLater(
         service.retryExecution(retryIds.single, useLatestConfiguration: true),
         throwsA(isA<TaskFlowValidationException>()
-            .having((error) => error.isInputError, 'input mismatch', isTrue)));
+            .having((error) => error.isInputError, 'input mismatch', isTrue)
+            .having(
+                (error) => error.isStorageError, 'storage failure', isFalse)));
+    expect(executions.executions, hasLength(2),
+        reason: 'a flow type mismatch must not create a retry owner');
     await executions.removeExecution(retryIds.single);
     expect(await File(inputs.first.text).exists(), isFalse);
     final remaining = executions.executions.single;

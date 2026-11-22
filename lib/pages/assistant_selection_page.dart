@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
@@ -15,6 +16,8 @@ import '../widgets/drag_sort_area.dart';
 import 'assistant/assistant_defaults_tab.dart';
 import 'assistant/assistant_shared.dart';
 import 'assistant/built_in_prompt_selector.dart';
+import '../widgets/constrained_text.dart';
+
 export 'assistant/assistant_shared.dart';
 
 part 'assistant_selection_page_edit_dialog.dart';
@@ -61,7 +64,11 @@ class AssistantSelectionPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.taskFlowUiChooseAssistant),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.taskFlowUiChooseAssistant,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -103,8 +110,11 @@ class AssistantSelectionPage extends ConsumerWidget {
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         icon: const Icon(Icons.add),
-                        label:
-                            Text(AppLocalizations.of(context)!.assistantCreate),
+                        label: ConstrainedText(
+                          AppLocalizations.of(context)!.assistantCreate,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         onPressed: () =>
                             _showCreateAssistantDialog(context, ref),
                       ),
@@ -195,7 +205,11 @@ class AssistantSelectionPage extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.assistantCreateNew),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.assistantCreateNew,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: AssistantEditorFields(
@@ -216,7 +230,11 @@ class AssistantSelectionPage extends ConsumerWidget {
                 disposeControllers();
                 Navigator.pop(ctx);
               },
-              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.batchDlgCancel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             FilledButton(
               onPressed: () {
@@ -231,7 +249,11 @@ class AssistantSelectionPage extends ConsumerWidget {
                 disposeControllers();
                 Navigator.pop(ctx);
               },
-              child: Text(AppLocalizations.of(context)!.fileManagerCreate),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.fileManagerCreate,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -246,6 +268,7 @@ class AssistantSelectionPage extends ConsumerWidget {
   ) {
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -286,7 +309,11 @@ class AssistantSelectionPage extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.assistantDeleteTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.assistantDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
           AppLocalizations.of(context)!
               .assistantDeleteConfirmation(assistant.name),
@@ -294,7 +321,11 @@ class AssistantSelectionPage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.batchDlgCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -306,7 +337,11 @@ class AssistantSelectionPage extends ConsumerWidget {
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.fileManagerDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

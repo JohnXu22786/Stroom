@@ -21,74 +21,97 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerAudioChunkingHint,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerChunkingMode,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerChunkingMode,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _chunking,
+              isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkNone,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkSmart,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkFixedDuration,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkFixedSize,
+                ),
+              ],
+              items: [
+                DropdownMenuItem(
+                  value: 'none',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerChunkNone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'silence',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerChunkSmart,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'fixedDuration',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerChunkFixedDuration,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'fixedSize',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerChunkFixedSize,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _chunking = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _chunking,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: 'none',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkNone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'silence',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkSmart,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'fixedDuration',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkFixedDuration,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'fixedSize',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkFixedSize,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _chunking = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(
@@ -116,65 +139,77 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerCompressionHint,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.4,
-            ),
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerCompressionMode,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerCompressionMode,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _compression,
+              isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerCompressionNone,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerCompressionAdpcm,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerCompressionFlac,
+                ),
+              ],
+              items: [
+                DropdownMenuItem(
+                  value: 'none',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerCompressionNone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'adpcm',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerCompressionAdpcm,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'flac',
+                  child: ConstrainedText(
+                    AppLocalizations.of(context)!.providerCompressionFlac,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _compression = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _compression,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: 'none',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerCompressionNone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'adpcm',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerCompressionAdpcm,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'flac',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerCompressionFlac,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _compression = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(

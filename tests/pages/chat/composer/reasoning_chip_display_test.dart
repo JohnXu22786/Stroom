@@ -80,6 +80,29 @@ Widget createComposerTestApp({
 
 void main() {
   group('Composer reasoning chip label', () {
+    testWidgets('reveals a long model-supplied effort value in the narrow row',
+        (tester) async {
+      const longValue =
+          'reasoning_effort_custom_option_value_that_exceeds_phone_width';
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        reasoningParamValues: {'reasoning_effort': longValue},
+      ));
+      await tester.pump();
+
+      final label = find.text(longValue);
+      expect(label, findsOneWidget);
+      final start = tester.getTopLeft(label);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(tester.getTopLeft(label).dx, lessThan(start.dx));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows effort value when reasoning ON + effort ON + value set',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
@@ -165,7 +188,7 @@ void main() {
       expect(settingsChip.color, Colors.purple);
     });
 
-    testWidgets('chip color is purple when reasoning enabled without effort',
+    testWidgets('chip is grey when reasoning is on without a configured toggle',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -177,13 +200,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Find the chip by its label "推理"
+      // No reasoning-toggle param is configured, so reasoning cannot be sent.
       final chip = find.byWidgetPredicate(
         (w) => w is SettingsChip && w.label == '推理',
       );
       expect(chip, findsOneWidget);
       final settingsChip = tester.widget<SettingsChip>(chip);
-      expect(settingsChip.color, Colors.purple);
+      expect(settingsChip.color, Colors.grey);
     });
 
     testWidgets('chip color is grey when reasoning disabled', (tester) async {

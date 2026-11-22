@@ -1,9 +1,382 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_ar.dart';
+import 'package:stroom/l10n/app_localizations_de.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_fr.dart';
+import 'package:stroom/l10n/app_localizations_ja.dart';
+import 'package:stroom/l10n/app_localizations_ko.dart';
+import 'package:stroom/l10n/app_localizations_pt.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('supported localized OCR summaries remain safe after persistence', () {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      final summaries = [
+        strings.ocrImagePreparationFailed,
+        strings.taskFlowOcrModelUnavailable,
+        strings.bgTaskOcrResultIncomplete('length'),
+      ];
+
+      for (final summary in summaries) {
+        expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      }
+    }
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR returned an incomplete result (finish_reason=provider-private-data)',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    final credentialBearing = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR returned an incomplete result (finish_reason=length); secret=abc',
+    );
+    expect(credentialBearing, startsWith('OCR 错误详情已隐藏'));
+    expect(credentialBearing, isNot(contains('secret=abc')));
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR model unavailable: private provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        '${AppLocalizationsDe().taskFlowOcrModelUnavailable} sk-proj-12345678',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
+  test('localized per-page OCR failure summaries are safe to persist', () {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      final details = [
+        strings.bgTaskOcrPageFailed('2'),
+        strings.bgTaskOcrPageIncomplete('4'),
+      ].join(strings.bgTaskOcrPageFailureSeparator);
+      final summary = strings.bgTaskOcrPagesIncomplete(details);
+
+      expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      final longDetails = List.generate(20, (index) {
+        return index.isEven
+            ? strings.bgTaskOcrPageFailed('${index + 1}')
+            : strings.bgTaskOcrPageIncomplete('${index + 1}');
+      }).join(strings.bgTaskOcrPageFailureSeparator);
+      final longSummary = strings.bgTaskOcrPagesIncomplete(longDetails);
+      expect(longSummary.length, greaterThan(160));
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(longSummary),
+        longSummary,
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          '$longSummary sk-proj-12345678',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Some images were not fully recognized: Image 2: vendor says secret=abc',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
+  test('Arabic OCR summaries stay safe and actionable after persistence', () {
+    final locales = [AppLocalizationsAr(), AppLocalizationsArSa()];
+
+    for (final localizations in locales) {
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final summaries = [
+        localizations.taskFlowOcrInputMissing,
+        localizations.taskFlowOcrInputReadFailed,
+        localizations.taskFlowOcrModelUnavailable,
+        localizations.taskFlowOcrInputTooLarge(requestLimit),
+        localizations.taskFlowOcrInputTooLarge(inputLimit),
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          localizations.taskFlowOcrInputMissing,
+          excludedValues: ['الصورة'],
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          'فشل OCR: private provider response',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          '${localizations.taskFlowOcrInputMissing} sk-proj-12345678',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+  });
+
+  test('German OCR summaries stay safe and actionable after persistence', () {
+    final locales = [AppLocalizationsDe(), AppLocalizationsDeDe()];
+
+    for (final localizations in locales) {
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final summaries = [
+        localizations.taskFlowOcrInputMissing,
+        localizations.taskFlowOcrInputReadFailed,
+        localizations.taskFlowOcrModelUnavailable,
+        localizations.taskFlowOcrInputTooLarge(requestLimit),
+        localizations.taskFlowOcrInputTooLarge(inputLimit),
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          localizations.taskFlowOcrInputMissing,
+          excludedValues: ['Bilddatei'],
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          localizations.taskFlowOcrInputTooLarge(
+            localizations.taskFlowOcrRequestSizeLimit('sk-proj-12345678'),
+          ),
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          'OCR-Anbieterfehler: vertrauliche Antwort des Anbieters',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+  });
+
+  test('Korean OCR summaries stay safe to persist without exposing credentials',
+      () {
+    final locales = [AppLocalizationsKo(), AppLocalizationsKoKr()];
+
+    for (final localizations in locales) {
+      final missing = localizations.taskFlowOcrInputMissing;
+      final unreadable = localizations.taskFlowOcrInputReadFailed;
+      final unavailableModel = localizations.taskFlowOcrModelUnavailable;
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final oversized = localizations.taskFlowOcrInputTooLarge(requestLimit);
+      final oversizedInput = localizations.taskFlowOcrInputTooLarge(inputLimit);
+
+      final summaries = [
+        missing,
+        unreadable,
+        unavailableModel,
+        oversized,
+        oversizedInput,
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      }
+
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          missing,
+          excludedValues: [missing],
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+  });
+
+  test('Spanish and Japanese TaskFlow OCR preflight summaries remain safe', () {
+    final locales = [AppLocalizationsEs(), AppLocalizationsJa()];
+
+    for (final localizations in locales) {
+      final missing = localizations.taskFlowOcrInputMissing;
+      final unreadable = localizations.taskFlowOcrInputReadFailed;
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final oversized = localizations.taskFlowOcrInputTooLarge(requestLimit);
+      final oversizedInput = localizations.taskFlowOcrInputTooLarge(inputLimit);
+
+      for (final summary in [missing, unreadable, oversized, oversizedInput]) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+    }
+
+    final spanishMissing = AppLocalizationsEs().taskFlowOcrInputMissing;
+    final japaneseMissing = AppLocalizationsJa().taskFlowOcrInputMissing;
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        spanishMissing,
+        excludedValues: ['imagen'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        japaneseMissing,
+        excludedValues: ['画像'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Exception: OCR 请求被模型拒绝: private provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
+  test('Portuguese and French OCR summaries remain safe to persist', () {
+    final locales = [
+      AppLocalizationsPt(),
+      AppLocalizationsPtBr(),
+      AppLocalizationsFr(),
+      AppLocalizationsFrFr(),
+    ];
+
+    for (final localizations in locales) {
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final summaries = [
+        localizations.taskFlowOcrInputMissing,
+        localizations.taskFlowOcrInputReadFailed,
+        localizations.taskFlowOcrModelUnavailable,
+        localizations.taskFlowOcrInputTooLarge(requestLimit),
+        localizations.taskFlowOcrInputTooLarge(inputLimit),
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+    }
+
+    final portugueseMissing = AppLocalizationsPt().taskFlowOcrInputMissing;
+    final portugueseLarge = AppLocalizationsPt().taskFlowOcrInputTooLarge(
+      AppLocalizationsPt().taskFlowOcrRequestSizeLimit('1.25'),
+    );
+    final frenchMissing = AppLocalizationsFr().taskFlowOcrInputMissing;
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        portugueseMissing,
+        excludedValues: ['imagem'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        portugueseLarge,
+        excludedValues: ['1.25'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        frenchMissing,
+        excludedValues: ['image'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Exception: OCR 请求被模型拒绝: sk-proj-12345678 private provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
+  test('Spanish and Japanese OCR payload errors remain safe to persist', () {
+    final summaries = [
+      AppLocalizationsEs().ocrImageEmpty,
+      AppLocalizationsEs().ocrImageUnsupportedFormat,
+      AppLocalizationsEs().ocrImageUnsupportedSpecialFormat,
+      AppLocalizationsEs().ocrImageDecodeFailed,
+      AppLocalizationsEs().ocrImageDimensionsTooLarge,
+      AppLocalizationsEs().ocrImageOrientationPngTooLarge,
+      AppLocalizationsEs().ocrImageOrientationFailed,
+      AppLocalizationsJa().ocrImageEmpty,
+      AppLocalizationsJa().ocrImageUnsupportedFormat,
+      AppLocalizationsJa().ocrImageUnsupportedSpecialFormat,
+      AppLocalizationsJa().ocrImageDecodeFailed,
+      AppLocalizationsJa().ocrImageDimensionsTooLarge,
+      AppLocalizationsJa().ocrImageOrientationPngTooLarge,
+      AppLocalizationsJa().ocrImageOrientationFailed,
+    ];
+
+    for (final summary in summaries) {
+      expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+    }
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Exception: OCR 请求被模型拒绝: secret provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
   test('nested request body credentials exclude echoed request IDs', () {
     const credential = 'opaque-secret-77';
     const nestedCredential = 'nested-token-secret-77';
@@ -262,6 +635,25 @@ void main() {
     }
   });
 
+  test('request URL extraction recognizes camel case API credentials only', () {
+    const url = 'https://ocr.test/v1?apiSecret=opaque-api-secret-191&'
+        'apiToken=opaque-api-token-191&clientSecret=opaque-client-secret-191&'
+        'accessTokenExpiresIn=3600&language=en&requestId=req-safe-191';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+
+    expect(
+      credentialValues,
+      containsAll([
+        'opaque-api-secret-191',
+        'opaque-api-token-191',
+        'opaque-client-secret-191',
+      ]),
+    );
+    expect(credentialValues, isNot(contains('en')));
+    expect(credentialValues, isNot(contains('3600')));
+    expect(credentialValues, isNot(contains('req-safe-191')));
+  });
+
   test(
     'X-Auth header secrets exclude echoed diagnostics but keep safe IDs',
     () {
@@ -438,6 +830,37 @@ void main() {
     )!;
 
     expect(credentialValues, contains(apiKey));
+    expect(echoedCredential, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
+  test('request body camel case credentials exclude echoed IDs only', () {
+    const apiToken = 'opaque-body-api-token-207';
+    const safeRequestId = 'req-safe-body-camel-case-207';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {
+        'apiToken': apiToken,
+        'accessTokenExpiresIn': 3600,
+        'accessToken': {'expiresIn': '1800'},
+        'language': 'en',
+      },
+    });
+    final echoedCredential = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': apiToken},
+      excludedValues: credentialValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, contains(apiToken));
+    expect(credentialValues, isNot(contains('3600')));
+    expect(credentialValues, isNot(contains('1800')));
+    expect(credentialValues, isNot(contains('en')));
     expect(echoedCredential, {'statusCode': 401});
     expect(safeResponse, {
       'statusCode': 429,
@@ -977,6 +1400,39 @@ void main() {
     }
   });
 
+  test('client key header aliases exclude echoed IDs but keep safe IDs', () {
+    const credential = 'opaque-client-value-123';
+    const safeRequestId = 'req-safe-after-client-key';
+    for (final headerName in [
+      'clientKey',
+      'client_key',
+      'client-key',
+      'X-Client-Key',
+    ]) {
+      final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders(
+        {headerName: credential},
+      );
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'requestId': credential,
+          'data': {'requestId': safeRequestId},
+        },
+        excludedValues: excludedValues,
+      )!;
+
+      expect(excludedValues, contains(credential), reason: headerName);
+      expect(
+          response,
+          {
+            'statusCode': 401,
+            'requestId': safeRequestId,
+          },
+          reason: headerName);
+      expect(jsonEncode(response), isNot(contains(credential)));
+    }
+  });
+
   test('request IDs exclude echoes matching a short masked auth header', () {
     const apiKey = 'abcd123456789';
     final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
@@ -1135,14 +1591,68 @@ void main() {
     expect(sanitized, isNot(contains('finish_reason=')));
   });
 
-  test('legacy task error details exclude an unsafe HTTP status token', () {
+  test('legacy task errors omit status when it matches an excluded value', () {
     final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-      'OCR 请求失败 HTTP 503',
-      excludedValues: ['503'],
+      'OCR 请求失败 HTTP 503 token=private-secret',
+      excludedValues: ['503', 'private-secret'],
     )!;
 
     expect(sanitized, 'OCR 错误详情已隐藏');
-    expect(sanitized, isNot(contains('503')));
+    expect(sanitized, isNot(contains('private-secret')));
+  });
+
+  test('safe hidden summaries retain only unexcluded bounded status', () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 错误详情已隐藏（HTTP 429，finish_reason=test-key）',
+      excludedValues: ['test-key'],
+    );
+
+    expect(sanitized, 'OCR 错误详情已隐藏（HTTP 429）');
+
+    final collidingStatus = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 错误详情已隐藏（HTTP 429，finish_reason=test-key）',
+      excludedValues: ['429', 'test-key'],
+    );
+    expect(collidingStatus, 'OCR 错误详情已隐藏');
+
+    final lowercaseStatus = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR error details were hidden（http 429）',
+      excludedValues: ['429'],
+    );
+
+    expect(lowercaseStatus, 'OCR error details were hidden');
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Los detalles del error de OCR estaban ocultos（HTTP 429）',
+        excludedValues: ['429'],
+      ),
+      'Los detalles del error de OCR estaban ocultos',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR エラーの詳細は非表示になりました（HTTP 429）',
+        excludedValues: ['429'],
+      ),
+      'OCR エラーの詳細は非表示になりました',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        '错误详情已隐藏（HTTP 429，finish_reason=secret）',
+        excludedValues: ['OCR', '429', 'secret'],
+      ),
+      '错误详情已隐藏',
+    );
+  });
+
+  test('safe hidden summaries still exclude credentials in the hidden label',
+      () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR error details were hidden',
+      excludedValues: ['OCR'],
+    );
+
+    expect(sanitized, isNot(contains('OCR')));
   });
 
   test('safe Dio error types still honor recovered credential exclusions', () {
@@ -1165,6 +1675,42 @@ void main() {
 
     expect(sanitized, 'OCR 错误详情已隐藏');
     expect(sanitized, isNot(contains(credential)));
+  });
+
+  test('live OCR safe errors use the selected locale and safe fallback', () {
+    final strings = AppLocalizationsDe();
+    final dioError = OcrDiagnosticSnapshot.safeTaskError(
+      DioException(
+        requestOptions: RequestOptions(path: '/ocr'),
+        type: DioExceptionType.connectionTimeout,
+      ),
+      localizations: strings,
+    );
+    final formatError = OcrDiagnosticSnapshot.safeTaskError(
+      const FormatException('provider response must stay private'),
+      localizations: strings,
+    );
+    final genericError = OcrDiagnosticSnapshot.safeTaskError(
+      StateError('provider response must stay private'),
+      localizations: strings,
+    );
+
+    expect(dioError, strings.bgTaskOcrErrorDetailsHidden);
+    expect(formatError, strings.ocrProcessingOcrFailed);
+    expect(genericError, strings.bgTaskOcrErrorDetailsHidden);
+    for (final summary in [dioError, formatError, genericError]) {
+      expect(summary, isNot(contains('请求')));
+      expect(summary, isNot(contains('provider response')));
+    }
+
+    expect(
+      OcrDiagnosticSnapshot.safeTaskError(
+        StateError('private'),
+        localizations: strings,
+        excludedValues: [strings.bgTaskOcrErrorDetailsHidden],
+      ),
+      isEmpty,
+    );
   });
 
   test('fallback task error excludes credentials contained in its label', () {

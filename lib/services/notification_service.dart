@@ -2,13 +2,16 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../providers/locale_provider.dart';
+
+import '../widgets/constrained_text.dart';
 
 // ============================================================================
 // Notification settings keys
@@ -17,6 +20,9 @@ import '../providers/locale_provider.dart';
 const _notificationsEnabledKey = 'notifications_enabled';
 const _notificationsPermissionRequestedKey =
     'notifications_permission_requested';
+const _lastNotificationIdKey = 'last_notification_id';
+const _notificationIdNamespaceStart = 2000000000;
+const _legacyNotificationIdSafetyMargin = 10000000;
 
 // ============================================================================
 // Notification Service
@@ -41,15 +47,10 @@ class NotificationService {
   /// Keeps service strings in sync with the app's selected locale.
   void updateLocaleOverride(Locale? locale) => _localeOverride = locale;
 
-  /// 单调递增的通知 ID 计数器。
-  ///
-  /// 不直接使用 taskId.hashCode：哈希可能碰撞（导致新通知覆盖
-  /// 旧通知，用户看不到第一个任务的完成通知），也可能是负数
-  /// （部分厂商 ROM 对负 ID 处理异常）。
-  ///
-  /// 初始值用当前时间（秒）播种：进程重启后 ID 不会从头开始，
-  /// 避免新通知意外覆盖上个进程还残留在通知栏的旧通知。
-  int _notificationIdCounter = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  /// Serializes ID reservations so overlapping notifications cannot store
+  /// the same value in shared preferences.
+  Future<void> _notificationIdReservationQueue = Future.value();
+  Future<void> _notificationSettingQueue = Future.value();
 
   /// Callback for in-app notification display.
   /// Set by the app shell to show an in-app banner.
@@ -110,16 +111,49 @@ class NotificationService {
   // ========================================================================
 
   /// Check if notifications are enabled (user setting).
-  Future<bool> get isEnabled async {
-    if (kIsWeb) return false;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_notificationsEnabledKey) ?? false;
+  Future<bool> get isEnabled {
+    if (kIsWeb) return Future.value(false);
+    final completer = Completer<bool>();
+    _notificationSettingQueue = _notificationSettingQueue.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        completer.complete(prefs.getBool(_notificationsEnabledKey) ?? false);
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 
   /// Set whether notifications are enabled.
-  Future<void> setEnabled(bool value) async {
+  Future<void> setEnabled(bool value) {
+    final completer = Completer<void>();
+    _notificationSettingQueue = _notificationSettingQueue.then((_) async {
+      try {
+        await _writeEnabled(value);
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _writeEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_notificationsEnabledKey, value);
+    final previousValue = prefs.getBool(_notificationsEnabledKey);
+    try {
+      if (!await prefs.setBool(_notificationsEnabledKey, value)) {
+        throw StateError('Failed to save notification setting.');
+      }
+    } catch (_) {
+      if (previousValue == null) {
+        await prefs.remove(_notificationsEnabledKey);
+      } else {
+        await prefs.setBool(_notificationsEnabledKey, previousValue);
+      }
+      rethrow;
+    }
   }
 
   /// Check if permission has been requested before.
@@ -153,8 +187,12 @@ class NotificationService {
       }
 
       // On iOS, permission is handled by the plugin
-      if (Platform.isIOS) {
-        return true; // Plugin handles this
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final status = await Permission.notification.status;
+        if (status.isGranted) return true;
+
+        final result = await Permission.notification.request();
+        return result.isGranted;
       }
 
       return false;
@@ -249,10 +287,11 @@ class NotificationService {
               payload.error ?? strings.notificationUnknownError,
             );
 
-      // 使用单调递增 ID，避免 hashCode 碰撞导致通知互相覆盖。
-      _notificationIdCounter += 1;
+      // Persist each ID before showing it so a quick process restart cannot
+      // reuse an ID that is still present in the system notification tray.
+      final notificationId = await _reserveNotificationId();
       await _plugin!.show(
-        id: _notificationIdCounter,
+        id: notificationId,
         title: title,
         body: body,
         notificationDetails: details,
@@ -263,6 +302,34 @@ class NotificationService {
         '[NotificationService] Failed to show system notification: $e',
       );
     }
+  }
+
+  Future<int> _reserveNotificationId() {
+    final completer = Completer<int>();
+    _notificationIdReservationQueue = _notificationIdReservationQueue.then((
+      _,
+    ) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final currentSecond = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final firstId = _notificationIdNamespaceStart >
+                currentSecond + _legacyNotificationIdSafetyMargin
+            ? _notificationIdNamespaceStart
+            : currentSecond + _legacyNotificationIdSafetyMargin;
+        final lastId = prefs.getInt(_lastNotificationIdKey) ?? firstId - 1;
+        if (lastId >= 0x7fffffff) {
+          throw StateError('Notification ID range is exhausted');
+        }
+        final nextId = lastId + 1;
+        if (!await prefs.setInt(_lastNotificationIdKey, nextId)) {
+          throw StateError('Could not persist the next notification ID');
+        }
+        completer.complete(nextId);
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 
   void _onNotificationResponse(NotificationResponse response) {
@@ -407,18 +474,13 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
                     : Colors.white.withValues(alpha: 0.6),
                 border: Border.all(
-                  color: Colors.white.withValues(
-                    alpha: isDark ? 0.15 : 0.5,
-                  ),
+                  color: Colors.white.withValues(alpha: isDark ? 0.15 : 0.5),
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -455,7 +517,7 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
+                        ConstrainedText(
                           widget.payload.title,
                           style: TextStyle(
                             color: fg.withValues(alpha: 0.7),

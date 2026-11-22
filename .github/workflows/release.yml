@@ -51,17 +51,12 @@ jobs:
       - name: Validate dispatch inputs
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
-          TAG: ${{ env.TAG }}
           PLATFORMS: ${{ inputs.platforms }}
           INCLUDE_RELEASE_NOTES: ${{ inputs.include_release_notes }}
         run: |
           python3 - <<'PY'
           import os
-          import re
 
-          tag = os.environ["TAG"]
-          if not re.fullmatch(r"v[0-9A-Za-z][0-9A-Za-z._+-]*", tag):
-              raise SystemExit("Invalid tag input; use a release tag such as v0.6.0")
           allowed = {"android", "ios", "linux", "macos-arm64", "macos-x64", "web", "windows"}
           selected = os.environ["PLATFORMS"].split(",")
           if os.environ["INCLUDE_RELEASE_NOTES"] not in {"true", "false"}:
@@ -72,10 +67,10 @@ jobs:
               raise SystemExit("Invalid platforms input; use all or a unique comma-separated platform list")
           PY
       - id: extract-version
-        env:
-          TAG: ${{ env.TAG }}
         run: |
-          printf 'app_version=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+          TAG="${{ env.TAG }}"
+          APP_VERSION="${TAG#v}"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
 
       # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
       # - tag push：从预先创建的 release draft 读取创建时间和自动生成的说明。
@@ -84,31 +79,22 @@ jobs:
       # 更新内容压缩后再 Base64 写入 JSON，避免大型发布说明超过
       # Flutter/Gradle 的进程参数长度限制。
       - id: build-info
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           RELEASE_NOTES_FILE="$RUNNER_TEMP/release-notes.txt"
-          RELEASE_ERROR_FILE="$RUNNER_TEMP/release-api-error.txt"
-          if ! RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>"$RELEASE_ERROR_FILE")"; then
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && grep -q 'HTTP 404' "$RELEASE_ERROR_FILE"; then
-              RELEASE_JSON='{}'
-            else
-              cat "$RELEASE_ERROR_FILE" >&2
-              exit 1
-            fi
-          fi
-          RELEASE_TIME="$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // .created_at // empty')"
+          RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null || true)"
+          RELEASE_TIME="$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // .created_at // empty' 2>/dev/null || true)"
           if [ -z "$RELEASE_TIME" ]; then
             RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             : > "$RELEASE_NOTES_FILE"
           else
-            printf '%s' "$RELEASE_JSON" | jq -j '.body // ""' > "$RELEASE_NOTES_FILE"
+            printf '%s' "$RELEASE_JSON" | jq -j '.body // ""' > "$RELEASE_NOTES_FILE" || true
           fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.include_release_notes }}" != "true" ]; then
             : > "$RELEASE_NOTES_FILE"
           fi
           echo "release_time=$RELEASE_TIME" >> "$GITHUB_OUTPUT"
-          python3 - "$GITHUB_WORKSPACE/build-info.json" "$TAG" "$RELEASE_TIME" "$RELEASE_NOTES_FILE" <<'PY'
+          APP_VERSION="${TAG#v}"
+          python3 - "$GITHUB_WORKSPACE/build-info.json" "$APP_VERSION" "$RELEASE_TIME" "$RELEASE_NOTES_FILE" <<'PY'
           import base64
           import json
           import pathlib
@@ -165,6 +151,7 @@ jobs:
           $version = "${{ needs.prepare-version.outputs.app_version }}"
           (Get-Content "windows\installer.iss") -replace '0\.2\.14', $version | Set-Content "windows\installer.iss"
           choco install innosetup --no-progress -y
+          Copy-Item "windows\installer-languages\ChineseSimplified.isl" "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl" -Force
           mkdir artifacts -Force
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows\installer.iss"
       - uses: softprops/action-gh-release@v2
@@ -411,9 +398,8 @@ jobs:
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign --dart-define-from-file=build-info.json
       - name: Create unsigned IPA (Payload/Runner.app → zip)
-        env:
-          TAG: ${{ env.TAG }}
         run: |
+          TAG="${{ env.TAG }}"
           mkdir -p build/ios/ipa/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa

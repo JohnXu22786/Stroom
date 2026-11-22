@@ -4,6 +4,110 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_codecs.dart';
 
+/// Read big-endian bits from a FLAC frame for structural assertions.
+class _FlacBitReader {
+  _FlacBitReader(this.bytes, this.offset);
+
+  final Uint8List bytes;
+  int offset;
+
+  int read(int count) {
+    var value = 0;
+    for (var i = 0; i < count; i++) {
+      value = (value << 1) | ((bytes[offset >> 3] >> (7 - (offset & 7))) & 1);
+      offset++;
+    }
+    return value;
+  }
+}
+
+({int partitionOrder, List<int> residualCounts, int frameEndBit})
+    _readZeroFlacFrameResidualLayout(Uint8List flac, int blockLength) {
+  const frameOffset = 42; // fLaC marker plus the 34-byte STREAMINFO block.
+  final bits = _FlacBitReader(flac, frameOffset * 8);
+
+  bits.read(16); // Sync code and blocking strategy.
+  final blockSizeCode = bits.read(4);
+  bits.read(12); // Sample rate, channel assignment, sample size, reserved.
+  bits.read(8); // Frame number zero.
+  if (blockSizeCode == 6) {
+    bits.read(8);
+  } else if (blockSizeCode == 7) {
+    bits.read(16);
+  }
+  bits.read(8); // Header CRC-8.
+
+  final subframeOrder = bits.read(6) & 0x7;
+  bits.read(1); // Wasted bits flag.
+  bits.read(subframeOrder * 16); // Warm-up samples.
+  expect(bits.read(2), 0, reason: 'encoder uses Rice4 residual coding');
+  final partitionOrder = bits.read(4);
+  final partitions = 1 << partitionOrder;
+  final partitionSamples = blockLength ~/ partitions;
+  final residualCounts = <int>[];
+  for (var partition = 0; partition < partitions; partition++) {
+    final count = partitionSamples - (partition == 0 ? subframeOrder : 0);
+    residualCounts.add(count);
+    expect(bits.read(4), 0, reason: 'zero residuals use Rice parameter zero');
+    for (var i = 0; i < count; i++) {
+      expect(bits.read(1), 0, reason: 'zero residual uses one zero stop bit');
+    }
+  }
+
+  final frameEndBit = ((bits.offset + 7) ~/ 8) * 8 + 16; // Padding and CRC-16.
+  return (
+    partitionOrder: partitionOrder,
+    residualCounts: residualCounts,
+    frameEndBit: frameEndBit,
+  );
+}
+
+({int partitionOrder, List<int> rawWidths, int frameEndBit})
+    _readFlacEscapeResidualLayout(Uint8List flac, int blockLength) {
+  const frameOffset = 42;
+  final bits = _FlacBitReader(flac, frameOffset * 8);
+
+  bits.read(16); // Sync code and blocking strategy.
+  final blockSizeCode = bits.read(4);
+  bits.read(12); // Sample rate, channel assignment, sample size, reserved.
+  bits.read(8); // Frame number zero.
+  if (blockSizeCode == 6) {
+    bits.read(8);
+  } else if (blockSizeCode == 7) {
+    bits.read(16);
+  }
+  bits.read(8); // Header CRC-8.
+
+  final subframeOrder = bits.read(6) & 0x7;
+  bits.read(1); // Wasted bits flag.
+  bits.read(subframeOrder * 16); // Warm-up samples.
+  expect(bits.read(2), 0, reason: 'encoder uses Rice4 residual coding');
+  final partitionOrder = bits.read(4);
+  final partitions = 1 << partitionOrder;
+  final partitionSamples = blockLength ~/ partitions;
+  final rawWidths = <int>[];
+  for (var partition = 0; partition < partitions; partition++) {
+    final count = partitionSamples - (partition == 0 ? subframeOrder : 0);
+    expect(bits.read(4), 15, reason: 'Rice4 escape marker must be 15');
+    final rawWidth = bits.read(5);
+    rawWidths.add(rawWidth);
+    expect(rawWidth, 16, reason: 'alternating S16 residuals need 16 bits');
+    for (var i = 0; i < count; i++) {
+      final raw = bits.read(rawWidth);
+      final residual =
+          raw >= (1 << (rawWidth - 1)) ? raw - (1 << rawWidth) : raw;
+      expect(residual, i.isEven ? 32767 : -32768);
+    }
+  }
+
+  final frameEndBit = ((bits.offset + 7) ~/ 8) * 8 + 16;
+  return (
+    partitionOrder: partitionOrder,
+    rawWidths: rawWidths,
+    frameEndBit: frameEndBit,
+  );
+}
+
 /// Generate a synthetic sine wave as Int16List.
 Int16List _sineWave(int samples, {double freq = 440, int sampleRate = 16000}) {
   final pcm = Int16List(samples);
@@ -118,6 +222,46 @@ void main() {
       final adpcm = encodeAdpcm(pcm, AdpcmConfig());
       expect(adpcm.isNotEmpty, true);
     });
+
+    test('encodes trailing samples and declares their WAV sample count', () {
+      final pcm = Int16List.fromList(
+        List<int>.generate(259, (index) => 1000 + index),
+      );
+      final firstBlock = encodeAdpcm(
+        Int16List.fromList(pcm.sublist(0, 256)),
+        AdpcmConfig(),
+      );
+      final adpcm = encodeAdpcm(pcm, AdpcmConfig());
+
+      expect(adpcm.length, 2 * 132);
+      expect(adpcm.sublist(0, 132), orderedEquals(firstBlock));
+      expect(adpcm[132] | (adpcm[133] << 8), pcm[256]);
+
+      final wav = adpcmToWav(
+        adpcm,
+        sampleRate: 16000,
+        sampleCount: pcm.length,
+      );
+      final bytes = ByteData.sublistView(wav);
+      expect(String.fromCharCodes(wav.sublist(40, 44)), 'fact');
+      expect(bytes.getUint32(44, Endian.little), 4);
+      expect(bytes.getUint32(48, Endian.little), pcm.length);
+      expect(String.fromCharCodes(wav.sublist(52, 56)), 'data');
+      expect(bytes.getUint32(56, Endian.little), 2 * 132);
+      expect(bytes.getUint32(4, Endian.little), wav.length - 8);
+    });
+
+    test('yielding encoder includes a trailing partial block', () async {
+      final pcm = _sineWave(256 * 2 + 17);
+      final yielded = await encodeAdpcmWithEventLoopYield(
+        pcm,
+        AdpcmConfig(),
+        yieldEveryBlocks: 1,
+      );
+
+      expect(yielded.length, 3 * 132);
+      expect(yielded, orderedEquals(encodeAdpcm(pcm, AdpcmConfig())));
+    });
   });
 
   group('FLAC encoder', () {
@@ -208,6 +352,128 @@ void main() {
       expect(flac[3], 0x43); // 'C'
     });
 
+    test('writes a 34-byte STREAMINFO before the first frame', () {
+      const sampleRate = 16000;
+      final pcm = Int16List(200);
+
+      final flac = encodeFlac(pcm, sampleRate: sampleRate);
+      final metadataLength = (flac[5] << 16) | (flac[6] << 8) | flac[7];
+      final streamInfo = flac.sublist(8, 8 + metadataLength);
+
+      expect(metadataLength, 34);
+      expect(flac[42], 0xFF);
+      expect(flac[43] & 0xFC, 0xF8);
+
+      final encodedSampleRate = (streamInfo[10] << 12) |
+          (streamInfo[11] << 4) |
+          (streamInfo[12] >> 4);
+      final channels = ((streamInfo[12] & 0x0E) >> 1) + 1;
+      final bitsPerSample =
+          (((streamInfo[12] & 0x01) << 4) | (streamInfo[13] >> 4)) + 1;
+      final totalSamples = ((streamInfo[13] & 0x0F) * 0x100000000) +
+          (streamInfo[14] * 0x1000000) +
+          (streamInfo[15] * 0x10000) +
+          (streamInfo[16] * 0x100) +
+          streamInfo[17];
+
+      expect(encodedSampleRate, sampleRate);
+      expect(channels, 1);
+      expect(bitsPerSample, 16);
+      expect(totalSamples, pcm.length);
+    });
+
+    test('marks unknown frame-size bounds as zero for both encoder paths',
+        () async {
+      final pcm = Int16List(200);
+      final outputs = [
+        encodeFlac(pcm),
+        await encodeFlacWithEventLoopYield(pcm),
+      ];
+
+      for (final flac in outputs) {
+        final minFrameSize = (flac[12] << 16) | (flac[13] << 8) | flac[14];
+        final maxFrameSize = (flac[15] << 16) | (flac[16] << 8) | flac[17];
+
+        expect(minFrameSize, 0);
+        expect(maxFrameSize, 0);
+      }
+    });
+
+    test('STREAMINFO block-size bounds match all encoded frame lengths', () {
+      for (final (sampleCount, expectedFrameSizes) in [
+        (200, [200]),
+        (4096 + 200, [4096, 200]),
+        (8192, [4096, 4096]),
+      ]) {
+        final flac = encodeFlac(Int16List(sampleCount));
+        final minBlockSize = (flac[8] << 8) | flac[9];
+        final maxBlockSize = (flac[10] << 8) | flac[11];
+        final frameBlockSizes = <int>[];
+
+        for (var offset = 42; offset < flac.length - 6; offset++) {
+          if (flac[offset] != 0xFF || (flac[offset + 1] & 0xFC) != 0xF8) {
+            continue;
+          }
+          final blockSizeCode = (flac[offset + 2] >> 4) & 0x0F;
+          final frameNumberLeadByte = flac[offset + 4];
+          final frameNumberBytes = frameNumberLeadByte < 0x80
+              ? 1
+              : (frameNumberLeadByte & 0xE0) == 0xC0
+                  ? 2
+                  : (frameNumberLeadByte & 0xF0) == 0xE0
+                      ? 3
+                      : 4;
+          final blockSizeOffset = offset + 4 + frameNumberBytes;
+          final blockSize = switch (blockSizeCode) {
+            6 => flac[blockSizeOffset] + 1,
+            7 => ((flac[blockSizeOffset] << 8) | flac[blockSizeOffset + 1]) + 1,
+            10 => 1024,
+            12 => 4096,
+            _ => fail('Unexpected FLAC block-size code $blockSizeCode'),
+          };
+          frameBlockSizes.add(blockSize);
+        }
+
+        expect(frameBlockSizes, expectedFrameSizes);
+        expect(minBlockSize, frameBlockSizes.reduce((a, b) => a < b ? a : b));
+        expect(maxBlockSize, frameBlockSizes.reduce((a, b) => a > b ? a : b));
+      }
+    });
+
+    test('uses sequential frame numbers for fixed-block frames', () async {
+      final pcm = Int16List(4096 * 3);
+      final outputs = [
+        encodeFlac(pcm),
+        await encodeFlacWithEventLoopYield(pcm, yieldEveryFrames: 2),
+      ];
+
+      for (final flac in outputs) {
+        final frameNumbers = <int>[];
+        for (var offset = 42; offset < flac.length - 6; offset++) {
+          if (flac[offset] != 0xFF || (flac[offset + 1] & 0xFC) != 0xF8) {
+            continue;
+          }
+
+          final first = flac[offset + 4];
+          final byteCount = first < 0x80
+              ? 1
+              : (first & 0xE0) == 0xC0
+                  ? 2
+                  : (first & 0xF0) == 0xE0
+                      ? 3
+                      : 4;
+          final prefixMask = byteCount == 1 ? 0x7F : 0x1F >> (byteCount - 2);
+          var frameNumber = first & prefixMask;
+          for (var i = 1; i < byteCount; i++) {
+            frameNumber = (frameNumber << 6) | (flac[offset + 4 + i] & 0x3F);
+          }
+          frameNumbers.add(frameNumber);
+        }
+
+        expect(frameNumbers, [0, 1, 2]);
+      }
+    });
+
     test('produces smaller output than PCM for tonal content', () {
       final pcm = _sineWave(8192);
       final pcmSize = pcm.length * 2;
@@ -241,6 +507,89 @@ void main() {
       final pcm = _sineWave(1024);
       final flac = encodeFlac(pcm, sampleRate: 8000);
       expect(flac.isNotEmpty, true);
+    });
+
+    test('partitions partial FLAC frame residuals by the declared block size',
+        () {
+      for (final blockLength in [200, 257, 1025, 4095, 4096]) {
+        final pcm = Int16List(blockLength)..fillRange(0, blockLength, 1000);
+        final flac = encodeFlac(pcm, sampleRate: 16000);
+        final layout = _readZeroFlacFrameResidualLayout(flac, blockLength);
+        final expectedOrder = blockLength % 4 == 0
+            ? 2
+            : blockLength % 2 == 0
+                ? 1
+                : 0;
+        final partitions = 1 << expectedOrder;
+        final expectedPartitionSamples = blockLength ~/ partitions;
+
+        expect(layout.partitionOrder, expectedOrder,
+            reason:
+                '$blockLength samples must use a divisible partition order');
+        expect(layout.residualCounts, hasLength(partitions));
+        expect(
+          layout.residualCounts.first,
+          expectedPartitionSamples - 1,
+          reason: 'the first partition excludes predictor warm-up samples',
+        );
+        expect(
+          layout.residualCounts.skip(1),
+          everyElement(expectedPartitionSamples),
+        );
+        expect(layout.frameEndBit, flac.length * 8,
+            reason: 'partition residuals must end at the frame CRC');
+      }
+    });
+
+    test('writes a valid Rice escape marker and raw residual width', () {
+      final pcm = Int16List(4096);
+      for (var i = 0; i < pcm.length; i++) {
+        pcm[i] = i.isEven ? 32767 : -32768;
+      }
+
+      final flac = encodeFlac(pcm, sampleRate: 16000);
+      final layout = _readFlacEscapeResidualLayout(flac, pcm.length);
+
+      expect(layout.partitionOrder, 2);
+      expect(layout.rawWidths, everyElement(16));
+      expect(layout.frameEndBit, flac.length * 8,
+          reason: 'escaped residuals must end exactly at the frame CRC');
+    });
+
+    test('encodes valid block-size fields for partial FLAC frames', () {
+      for (final (blockLength, expectedCode) in [
+        (200, 6),
+        (257, 7),
+        (1024, 10),
+        (4095, 7),
+        (4096, 12),
+      ]) {
+        final flac = encodeFlac(Int16List(blockLength), sampleRate: 16000);
+        var frameOffset = -1;
+        for (var i = 42; i < flac.length - 1; i++) {
+          if (flac[i] == 0xFF && (flac[i + 1] & 0xFC) == 0xF8) {
+            frameOffset = i;
+            break;
+          }
+        }
+        expect(frameOffset, greaterThanOrEqualTo(42),
+            reason: 'encoded output must contain a FLAC frame sync');
+
+        final code = (flac[frameOffset + 2] >> 4) & 0x0F;
+
+        expect(code, expectedCode,
+            reason:
+                '$blockLength samples must use a valid FLAC block-size code');
+
+        final decodedBlockLength = switch (code) {
+          6 => flac[frameOffset + 5] + 1,
+          7 => ((flac[frameOffset + 5] << 8) | flac[frameOffset + 6]) + 1,
+          10 => 1024,
+          12 => 4096,
+          _ => fail('Unexpected block-size code $code'),
+        };
+        expect(decodedBlockLength, blockLength);
+      }
     });
   });
 
@@ -311,14 +660,17 @@ void main() {
       expect(fmt.getUint16(34, Endian.little), 4);
       // samples per block extension
       expect(fmt.getUint16(38, Endian.little), 256);
-      // data chunk at offset 40 (after the 20-byte fmt data)
-      expect(String.fromCharCodes(wav.sublist(40, 44)), 'data');
-      final dataSize = fmt.getUint32(44, Endian.little);
+      // `fact` reports source samples before the compressed data chunk.
+      expect(String.fromCharCodes(wav.sublist(40, 44)), 'fact');
+      expect(fmt.getUint32(44, Endian.little), 4);
+      expect(fmt.getUint32(48, Endian.little), pcm.length);
+      expect(String.fromCharCodes(wav.sublist(52, 56)), 'data');
+      final dataSize = fmt.getUint32(56, Endian.little);
       expect(dataSize, adpcm.length);
       // WAV IMA ADPCM decoders read the LOW nibble first; the raw encoder
       // packs high-first, so the wrapper must have swapped the payload
       // nibbles — but ONLY the payload, never the 4-byte per-block headers.
-      final dataStart = 48; // 12 + 8 + 20 + 8
+      final dataStart = 60; // RIFF + fmt + fact + data headers
       for (int i = 0; i < adpcm.length; i++) {
         final expected = i % 132 >= 4
             ? ((adpcm[i] & 0x0F) << 4) | (adpcm[i] >> 4)
@@ -334,7 +686,7 @@ void main() {
 
       final wav = adpcmToWav(adpcm, sampleRate: 8000);
       final fmt = ByteData.view(wav.buffer);
-      final dataSize = fmt.getUint32(44, Endian.little);
+      final dataSize = fmt.getUint32(56, Endian.little);
 
       // Partial block padded to a multiple of 132.
       expect(dataSize % 132, 0);

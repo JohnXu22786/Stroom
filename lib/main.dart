@@ -23,6 +23,38 @@ import 'task_flow/services/task_flow_execution_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
+import 'providers/locale_provider.dart';
+
+String _sanitizeDiagnosticText(String value) {
+  return value
+      .replaceAll(RegExp(r'([?&][^=&#\s]+)=([^&#\s]*)'), r'$1=[REDACTED]')
+      .replaceAll(
+        RegExp(r'authorization\s*:\s*[^\r\n]+', caseSensitive: false),
+        'Authorization: [REDACTED]',
+      )
+      .replaceAll(
+        RegExp(
+            r'((?:x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret)\s*[=:]\s*)[^\s,;]+',
+            caseSensitive: false),
+        r'$1[REDACTED]',
+      );
+}
+
+Future<void> _recordUncaughtError(
+    String source, Object error, StackTrace stack) async {
+  final safeStack = _sanitizeDiagnosticText(stack.toString());
+  try {
+    // Put the full trace in the message because AppLogService.error's
+    // optional stack argument intentionally truncates long traces.
+    await AppLogService.error(
+      source,
+      'Uncaught ${error.runtimeType}\nFull stack trace:\n$safeStack',
+    );
+    await AppLogService.flush();
+  } catch (_) {
+    // Diagnostic recording must not change Flutter's existing error path.
+  }
+}
 
 final asrRetryAudioStoreProvider =
     Provider<AsrRetryAudioStore>((ref) => AsrRetryAudioStore());
@@ -105,18 +137,24 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
 void _initGlobalErrorHandling() {
   // 1. 捕获 Flutter 框架层的错误（build、layout、paint 等）
   FlutterError.onError = (FlutterErrorDetails details) {
-    debugPrint('[GlobalError] FlutterError: ${details.exception}');
-    debugPrint('[GlobalError] Stack: ${details.stack}');
+    debugPrint(
+        '[GlobalError] FlutterError type: ${details.exception.runtimeType}');
+    debugPrint(
+        '[GlobalError] Stack: ${_sanitizeDiagnosticText(details.stack?.toString() ?? '')}');
     if (details.context != null) {
-      debugPrint('[GlobalError] Context: ${details.context}');
+      debugPrint(
+          '[GlobalError] Context: ${_sanitizeDiagnosticText(details.context.toString())}');
     }
+    final stack = details.stack ?? StackTrace.current;
+    unawaited(_recordUncaughtError('FlutterError', details.exception, stack));
   };
 
   // 2. 替换默认的红色错误页为安全降级组件
   ErrorWidget.builder = (FlutterErrorDetails details) {
+    final strings = appLocalizationsForLocale(null);
     if (kReleaseMode) {
       // 生产环境：显示友好提示，不暴露详细信息
-      return const Material(
+      return Material(
         color: Color(0xFF1E1E2E),
         child: Center(
           child: Padding(
@@ -127,8 +165,8 @@ void _initGlobalErrorHandling() {
                 Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
                 SizedBox(height: 16),
                 Text(
-                  '界面渲染异常',
-                  style: TextStyle(
+                  strings.renderErrorTitle,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -136,8 +174,8 @@ void _initGlobalErrorHandling() {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  '请尝试重启应用。',
-                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                  strings.renderErrorRestartMessage,
+                  style: const TextStyle(color: Colors.white38, fontSize: 14),
                 ),
               ],
             ),
@@ -161,9 +199,9 @@ void _initGlobalErrorHandling() {
                   color: Colors.redAccent,
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  '界面渲染异常（Debug 模式）',
-                  style: TextStyle(
+                Text(
+                  strings.renderErrorDebugTitle,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -186,12 +224,16 @@ void _initGlobalErrorHandling() {
   if (!kIsWeb) {
     try {
       PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-        debugPrint('[GlobalError] PlatformDispatcher error: $error');
-        debugPrint('[GlobalError] Stack: $stack');
+        debugPrint(
+            '[GlobalError] PlatformDispatcher error type: ${error.runtimeType}');
+        debugPrint(
+            '[GlobalError] Stack: ${_sanitizeDiagnosticText(stack.toString())}');
+        unawaited(_recordUncaughtError('PlatformDispatcher', error, stack));
         return true; // 已处理，不崩溃
       };
-    } catch (_) {
+    } catch (error, stack) {
       // PlatformDispatcher 在某些平台上不可用，忽略
+      unawaited(_recordUncaughtError('GlobalErrorHandling', error, stack));
     }
   }
 }
@@ -210,6 +252,7 @@ Widget _buildBootstrapLoadingScreen() {
 }
 
 Future<void> main() async {
+  final startupClock = Stopwatch()..start();
   // 初始化全局错误处理（必须在 runApp 之前）
   _initGlobalErrorHandling();
 
@@ -226,6 +269,10 @@ Future<void> main() async {
         registerBundledAssetLicenses();
         await BrowserProfileService.applyPendingAction();
         await AppLogService.info('App', '应用启动: Stroom');
+        await AppLogService.info(
+          'App',
+          '启动阶段完成: binding/window, elapsedMs=${startupClock.elapsedMilliseconds}',
+        );
         registerVideoPlayer();
         // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
         // 通知需要走系统通知（in-app 横幅不可见）。
@@ -246,9 +293,17 @@ Future<void> main() async {
 
         // 使用 StartupApp 作为入口，它会在启动页面完成后切换到 Application
         runApp(const ProviderScope(child: StartupApp()));
+        await AppLogService.info(
+          'App',
+          '启动完成: elapsedMs=${startupClock.elapsedMilliseconds}',
+        );
+        await AppLogService.flush();
       } catch (e, s) {
         // If initialization fails, show an error screen
-        debugPrint('[GlobalError] App initialization failed: $e\n$s');
+        debugPrint(
+            '[GlobalError] App initialization failed: ${e.runtimeType}\n${_sanitizeDiagnosticText(s.toString())}');
+        await _recordUncaughtError('AppStartup', e, s);
+        final strings = appLocalizationsForLocale(null);
         runApp(
           MaterialApp(
             home: Scaffold(
@@ -256,15 +311,15 @@ Future<void> main() async {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      '应用启动失败',
+                    Text(
+                      strings.startupErrorTitle,
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text('错误: $e'),
+                    Text(strings.startupErrorDetails('$e')),
                   ],
                 ),
               ),
@@ -275,8 +330,11 @@ Future<void> main() async {
     },
     (Object error, StackTrace stack) {
       // 4. 捕获 runZonedGuarded 内的所有未捕获异步异常
-      debugPrint('[GlobalError] Unhandled async error: $error');
-      debugPrint('[GlobalError] Stack: $stack');
+      debugPrint(
+          '[GlobalError] Unhandled async error type: ${error.runtimeType}');
+      debugPrint(
+          '[GlobalError] Stack: ${_sanitizeDiagnosticText(stack.toString())}');
+      unawaited(_recordUncaughtError('Zone', error, stack));
     },
   );
 }

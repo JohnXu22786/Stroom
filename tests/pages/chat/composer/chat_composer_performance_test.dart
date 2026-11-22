@@ -11,16 +11,18 @@ import 'package:stroom/pages/chat_page.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
-Widget createChatTestApp({String? activeConversationId}) {
+Widget createChatTestApp({
+  String? activeConversationId,
+  Widget? home,
+}) {
   SharedPreferences.setMockInitialValues({});
+  final conversationId = activeConversationId ?? 'test-conv-id';
   return ProviderScope(
     overrides: [
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-        (ref) => activeConversationId ?? 'test-conv-id',
-      ),
+      activeConversationIdProvider.overrideWith((ref) => conversationId),
       providerEntriesProvider.overrideWith(
         (ref) => ProviderEntriesNotifier(),
       ),
@@ -34,7 +36,7 @@ Widget createChatTestApp({String? activeConversationId}) {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: const ChatPage()),
+        home: home ?? const ChatPage()),
   );
 }
 
@@ -175,6 +177,64 @@ void main() {
 
       // Send button should be enabled
       expect(findIconButton(tester, Icons.send_rounded).onPressed, isNotNull);
+    });
+
+    testWidgets('disposing the page while composer saves a draft is safe', (
+      tester,
+    ) async {
+      await setupSurface(tester);
+      final pageVisible = ValueNotifier(true);
+      await tester.pumpWidget(
+        createChatTestApp(
+          home: ValueListenableBuilder<bool>(
+            valueListenable: pageVisible,
+            builder: (context, visible, child) =>
+                visible ? const ChatPage() : const SizedBox.shrink(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+        listen: false,
+      );
+      final conversationsNotifier = container.read(
+        conversationsProvider.notifier,
+      );
+      await tester.runAsync(() => conversationsNotifier.ready);
+      conversationsNotifier.createConversation(
+        id: 'test-conv-id',
+        activate: false,
+      );
+      await tester.pump();
+      // Creating an empty conversation mounts flutter_chat_ui's empty list,
+      // which owns a 50 ms timer. Let it finish before testing page disposal.
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      await tester.enterText(find.byType(TextField), 'draft before navigation');
+      await tester.pump();
+      // ChatPage's async conversation load can mount a fresh empty list after
+      // the conversation was created. Drain that list's upstream 50 ms timer
+      // after the final mount, before tearing the page down.
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Removing ChatPage disposes its composer. The composer captures its
+      // draft during dispose and persists it after the widget lifecycle ends.
+      // This must not make the page's provider listener read from an inactive
+      // widget tree, and the write must still update the live provider.
+      pageVisible.value = false;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(tester.takeException(), isNull);
+      expect(
+        container.read(conversationsProvider).single.draftText,
+        'draft before navigation',
+      );
+      pageVisible.dispose();
     });
 
     testWidgets('draft save debounce timer fires without crashing',

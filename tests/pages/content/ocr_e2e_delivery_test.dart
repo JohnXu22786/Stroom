@@ -143,24 +143,11 @@ OcrPage _ocrPage({
       ],
       testImagePayloadPreparer: (bytes) async =>
           prepareOcrImagePayloadSync(bytes),
-      testOcrServiceFactory: (config) {
-        // This delivery test exercises the page and task handoff through the
-        // scripted HTTP adapter. Keep the provider routing layer out of this
-        // fixture so it does not require a live gateway runtime.
-        final directConfig = OcrConfig(
-          host: config.host,
-          apiKey: config.apiKey,
-          model: config.model,
-          systemPrompt: config.systemPrompt,
-          typeConfig: config.typeConfig,
-          customParams: config.customParams,
-          requestSizeBudgetBytes: config.requestSizeBudgetBytes,
-        );
-        return OcrService(
-          config: directConfig,
-          dio: _dioFor(directConfig, adapter),
-        );
-      },
+      testOcrServiceFactory: (config) => OcrService(
+        config: config,
+        ownsDio: true,
+        dio: _dioFor(config, adapter),
+      ),
     );
 
 Widget _deliveryApp({
@@ -326,24 +313,11 @@ void main() {
     await _pumpUntil(tester, () => find.byType(OcrPage).evaluate().isEmpty);
     await _pumpUntil(
       tester,
-      () => background.state.any(
-        (task) =>
-            task.status == TaskStatus.completed ||
-            task.status == TaskStatus.failed,
-      ),
+      () =>
+          adapter.requests.length == 1 &&
+          background.state.any((task) => task.status == TaskStatus.completed),
     );
     final pageTask = background.state.single;
-    expect(
-      pageTask.status,
-      TaskStatus.completed,
-      reason:
-          'OCR task failed: ${pageTask.error}; diagnostics=${pageTask.rawResponse}',
-    );
-    expect(
-      adapter.requests,
-      hasLength(1),
-      reason: 'OCR task error: ${pageTask.error}',
-    );
     expect(pageTask.result, 'Recognized text');
     final editedPayload = prepareOcrImagePayloadSync(
       _requestImageBytes(adapter.requests.first),
@@ -396,17 +370,6 @@ void main() {
         providerEntries: ProviderEntriesState(entries: [_ocrEntry()]),
         localizations: localizations,
         ocrDio: flowDio,
-        requestOcr: (bytes, format) async {
-          // This test compares the direct HTTP payload with the page request.
-          // Route resolution has dedicated tests and needs a gateway runtime,
-          // so keep this fixture on the injected scripted Dio.
-          final service = OcrService(config: config, dio: flowDio);
-          final result = await service.recognize(
-            imageBytes: bytes,
-            imageFormat: format,
-          );
-          return result.text;
-        },
       ),
     );
     expect(flowResult, 'Task flow text');
@@ -477,6 +440,7 @@ void main() {
       onSaved: () {},
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: _dioFor(config, failureAdapter),
       ),
     );
@@ -518,6 +482,7 @@ void main() {
       onSaved: () {},
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: _dioFor(config, retryAdapter),
       ),
     );

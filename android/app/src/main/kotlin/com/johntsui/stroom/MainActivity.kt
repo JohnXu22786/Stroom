@@ -180,8 +180,16 @@ class MainActivity : FlutterActivity() {
                     val uriStr = call.argument<String>("uri")
                     val fileName = call.argument<String>("fileName")
                     val content = call.argument<String>("content")
+                    val replaceExisting =
+                        call.argument<Boolean>("replaceExisting") ?: false
                     if (uriStr != null && fileName != null && content != null) {
-                        writeLogToSaf(uriStr, fileName, content, result)
+                        writeLogToSaf(
+                            uriStr,
+                            fileName,
+                            content,
+                            replaceExisting,
+                            result
+                        )
                     } else {
                         result.error("INVALID_ARGS", "日志参数不完整", null)
                     }
@@ -199,6 +207,14 @@ class MainActivity : FlutterActivity() {
                     val uriStr = call.argument<String>("uri")
                     if (uriStr != null) {
                         listLogsInSaf(uriStr, result)
+                    } else {
+                        result.error("INVALID_ARGS", "URI 为空", null)
+                    }
+                }
+                "listLogMetadata" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr != null) {
+                        listLogMetadataInSaf(uriStr, result)
                     } else {
                         result.error("INVALID_ARGS", "URI 为空", null)
                     }
@@ -565,8 +581,15 @@ class MainActivity : FlutterActivity() {
         uriStr: String,
         fileName: String,
         content: String,
+        replaceExisting: Boolean,
         result: MethodChannel.Result
     ) {
+        var existingFile: DocumentFile? = null
+        var logsDirectory: DocumentFile? = null
+        var combinedContentForFallback: String? = null
+        var tempFile: DocumentFile? = null
+        var tempCompleteMarker: DocumentFile? = null
+        var tempFileComplete = false
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -582,32 +605,87 @@ class MainActivity : FlutterActivity() {
                 result.error("CREATE_DIR_FAILED", "无法创建日志目录", null)
                 return
             }
+            logsDirectory = logsDir
 
-            // 查找已有日志文件，读取已有内容用于追加
-            val existingFile = logsDir.findFile(fileName)
-            val existingContent = if (existingFile != null) {
-                val inputStream = contentResolver.openInputStream(existingFile.uri)
-                inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+            // Resume from a retained complete temp file when an earlier write
+            // failed after writing its payload but before publishing the target.
+            val targetFile = logsDir.findFile(fileName)
+            val newestTempFile = logsDir.listFiles()
+                .filter { candidate ->
+                    candidate.name?.startsWith("$fileName.tmp_") == true &&
+                        !candidate.name.orEmpty().endsWith(".complete") &&
+                        logsDir.findFile("${candidate.name}.complete") != null
+                }
+                .maxByOrNull { candidate ->
+                    candidate.name.orEmpty().substringAfter("$fileName.tmp_")
+                }
+            val existingContent = if (!replaceExisting) {
+                selectLogContentSource(targetFile, newestTempFile)?.content.orEmpty()
             } else {
                 ""
             }
+            existingFile = targetFile
 
             // 拼接完整内容
-            val combinedContent = existingContent + content
+            val combinedContent = when {
+                replaceExisting -> content
+                // The channel may time out after the atomic publish. A retry
+                // of that same batch must not append it a second time.
+                else -> LogContentAppend.append(existingContent, content)
+            }
+            combinedContentForFallback = combinedContent
 
-            // 安全写入：先写临时文件，成功后删除旧文件并重命名
-            val tempFileName = "$fileName.tmp_${System.currentTimeMillis()}"
-            val tempFile = logsDir.createFile("text/plain", tempFileName)
-            if (tempFile == null) {
-                result.error("CREATE_FILE_FAILED", "无法创建临时日志文件", null)
+            if (!cleanupIncompleteLogTemps(logsDir, fileName)) {
+                result.error(
+                    "LOG_TEMP_CLEANUP_FAILED",
+                    "无法清理不完整的临时日志文件",
+                    combinedContent
+                )
                 return
             }
 
-            val outputStream = contentResolver.openOutputStream(tempFile.uri)
+            // 安全写入：先写临时文件，成功后删除旧文件并重命名
+            val latestTempGenerationMillis = logsDir.listFiles()
+                .mapNotNull { candidate ->
+                    val name = candidate.name ?: return@mapNotNull null
+                    if (!name.startsWith("$fileName.tmp_") ||
+                        name.endsWith(".complete")
+                    ) {
+                        null
+                    } else {
+                        name.substringAfter("$fileName.tmp_")
+                            .substringBefore('_')
+                            .toLongOrNull()
+                    }
+                }
+                .maxOrNull() ?: 0L
+            val generationMillis = maxOf(
+                System.currentTimeMillis(),
+                latestTempGenerationMillis + 1,
+            )
+            val tempGeneration =
+                "${generationMillis.toString().padStart(13, '0')}_" +
+                    java.lang.Long.toHexString(System.nanoTime()).padStart(16, '0')
+            val tempFileName = "$fileName.tmp_$tempGeneration"
+            tempFile = logsDir.createFile("text/plain", tempFileName)
+            if (tempFile == null) {
+                result.error(
+                    "CREATE_FILE_FAILED",
+                    "无法创建临时日志文件",
+                    combinedContent
+                )
+                return
+            }
+
+            val outputStream = contentResolver.openOutputStream(tempFile!!.uri)
             if (outputStream == null) {
                 // 清理临时文件
-                tempFile.delete()
-                result.error("WRITE_FAILED", "无法打开输出流写入日志", null)
+                tempFile!!.delete()
+                result.error(
+                    "WRITE_FAILED",
+                    "无法打开输出流写入日志",
+                    combinedContent
+                )
                 return
             }
 
@@ -615,24 +693,106 @@ class MainActivity : FlutterActivity() {
                 writer.write(combinedContent)
                 writer.flush()
             }
+            tempCompleteMarker = logsDir.createFile(
+                "text/plain",
+                "$tempFileName.complete"
+            )
+            if (tempCompleteMarker == null) {
+                tempFile!!.delete()
+                result.error(
+                    "LOG_REPLACE_FAILED",
+                    "无法标记完整临时日志文件",
+                    combinedContent
+                )
+                return
+            }
+            tempFileComplete = true
+
+            // Keep the new complete candidate recoverable while removing all
+            // older generations. A published target and a stale complete temp
+            // must never be left as ambiguous competing versions.
+            if (!cleanupOlderLogTemps(logsDir, fileName, tempFile!!, tempCompleteMarker!!)) {
+                result.error(
+                    "LOG_TEMP_CLEANUP_FAILED",
+                    "无法清理旧的临时日志文件",
+                    combinedContent
+                )
+                return
+            }
 
             // 写入成功：删除旧文件
             if (existingFile != null) {
-                existingFile.delete()
+                val deleted = existingFile.delete()
+                if (!deleted && existingFile.exists()) {
+                    tempFile!!.delete()
+                    tempCompleteMarker!!.delete()
+                    result.error(
+                        "LOG_REPLACE_FAILED",
+                        "无法替换已有日志文件 $fileName",
+                        combinedContent
+                    )
+                    return
+                }
             }
 
             // 将临时文件重命名为目标文件名
-            val renamed = tempFile.renameTo(fileName)
+            val renamed = tempFile!!.renameTo(fileName)
             if (!renamed) {
-                // 重命名失败，尝试重新创建。内容已写入临时文件，
-                // 至少数据没丢（临时文件会留在目录里）
+                // 将完整内容交给 Dart 层的本地回退路径保存，临时文件保留以防回退失败。
                 Log.w(TAG, "SAF: 日志文件重命名失败，临时文件保留: $tempFileName")
+                result.error(
+                    "LOG_TARGET_REMOVED",
+                    "无法将临时日志文件重命名为 $fileName",
+                    combinedContent
+                )
+                return
             }
+            tempCompleteMarker!!.delete()
+            // The published target supersedes every retained complete temp
+            // generation for this log, including generations older than the
+            // one used as the source for this replacement.
+            logsDir.listFiles()
+                .filter { candidate ->
+                    candidate.name?.startsWith("$fileName.tmp_") == true &&
+                        !candidate.name.orEmpty().endsWith(".complete") &&
+                        logsDir.findFile("${candidate.name}.complete") != null
+                }
+                .forEach { candidate ->
+                    logsDir.findFile("${candidate.name}.complete")?.delete()
+                    candidate.delete()
+                }
 
             result.success(null)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 写入日志文件失败", e)
-            result.error("WRITE_LOG_FAILED", "写入日志文件失败: ${e.message}", null)
+            if (!tempFileComplete) {
+                try {
+                    tempFile?.delete()
+                    tempCompleteMarker?.delete()
+                } catch (_: Exception) {
+                    // The complete Dart/local fallback remains available.
+                }
+                logsDirectory?.let { logsDir ->
+                    if (!cleanupIncompleteLogTemps(logsDir, fileName)) {
+                        Log.w(TAG, "SAF: 不完整临时日志清理失败，将在下次写入时重试")
+                    }
+                }
+            }
+            val oldFileStillExists = try {
+                existingFile?.exists() == true
+            } catch (_: Exception) {
+                false
+            }
+            // If reading the old SAF file failed, `content` is only the new
+            // batch, not a complete replacement payload. Let Dart persist it
+            // as an append fallback instead of retrying it with replace=true.
+            val fallbackContent = combinedContentForFallback
+                ?: if (replaceExisting) content else null
+            result.error(
+                if (oldFileStillExists) "LOG_REPLACE_FAILED" else "LOG_TARGET_REMOVED",
+                "写入日志文件失败: ${e.message}",
+                fallbackContent
+            )
         }
     }
 
@@ -655,17 +815,168 @@ class MainActivity : FlutterActivity() {
                     return
                 }
 
-            val file = logsDir.findFile(fileName)
-            if (file != null) {
-                val inputStream = contentResolver.openInputStream(file.uri)
-                val content = inputStream?.bufferedReader()?.use { it.readText() }
-                result.success(content)
-            } else {
-                result.success(null)
-            }
+            val targetFile = logsDir.findFile(fileName)
+            val newestTempFile = logsDir.listFiles()
+                .filter { candidate ->
+                    candidate.name?.startsWith("$fileName.tmp_") == true &&
+                        !candidate.name.orEmpty().endsWith(".complete") &&
+                        logsDir.findFile("${candidate.name}.complete") != null
+                }
+                .maxByOrNull { candidate ->
+                    candidate.name.orEmpty().substringAfter("$fileName.tmp_")
+                }
+            result.success(selectLogContentSource(targetFile, newestTempFile)?.content)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 读取日志文件失败", e)
             result.success(null)
+        }
+    }
+
+    /**
+     * Chooses between the published log and a retained complete temp.
+     * Appends make the newer temp extend the target; stale temps are prefixes
+     * of the published target. For replacement writes, which may diverge,
+     * SAF's modification time identifies the newer complete temp.
+     */
+    private data class SafLogContentSource(
+        val file: DocumentFile,
+        val content: String,
+    )
+
+    private fun selectLogContentSource(
+        targetFile: DocumentFile?,
+        newestTempFile: DocumentFile?
+    ): SafLogContentSource? {
+        if (targetFile == null && newestTempFile == null) return null
+        if (targetFile == null) {
+            return SafLogContentSource(
+                newestTempFile!!,
+                readSafLogFile(newestTempFile)
+                    ?: throw IllegalStateException("无法读取完整临时日志文件"),
+            )
+        }
+        if (newestTempFile == null) {
+            return SafLogContentSource(
+                targetFile,
+                readSafLogFile(targetFile)
+                    ?: throw IllegalStateException("无法读取已有日志文件"),
+            )
+        }
+
+        val targetContent = readSafLogFile(targetFile)
+        val tempContent = readSafLogFile(newestTempFile)
+        if (targetContent == null && tempContent == null) {
+            throw IllegalStateException("无法读取已有日志或完整临时日志文件")
+        }
+        if (targetContent == null) {
+            return SafLogContentSource(newestTempFile, tempContent!!)
+        }
+        if (tempContent == null) {
+            return SafLogContentSource(targetFile, targetContent)
+        }
+
+        if (tempContent != targetContent) {
+            if (tempContent.startsWith(targetContent)) {
+                return SafLogContentSource(newestTempFile, tempContent)
+            }
+            if (tempContent.isNotEmpty() && targetContent.startsWith(tempContent)) {
+                return SafLogContentSource(targetFile, targetContent)
+            }
+        }
+        // SAF providers may expose timestamps only to coarse precision (or
+        // return zero for both files). In a tie, the complete temp is the
+        // recoverable replacement staged before the target was published.
+        return if (newestTempFile.lastModified() >= targetFile.lastModified()) {
+            SafLogContentSource(newestTempFile, tempContent)
+        } else {
+            SafLogContentSource(targetFile, targetContent)
+        }
+    }
+
+    private fun readSafLogFile(file: DocumentFile): String? {
+        return try {
+            val inputStream = contentResolver.openInputStream(file.uri) ?: return null
+            inputStream.bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.w(TAG, "SAF: 无法读取日志候选文件 ${file.name}", e)
+            null
+        }
+    }
+
+    /** Removes orphaned partial log temps, retrying failed cleanup on later writes. */
+    private fun cleanupIncompleteLogTemps(
+        logsDir: DocumentFile,
+        fileName: String
+    ): Boolean {
+        return try {
+            var allRemoved = true
+            logsDir.listFiles()
+                .filter { it.name?.startsWith("$fileName.tmp_") == true }
+                .forEach { candidate ->
+                    val name = candidate.name ?: return@forEach
+                    val isMarker = name.endsWith(".complete")
+                    val shouldRemove = if (isMarker) {
+                        logsDir.findFile(name.removeSuffix(".complete")) == null
+                    } else {
+                        logsDir.findFile("$name.complete") == null
+                    }
+                    if (shouldRemove) {
+                        val requested = candidate.delete()
+                        if (!requested || candidate.exists()) allRemoved = false
+                    }
+                }
+            allRemoved
+        } catch (e: Exception) {
+            Log.w(TAG, "SAF: 清理不完整临时日志失败", e)
+            false
+        }
+    }
+
+    /**
+     * Removes every previous temp generation after the new generation is
+     * complete and recoverable, but before publishing it over the target.
+     */
+    private fun cleanupOlderLogTemps(
+        logsDir: DocumentFile,
+        fileName: String,
+        keepTempFile: DocumentFile,
+        keepCompleteMarker: DocumentFile
+    ): Boolean {
+        return try {
+            var allRemoved = true
+            val keepNames = setOf(keepTempFile.name, keepCompleteMarker.name)
+            val candidates = logsDir.listFiles()
+                .filter { it.name?.startsWith("$fileName.tmp_") == true }
+
+            candidates.forEach { candidate ->
+                val name = candidate.name ?: return@forEach
+                if (name in keepNames || !candidate.exists()) return@forEach
+
+                if (name.endsWith(".complete")) {
+                    val payloadName = name.removeSuffix(".complete")
+                    if (logsDir.findFile(payloadName) == null) {
+                        val deleted = candidate.delete()
+                        if (!deleted || candidate.exists()) allRemoved = false
+                    }
+                    return@forEach
+                }
+
+                val completeMarker = logsDir.findFile("$name.complete")
+                if (completeMarker != null) {
+                    val markerDeleted = completeMarker.delete()
+                    if (!markerDeleted || completeMarker.exists()) {
+                        allRemoved = false
+                        return@forEach
+                    }
+                }
+
+                val deleted = candidate.delete()
+                if (!deleted || candidate.exists()) allRemoved = false
+            }
+            allRemoved
+        } catch (e: Exception) {
+            Log.w(TAG, "SAF: 清理旧临时日志失败", e)
+            false
         }
     }
 
@@ -678,24 +989,100 @@ class MainActivity : FlutterActivity() {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
             if (treeDocument == null) {
-                result.success(emptyList<String>())
+                result.error("SAF_TREE_UNAVAILABLE", "无法访问已授权目录", null)
                 return
             }
             val logsDir = getOrCreateLogsDir(treeDocument)
                 ?: run {
-                    result.success(emptyList<String>())
+                    result.error("LOGS_DIR_UNAVAILABLE", "无法访问日志目录", null)
                     return
                 }
 
             val children = logsDir.listFiles()
-            val fileNames = children
-                .filter { it.isFile && (it.name?.endsWith(".log") == true) }
-                .map { it.name }
-                .filterNotNull()
+            val fileNames = children.mapNotNull { child ->
+                if (!child.isFile) return@mapNotNull null
+                val name = child.name ?: return@mapNotNull null
+                if (name.endsWith(".log")) return@mapNotNull name
+                val marker = ".log.tmp_"
+                val markerIndex = name.indexOf(marker)
+                if (markerIndex < 0) return@mapNotNull null
+                if (name.endsWith(".complete")) return@mapNotNull null
+                if (logsDir.findFile("$name.complete") == null) return@mapNotNull null
+                name.substring(0, markerIndex + ".log".length)
+            }.distinct()
             result.success(fileNames)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 列出日志文件失败", e)
-            result.success(emptyList<String>())
+            result.error("LIST_LOGS_FAILED", "读取日志目录失败", null)
+        }
+    }
+
+    /// Enumerate log files and their sizes/timestamps for retention and cap cleanup.
+    private fun listLogMetadataInSaf(
+        uriStr: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            val logsDir = treeDocument?.let { getOrCreateLogsDir(it) }
+            if (logsDir == null) {
+                result.error("LOGS_DIR_UNAVAILABLE", "无法访问日志目录", null)
+                return
+            }
+            val targetFilesByLogName = mutableMapOf<String, DocumentFile>()
+            val newestTempsByLogName = mutableMapOf<String, Pair<String, DocumentFile>>()
+            logsDir.listFiles().forEach { file ->
+                if (!file.isFile) return@forEach
+                val name = file.name ?: return@forEach
+                val isCompleteTemp = !name.endsWith(".log") &&
+                    name.contains(".log.tmp_") &&
+                    !name.endsWith(".complete") &&
+                    logsDir.findFile("$name.complete") != null
+                val logName = if (name.endsWith(".log")) {
+                    name
+                } else {
+                    val marker = ".log.tmp_"
+                    val markerIndex = name.indexOf(marker)
+                    if (markerIndex < 0) return@forEach
+                    if (name.endsWith(".complete")) return@forEach
+                    if (logsDir.findFile("$name.complete") == null) return@forEach
+                    name.substring(0, markerIndex + ".log".length)
+                }
+                if (isCompleteTemp) {
+                    val generation = name.substringAfter("$logName.tmp_")
+                    val previous = newestTempsByLogName[logName]
+                    if (previous == null || generation > previous.first) {
+                        newestTempsByLogName[logName] = generation to file
+                    }
+                } else if (name.endsWith(".log")) {
+                    targetFilesByLogName[logName] = file
+                }
+            }
+            val logNames = targetFilesByLogName.keys + newestTempsByLogName.keys
+            val metadata = logNames.distinct().map { name ->
+                val targetFile = targetFilesByLogName[name]
+                val tempFile = newestTempsByLogName[name]?.second
+                val selectedSource = if (tempFile != null && targetFile != null) {
+                    selectLogContentSource(targetFile, tempFile)
+                } else {
+                    null
+                }
+                val file = selectedSource?.file ?: targetFile ?: tempFile!!
+                val sizeBytes = selectedSource?.content
+                    ?.toByteArray(Charsets.UTF_8)
+                    ?.size
+                    ?: file.length()
+                mapOf(
+                    "name" to name,
+                    "sizeBytes" to sizeBytes,
+                    "modifiedAtMillis" to file.lastModified(),
+                )
+            }
+            result.success(metadata)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 读取日志元数据失败", e)
+            result.error("LIST_LOG_METADATA_FAILED", "读取日志元数据失败", null)
         }
     }
 
@@ -709,24 +1096,38 @@ class MainActivity : FlutterActivity() {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
             if (treeDocument == null) {
-                result.success(null)
+                result.success(false)
                 return
             }
             val logsDir = getOrCreateLogsDir(treeDocument)
                 ?: run {
-                    result.success(null)
+                    result.success(false)
                     return
                 }
 
-            val file = logsDir.findFile(fileName)
-            if (file != null) {
-                val deleted = file.delete()
-                Log.i(TAG, "SAF: 删除日志文件 $fileName: $deleted")
+            val files = logsDir.listFiles().filter { candidate ->
+                candidate.name == fileName ||
+                    candidate.name?.startsWith("$fileName.tmp_") == true
             }
-            result.success(null)
+            var deleteRequestsSucceeded = true
+            files.forEach { candidate ->
+                try {
+                    if (!candidate.delete()) deleteRequestsSucceeded = false
+                } catch (e: Exception) {
+                    deleteRequestsSucceeded = false
+                    Log.w(TAG, "SAF: 删除日志条目失败 ${candidate.name}", e)
+                }
+            }
+            val matchingFilesRemain = logsDir.listFiles().any { candidate ->
+                candidate.name == fileName ||
+                    candidate.name?.startsWith("$fileName.tmp_") == true
+            }
+            val deleted = deleteRequestsSucceeded && !matchingFilesRemain
+            Log.i(TAG, "SAF: 删除日志文件 $fileName: $deleted")
+            result.success(deleted)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 删除日志文件失败", e)
-            result.success(null)
+            result.success(false)
         }
     }
 

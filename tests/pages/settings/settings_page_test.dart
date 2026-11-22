@@ -9,76 +9,65 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/l10n/app_localizations.dart';
-import 'package:stroom/l10n/app_localizations_en.dart';
-import 'package:stroom/l10n/app_localizations_zh.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/pages/notification_settings_page.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
-import 'package:stroom/services/llm_credential_store.dart';
-
-ProviderEntriesNotifier? _providerEntriesNotifier;
-bool _providerEntriesLoadFinished = false;
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
-Widget _buildSettingsTestApp() {
+Widget _buildSettingsTestApp({
+  Locale locale = const Locale('zh', 'CN'),
+  UpdateNotifier? updateNotifier,
+}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        final notifier = ProviderEntriesNotifier(
-          credentialStore: _TestLlmCredentialStore(),
-        );
-        _providerEntriesNotifier = notifier;
+        final notifier = ProviderEntriesNotifier();
         // load() is normally called in the provider factory, so we call it here too.
-        _providerEntriesLoadFinished = false;
-        notifier.load().whenComplete(() => _providerEntriesLoadFinished = true);
+        notifier.load();
         return notifier;
       }),
-      updateProvider.overrideWith((ref) => UpdateNotifier()),
+      updateProvider.overrideWith((ref) => updateNotifier ?? UpdateNotifier()),
     ],
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const SettingsPage(),
     ),
   );
 }
 
-class _TestLlmCredentialStore implements LlmCredentialStore {
-  final Map<String, String> _values = {};
-
-  @override
-  Future<String?> read(String reference) async => _values[reference];
-
-  @override
-  Future<void> write(String reference, String secret) async {
-    _values[reference] = secret;
-  }
-
-  @override
-  Future<void> delete(String reference) async {
-    _values.remove(reference);
-  }
+Future<void> _scrollSettingsToEnd(WidgetTester tester) async {
+  await tester.drag(find.byType(ListView).first, const Offset(0, -10000));
+  await tester.pumpAndSettle();
 }
 
-Future<void> _pumpSettingsTestApp(WidgetTester tester) async {
-  await tester.pumpWidget(_buildSettingsTestApp());
-  for (var attempt = 0;
-      attempt < 1000 && !_providerEntriesLoadFinished;
-      attempt++) {
-    await tester.pump(const Duration(milliseconds: 10));
+class _FixedErrorUpdateNotifier extends UpdateNotifier {
+  _FixedErrorUpdateNotifier(String error) {
+    state = UpdateState(error: error);
   }
-  expect(_providerEntriesLoadFinished, isTrue);
-  expect(_providerEntriesNotifier?.state.isLoaded, isTrue);
-  await tester.pumpAndSettle();
+
+  @override
+  Future<void> checkForUpdate({bool silent = false}) async {}
 }
 
 /// 构建只包含 TTS、LLM 和 OCR 的已保存数据（模拟旧版本用户升级，无 ASR）
@@ -156,6 +145,313 @@ String _llmEntryWithModels() {
 }
 
 void main() {
+  testWidgets('settings page headings follow the selected locale',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildSettingsTestApp(locale: const Locale('en', 'US')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('General'), findsOneWidget);
+    expect(find.text('Task Completion Notifications'), findsOneWidget);
+    expect(find.text('Background Operation Optimization'), findsOneWidget);
+    await _scrollSettingsToEnd(tester);
+    await tester.ensureVisible(find.text('About'));
+    expect(find.text('About'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      _buildSettingsTestApp(locale: const Locale('zh', 'CN')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('常规设置'), findsOneWidget);
+    expect(find.text('任务完成通知'), findsOneWidget);
+    expect(find.text('后台运行优化'), findsOneWidget);
+    await _scrollSettingsToEnd(tester);
+    await tester.ensureVisible(find.text('关于'));
+    expect(find.text('关于'), findsOneWidget);
+  });
+
+  testWidgets('denied iOS notification request stays disabled', (tester) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 0;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: 0};
+      }
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(NotificationSettingsPage)),
+    )!;
+    await tester.tap(find.text(strings.notificationSettingsRequestPermission));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Switch), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('notifications_enabled'), isFalse);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('notification settings page follows the selected locale', (
+    tester,
+  ) async {
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return 1;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: 1};
+      }
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const NotificationSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Notification Permission Settings'), findsOneWidget);
+    expect(find.text('System Environment'), findsOneWidget);
+    expect(find.text('Platform Guide'), findsOneWidget);
+  });
+
+  testWidgets('notification action labels stay readable in narrow slots', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+    var permissionCode = 0;
+    const permissionsChannel = MethodChannel(
+      'flutter.baseflow.com/permissions/methods',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(permissionsChannel, (call) async {
+      if (call.method == 'checkPermissionStatus') return permissionCode;
+      return true;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(permissionsChannel, null);
+    });
+
+    Future<void> renderPage() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('de', 'DE'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.5),
+              ),
+              child: child!,
+            ),
+            home: const NotificationSettingsPage(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    final semantics = tester.ensureSemantics();
+    for (final code in [0, 4]) {
+      permissionCode = code;
+      await renderPage();
+      final strings = AppLocalizations.of(
+        tester.element(find.byType(NotificationSettingsPage)),
+      )!;
+      final label = code == 0
+          ? strings.notificationSettingsRequestPermission
+          : strings.notificationSettingsOpenSystemSettings;
+      for (final text in [strings.notificationSettingsCheckAgain, label]) {
+        final constrainedLabel = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == text,
+        );
+        expect(constrainedLabel, findsOneWidget);
+        await tester.ensureVisible(constrainedLabel);
+        await tester.pump();
+        final semanticLabel = tester.getSemantics(constrainedLabel).label;
+        expect(semanticLabel.replaceAll(RegExp(r'\s+'), ' '), contains(text));
+      }
+    }
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  testWidgets('update check errors follow the selected locale', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    Future<void> verifyError(Locale locale, String expectedText) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        _buildSettingsTestApp(
+          locale: locale,
+          updateNotifier: _FixedErrorUpdateNotifier('网络错误: connection failed'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _scrollSettingsToEnd(tester);
+      final checkForUpdates = find.text(
+        locale.languageCode == 'en' ? 'Check for Updates' : '检查更新',
+      );
+      await tester.ensureVisible(checkForUpdates);
+      await tester.tap(checkForUpdates);
+      await tester.pumpAndSettle();
+      expect(find.text(expectedText), findsOneWidget);
+    }
+
+    await verifyError(
+      const Locale('en', 'US'),
+      'Network error: connection failed',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await verifyError(const Locale('zh', 'CN'), '网络错误：connection failed');
+  });
+
+  testWidgets('About update entry shows and reopens a background download', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = UpdateNotifier()
+      ..state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.5.5',
+        downloadUrl: 'https://example.com/latest.zip',
+        isDownloading: true,
+        downloadInBackground: true,
+        downloadProgress: 0.42,
+        downloadReceivedBytes: 1024,
+      );
+    await tester.pumpWidget(
+      _buildSettingsTestApp(
+        locale: const Locale('en', 'US'),
+        updateNotifier: notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollSettingsToEnd(tester);
+
+    expect(find.text('Downloading update… 1.0 KB'), findsOneWidget);
+    notifier.state = notifier.state.copyWith(downloadTotalBytes: 2048);
+    await tester.pump();
+    expect(
+        find.text('Downloading update… 1.0 KB / 2.0 KB (42%)'), findsOneWidget);
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Cancel download'), findsOneWidget);
+    expect(find.text('Download in background'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('About update entry reopens a failed download for retry', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final notifier = UpdateNotifier()
+      ..state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.5.5',
+        downloadUrl: 'https://example.com/latest.zip',
+        downloadError: 'Download failed: no network',
+      );
+    await tester.pumpWidget(
+      _buildSettingsTestApp(
+        locale: const Locale('en', 'US'),
+        updateNotifier: notifier,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollSettingsToEnd(tester);
+
+    expect(find.text('Download failed: no network'), findsOneWidget);
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Retry download'), findsOneWidget);
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // From settings_page_asr_test.dart
   // ─────────────────────────────────────────────────────────────────────
@@ -175,13 +471,14 @@ void main() {
           'provider_entries': _savedDataWithoutAsr(),
         });
 
-        await _pumpSettingsTestApp(tester);
+        await tester.pumpWidget(_buildSettingsTestApp());
+        await tester.pumpAndSettle();
 
         // ASR should be migrated in and displayed
-        expect(find.text('TTS供应商'), findsOneWidget);
-        expect(find.text('LLM供应商'), findsOneWidget);
-        expect(find.text('OCR供应商'), findsOneWidget);
-        expect(find.text('音频转写供应商'), findsOneWidget);
+        expect(find.text('TTS（文本转语音）'), findsOneWidget);
+        expect(find.text('LLM（大语言模型）'), findsOneWidget);
+        expect(find.text('OCR（光学字符识别）'), findsOneWidget);
+        expect(find.text('STT（语音转文本）'), findsOneWidget);
       },
     );
   });
@@ -204,23 +501,13 @@ void main() {
         'provider_entries': _savedDataWithoutOcr(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
 
       // OCR should be migrated in and displayed
-      expect(find.text('TTS供应商'), findsOneWidget);
-      expect(find.text('LLM供应商'), findsOneWidget);
-      expect(find.text('OCR供应商'), findsOneWidget);
-    });
-  });
-
-  group('SettingsPage - built-in web search supplier', () {
-    testWidgets('shows the built-in entry without persisting it',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({'provider_entries': '[]'});
-
-      await _pumpSettingsTestApp(tester);
-
-      expect(find.text(kBuiltinWebSearchEntryName), findsOneWidget);
+      expect(find.text('TTS（文本转语音）'), findsOneWidget);
+      expect(find.text('LLM（大语言模型）'), findsOneWidget);
+      expect(find.text('OCR（光学字符识别）'), findsOneWidget);
     });
   });
 
@@ -230,7 +517,11 @@ void main() {
 
   group('SettingsPage - 压缩触发设置面板', () {
     Future<void> openCompactionPanel(WidgetTester tester) async {
-      final tileFinder = find.text('压缩触发设置').first;
+      final title = AppLocalizations.of(
+        tester.element(find.byType(SettingsPage)),
+      )!
+          .contextCompactionTriggerSettings;
+      final tileFinder = find.text(title).first;
       await tester.scrollUntilVisible(tileFinder, 300,
           scrollable: find.byType(Scrollable).first);
       await tester.tap(tileFinder);
@@ -249,7 +540,8 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
 
       await openCompactionPanel(tester);
 
@@ -272,6 +564,90 @@ void main() {
       );
     });
 
+    testWidgets('field labels are constrained without changing native editing',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _llmEntryWithModels(),
+      });
+
+      await tester.pumpWidget(
+        _buildSettingsTestApp(locale: const Locale('de', 'DE')),
+      );
+      await tester.pumpAndSettle();
+      await openCompactionPanel(tester);
+      tester.view.physicalSize = const Size(320, 640);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final strings = AppLocalizations.of(
+        tester.element(find.byKey(const Key('compaction-settings-body'))),
+      )!;
+      final percentField = find.byKey(const Key('global-percent-field'));
+      final percentDecoration = tester
+          .widget<InputDecorator>(
+            find.descendant(
+                of: percentField, matching: find.byType(InputDecorator)),
+          )
+          .decoration;
+      final percentLabel = percentDecoration.label;
+      expect(percentLabel, isA<ConstrainedText>());
+      expect(
+          (percentLabel! as ConstrainedText).data, strings.contextPercentField);
+      expect((percentLabel as ConstrainedText).maxLines, 1);
+
+      final modelTile =
+          find.widgetWithText(SwitchListTile, 'Model A | ProviderA');
+      await tester.drag(find.byType(ListView).last, const Offset(0, -160));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(modelTile);
+      await tester.pump(const Duration(milliseconds: 300));
+      final modelKey =
+          compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
+      final tokenField = find.descendant(
+        of: find.byKey(ValueKey('model-token-$modelKey')),
+        matching: find.byType(TextFormField),
+      );
+      await tester.ensureVisible(tokenField);
+      await tester.pump(const Duration(milliseconds: 100));
+      final tokenDecoration = tester
+          .widget<InputDecorator>(
+            find.descendant(
+                of: tokenField, matching: find.byType(InputDecorator)),
+          )
+          .decoration;
+      expect(tokenDecoration.label, isA<ConstrainedText>());
+      expect((tokenDecoration.label! as ConstrainedText).data,
+          strings.contextThresholdField);
+      expect((tokenDecoration.label! as ConstrainedText).maxLines, 1);
+
+      await tester.tap(tokenField);
+      await tester.enterText(tokenField, '48000');
+      await tester.pump();
+      final editableText = tester.widget<EditableText>(
+        find.descendant(of: tokenField, matching: find.byType(EditableText)),
+      );
+      editableText.controller.selection = const TextSelection(
+        baseOffset: 1,
+        extentOffset: 3,
+      );
+      await tester.pump(const Duration(milliseconds: 1200));
+
+      final currentEditableText = tester.widget<EditableText>(
+        find.descendant(of: tokenField, matching: find.byType(EditableText)),
+      );
+      expect(currentEditableText.focusNode.hasFocus, isTrue);
+      expect(currentEditableText.controller.text, '48000');
+      expect(currentEditableText.controller.selection,
+          const TextSelection(baseOffset: 1, extentOffset: 3));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('总开关关闭后下方设置全部置灰且不可操作', (tester) async {
       tester.view.physicalSize = const Size(1080, 8000);
       tester.view.devicePixelRatio = 1.0;
@@ -284,7 +660,8 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 
       // 预置一个开启的模型独立设置（带可见的 token 输入框）
@@ -363,7 +740,8 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 
       final percentField = find.byKey(const Key('global-percent-field'));
@@ -393,7 +771,8 @@ void main() {
 
       SharedPreferences.setMockInitialValues({});
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 
       final percentField = find.byKey(const Key('global-percent-field'));
@@ -427,7 +806,8 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 
       // 开启 Model A 的独立设置
@@ -495,11 +875,13 @@ void main() {
 
       SharedPreferences.setMockInitialValues({});
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
 
       // The whole about header card is tappable — tapping the app name
       // text (not just the logo icon) must open the dialog.
       // Scroll the last section of the long ListView into view first.
+      await _scrollSettingsToEnd(tester);
       await tester.ensureVisible(find.text('Stroom'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Stroom'));
@@ -518,6 +900,36 @@ void main() {
       expect(find.text('点击查看版本信息'), findsNothing);
     });
 
+    testWidgets('version info dialog labels follow the selected locale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        _buildSettingsTestApp(locale: const Locale('en', 'US')),
+      );
+      await tester.pumpAndSettle();
+      await _scrollSettingsToEnd(tester);
+      await tester.ensureVisible(find.text('Stroom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stroom'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Version information'), findsOneWidget);
+      expect(find.text('Version'), findsOneWidget);
+      expect(find.text('Release time'), findsOneWidget);
+      expect(find.text('Local build'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('version info dialog closes via 关闭 button', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -528,7 +940,8 @@ void main() {
 
       SharedPreferences.setMockInitialValues({});
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.byIcon(Icons.auto_awesome));
       await tester.pumpAndSettle();
@@ -543,51 +956,91 @@ void main() {
     });
   });
 
-  group('About update error localization', () {
-    test('localizes provider update errors in English', () {
-      final strings = AppLocalizationsEn();
-
-      expect(
-        localizeAboutUpdateError(
-          strings,
-          strings.updateCheckNetworkError('SocketException'),
-        ),
-        strings.aboutUpdateNetworkError('SocketException'),
-      );
-      expect(
-        localizeAboutUpdateError(
-          strings,
-          strings.updateCheckHttpFailed('502'),
-        ),
-        strings.aboutUpdateHttpError('502'),
-      );
-      expect(
-        localizeAboutUpdateError(strings, strings.updateCheckInvalidResponse),
-        strings.aboutUpdateInvalidResponse,
-      );
+  testWidgets(
+      'About menu separates update controls from links and orders legal links',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 6000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
     });
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
 
-    test('localizes provider update errors in Chinese', () {
-      final strings = AppLocalizationsZh();
+    await tester.pumpWidget(_buildSettingsTestApp());
+    await tester.pumpAndSettle();
 
-      expect(
-        localizeAboutUpdateError(
-          strings,
-          strings.updateCheckNetworkError('SocketException'),
-        ),
-        strings.aboutUpdateNetworkError('SocketException'),
-      );
-      expect(
-        localizeAboutUpdateError(
-          strings,
-          strings.updateCheckHttpFailed('502'),
-        ),
-        strings.aboutUpdateHttpError('502'),
-      );
-      expect(
-        localizeAboutUpdateError(strings, strings.updateCheckInvalidResponse),
-        strings.aboutUpdateInvalidResponse,
-      );
-    });
+    final updates = find.text('检查更新');
+    final previewUpdates = find.text('接收预览版');
+    final home = find.text('项目主页');
+    final generalAndLegalLinks = [
+      find.text('问题反馈'),
+      find.text('隐私政策'),
+      find.text('开源协议'),
+      find.text('开源许可'),
+    ];
+    final updatesCard = find
+        .ancestor(
+          of: updates,
+          matching: find.byType(Card),
+        )
+        .first;
+    final previewUpdatesCard = find
+        .ancestor(
+          of: previewUpdates,
+          matching: find.byType(Card),
+        )
+        .first;
+    final linksCard = find
+        .ancestor(
+          of: home,
+          matching: find.byType(Card),
+        )
+        .first;
+    List<String> titlesIn(Finder card) => find
+        .descendant(of: card, matching: find.byType(ListTile))
+        .evaluate()
+        .map(
+          (element) => (element.widget as ListTile).title as ConstrainedText,
+        )
+        .map((title) => title.data)
+        .toList();
+
+    expect(
+        identical(
+            tester.widget(updatesCard), tester.widget(previewUpdatesCard)),
+        isTrue);
+    expect(identical(tester.widget(updatesCard), tester.widget(linksCard)),
+        isFalse);
+    expect(titlesIn(updatesCard), ['检查更新', '接收预览版']);
+    expect(titlesIn(linksCard), [
+      '项目主页',
+      '问题反馈',
+      '隐私政策',
+      '开源协议',
+      '开源许可',
+    ]);
+    for (final row in generalAndLegalLinks) {
+      final legalCard = find
+          .ancestor(
+            of: row,
+            matching: find.byType(Card),
+          )
+          .first;
+      expect(identical(tester.widget(linksCard), tester.widget(legalCard)),
+          isTrue);
+    }
+
+    final legalLabels = find
+        .descendant(of: linksCard, matching: find.byType(Text))
+        .evaluate()
+        .map((element) => (element.widget as Text).data)
+        .whereType<String>()
+        .toList();
+    expect(legalLabels.indexOf('项目主页'), lessThan(legalLabels.indexOf('问题反馈')));
+    expect(legalLabels.indexOf('问题反馈'), lessThan(legalLabels.indexOf('隐私政策')));
+    expect(legalLabels.indexOf('隐私政策'), lessThan(legalLabels.indexOf('开源协议')));
+    expect(legalLabels.indexOf('开源协议'), lessThan(legalLabels.indexOf('开源许可')));
   });
 }

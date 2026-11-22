@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../widgets/constrained_text.dart';
 import 'startup_backdrop_painter.dart';
 import 'startup_visual_style.dart';
 
@@ -103,23 +104,53 @@ class _StartupPageState extends State<StartupPage>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final hero = Center(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: _buildMintHero(),
-                    ),
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  final enlargesHeroText = const [11.0, 15.0, 34.0].any(
+                    (fontSize) => textScaler.scale(fontSize) > fontSize + 0.01,
                   );
+                  final isCompact = constraints.maxHeight < 520;
 
-                  // Keep the redesigned card compact on short screens.
-                  if (constraints.maxHeight < 520) {
+                  // Keep display text at its intended size. A compact card uses
+                  // less decorative spacing; enlarged text and very short
+                  // layouts scroll the hero while keeping startup feedback visible.
+                  if (isCompact && !enlargesHeroText) {
+                    final compactHero = Center(
+                      child: _buildMintHero(compact: true),
+                    );
+                    final hasStartupDetails = widget.statusMessage.isNotEmpty ||
+                        (widget.progressDetail?.isNotEmpty ?? false);
                     return Column(
                       children: [
-                        Expanded(child: hero),
+                        Expanded(
+                          child: hasStartupDetails
+                              ? SingleChildScrollView(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 24,
+                                  ),
+                                  child: compactHero,
+                                )
+                              : compactHero,
+                        ),
                         _buildLoadingSection(),
-                        const SizedBox(height: 24),
                       ],
                     );
                   }
+
+                  if (isCompact || enlargesHeroText) {
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: _buildMintHero()),
+                          ),
+                        ),
+                        _buildLoadingSection(),
+                      ],
+                    );
+                  }
+
+                  final hero = Center(child: _buildMintHero());
 
                   return Column(
                     children: [
@@ -139,12 +170,12 @@ class _StartupPageState extends State<StartupPage>
     );
   }
 
-  Widget _buildMintHero() {
+  Widget _buildMintHero({bool compact = false}) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 320),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(compact ? 13 : 24),
         decoration: BoxDecoration(
           color: _visualStyle.cardSurface.withValues(alpha: 0.24),
           border: Border.all(color: _visualStyle.cardBorder),
@@ -162,13 +193,16 @@ class _StartupPageState extends State<StartupPage>
           children: [
             Row(
               children: [
-                Text(
-                  'FOCUS FLOW',
-                  style: TextStyle(
-                    color: _visualStyle.secondaryForeground,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2,
+                Expanded(
+                  child: ConstrainedText(
+                    'FOCUS FLOW',
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: _visualStyle.secondaryForeground,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 2,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -179,13 +213,13 @@ class _StartupPageState extends State<StartupPage>
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            SizedBox(height: compact ? 8 : 22),
             _buildAppIcon(size: 68),
-            const SizedBox(height: 18),
+            SizedBox(height: compact ? 8 : 18),
             _buildBrandName(fontSize: 34, letterSpacing: 1),
-            const SizedBox(height: 7),
+            SizedBox(height: compact ? 2 : 7),
             _buildTagline(),
-            const SizedBox(height: 22),
+            SizedBox(height: compact ? 6 : 22),
             _buildFlowRail(),
           ],
         ),
@@ -229,8 +263,9 @@ class _StartupPageState extends State<StartupPage>
     required double fontSize,
     required double letterSpacing,
   }) {
-    return Text(
+    return ConstrainedText(
       'Stroom',
+      maxLines: 1,
       textAlign: TextAlign.center,
       style: TextStyle(
         fontSize: fontSize,

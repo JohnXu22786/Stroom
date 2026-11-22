@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import '../models/chat_message.dart';
 import '../providers/conversation_provider.dart';
 
+import '../widgets/constrained_text.dart';
+
 // ============================================================================
 // Data classes for search results
 // ============================================================================
@@ -205,7 +207,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.messageSearchTitle),
+        title: ConstrainedText(
+          localizations.messageSearchTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -361,7 +367,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                     child: Icon(Icons.push_pin, size: 14, color: cs.primary),
                   ),
                 Expanded(
-                  child: Text(
+                  child: ConstrainedText(
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -416,11 +422,12 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     ColorScheme cs,
   ) {
     // Compute match position relative to snippet start
-    final relativeStart = match.matchStart - snippetStart;
+    final relativeStart =
+        match.matchStart - snippetStart + (snippetStart > 0 ? 1 : 0);
     final queryLen = match.matchEnd - match.matchStart;
 
     if (relativeStart < 0 || relativeStart + queryLen > snippet.length) {
-      return Text(
+      return ConstrainedText(
         snippet,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
@@ -446,13 +453,13 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       spans.add(TextSpan(text: snippet.substring(relativeStart + queryLen)));
     }
 
-    return RichText(
+    return ConstrainedText(
+      snippet,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
-      text: TextSpan(
-        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-        children: spans,
-      ),
+      useNaturalWidthLayout: true,
+      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+      highlightedText: TextSpan(children: spans),
     );
   }
 

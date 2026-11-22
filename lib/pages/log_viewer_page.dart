@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -8,6 +9,8 @@ import 'package:path/path.dart' as p;
 
 import '../l10n/app_localizations.dart';
 import '../services/app_log_service.dart';
+
+import '../widgets/constrained_text.dart';
 
 // ====================================================================
 // LogViewerPage — 应用日志查看器
@@ -29,6 +32,11 @@ class _LogViewerPageState extends State<LogViewerPage>
     with WidgetsBindingObserver {
   List<String> _logFiles = [];
   bool _isLoading = true;
+  AppLogPolicy? _policy;
+  AppLogStorageUsage _storageUsage = const AppLogStorageUsage(
+    fileCount: 0,
+    bytes: 0,
+  );
   Timer? _retryTimer;
   int _retryCount = 0;
   static const Duration _maxRetryDelay = Duration(seconds: 60);
@@ -37,6 +45,7 @@ class _LogViewerPageState extends State<LogViewerPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadPolicyAndUsage();
     _loadLogFiles();
   }
 
@@ -51,6 +60,7 @@ class _LogViewerPageState extends State<LogViewerPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadLogFiles();
+      _loadPolicyAndUsage();
     }
   }
 
@@ -97,11 +107,56 @@ class _LogViewerPageState extends State<LogViewerPage>
         _scheduleRetry(); // Retry on error too
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.appLogLoadFilesError(e)),
+            content: Text(
+              AppLocalizations.of(context)!.appLogLoadFilesError(e),
+            ),
           ),
         );
       }
+    }
+  }
+
+  Future<void> _loadPolicyAndUsage() async {
+    try {
+      final policy = await AppLogService.getPolicy();
+      final usage = await AppLogService.getStorageUsage();
+      if (!mounted) return;
+      setState(() {
+        _policy = policy;
+        _storageUsage = usage;
+      });
+    } catch (e) {
+      debugPrint('[LogViewer] Failed to load logging settings: $e');
+    }
+  }
+
+  Future<void> _openSettings() async {
+    try {
+      final policy = _policy ?? await AppLogService.getPolicy();
+      final storageUsage = await AppLogService.getStorageUsage();
+      if (!mounted) return;
+      final updatedPolicy = await showDialog<AppLogPolicy>(
+        context: context,
+        builder: (_) =>
+            _AppLogSettingsDialog(policy: policy, storageUsage: storageUsage),
+      );
+      if (updatedPolicy == null || !mounted) return;
+      await AppLogService.updatePolicy(updatedPolicy);
+      await _loadPolicyAndUsage();
+      await _loadLogFiles();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.appLogSettingsSaved),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.appLogSettingsError(e)),
+        ),
+      );
     }
   }
 
@@ -164,30 +219,24 @@ class _LogViewerPageState extends State<LogViewerPage>
   }
 
   Future<void> _deleteLogFile(String fileName) async {
+    bool? deleted;
+    Object? deleteError;
     try {
-      final logDir = await AppLogService.getLogDir();
-      final file = File(p.join(logDir.path, fileName));
-      if (await file.exists()) {
-        await file.delete();
-        await _loadLogFiles();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  AppLocalizations.of(context)!.appLogDeleteDone(fileName)),
-            ),
-          );
-        }
-      }
+      deleted = await AppLogService.deleteLogFile(fileName);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.appLogDeleteError(e)),
-          ),
-        );
-      }
+      deleteError = e;
     }
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final message = deleteError != null
+        ? l10n.appLogDeleteError(deleteError)
+        : deleted == true
+            ? l10n.appLogDeleteDone(fileName)
+            : l10n.appLogDeleteUnconfirmed;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+    await _loadLogFiles();
+    await _loadPolicyAndUsage();
   }
 
   /// 导出日志文件：复制文件路径到剪贴板，方便用户用系统资源管理器打开。
@@ -215,8 +264,9 @@ class _LogViewerPageState extends State<LogViewerPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.appLogPathCopied(filePath)),
+            content: Text(
+              AppLocalizations.of(context)!.appLogPathCopied(filePath),
+            ),
           ),
         );
       }
@@ -238,15 +288,25 @@ class _LogViewerPageState extends State<LogViewerPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appLogPageTitle),
+        title: ConstrainedText(
+          l10n.appLogPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: l10n.appLogSettings,
+            onPressed: _openSettings,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: l10n.appLogRefresh,
             onPressed: () {
               _retryCount = 0; // Reset retry count on manual refresh
               _loadLogFiles();
+              _loadPolicyAndUsage();
             },
           ),
           IconButton(
@@ -255,10 +315,11 @@ class _LogViewerPageState extends State<LogViewerPage>
             onPressed: () async {
               await AppLogService.cleanupOldLogs();
               await _loadLogFiles();
+              await _loadPolicyAndUsage();
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.appLogCleanupDone)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(l10n.appLogCleanupDone)));
             },
           ),
         ],
@@ -269,11 +330,28 @@ class _LogViewerPageState extends State<LogViewerPage>
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                l10n.appLogRetentionNotice(AppLogService.retentionDays),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.appLogRetentionNotice(
+                      _policy?.retentionDays ?? AppLogService.retentionDays,
+                    ),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    l10n.appLogStorageUsage(
+                      _storageUsage.fileCount,
+                      _formatLogBytes(_storageUsage.bytes),
+                    ),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -344,10 +422,7 @@ class _LogViewerPageState extends State<LogViewerPage>
       itemBuilder: (context, index) {
         final fileName = _logFiles[index];
         return ListTile(
-          leading: Icon(
-            Icons.article,
-            color: theme.colorScheme.primary,
-          ),
+          leading: Icon(Icons.article, color: theme.colorScheme.primary),
           title: Text(
             fileName,
             style: const TextStyle(fontWeight: FontWeight.w500),
@@ -360,14 +435,20 @@ class _LogViewerPageState extends State<LogViewerPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: Icon(Icons.ios_share,
-                    color: theme.colorScheme.primary, size: 20),
+                icon: Icon(
+                  Icons.ios_share,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
                 tooltip: l10n.appLogExport,
                 onPressed: () => _exportLogFile(fileName),
               ),
               IconButton(
-                icon: Icon(Icons.delete_outline,
-                    color: theme.colorScheme.error, size: 20),
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: theme.colorScheme.error,
+                  size: 20,
+                ),
                 tooltip: l10n.appLogDelete,
                 onPressed: () => _confirmDelete(fileName),
               ),
@@ -403,12 +484,20 @@ class _LogViewerPageState extends State<LogViewerPage>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.appLogConfirmDeleteTitle),
+        title: ConstrainedText(
+          l10n.appLogConfirmDeleteTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(l10n.appLogConfirmDeleteMessage(fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.appLogCancel),
+            child: ConstrainedText(
+              l10n.appLogCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             onPressed: () {
@@ -418,13 +507,210 @@ class _LogViewerPageState extends State<LogViewerPage>
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(ctx).colorScheme.error,
             ),
-            child: Text(l10n.appLogDelete),
+            child: ConstrainedText(
+              l10n.appLogDelete,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
+String _formatLogBytes(int bytes) {
+  if (bytes < 1024 * 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+}
+
+class _AppLogSettingsDialog extends StatefulWidget {
+  const _AppLogSettingsDialog({
+    required this.policy,
+    required this.storageUsage,
+  });
+
+  final AppLogPolicy policy;
+  final AppLogStorageUsage storageUsage;
+
+  @override
+  State<_AppLogSettingsDialog> createState() => _AppLogSettingsDialogState();
+}
+
+class _AppLogSettingsDialogState extends State<_AppLogSettingsDialog> {
+  late int _retentionDays;
+  late LogLevel _minimumLevel;
+  late int _maxStorageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _retentionDays = widget.policy.retentionDays;
+    _minimumLevel = widget.policy.minimumLevel;
+    _maxStorageBytes = widget.policy.maxStorageBytes ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final retentionOptions = <int>{1, 3, 7, 15, 30, 60, 90, 180, 365}
+      ..add(_retentionDays);
+    const megabyte = 1024 * 1024;
+    final sizeOptions = <int>{
+      0,
+      10 * megabyte,
+      50 * megabyte,
+      100 * megabyte,
+      500 * megabyte,
+    }..add(_maxStorageBytes);
+
+    return AlertDialog(
+      title: ConstrainedText(
+        l10n.appLogSettingsTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.appLogStorageUsage(
+                widget.storageUsage.fileCount,
+                _formatLogBytes(widget.storageUsage.bytes),
+              ),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            DropdownButtonFormField<int>(
+              isExpanded: true,
+              initialValue: _retentionDays,
+              decoration: InputDecoration(
+                label: ConstrainedText(
+                  l10n.appLogRetentionDays,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              items: (retentionOptions.toList()..sort())
+                  .map(
+                    (days) => DropdownMenuItem(
+                      value: days,
+                      child: ConstrainedText(
+                        l10n.appLogDays(days),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _retentionDays = value);
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<LogLevel>(
+              isExpanded: true,
+              initialValue: _minimumLevel,
+              decoration: InputDecoration(
+                label: ConstrainedText(
+                  l10n.appLogMinimumLevel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              items: LogLevel.values
+                  .map(
+                    (level) => DropdownMenuItem(
+                      value: level,
+                      child: ConstrainedText(
+                        _logLevelLabel(l10n, level),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _minimumLevel = value);
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              isExpanded: true,
+              initialValue: _maxStorageBytes,
+              decoration: InputDecoration(
+                label: ConstrainedText(
+                  l10n.appLogStorageLimit,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              items: (sizeOptions.toList()..sort()).map((sizeBytes) {
+                return DropdownMenuItem(
+                  value: sizeBytes,
+                  child: ConstrainedText(
+                    sizeBytes == 0
+                        ? l10n.appLogUnlimited
+                        : _formatLogBytes(sizeBytes),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _maxStorageBytes = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.appLogSettingsHelp,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: ConstrainedText(
+            l10n.appLogCancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            AppLogPolicy(
+              retentionDays: _retentionDays,
+              minimumLevel: _minimumLevel,
+              maxStorageBytes: _maxStorageBytes == 0 ? null : _maxStorageBytes,
+            ),
+          ),
+          child: ConstrainedText(
+            l10n.appLogSave,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _logLevelLabel(AppLocalizations l10n, LogLevel level) => switch (level) {
+      LogLevel.debug => l10n.appLogLevelDebug,
+      LogLevel.info => l10n.appLogLevelInfo,
+      LogLevel.warning => l10n.appLogLevelWarning,
+      LogLevel.error => l10n.appLogLevelError,
+    };
 
 // ====================================================================
 // 日志内容查看页面
@@ -456,20 +742,39 @@ class _ParsedLogLine {
   final bool isEmpty;
   final Color? color;
   final IconData? icon;
+  final DateTime? timestamp;
+  final String? level;
+  final String? source;
 
   const _ParsedLogLine({
     required this.text,
     required this.isEmpty,
     this.color,
     this.icon,
+    this.timestamp,
+    this.level,
+    this.source,
   });
 }
 
 /// 匹配日志行中的级别标记，如 `[ERROR]`。
 final RegExp _levelPattern = RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]');
+final RegExp _logEntryPattern = RegExp(
+  r'^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{6})?)\] '
+  r'\[(DEBUG|INFO|WARN|ERROR)\] \[([^\]]+)\]'
+  r'(?: \[seq:\d+\])?',
+);
 
 class _LogContentPageState extends State<LogContentPage> {
   bool _showRaw = false;
+  bool _showFilters = false;
+  String _keyword = '';
+  String _sourceFilter = '';
+  String? _levelFilter;
+  TimeOfDay? _fromTime;
+  TimeOfDay? _untilTime;
+  final TextEditingController _keywordController = TextEditingController();
+  final TextEditingController _sourceController = TextEditingController();
   final ScrollController _rawScrollController = ScrollController();
   final ScrollController _structuredScrollController = ScrollController();
 
@@ -495,6 +800,8 @@ class _LogContentPageState extends State<LogContentPage> {
 
   @override
   void dispose() {
+    _keywordController.dispose();
+    _sourceController.dispose();
     _rawScrollController.dispose();
     _structuredScrollController.dispose();
     super.dispose();
@@ -555,7 +862,8 @@ class _LogContentPageState extends State<LogContentPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(AppLocalizations.of(context)!.appLogCopyError(e))),
+          content: Text(AppLocalizations.of(context)!.appLogCopyError(e)),
+        ),
       );
       return;
     }
@@ -577,14 +885,91 @@ class _LogContentPageState extends State<LogContentPage> {
     return count;
   }
 
+  bool get _hasActiveFilters =>
+      _keyword.trim().isNotEmpty ||
+      _sourceFilter.trim().isNotEmpty ||
+      _levelFilter != null ||
+      _fromTime != null ||
+      _untilTime != null;
+
+  List<_ParsedLogLine> get _visibleLines {
+    final blocks = <List<_ParsedLogLine>>[];
+    for (final line in _lines) {
+      if (line.timestamp != null || blocks.isEmpty) {
+        blocks.add([line]);
+      } else {
+        blocks.last.add(line);
+      }
+    }
+
+    return blocks
+        .where((block) {
+          final entry = block.firstWhere(
+            (line) => line.timestamp != null,
+            orElse: () => block.first,
+          );
+          if (_levelFilter != null && entry.level != _levelFilter) return false;
+          if (_sourceFilter.trim().isNotEmpty &&
+              !(entry.source ?? '').toLowerCase().contains(
+                    _sourceFilter.trim().toLowerCase(),
+                  )) {
+            return false;
+          }
+          if ((_fromTime != null || _untilTime != null) &&
+              entry.timestamp == null) {
+            return false;
+          }
+          final timestamp = entry.timestamp;
+          if (timestamp != null) {
+            final minute = timestamp.hour * 60 + timestamp.minute;
+            final from = _fromTime == null
+                ? null
+                : _fromTime!.hour * 60 + _fromTime!.minute;
+            final until = _untilTime == null
+                ? null
+                : _untilTime!.hour * 60 + _untilTime!.minute;
+            if (from != null && until != null) {
+              final matches = from <= until
+                  ? minute >= from && minute <= until
+                  : minute >= from || minute <= until;
+              if (!matches) return false;
+            } else if (from != null && minute < from) {
+              return false;
+            } else if (until != null && minute > until) {
+              return false;
+            }
+          }
+          if (_keyword.trim().isNotEmpty &&
+              !block
+                  .map((line) => line.text)
+                  .join('\n')
+                  .toLowerCase()
+                  .contains(_keyword.trim().toLowerCase())) {
+            return false;
+          }
+          return true;
+        })
+        .expand((block) => block)
+        .toList(growable: false);
+  }
+
   static List<_ParsedLogLine> _parseLines(String content) {
     return content.split('\n').map((line) {
       if (line.trim().isEmpty) {
         return _ParsedLogLine(text: line, isEmpty: true);
       }
       final match = _levelPattern.firstMatch(line);
+      final entryMatch = _logEntryPattern.firstMatch(line);
+      final timestamp =
+          entryMatch == null ? null : DateTime.tryParse(entryMatch.group(1)!);
       if (match == null) {
-        return _ParsedLogLine(text: line, isEmpty: false);
+        return _ParsedLogLine(
+          text: line,
+          isEmpty: false,
+          timestamp: timestamp,
+          level: entryMatch?.group(2),
+          source: entryMatch?.group(3),
+        );
       }
       final (Color?, IconData?) levelStyle = switch (match.group(1)!) {
         'ERROR' => (Colors.red, Icons.error_outline),
@@ -598,6 +983,9 @@ class _LogContentPageState extends State<LogContentPage> {
         isEmpty: false,
         color: levelStyle.$1,
         icon: levelStyle.$2,
+        timestamp: timestamp,
+        level: entryMatch?.group(2) ?? match.group(1),
+        source: entryMatch?.group(3),
       );
     }).toList(growable: false);
   }
@@ -606,28 +994,44 @@ class _LogContentPageState extends State<LogContentPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
+    final toolbarHeight = math.max(
+      kToolbarHeight,
+      MediaQuery.textScalerOf(context).scale(kToolbarHeight),
+    );
 
     return Scaffold(
       appBar: AppBar(
-        // FittedBox 防止大字体缩放下两行标题超出固定高度的工具栏。
-        title: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(widget.fileName,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(
-                l10n.appLogLineCount(_lineCount),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+        toolbarHeight: toolbarHeight,
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedText(
+              widget.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            ConstrainedText(
+              _hasActiveFilters
+                  ? l10n.appLogFilteredLineCount(
+                      _visibleLines.length,
+                      _lineCount,
+                    )
+                  : l10n.appLogLineCount(_lineCount),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ],
-          ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
+            tooltip: l10n.appLogFilter,
+            onPressed: () => setState(() => _showFilters = !_showFilters),
+          ),
           IconButton(
             icon: const Icon(Icons.copy_all),
             tooltip: l10n.appLogCopyAll,
@@ -640,17 +1044,180 @@ class _LogContentPageState extends State<LogContentPage> {
           ),
         ],
       ),
-      body: _showRaw ? _buildRawView(theme) : _buildStructuredView(theme),
+      body: Column(
+        children: [
+          if (_showFilters) _buildFilterPanel(l10n),
+          Expanded(
+            child:
+                _showRaw ? _buildRawView(theme) : _buildStructuredView(theme),
+          ),
+        ],
+      ),
     );
   }
 
+  Widget _buildFilterPanel(AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(
+        children: [
+          TextField(
+            controller: _keywordController,
+            decoration: InputDecoration(
+              label: ConstrainedText(
+                l10n.appLogSearch,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              prefixIcon: const Icon(Icons.search),
+              isDense: true,
+            ),
+            onChanged: (value) => setState(() => _keyword = value),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _sourceController,
+                  decoration: InputDecoration(
+                    label: ConstrainedText(
+                      l10n.appLogSource,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    prefixIcon: const Icon(Icons.source_outlined),
+                    isDense: true,
+                  ),
+                  onChanged: (value) => setState(() => _sourceFilter = value),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String?>(
+                  key: ValueKey(_levelFilter),
+                  isExpanded: true,
+                  initialValue: _levelFilter,
+                  decoration: InputDecoration(
+                    label: ConstrainedText(
+                      l10n.appLogLevel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    isDense: true,
+                  ),
+                  items: [
+                    DropdownMenuItem<String?>(
+                      value: null,
+                      child: ConstrainedText(
+                        l10n.appLogAnyLevel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    ...LogLevel.values.map(
+                      (level) => DropdownMenuItem<String?>(
+                        value: level.label,
+                        child: ConstrainedText(
+                          _logLevelLabel(l10n, level),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _levelFilter = value),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _chooseTime(fromTime: true),
+                  icon: const Icon(Icons.schedule),
+                  label: ConstrainedText(
+                    _fromTime == null
+                        ? l10n.appLogFromTime
+                        : '${l10n.appLogFromTime}: ${_fromTime!.format(context)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _chooseTime(fromTime: false),
+                  icon: const Icon(Icons.schedule),
+                  label: ConstrainedText(
+                    _untilTime == null
+                        ? l10n.appLogUntilTime
+                        : '${l10n.appLogUntilTime}: ${_untilTime!.format(context)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: l10n.appLogClearFilters,
+                onPressed: _hasActiveFilters
+                    ? () => setState(() {
+                          _keyword = '';
+                          _sourceFilter = '';
+                          _keywordController.clear();
+                          _sourceController.clear();
+                          _levelFilter = null;
+                          _fromTime = null;
+                          _untilTime = null;
+                        })
+                    : null,
+                icon: const Icon(Icons.clear_all),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _chooseTime({required bool fromTime}) async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: fromTime
+          ? _fromTime ?? const TimeOfDay(hour: 0, minute: 0)
+          : _untilTime ?? const TimeOfDay(hour: 23, minute: 59),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      if (fromTime) {
+        _fromTime = selected;
+      } else {
+        _untilTime = selected;
+      }
+    });
+  }
+
   Widget _buildRawView(ThemeData theme) {
+    if (_hasActiveFilters && _visibleLines.every((line) => line.isEmpty)) {
+      return Center(
+        child: Text(
+          AppLocalizations.of(context)!.appLogNoMatches,
+          style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+    final visibleContent = _hasActiveFilters
+        ? _visibleLines.map((line) => line.text).join('\n')
+        : widget.content;
     return SingleChildScrollView(
       controller: _rawScrollController,
       // 纯文本模式边缘留白更大，阅读更舒适。
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: SelectableText(
-        widget.content,
+        visibleContent,
         style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 12,
@@ -661,12 +1228,23 @@ class _LogContentPageState extends State<LogContentPage> {
   }
 
   Widget _buildStructuredView(ThemeData theme) {
+    final lines = _visibleLines;
+    if (lines.isEmpty || lines.every((line) => line.isEmpty)) {
+      return Center(
+        child: Text(
+          _hasActiveFilters
+              ? AppLocalizations.of(context)!.appLogNoMatches
+              : AppLocalizations.of(context)!.appLogNoFiles,
+          style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
     return ListView.builder(
       controller: _structuredScrollController,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: _lines.length,
+      itemCount: lines.length,
       itemBuilder: (context, index) {
-        final line = _lines[index];
+        final line = lines[index];
         if (line.isEmpty) return const SizedBox.shrink();
 
         return Padding(

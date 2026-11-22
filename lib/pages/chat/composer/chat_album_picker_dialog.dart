@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -10,7 +11,10 @@ import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
+
 import 'album_picker_shared.dart';
+
+import '../../../widgets/constrained_text.dart';
 
 /// Shows a dialog for selecting images from the app's internal album.
 ///
@@ -293,9 +297,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       });
       return;
     }
-    Navigator.of(context).pop(
-      _orderedSelectedItems.map((entry) => entry.value).toList(),
-    );
+    Navigator.of(context)
+        .pop(_orderedSelectedItems.map((entry) => entry.value).toList());
   }
 
   @override
@@ -319,7 +322,11 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: Text(l10n.chatAlbumPickerTitle),
+          title: ConstrainedText(
+            l10n.chatAlbumPickerTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -330,9 +337,11 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
               TextButton(
                 key: const Key('album_picker_clear_btn'),
                 onPressed: _clearSelection,
-                child: Text(
+                child: ConstrainedText(
                   l10n.appMediaClearSelection(_selectionCount),
                   style: TextStyle(color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
@@ -342,16 +351,22 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             // Folder path indicator
             if (!_isRoot)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.folder,
-                        size: 14, color: cs.primary.withValues(alpha: 0.7)),
+                    Icon(
+                      Icons.folder,
+                      size: 14,
+                      color: cs.primary.withValues(alpha: 0.7),
+                    ),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         _currentFolder,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 12,
                           color: cs.onSurfaceVariant,
@@ -364,9 +379,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
               ),
 
             // Content
-            Expanded(
-              child: _buildContent(cs),
-            ),
+            Expanded(child: _buildContent(cs)),
 
             // Preview bar
             if (hasSelection) _buildPreviewBar(cs),
@@ -389,10 +402,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                       ? null
                       : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
-                  label: Text(
+                  label: ConstrainedText(
                     hasSelection
                         ? l10n.appMediaConfirmSelectionCount(_selectionCount)
                         : l10n.appMediaConfirmSelection,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -420,7 +435,11 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             TextButton(
               key: const Key('album_picker_retry_btn'),
               onPressed: _retryLoadData,
-              child: Text(l10n.actionRetry),
+              child: ConstrainedText(
+                l10n.actionRetry,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -444,10 +463,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             const SizedBox(height: 12),
             Text(
               _isRoot ? l10n.chatAlbumPickerEmpty : l10n.appMediaEmptyFolder,
-              style: TextStyle(
-                fontSize: 14,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -482,18 +498,30 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             children: [
               Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
-              Text(
-                parent.isEmpty
-                    ? AppLocalizations.of(context)!.appMediaRoot
-                    : AppLocalizations.of(context)!.appMediaParentFolder(
-                        FolderPathUtils.getFolderBaseName(parent),
-                      ),
-                style: TextStyle(fontSize: 15, color: cs.primary),
+              Expanded(
+                child: ConstrainedText(
+                  parent.isEmpty
+                      ? AppLocalizations.of(context)!.appMediaRoot
+                      : AppLocalizations.of(context)!.appMediaParentFolder(
+                          FolderPathUtils.getFolderBaseName(parent),
+                        ),
+                  style: TextStyle(fontSize: 15, color: cs.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              Text(
-                FolderPathUtils.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: ConstrainedText(
+                    FolderPathUtils.getFolderBaseName(_currentFolder),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ],
           ),
@@ -521,15 +549,20 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
-                  child: Icon(Icons.folder_outlined,
-                      size: 22, color: Colors.amber),
+                  child: Icon(
+                    Icons.folder_outlined,
+                    size: 22,
+                    color: Colors.amber,
+                  ),
                 ),
               ),
               Expanded(
-                child: Text(
+                child: ConstrainedText(
                   baseName,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 15),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -577,10 +610,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ConstrainedText(
                       '${record.name}.${record.format}',
                       style: const TextStyle(
-                          fontWeight: FontWeight.w500, fontSize: 15),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -589,14 +624,19 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                       children: [
                         if (record.folder.isNotEmpty &&
                             record.folder != _currentFolder) ...[
-                          Icon(Icons.folder,
-                              size: 12, color: cs.onSurfaceVariant),
+                          Icon(
+                            Icons.folder,
+                            size: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 3),
                           Flexible(
-                            child: Text(
+                            child: ConstrainedText(
                               record.folder,
                               style: TextStyle(
-                                  fontSize: 12, color: cs.onSurfaceVariant),
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -606,15 +646,18 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                             width: 3,
                             height: 3,
                             decoration: BoxDecoration(
-                                color: cs.onSurfaceVariant,
-                                shape: BoxShape.circle),
+                              color: cs.onSurfaceVariant,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                           const SizedBox(width: 6),
                         ],
                         Text(
                           _formatSize(record.size),
                           style: TextStyle(
-                              fontSize: 12, color: cs.onSurfaceVariant),
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -640,9 +683,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       height: 106,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -650,7 +691,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!
                   .appAlbumPickerSelectedImages(_selectionCount),
               style: TextStyle(
@@ -658,6 +699,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 color: cs.onSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
@@ -710,10 +753,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       // Show the fullscreen preview dialog with edit button
       final shouldEdit = await showDialog<bool>(
         context: context,
-        builder: (ctx) => ImagePreviewDialog(
-          imageData: imageBytes,
-          fileName: fileName,
-        ),
+        builder: (ctx) =>
+            ImagePreviewDialog(imageData: imageBytes, fileName: fileName),
       );
 
       if (shouldEdit != true || !mounted) return;

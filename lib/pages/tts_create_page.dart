@@ -13,6 +13,9 @@ import '../widgets/folder_picker_dialog.dart';
 import 'provider_config_page.dart';
 import 'tts_create_shared.dart';
 
+import '../widgets/constrained_text.dart';
+import '../widgets/save_to_folder_selector.dart';
+
 /// TTS创建页面 - 用于文本转语音转换
 ///
 /// 布局与 OCR / 音频转写（ASR）页面保持一致：
@@ -21,6 +24,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
   final String? initialText;
   final bool isOverwrite;
   final String? originalTitle;
+  final String? replaceRecordId;
   final String? initialFolder;
   final SynthesisTask? retryTask;
 
@@ -29,6 +33,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
     this.initialText,
     this.isOverwrite = false,
     this.originalTitle,
+    this.replaceRecordId,
     this.initialFolder,
     this.retryTask,
   });
@@ -79,6 +84,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   /// 表单校验错误（显示在底部错误横幅中，样式与 OCR/ASR 页面一致）
   String? _errorMessage;
+  bool _isSubmitting = false;
 
   /// "请输入要转换的文本" 错误横幅是否正在显示。用标志位而不是
   /// 字符串比较，避免文案改动后自动收起逻辑静默失效。
@@ -301,7 +307,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return _modelConfig != null;
   }
 
-  void _generateSpeech() {
+  Future<void> _generateSpeech() async {
+    if (_isSubmitting) return;
+
     if (!_isTTSConfigured() ||
         _availableModels.isEmpty ||
         _selectedModelIndex == null ||
@@ -324,40 +332,54 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     _focusNode.unfocus();
 
-    // 保存当前配置
-    final synthNotifier = ref.read(synthesisConfigProvider.notifier);
-    if (_modelConfig!.voices.isNotEmpty) {
-      // 异步保存，不等待
-      synthNotifier.updateVoice(_selectedVoice);
-    }
-    synthNotifier.updateSpeed(_speed);
-    synthNotifier.updateVolume(_volume);
-
-    // 查找裁切预设
-    Map<String, dynamic>? trimPreset;
-    if (_modelConfig!.selectedTrimPresetId != null) {
-      final customPresets = ref.read(customTrimPresetsProvider);
-      trimPreset = getTrimPresetById(
-        _modelConfig!.selectedTrimPresetId!,
-        customPresets,
-      );
-    }
-
-    // 获取选中的供应商配置
     final modelOption = _availableModels[_selectedModelIndex!];
-
-    // 收集自定义参数值
+    final selectedVoice = _selectedVoice;
+    final speed = _speed;
+    final volume = _volume;
+    final trimPresetId = modelOption.config.selectedTrimPresetId;
+    final customTrimPresets =
+        trimPresetId == null ? null : ref.read(customTrimPresetsProvider);
     final customParams = <String, String>{};
     for (final entry in _customParamControllers.entries) {
       customParams[entry.key] = entry.value.text;
     }
-    // instruction 参数
     final instruction = _instructionController.text.trim();
     if (instruction.isNotEmpty) {
       customParams['instructions'] = instruction;
     }
-
     final title = _titleController.text.trim();
+    final folder = _saveFolder;
+
+    // 保存当前配置
+    final synthNotifier = ref.read(synthesisConfigProvider.notifier);
+    setState(() {
+      _isSubmitting = true;
+    });
+    try {
+      await Future.wait([
+        if (modelOption.config.voices.isNotEmpty)
+          synthNotifier.updateVoice(selectedVoice),
+        synthNotifier.updateSpeed(speed),
+        synthNotifier.updateVolume(volume),
+      ]);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = error.toString();
+      });
+      return;
+    }
+    if (!mounted) return;
+
+    // 查找裁切预设
+    Map<String, dynamic>? trimPreset;
+    if (trimPresetId != null) {
+      trimPreset = getTrimPresetById(
+        trimPresetId,
+        customTrimPresets!,
+      );
+    }
 
     // 添加到任务列表，在后台执行合成
     ref.read(taskListProvider.notifier).addTask(
@@ -369,7 +391,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           modelConfig: modelOption.config,
           customParams: customParams,
           trimPreset: trimPreset,
-          folder: _saveFolder,
+          folder: folder,
+          replaceRecordId:
+              widget.replaceRecordId ?? widget.retryTask?.replaceRecordId,
         );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -395,7 +419,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.ttsCreateTitle),
+        title: ConstrainedText(
+          l10n.ttsCreateTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           if (_textController.text.isNotEmpty ||
@@ -403,7 +431,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
-              label: Text(l10n.clear),
+              label: ConstrainedText(
+                l10n.clear,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),
@@ -502,7 +534,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: Text(l10n.configure, style: TextStyle(fontSize: 12)),
+                child: ConstrainedText(
+                  l10n.configure,
+                  style: TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -550,12 +587,16 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              l10n.ttsSynthesisModel,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
+            Flexible(
+              child: ConstrainedText(
+                l10n.ttsSynthesisModel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),
@@ -574,6 +615,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                   child: DropdownButton<int>(
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
+                    menuWidth: (MediaQuery.sizeOf(context).width - 32)
+                        .clamp(0, 360)
+                        .toDouble(),
                     value: clampedIndex,
                     isDense: true,
                     isExpanded: true,
@@ -591,6 +635,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                       if (idx == null || idx >= _availableModels.length) return;
                       _onModelSelected(idx);
                     },
+                    selectedItemBuilder: (context) => List.generate(
+                      _availableModels.length,
+                      (i) {
+                        final opt = _availableModels[i];
+                        final modelName = opt.config.name.isNotEmpty
+                            ? opt.config.name
+                            : opt.config.modelId;
+                        final displayText = opt
+                                .providerConfig.providerName.isNotEmpty
+                            ? '$modelName | ${opt.providerConfig.providerName}'
+                            : modelName;
+                        return ConstrainedText(
+                          displayText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          useNaturalWidthLayout: true,
+                        );
+                      },
+                    ),
                     items: List.generate(_availableModels.length, (i) {
                       final opt = _availableModels[i];
                       final modelName = opt.config.name.isNotEmpty
@@ -602,9 +665,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                           : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
-                        child: Text(
+                        child: ConstrainedText(
                           displayText,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          useNaturalWidthLayout: true,
                         ),
                       );
                     }),
@@ -691,6 +756,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     final cs = Theme.of(context).colorScheme;
 
     return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -701,31 +767,43 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               children: [
                 _sectionIcon(Icons.drive_file_rename_outline, cs),
                 const SizedBox(width: 10),
-                Text(
-                  l10n.ttsOriginalTitle,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                Flexible(
+                  flex: 2,
+                  child: ConstrainedText(
+                    l10n.ttsOriginalTitle,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
                 if (widget.originalTitle != null)
-                  FilterChip(
-                    label: Text(l10n.ttsUseOriginalTitle),
-                    selected: _useOriginalTitle,
-                    showCheckmark: false,
-                    avatar: Icon(
-                      _useOriginalTitle ? Icons.check : Icons.title,
-                      size: 16,
+                  Flexible(
+                    flex: 3,
+                    child: FilterChip(
+                      label: ConstrainedText(
+                        l10n.ttsUseOriginalTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      selected: _useOriginalTitle,
+                      showCheckmark: false,
+                      avatar: Icon(
+                        _useOriginalTitle ? Icons.check : Icons.title,
+                        size: 16,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (selected) {
+                        setState(() {
+                          _useOriginalTitle = selected;
+                          if (selected) {
+                            _titleController.text = widget.originalTitle!;
+                          } else {
+                            _titleController.clear();
+                          }
+                        });
+                      },
                     ),
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (selected) {
-                      setState(() {
-                        _useOriginalTitle = selected;
-                        if (selected) {
-                          _titleController.text = widget.originalTitle!;
-                        } else {
-                          _titleController.clear();
-                        }
-                      });
-                    },
                   ),
               ],
             ),
@@ -744,9 +822,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               children: [
                 _sectionIcon(Icons.subject_rounded, cs),
                 const SizedBox(width: 10),
-                Text(
-                  l10n.ttsTextToConvert,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                Expanded(
+                  child: ConstrainedText(
+                    l10n.ttsTextToConvert,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -797,11 +879,15 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                           color: Colors.red,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          l10n.ttsTextLimitWarning(limit),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.red,
+                        Flexible(
+                          child: ConstrainedText(
+                            l10n.ttsTextLimitWarning(limit),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                            ),
                           ),
                         ),
                       ],
@@ -887,6 +973,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     }
 
     return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -954,22 +1041,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                    children: [
-                      TextSpan(text: l10n.ttsProviderSettingsLead),
-                      TextSpan(
-                        text: l10n.ttsProviderSettings,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          decoration: TextDecoration.underline,
+                Flexible(
+                  child: RichText(
+                    textAlign: TextAlign.end,
+                    text: TextSpan(
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                      children: [
+                        TextSpan(text: l10n.ttsProviderSettingsLead),
+                        TextSpan(
+                          text: l10n.ttsProviderSettings,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: (TapGestureRecognizer()
+                            ..onTap = _navigateToProviderConfig),
                         ),
-                        recognizer: (TapGestureRecognizer()
-                          ..onTap = _navigateToProviderConfig),
-                      ),
-                      TextSpan(text: l10n.ttsProviderSettingsTail),
-                    ],
+                        TextSpan(text: l10n.ttsProviderSettingsTail),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -992,11 +1082,17 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             children: [
               Row(
                 children: [
-                  Text(
-                    AppLocalizations.of(context)!.ttsEditText,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.ttsEditText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(ctx),
@@ -1045,13 +1141,21 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         DropdownButtonFormField<String>(
           dropdownColor: StroomMenuStyle.surface(context),
           borderRadius: StroomMenuStyle.borderRadius,
+          isExpanded: true,
           initialValue: model.voices.any((v) => v.id == _selectedVoice)
               ? _selectedVoice
               : model.voices.first.id,
           key: ValueKey('voice_$_selectedVoice'),
           decoration: _formFieldDecoration(hintText: l10n.ttsSelectVoice),
           items: model.voices.map((v) {
-            return DropdownMenuItem<String>(value: v.id, child: Text(v.name));
+            return DropdownMenuItem<String>(
+              value: v.id,
+              child: ConstrainedText(
+                v.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
           }).toList(),
           onChanged: (newVoice) {
             if (newVoice != null) {
@@ -1071,16 +1175,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              l10n.ttsSpeed,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsSpeed,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            Text(
-              '${_speed.toStringAsFixed(1)}x',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+            Expanded(
+              child: ConstrainedText(
+                '${_speed.toStringAsFixed(1)}x',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
             ),
           ],
@@ -1102,9 +1215,29 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('${model.speedMin}x'),
-            Text(l10n.ttsNormal),
-            Text('${model.speedMax}x'),
+            Expanded(
+              child: ConstrainedText(
+                '${model.speedMin}x',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsNormal,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                '${model.speedMax}x',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
           ],
         ),
       ],
@@ -1119,16 +1252,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              l10n.ttsVolume,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsVolume,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
             ),
-            Text(
-              _volume.toStringAsFixed(1),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+            Expanded(
+              child: ConstrainedText(
+                _volume.toStringAsFixed(1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
             ),
           ],
@@ -1150,9 +1292,29 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(model.volumeMin.toStringAsFixed(1)),
-            Text(l10n.ttsNormal),
-            Text(model.volumeMax.toStringAsFixed(1)),
+            Expanded(
+              child: ConstrainedText(
+                model.volumeMin.toStringAsFixed(1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                l10n.ttsNormal,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Expanded(
+              child: ConstrainedText(
+                model.volumeMax.toStringAsFixed(1),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
           ],
         ),
       ],
@@ -1248,14 +1410,14 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // 保存位置选择器（生成按钮上方）
-            _buildSaveToSelector(cs),
+            _buildSaveToSelector(),
             const SizedBox(height: 4),
             // 生成文件的路径预览（标题/文本非空时显示完整路径）
             if (_textController.text.trim().isNotEmpty ||
                 _titleController.text.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
+                child: ConstrainedText(
                   _filePathPreview(),
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   maxLines: 1,
@@ -1266,11 +1428,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _generateSpeech,
+                onPressed: _isSubmitting ? null : _generateSpeech,
                 icon: const Icon(Icons.audio_file, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   l10n.ttsGenerateRecording,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1296,46 +1460,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return l10n.ttsSaveAs(folder, name, format);
   }
 
-  Widget _buildSaveToSelector(ColorScheme cs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: _pickSaveFolder,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context)!.saveTo,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  _saveFolder.isEmpty
-                      ? AppLocalizations.of(context)!.rootFolder
-                      : _saveFolder,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildSaveToSelector() {
+    final l10n = AppLocalizations.of(context)!;
+    return SaveToFolderSelector(
+      label: l10n.saveTo,
+      folder: _saveFolder.isEmpty ? l10n.rootFolder : _saveFolder,
+      onTap: _pickSaveFolder,
     );
   }
 

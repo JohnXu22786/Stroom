@@ -12,6 +12,9 @@ import '../l10n/app_localizations.dart';
 import '../providers/tts_state_provider.dart';
 import '../services/storage_service.dart';
 import '../utils/file_manifest.dart';
+import '../utils/storage_file_publication.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 录音页面 - 使用 audio_waveforms 重构，带波形图与暂停/恢复功能
 class AudioRecordingPage extends ConsumerStatefulWidget {
@@ -69,18 +72,17 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
     }
   }
 
-  static final _recordingDraftFileName =
-      RegExp(r'^recording_\d+\.m4a$', caseSensitive: false);
+  static final _recordingDraftFileName = RegExp(
+    r'^recording_\d+\.m4a$',
+    caseSensitive: false,
+  );
 
   Future<void> _restorePendingRecordingDraft() async {
     if (kIsWeb) return;
     try {
       final appDir = await AppStorage.directory;
       final candidatesByName = <String, File>{};
-      for (final path in [
-        appDir,
-        p.join(appDir, 'audio_drafts'),
-      ]) {
+      for (final path in [appDir, p.join(appDir, 'audio_drafts')]) {
         final directory = Directory(path);
         if (!await directory.exists()) continue;
         await for (final entity in directory.list(followLinks: false)) {
@@ -92,8 +94,9 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           final name = p.basename(entity.path);
           final existing = candidatesByName[name];
           if (existing == null ||
-              (await entity.lastModified())
-                  .isAfter(await existing.lastModified())) {
+              (await entity.lastModified()).isAfter(
+                await existing.lastModified(),
+              )) {
             candidatesByName[name] = entity;
           }
         }
@@ -172,8 +175,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         final granted = await _controller.checkPermission();
         if (!granted) {
           if (mounted) {
-            _showSnackBar(_l10n.audioRecordingMicrophonePermissionRequired,
-                isError: true);
+            _showSnackBar(
+              _l10n.audioRecordingMicrophonePermissionRequired,
+              isError: true,
+            );
           }
           if (mounted) {
             setState(() => _isStarting = false);
@@ -220,8 +225,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar(_l10n.audioRecordingStartFailure(e.toString()),
-            isError: true);
+        _showSnackBar(
+          _l10n.audioRecordingStartFailure(e.toString()),
+          isError: true,
+        );
       }
       if (mounted) {
         setState(() => _isStarting = false);
@@ -236,8 +243,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       // _onRecorderState 会自动更新 _isPaused
     } catch (e) {
       if (mounted) {
-        _showSnackBar(_l10n.audioRecordingPauseFailure(e.toString()),
-            isError: true);
+        _showSnackBar(
+          _l10n.audioRecordingPauseFailure(e.toString()),
+          isError: true,
+        );
       }
     }
   }
@@ -250,8 +259,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       // _onRecorderState 会自动更新 _isPaused
     } catch (e) {
       if (mounted) {
-        _showSnackBar(_l10n.audioRecordingResumeFailure(e.toString()),
-            isError: true);
+        _showSnackBar(
+          _l10n.audioRecordingResumeFailure(e.toString()),
+          isError: true,
+        );
       }
     }
   }
@@ -282,8 +293,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           _isRecording = false;
           _isPaused = false;
         });
-        _showSnackBar(_l10n.audioRecordingStopFailure(e.toString()),
-            isError: true);
+        _showSnackBar(
+          _l10n.audioRecordingStopFailure(e.toString()),
+          isError: true,
+        );
       }
     } finally {
       if (mounted) {
@@ -319,18 +332,33 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       const format = 'm4a';
       final now = DateTime.now();
       final defaultName = '录音_${now.month}${now.day}_${now.hour}${now.minute}';
-      await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
-        await FileManifest.writeFile('$hash.$format', bytes);
-        await FileManifest.addRecord(AudioRecord(
-          name: defaultName,
-          hash: hash,
-          format: format,
-          createdAt: now,
-          size: bytes.length,
-          folder: '',
-          duration: _recordDurationSeconds,
-        ));
-      });
+      final record = AudioRecord(
+        name: defaultName,
+        hash: hash,
+        format: format,
+        createdAt: now,
+        size: bytes.length,
+        folder: '',
+        duration: _recordDurationSeconds,
+      );
+      await FileManifest.withStorageFileSaveLock(
+        record.storageFileName,
+        () async {
+          await publishStorageFiles<void, AudioRecord>(
+            publish: (writeFile) async {
+              await writeFile(record.storageFileName, bytes);
+              await FileManifest.addRecord(record);
+            },
+            loadRecords: FileManifest.loadRecordsStrict,
+            isReferenced: (candidate, fileName) =>
+                candidate.storageFileName == fileName,
+            writeFile: FileManifest.writeFile,
+            readFile: FileManifest.readFile,
+            fileExists: FileManifest.fileExists,
+            deleteFile: FileManifest.deleteFile,
+          );
+        },
+      );
 
       // 删除临时文件
       try {
@@ -351,8 +379,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar(_l10n.audioRecordingSaveFailure(e.toString()),
-            isError: true);
+        _showSnackBar(
+          _l10n.audioRecordingSaveFailure(e.toString()),
+          isError: true,
+        );
       }
     } finally {
       if (mounted) {
@@ -402,7 +432,11 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_l10n.audioRecordingTitle),
+        title: ConstrainedText(
+          _l10n.audioRecordingTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: Center(
@@ -421,8 +455,11 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.warning_amber_rounded,
-              size: 64, color: Colors.orange[300]),
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 64,
+            color: Colors.orange[300],
+          ),
           const SizedBox(height: 16),
           Text(
             _l10n.audioRecordingBrowserUnsupported,
@@ -680,9 +717,11 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 ),
               )
             : Icon(icon, size: 22),
-        label: Text(
+        label: ConstrainedText(
           label,
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

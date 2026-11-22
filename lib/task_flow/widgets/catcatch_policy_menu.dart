@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 
+import '../../widgets/constrained_text.dart';
+
 /// Popup choices used by CatCatch's output and resource-selection settings.
 class CatCatchPolicyMenu extends StatelessWidget {
   final bool outputPolicy;
@@ -42,7 +44,11 @@ class CatCatchPolicyMenu extends StatelessWidget {
           .map(
             (entry) => PopupMenuItem<String>(
               value: entry.key,
-              child: Text(entry.value),
+              child: ConstrainedText(
+                entry.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           )
           .toList(),
@@ -57,7 +63,13 @@ class CatCatchPolicyMenu extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Expanded(child: Text(options[value] ?? options.values.first)),
+            Expanded(
+              child: ConstrainedText(
+                options[value] ?? options.values.first,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const Icon(Icons.arrow_drop_down),
           ],
         ),

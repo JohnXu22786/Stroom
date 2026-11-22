@@ -106,6 +106,73 @@ Finder _localizedBackButton(WidgetTester tester) {
 
 void main() {
   group('Chat tab navigation flow (nested Navigator)', () {
+    testWidgets('conversation switches show the loader while loading',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final now = DateTime(2026, 1, 1);
+      late ProviderContainer container;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationsProvider.overrideWith((ref) {
+              final notifier = ConversationsNotifier(ref);
+              notifier.state = [
+                Conversation(
+                  id: 'conversation-a',
+                  title: 'Conversation A',
+                  createdAt: now,
+                  updatedAt: now,
+                  messages: [],
+                  assistantId: null,
+                ),
+                Conversation(
+                  id: 'conversation-b',
+                  title: 'Conversation B',
+                  createdAt: now,
+                  updatedAt: now,
+                  messages: [],
+                  assistantId: null,
+                ),
+              ];
+              return notifier;
+            }),
+            activeConversationIdProvider
+                .overrideWith((ref) => 'conversation-a'),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: Builder(
+            builder: (context) {
+              container = ProviderScope.containerOf(context);
+              return const MaterialApp(
+                locale: Locale('en'),
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: [
+                  AppLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                home: ChatPage(),
+              );
+            },
+          ),
+        ),
+      );
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      container.read(activeConversationIdProvider.notifier).state =
+          'conversation-b';
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    });
+
     // =========================================================================
     // 1. Chat tab always starts at AssistantSelectionPage
     // =========================================================================
@@ -201,6 +268,10 @@ void main() {
       expect(newTopicButtons, findsWidgets);
       await tester.tap(newTopicButtons.first);
       await tester.pump();
+
+      // New conversation entry uses the loading indicator while setup runs.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
       tester.takeException();

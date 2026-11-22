@@ -6,8 +6,11 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
+
 import '../l10n/app_localizations.dart';
 import '../widgets/markdown_extensions.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// 文本预览/编辑页面 - 查看和编辑文本内容
 ///
@@ -17,11 +20,13 @@ import '../widgets/markdown_extensions.dart';
 class TextPreviewEditPage extends StatefulWidget {
   final TextRecord file;
   final String? initialContent;
+  final bool registerRecordOnSave;
 
   const TextPreviewEditPage({
     super.key,
     required this.file,
     this.initialContent,
+    this.registerRecordOnSave = false,
   });
 
   @override
@@ -164,18 +169,31 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     final shouldDiscard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.textPreviewDiscardEditsTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Text(
-            AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
+          AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(AppLocalizations.of(context)!.textPreviewCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewDiscard,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -220,7 +238,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.textPreviewFontSize),
+          title: ConstrainedText(
+            AppLocalizations.of(context)!.textPreviewFontSize,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           content: SizedBox(
             width: 260,
             height: 100,
@@ -262,12 +284,19 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                 setState(() => _fontSize = temp);
                 _persistFontSize();
               },
-              child:
-                  Text(AppLocalizations.of(context)!.textPreviewRestoreDefault),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.textPreviewRestoreDefault,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(AppLocalizations.of(context)!.textPreviewClose),
+              child: ConstrainedText(
+                AppLocalizations.of(context)!.textPreviewClose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -306,7 +335,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
 
       // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
       // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateTextRecord(updatedRecord, newContent);
+      if (widget.registerRecordOnSave) {
+        await TextManifest.saveTextRecord(updatedRecord, newContent);
+      } else {
+        await TextManifest.updateTextRecord(updatedRecord, newContent);
+      }
 
       // Recheck all persisted references under the old hash lock. The same
       // record ID may have been repointed to the old content by a stale save.
@@ -326,8 +359,9 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .textPreviewSaveFailed(e.toString())),
+            content: Text(
+              AppLocalizations.of(context)!.textPreviewSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -449,19 +483,31 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(
-                AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+            title: ConstrainedText(
+              AppLocalizations.of(context)!.textPreviewDiscardEditsTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             content: Text(
-                AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
+              AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(AppLocalizations.of(context)!.textPreviewCancel),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.textPreviewCancel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.textPreviewDiscard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -478,7 +524,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: ConstrainedText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           actions: _buildAppBarActions(),
         ),
         body: _isEditMode

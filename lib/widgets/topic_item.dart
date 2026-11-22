@@ -5,6 +5,9 @@ import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 import 'temporary_countdown_capsule.dart';
+import 'temporary_conversation_dialog.dart';
+
+import 'constrained_text.dart';
 
 class TopicItem extends StatelessWidget {
   final Conversation topic;
@@ -19,7 +22,9 @@ class TopicItem extends StatelessWidget {
   final VoidCallback onPinToggle;
   final VoidCallback onRename;
   final VoidCallback onAutoRename;
+  final VoidCallback onReadStateToggle;
   final VoidCallback onSelectionToggle;
+  final VoidCallback? onTemporaryToggle;
 
   const TopicItem({
     super.key,
@@ -35,7 +40,9 @@ class TopicItem extends StatelessWidget {
     required this.onPinToggle,
     required this.onRename,
     required this.onAutoRename,
+    required this.onReadStateToggle,
     required this.onSelectionToggle,
+    this.onTemporaryToggle,
   });
 
   @override
@@ -136,9 +143,11 @@ class TopicItem extends StatelessWidget {
                             topic.temporaryExpiresAt != null)
                           TemporaryCountdownCapsule(
                             expiresAt: topic.temporaryExpiresAt!,
+                            pausedRemainingMilliseconds:
+                                topic.temporaryPausedRemainingMilliseconds,
                           ),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -208,8 +217,11 @@ class TopicItem extends StatelessWidget {
                         size: 18,
                         color: cs.onSurfaceVariant,
                       ),
-                      onSelected: (value) {
+                      onSelected: (value) async {
                         switch (value) {
+                          case 'read_state':
+                            onReadStateToggle();
+                            break;
                           case 'rename':
                             onRename();
                             break;
@@ -219,6 +231,16 @@ class TopicItem extends StatelessWidget {
                           case 'pin':
                             onPinToggle();
                             break;
+                          case 'toggle_temporary':
+                            if (topic.isTemporary ||
+                                await showTemporaryConversationEnableDialog(
+                                  context,
+                                )) {
+                              if (context.mounted) {
+                                onTemporaryToggle?.call();
+                              }
+                            }
+                            break;
                           case 'delete':
                             onDelete();
                             break;
@@ -226,32 +248,79 @@ class TopicItem extends StatelessWidget {
                       },
                       itemBuilder: (ctx) => [
                         PopupMenuItem(
+                          value: 'read_state',
+                          child: Row(
+                            children: [
+                              Icon(
+                                isUnread
+                                    ? Icons.mark_email_read_outlined
+                                    : Icons.mark_email_unread_outlined,
+                                size: 20,
+                                color: isUnread
+                                    ? Color.lerp(cs.primary, Colors.green, 0.55)
+                                    : cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: ConstrainedText(
+                                  isUnread
+                                      ? AppLocalizations.of(context)!
+                                          .topicItemMarkRead
+                                      : AppLocalizations.of(context)!
+                                          .topicItemMarkUnread,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
                           value: 'rename',
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.topicItemRename,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         PopupMenuItem(
                           value: 'auto_rename',
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.topicItemAutoName,
                             style: TextStyle(color: cs.onSurface),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         PopupMenuItem(
                           value: 'pin',
-                          child: Text(
+                          child: ConstrainedText(
                             topic.isPinned
                                 ? AppLocalizations.of(context)!.topicItemUnpin
                                 : AppLocalizations.of(context)!.topicItemPin,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        if (onTemporaryToggle != null)
+                          PopupMenuItem(
+                            value: 'toggle_temporary',
+                            child: Text(
+                              topic.isTemporary
+                                  ? AppLocalizations.of(context)!
+                                      .conversationKeep
+                                  : AppLocalizations.of(context)!
+                                      .conversationSetTemporary,
+                            ),
+                          ),
                         const PopupMenuDivider(),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!.topicItemDelete,
                             style: TextStyle(color: cs.error),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],

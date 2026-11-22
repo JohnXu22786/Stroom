@@ -104,6 +104,143 @@ void main() {
   const fragmentNote =
       'Explain #access_token=ordinary-text without changing it';
 
+  test('credential aliases stay out of launch snapshots and hydrate live', () {
+    ProviderEntriesState providers(String apiToken, String accessKey) {
+      final state = modelProviders('provider-secret', '0.5');
+      state.entries.single.configs.single.models.single.customParams.addAll([
+        CustomParam(paramName: 'api_token', defaultValue: apiToken),
+        CustomParam(paramName: 'access_key', defaultValue: accessKey),
+        CustomParam(paramName: 'temperature', defaultValue: '0.5'),
+      ]);
+      return state;
+    }
+
+    final snapshot = FlowLaunchSnapshot.capture(
+      flow,
+      providers('launch-api-token', 'launch-access-key'),
+      [],
+    );
+    final encoded = jsonEncode(snapshot.toMap());
+    expect(encoded, isNot(contains('api_token')));
+    expect(encoded, isNot(contains('launch-api-token')));
+    expect(encoded, isNot(contains('access_key')));
+    expect(encoded, isNot(contains('launch-access-key')));
+
+    final resolved = resolveProviderModel(
+      FlowLaunchSnapshot.fromMap(snapshot.toMap()).resolveProviders(
+        providers('current-api-token', 'current-access-key'),
+      ),
+      'tts',
+      flow.blocks.single.params['modelRef'],
+    )!;
+    final params = resolved.model.customParams;
+    expect(
+      params
+          .singleWhere((param) => param.paramName == 'api_token')
+          .defaultValue,
+      'current-api-token',
+    );
+    expect(
+      params
+          .singleWhere((param) => param.paramName == 'access_key')
+          .defaultValue,
+      'current-access-key',
+    );
+    expect(
+      params
+          .singleWhere((param) => param.paramName == 'temperature')
+          .defaultValue,
+      '0.5',
+    );
+  });
+
+  test('OCR client keys in config and model headers redact and hydrate live',
+      () {
+    ProviderEntriesState ocrProviders(
+        String configClientKey,
+        String modelClientKey,
+        String configClientSecret,
+        String modelClientSecret,
+        String configAuth,
+        String modelAuth,
+        String traceId) {
+      final state = modelProviders('provider-secret', '0.5');
+      final config = state.entries.single.configs.single;
+      state.entries.single.type = 'ocr';
+      config.typeConfig['headers'] = jsonEncode({
+        'clientKey': configClientKey,
+        'X-Client-Secret': configClientSecret,
+        'X-Auth': configAuth,
+        'X-Trace-Id': traceId,
+      });
+      config.models.single.typeConfig['headers'] = jsonEncode({
+        'X-Client-Key': modelClientKey,
+        'X-Client-Secret': modelClientSecret,
+        'X-Auth': modelAuth,
+        'X-Trace-Id': traceId,
+      });
+      return state;
+    }
+
+    final ocrFlow = TaskFlowDefinition(blocks: [
+      TaskFlowBlock(typeKey: BlockType.ocr, params: {
+        'modelRef': {'configId': 'config', 'modelId': 'model'}
+      })
+    ]);
+    final snapshot = FlowLaunchSnapshot.capture(
+      ocrFlow,
+      ocrProviders(
+        'launch-config-client-key',
+        'launch-model-client-key',
+        'launch-config-client-secret',
+        'launch-model-client-secret',
+        'launch-config-auth-secret',
+        'launch-model-auth-secret',
+        'launch-trace',
+      ),
+      [],
+    );
+    final encoded = jsonEncode(snapshot.toMap());
+    expect(encoded, isNot(contains('launch-config-client-key')));
+    expect(encoded, isNot(contains('launch-model-client-key')));
+    expect(encoded, isNot(contains('launch-config-client-secret')));
+    expect(encoded, isNot(contains('launch-model-client-secret')));
+    expect(encoded, isNot(contains('launch-config-auth-secret')));
+    expect(encoded, isNot(contains('launch-model-auth-secret')));
+    expect(encoded, isNot(contains('clientKey')));
+    expect(encoded, isNot(contains('X-Client-Key')));
+    expect(encoded, isNot(contains('X-Client-Secret')));
+    expect(encoded, isNot(contains('X-Auth')));
+
+    final resolved = resolveProviderModel(
+      FlowLaunchSnapshot.fromMap(snapshot.toMap()).resolveProviders(
+        ocrProviders(
+          'current-config-client-key',
+          'current-model-client-key',
+          'current-config-client-secret',
+          'current-model-client-secret',
+          'current-config-auth-secret',
+          'current-model-auth-secret',
+          'live-trace',
+        ),
+      ),
+      'ocr',
+      ocrFlow.blocks.single.params['modelRef'],
+    )!;
+    expect(jsonDecode(resolved.config.typeConfig['headers'] as String), {
+      'clientKey': 'current-config-client-key',
+      'X-Client-Secret': 'current-config-client-secret',
+      'X-Auth': 'current-config-auth-secret',
+      'X-Trace-Id': 'launch-trace',
+    });
+    expect(jsonDecode(resolved.model.typeConfig['headers'] as String), {
+      'X-Client-Key': 'current-model-client-key',
+      'X-Client-Secret': 'current-model-client-secret',
+      'X-Auth': 'current-model-auth-secret',
+      'X-Trace-Id': 'launch-trace',
+    });
+  });
+
   test(
     'fragment URLs redact saved values and hydrate config and model callbacks',
     () {

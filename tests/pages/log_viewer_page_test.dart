@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,8 +8,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/log_viewer_page.dart';
 import 'package:stroom/services/app_log_service.dart';
+import 'package:stroom/services/backup_location_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/web_file_store.dart';
+import 'package:stroom/widgets/constrained_text.dart';
+
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() condition,
+) async {
+  for (var attempt = 0; attempt < 300 && !condition(); attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(
+    condition(),
+    isTrue,
+    reason: 'Timed out waiting for the log viewer to reach the expected state.',
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,17 +49,120 @@ void main() {
       );
 
   group('LogViewerPage localization', () {
-    testWidgets('localizes log viewer page chrome in English and Chinese',
-        (tester) async {
+    testWidgets('constrains localized log settings and filter field labels', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogContentPage(
+            fileName: 'app_2026-11-20-12.log',
+            content: 'INFO: log entry',
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Filter log entries'));
+      await tester.pumpAndSettle();
+
+      final filterLabels = tester
+          .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+          .map((label) => label.data)
+          .toSet();
+      expect(filterLabels, containsAll(['Keyword', 'Source', 'Level']));
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogViewerPage(),
+        ),
+      );
+      await tester.tap(find.byTooltip('Log settings'));
+      await _pumpUntil(
+        tester,
+        () => tester.any(find.text('Application log settings')),
+      );
+
+      final settingsLabels = tester
+          .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+          .map((label) => label.data)
+          .toSet();
+      expect(
+        settingsLabels,
+        containsAll([
+          'Keep logs for',
+          'Minimum detail level',
+          'Maximum log storage',
+        ]),
+      );
+    });
+
+    testWidgets('log content app bar keeps full labels at narrow widths', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const fileName = 'application_log_with_a_long_filename_2026-11-20-12.log';
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(brightness: brightness),
+            locale: const Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.8),
+              ),
+              child: child!,
+            ),
+            home: const LogContentPage(
+              fileName: fileName,
+              content: 'INFO: log entry',
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final constrainedLabels = tester.widgetList<ConstrainedText>(
+          find.byType(ConstrainedText),
+        );
+        expect(
+          constrainedLabels.map((label) => label.data),
+          contains(fileName),
+        );
+        expect(
+          constrainedLabels.map((label) => label.data),
+          contains('1 line'),
+        );
+        expect(find.byType(FittedBox), findsNothing);
+        expect(
+          tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight,
+          greaterThan(kToolbarHeight),
+        );
+        expect(find.byTooltip('Filter log entries'), findsOneWidget);
+        expect(find.byTooltip('Copy all'), findsOneWidget);
+        expect(find.byTooltip('Raw view'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    });
+
+    testWidgets('localizes log viewer page chrome in English and Chinese', (
+      tester,
+    ) async {
       for (final locale in [
         const Locale('en', 'US'),
-        const Locale('zh', 'CN')
+        const Locale('zh', 'CN'),
       ]) {
         await tester.pumpWidget(
-          localizationTestApp(
-            locale: locale,
-            home: const LogViewerPage(),
-          ),
+          localizationTestApp(locale: locale, home: const LogViewerPage()),
         );
 
         final isEnglish = locale.languageCode == 'en';
@@ -45,22 +170,22 @@ void main() {
           find.text(isEnglish ? 'Application logs' : '应用日志'),
           findsOneWidget,
         );
-        expect(
-          find.byTooltip(isEnglish ? 'Refresh' : '刷新'),
-          findsOneWidget,
-        );
+        expect(find.byTooltip(isEnglish ? 'Refresh' : '刷新'), findsOneWidget);
         expect(
           find.byTooltip(isEnglish ? 'Clean up old logs' : '清理旧日志'),
           findsOneWidget,
         );
         expect(
-          find.text(isEnglish
-              ? 'Log retention: Only the most recent 15 days are kept. Logs older than 15 days are cleaned automatically.'
-              : '日志保留期限：只保留最近 15 天的日志，超过 15 天会自动清理。'),
+          find.text(
+            isEnglish
+                ? 'Log retention: Only the most recent 15 days are kept. Logs older than 15 days are cleaned automatically.'
+                : '日志保留期限：只保留最近 15 天的日志，超过 15 天会自动清理。',
+          ),
           findsOneWidget,
         );
-        final appLocalizations =
-            AppLocalizations.of(tester.element(find.byType(LogViewerPage)))!;
+        final appLocalizations = AppLocalizations.of(
+          tester.element(find.byType(LogViewerPage)),
+        )!;
         expect(
           appLocalizations.appLogAutoRefresh(1),
           isEnglish
@@ -76,59 +201,283 @@ void main() {
       }
     });
 
-    testWidgets(
-        'localizes log content actions and status without changing filename or raw content',
-        (tester) async {
-      const fileName = 'user-provided.log';
-      const rawContent = '[ERROR] Keep this exact user log content: 原样保留';
-      final platformCalls = <MethodCall>[];
+    testWidgets('deletes visible SAF fallback logs from app storage', (
+      tester,
+    ) async {
+      const fileName = 'app_2026-01-01-10.log';
+      const safChannel = MethodChannel('com.johntsui.stroom/saf');
+      final logRoot = Directory.systemTemp.createTempSync('log_viewer_');
+      final fallbackLog = File('${logRoot.path}/$fileName');
+      fallbackLog.writeAsStringSync('fallback log');
+      final remainingLog = File('${logRoot.path}/app_2026-01-01-11.log');
+      remainingLog.writeAsStringSync('remaining log');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'backup_saf_uri',
+        'content://provider/tree/documents',
+      );
+      BackupLocationManager.debugIsAndroidOverride = true;
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
+        safChannel,
         (call) async {
-          platformCalls.add(call);
-          return null;
+          if (call.method == 'listLogs') return <String>[];
+          if (call.method == 'listLogMetadata') return <Map<String, Object>>[];
+          if (call.method == 'deleteLog') return true;
+          throw MissingPluginException('Unexpected SAF method: ${call.method}');
         },
       );
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null));
+      addTearDown(() async {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          safChannel,
+          null,
+        );
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        logRoot.deleteSync(recursive: true);
+      });
 
-      for (final locale in [
-        const Locale('en', 'US'),
-        const Locale('zh', 'CN')
-      ]) {
-        await tester.pumpWidget(
-          localizationTestApp(
-            locale: locale,
-            home: LogContentPage(
-              key: ValueKey(locale.languageCode),
-              fileName: fileName,
-              content: rawContent,
-            ),
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogViewerPage(),
+        ),
+      );
+      await _pumpUntil(tester, () => tester.any(find.text(fileName)));
+      expect(find.text(fileName), findsOneWidget);
+
+      final deleteAction = find.descendant(
+        of: find.ancestor(
+          of: find.text(fileName),
+          matching: find.byType(ListTile),
+        ),
+        matching: find.byTooltip('Delete'),
+      );
+      await tester.tap(deleteAction);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await _pumpUntil(
+        tester,
+        () =>
+            !tester.any(find.text(fileName)) &&
+            tester.any(find.text('app_2026-01-01-11.log')),
+      );
+
+      expect(fallbackLog.existsSync(), isFalse);
+      expect(remainingLog.existsSync(), isTrue);
+      expect(find.text(fileName), findsNothing);
+    });
+
+    testWidgets('localizes and refreshes after an unconfirmed deletion', (
+      tester,
+    ) async {
+      const fileName = 'app_2026-01-01-10.log';
+      const safChannel = MethodChannel('com.johntsui.stroom/saf');
+      final logRoot = Directory.systemTemp.createTempSync('log_viewer_');
+      final fallbackLog = File('${logRoot.path}/$fileName');
+      fallbackLog.writeAsStringSync('fallback log');
+      final remainingLog = File('${logRoot.path}/app_2026-01-01-11.log');
+      remainingLog.writeAsStringSync('remaining log');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'backup_saf_uri',
+        'content://provider/tree/documents',
+      );
+      BackupLocationManager.debugIsAndroidOverride = true;
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+      var listCalls = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        safChannel,
+        (call) async {
+          if (call.method == 'listLogs') {
+            listCalls++;
+            if (listCalls == 1) return <String>[];
+            if (listCalls == 2) throw PlatformException(code: 'list_failed');
+            return <String>[];
+          }
+          if (call.method == 'listLogMetadata') return <Map<String, Object>>[];
+          if (call.method == 'deleteLog') return false;
+          throw MissingPluginException('Unexpected SAF method: ${call.method}');
+        },
+      );
+      addTearDown(() async {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          safChannel,
+          null,
+        );
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        logRoot.deleteSync(recursive: true);
+      });
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('zh', 'CN'),
+          home: const LogViewerPage(),
+        ),
+      );
+      await _pumpUntil(tester, () => tester.any(find.text(fileName)));
+      expect(find.text(fileName), findsOneWidget);
+
+      final deleteAction = find.descendant(
+        of: find.ancestor(
+          of: find.text(fileName),
+          matching: find.byType(ListTile),
+        ),
+        matching: find.byTooltip('删除'),
+      );
+      await tester.tap(deleteAction);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(FilledButton, '删除'));
+      await _pumpUntil(
+        tester,
+        () =>
+            tester.any(find.text('无法确认删除结果。')) &&
+            !tester.any(find.text(fileName)),
+      );
+
+      expect(fallbackLog.existsSync(), isFalse);
+      expect(remainingLog.existsSync(), isTrue);
+      expect(find.text(fileName), findsNothing);
+      expect(find.text('无法确认删除结果。'), findsOneWidget);
+    });
+
+    testWidgets('does not refresh after the page is disposed during deletion', (
+      tester,
+    ) async {
+      const fileName = 'app_2026-01-01-10.log';
+      const safChannel = MethodChannel('com.johntsui.stroom/saf');
+      final deleteCompleter = Completer<bool>();
+      var deleteStarted = false;
+      final logRoot = Directory.systemTemp.createTempSync('log_viewer_');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'backup_saf_uri',
+        'content://provider/tree/documents',
+      );
+      BackupLocationManager.debugIsAndroidOverride = true;
+      BackupLocationManager.debugAppLocalLogsRootPath = logRoot.path;
+      BackupLocationManager.debugPendingLogRootPath = logRoot.path;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        safChannel,
+        (call) async {
+          if (call.method == 'listLogs') return [fileName];
+          if (call.method == 'listLogMetadata') {
+            return <Map<String, Object>>[];
+          }
+          if (call.method == 'deleteLog') {
+            deleteStarted = true;
+            return deleteCompleter.future;
+          }
+          throw MissingPluginException('Unexpected SAF method: ${call.method}');
+        },
+      );
+      addTearDown(() async {
+        if (!deleteCompleter.isCompleted) deleteCompleter.complete(false);
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          safChannel,
+          null,
+        );
+        BackupLocationManager.debugIsAndroidOverride = null;
+        BackupLocationManager.debugAppLocalLogsRootPath = null;
+        BackupLocationManager.debugPendingLogRootPath = null;
+        logRoot.deleteSync(recursive: true);
+      });
+
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogViewerPage(),
+        ),
+      );
+      await _pumpUntil(tester, () => tester.any(find.text(fileName)));
+      expect(find.text(fileName), findsOneWidget);
+      await tester.tap(find.byTooltip('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      for (var attempt = 0; attempt < 5 && !deleteStarted; attempt++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(deleteStarted, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      deleteCompleter.complete(false);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'localizes log content actions and status without changing filename or raw content',
+      (tester) async {
+        const fileName = 'user-provided.log';
+        const rawContent = '[ERROR] Keep this exact user log content: 原样保留';
+        final platformCalls = <MethodCall>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            platformCalls.add(call);
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
           ),
         );
-        await tester.pumpAndSettle();
 
-        final isEnglish = locale.languageCode == 'en';
-        expect(find.text(fileName), findsOneWidget);
-        expect(find.text(isEnglish ? '1 line' : '共 1 行'), findsOneWidget);
-        expect(find.byTooltip(isEnglish ? 'Raw view' : '原始视图'), findsOneWidget);
-        await tester.tap(find.byTooltip(isEnglish ? 'Raw view' : '原始视图'));
-        await tester.pumpAndSettle();
-        expect(find.text(rawContent), findsOneWidget);
+        for (final locale in [
+          const Locale('en', 'US'),
+          const Locale('zh', 'CN'),
+        ]) {
+          await tester.pumpWidget(
+            localizationTestApp(
+              locale: locale,
+              home: LogContentPage(
+                key: ValueKey(locale.languageCode),
+                fileName: fileName,
+                content: rawContent,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
 
-        await tester.tap(find.byTooltip(isEnglish ? 'Copy all' : '复制全文'));
-        await tester.pumpAndSettle();
-        final copyCall = platformCalls
-            .where((call) => call.method == 'Clipboard.setData')
-            .lastOrNull;
-        expect(copyCall, isNotNull);
-        expect((copyCall!.arguments as Map)['text'], rawContent);
-        expect(
-          find.text(isEnglish ? 'Copied all log content' : '已复制全部日志内容'),
-          findsOneWidget,
-        );
-      }
-    });
+          final isEnglish = locale.languageCode == 'en';
+          expect(find.text(fileName), findsOneWidget);
+          expect(find.text(isEnglish ? '1 line' : '共 1 行'), findsOneWidget);
+          expect(
+            find.byTooltip(isEnglish ? 'Raw view' : '原始视图'),
+            findsOneWidget,
+          );
+          await tester.tap(find.byTooltip(isEnglish ? 'Raw view' : '原始视图'));
+          await tester.pumpAndSettle();
+          expect(find.text(rawContent), findsOneWidget);
+
+          await tester.tap(find.byTooltip(isEnglish ? 'Copy all' : '复制全文'));
+          await tester.pumpAndSettle();
+          final copyCall = platformCalls
+              .where((call) => call.method == 'Clipboard.setData')
+              .lastOrNull;
+          expect(copyCall, isNotNull);
+          expect((copyCall!.arguments as Map)['text'], rawContent);
+          expect(
+            find.text(isEnglish ? 'Copied all log content' : '已复制全部日志内容'),
+            findsOneWidget,
+          );
+        }
+      },
+    );
   });
 
   // ==================================================================
@@ -185,8 +534,11 @@ void main() {
       );
 
       final position = currentPosition(tester);
-      expect(position.maxScrollExtent, greaterThan(0),
-          reason: '500 lines must overflow the viewport');
+      expect(
+        position.maxScrollExtent,
+        greaterThan(0),
+        reason: '500 lines must overflow the viewport',
+      );
       expect(
         position.pixels,
         greaterThanOrEqualTo(position.maxScrollExtent - 2),
@@ -195,8 +547,9 @@ void main() {
       );
     });
 
-    testWidgets('first toggle to raw view keeps the reading position',
-        (tester) async {
+    testWidgets('first toggle to raw view keeps the reading position', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         localizationTestApp(
           home: LogContentPage(
@@ -216,24 +569,36 @@ void main() {
       );
       await tester.pump();
       final structuredOffset = currentPosition(tester).pixels;
-      expect(structuredOffset, lessThan(bottomOffset - 3000),
-          reason: 'the drag must move the reading position away from '
-              'the bottom');
+      expect(
+        structuredOffset,
+        lessThan(bottomOffset - 3000),
+        reason: 'the drag must move the reading position away from '
+            'the bottom',
+      );
 
       await tester.tap(find.byTooltip('原始视图'));
       await tester.pump();
 
       final position = currentPosition(tester);
-      expect(position.maxScrollExtent, greaterThan(0),
-          reason: 'raw content must overflow the viewport for this test');
+      expect(
+        position.maxScrollExtent,
+        greaterThan(0),
+        reason: 'raw content must overflow the viewport for this test',
+      );
       // The raw view was never shown before: it maps proportionally to
       // the structured reading position — it must not be yanked to the
       // top of the file nor to the bottom (latest logs).
-      expect(position.pixels, greaterThan(0),
-          reason: 'switching modes must not jump to the top of the file');
-      expect(position.pixels, lessThan(position.maxScrollExtent - 2000),
-          reason: 'switching modes must not scroll to the bottom — only '
-              'the initial page entry may auto-scroll');
+      expect(
+        position.pixels,
+        greaterThan(0),
+        reason: 'switching modes must not jump to the top of the file',
+      );
+      expect(
+        position.pixels,
+        lessThan(position.maxScrollExtent - 2000),
+        reason: 'switching modes must not scroll to the bottom — only '
+            'the initial page entry may auto-scroll',
+      );
       final expectedProportional =
           structuredOffset / bottomOffset * position.maxScrollExtent;
       expect(
@@ -244,8 +609,9 @@ void main() {
       );
     });
 
-    testWidgets('toggling back to structured view keeps its scroll position',
-        (tester) async {
+    testWidgets('toggling back to structured view keeps its scroll position', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         localizationTestApp(
           home: LogContentPage(
@@ -268,8 +634,11 @@ void main() {
       );
       await tester.pump();
       final draggedOffset = currentPosition(tester).pixels;
-      expect(draggedOffset, lessThan(bottomOffset - 3000),
-          reason: 'the drag must move the view well away from the bottom');
+      expect(
+        draggedOffset,
+        lessThan(bottomOffset - 3000),
+        reason: 'the drag must move the view well away from the bottom',
+      );
 
       await tester.tap(find.byTooltip('原始视图'));
       await tester.pump();
@@ -282,13 +651,17 @@ void main() {
         lessThan(100),
         reason: 'Mode switches must never move the scroll position',
       );
-      expect(restoredOffset, lessThan(bottomOffset - 3000),
-          reason: 'after toggling back, the view must still be far from '
-              'the bottom — it must not be yanked to the latest logs');
+      expect(
+        restoredOffset,
+        lessThan(bottomOffset - 3000),
+        reason: 'after toggling back, the view must still be far from '
+            'the bottom — it must not be yanked to the latest logs',
+      );
     });
 
-    testWidgets('raw view restores its scroll position after toggling back',
-        (tester) async {
+    testWidgets('raw view restores its scroll position after toggling back', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         localizationTestApp(
           home: LogContentPage(
@@ -302,8 +675,11 @@ void main() {
       await tester.tap(find.byTooltip('原始视图'));
       await tester.pump();
       final rawBottom = currentPosition(tester).pixels;
-      expect(rawBottom, greaterThan(0),
-          reason: 'first raw view must open at the structured position');
+      expect(
+        rawBottom,
+        greaterThan(0),
+        reason: 'first raw view must open at the structured position',
+      );
 
       // Scroll the raw view up to the middle. (Drag DOWN = positive dy
       // scrolls toward the top.)
@@ -313,8 +689,11 @@ void main() {
       );
       await tester.pump();
       final rawOffset = currentPosition(tester).pixels;
-      expect(rawOffset, lessThan(rawBottom - 3000),
-          reason: 'the drag must move the raw view away from the bottom');
+      expect(
+        rawOffset,
+        lessThan(rawBottom - 3000),
+        reason: 'the drag must move the raw view away from the bottom',
+      );
 
       await tester.tap(find.byTooltip('结构化视图'));
       await tester.pump();
@@ -336,8 +715,9 @@ void main() {
   // ==================================================================
 
   group('LogContentPage — layout', () {
-    testWidgets('structured view renders level icons for a large mixed log',
-        (tester) async {
+    testWidgets('structured view renders level icons for a large mixed log', (
+      tester,
+    ) async {
       final buffer = StringBuffer();
       for (var i = 0; i < 5000; i++) {
         switch (i % 4) {
@@ -374,8 +754,11 @@ void main() {
       // ERROR/WARN lines happen to be visible after the entry auto-scroll.
       SelectableText firstVisibleLevelLine(String level) => tester.widget(
             find
-                .byWidgetPredicate((w) =>
-                    w is SelectableText && w.data?.contains('[$level]') == true)
+                .byWidgetPredicate(
+                  (w) =>
+                      w is SelectableText &&
+                      w.data?.contains('[$level]') == true,
+                )
                 .first,
           );
       expect(firstVisibleLevelLine('ERROR').style?.color, Colors.red);
@@ -388,6 +771,32 @@ void main() {
   // ==================================================================
 
   group('LogContentPage — actions', () {
+    testWidgets('source filters parse fractional log timestamps', (
+      tester,
+    ) async {
+      const content =
+          '[2024-01-01 00:00:00.000001] [INFO] [PreciseSource] fractional entry\n'
+          '[2024-01-01 00:00:01] [ERROR] [OtherSource] other entry';
+      await tester.pumpWidget(
+        localizationTestApp(
+          locale: const Locale('en', 'US'),
+          home: const LogContentPage(
+            fileName: 'app_2024-01-01-00.log',
+            content: content,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Filter log entries'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1), 'PreciseSource');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('fractional entry'), findsOneWidget);
+      expect(find.textContaining('other entry'), findsNothing);
+      expect(find.text('1 of 2 lines'), findsOneWidget);
+    });
+
     testWidgets('shows line count in the AppBar', (tester) async {
       await tester.pumpWidget(
         localizationTestApp(
@@ -423,8 +832,9 @@ void main() {
       expect(find.text('共 2 行'), findsOneWidget);
     });
 
-    testWidgets('copy action copies the full content to the clipboard',
-        (tester) async {
+    testWidgets('copy action copies the full content to the clipboard', (
+      tester,
+    ) async {
       final content = buildLogContent(3);
       final platformCalls = <MethodCall>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -434,8 +844,12 @@ void main() {
           return null;
         },
       );
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null));
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
 
       await tester.pumpWidget(
         localizationTestApp(
@@ -452,8 +866,11 @@ void main() {
       final copyCall = platformCalls
           .where((c) => c.method == 'Clipboard.setData')
           .lastOrNull;
-      expect(copyCall, isNotNull,
-          reason: 'copy button must write to the clipboard');
+      expect(
+        copyCall,
+        isNotNull,
+        reason: 'copy button must write to the clipboard',
+      );
       expect((copyCall!.arguments as Map)['text'], content);
       expect(find.text('已复制全部日志内容'), findsOneWidget);
     });

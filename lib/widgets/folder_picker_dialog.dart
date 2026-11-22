@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/natural_sort.dart';
 
+import 'constrained_text.dart';
+
 /// 文件夹选择器对话框
 ///
 /// 单击选中文件夹，双击进入查看子文件夹；支持在子文件夹内
@@ -332,9 +334,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
+                          child: ConstrainedText(
                             AppLocalizations.of(context)!
                                 .folderPickerPath(_currentPath),
+                            maxLines: 1,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -376,8 +379,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                   ),
                 ],
 
-                // 现有文件夹列表
-                if (folders.isNotEmpty) ...[
+                // 现有文件夹列表；在子文件夹层级即使为空也保留该分区。
+                if (_isInSubFolder || folders.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   _sectionLabel(
                     context,
@@ -387,25 +390,41 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                             .folderPickerExistingFolders,
                   ),
                   const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final folder in folders)
-                          _buildFolderTile(
-                            context,
-                            cs,
-                            folder,
-                            // 显示文件夹基名（不含父路径）
-                            _isInSubFolder
-                                ? folder.substring(folder.lastIndexOf('/') + 1)
-                                : folder,
-                            Icons.folder_outlined,
-                          ),
-                      ],
+                  if (folders.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: Text(
+                          AppLocalizations.of(context)!.folderPickerNoFolders,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final folder in folders)
+                            _buildFolderTile(
+                              context,
+                              cs,
+                              folder,
+                              // 显示文件夹基名（不含父路径）
+                              _isInSubFolder
+                                  ? folder
+                                      .substring(folder.lastIndexOf('/') + 1)
+                                  : folder,
+                              Icons.folder_outlined,
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
 
                 // 创建新文件夹：仅当调用方支持创建时才显示。
@@ -421,8 +440,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         Icons.create_new_folder_outlined,
                         size: 18,
                       ),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.folderPickerCreateNew,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     )
                   else
@@ -489,14 +510,22 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
             // 创建进行中禁用：避免在途创建时直接关闭对话框，
             // 导致文件夹已创建但调用方收到「取消」
             onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-            child: Text(AppLocalizations.of(context)!.folderPickerCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.folderPickerCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           FilledButton(
             // 创建进行中禁用：避免在途创建时弹出旧选择
             onPressed: _isCreating
                 ? null
                 : () => Navigator.of(context).pop(_selectedFolder),
-            child: Text(AppLocalizations.of(context)!.folderPickerConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.folderPickerConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

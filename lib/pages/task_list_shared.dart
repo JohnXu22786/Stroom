@@ -7,6 +7,8 @@ import '../task_flow/pages/task_flow_run_page.dart';
 import '../task_flow/providers/task_flow_execution_provider.dart';
 import 'unified_task_list/task_utils.dart';
 
+import '../widgets/constrained_text.dart';
+
 class TaskCard extends ConsumerWidget {
   final SynthesisTask task;
 
@@ -37,7 +39,7 @@ class TaskCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  ConstrainedText(
                     task.title.isNotEmpty
                         ? task.title
                         : AppLocalizations.of(context)!
@@ -50,13 +52,14 @@ class TaskCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       buildStatusChip(
                         task.status,
                         AppLocalizations.of(context)!,
                       ),
-                      const SizedBox(width: 8),
                       Text(
                         formatRelativeTime(
                           task.createdAt,
@@ -159,7 +162,11 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ),
                 icon: const Icon(Icons.account_tree_outlined, size: 18),
-                label: Text(strings.taskListViewFlow),
+                label: ConstrainedText(
+                  strings.taskListViewFlow,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             if (canControlStandalone && task.status == TaskStatus.running)
               PopupMenuButton<String>(
@@ -211,9 +218,11 @@ class TaskCard extends ConsumerWidget {
                         ref.read(taskListProvider.notifier).resumeTask(task.id);
                       },
                       icon: const Icon(Icons.play_arrow, size: 16),
-                      label: Text(
+                      label: ConstrainedText(
                         strings.taskListResume,
                         style: TextStyle(fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -259,9 +268,11 @@ class TaskCard extends ConsumerWidget {
                         ref.read(taskListProvider.notifier).retryTask(task.id);
                       },
                       icon: const Icon(Icons.refresh, size: 16),
-                      label: Text(
+                      label: ConstrainedText(
                         strings.taskListRetry,
                         style: TextStyle(fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -384,7 +395,13 @@ class TaskCard extends ConsumerWidget {
           children: [
             Icon(Icons.error_outline, color: Colors.red, size: 20),
             SizedBox(width: 8),
-            Text(strings.taskListSynthesisErrorTitle),
+            Flexible(
+              child: ConstrainedText(
+                strings.taskListSynthesisErrorTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -396,7 +413,11 @@ class TaskCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.taskListClose),
+            child: ConstrainedText(
+              strings.taskListClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -412,7 +433,13 @@ class TaskCard extends ConsumerWidget {
           children: [
             Icon(Icons.code, color: Colors.orange, size: 20),
             SizedBox(width: 8),
-            Text(strings.taskListOriginalExchange),
+            Flexible(
+              child: ConstrainedText(
+                strings.taskListOriginalExchange,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: SizedBox(
@@ -484,7 +511,11 @@ class TaskCard extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(strings.taskListClose),
+            child: ConstrainedText(
+              strings.taskListClose,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

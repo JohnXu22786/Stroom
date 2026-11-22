@@ -624,10 +624,20 @@ extension _ChatPageUiExt on _ChatPageState {
   Widget _buildTopBar({required String title, Conversation? conversation}) {
     final cs = Theme.of(context).colorScheme;
     final isTemporary = conversation?.isTemporary ?? false;
+    final wasTemporary = conversation == null
+        ? null
+        : _lastTemporaryModeByConversation[conversation.id];
+    if (conversation != null) {
+      _lastTemporaryModeByConversation[conversation.id] = isTemporary;
+    }
+    final activatedTemporary = isTemporary && wasTemporary == false;
     final temporaryExpiresAt =
         isTemporary ? conversation!.temporaryExpiresAt : null;
-    final titleText = Text(
+    final temporaryPausedRemaining =
+        isTemporary ? conversation!.temporaryPausedRemainingMilliseconds : null;
+    final titleText = ConstrainedText(
       title,
+      maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: 16,
@@ -660,10 +670,7 @@ extension _ChatPageUiExt on _ChatPageState {
               scrollProgress,
             ),
             border: Border(
-              bottom: BorderSide(
-                color: cs.outlineVariant,
-                width: 0.5,
-              ),
+              bottom: BorderSide(color: cs.outlineVariant, width: 0.5),
             ),
           ),
           child: child,
@@ -691,7 +698,14 @@ extension _ChatPageUiExt on _ChatPageState {
                 children: [
                   // 临时对话倒计时胶囊（标题前）
                   if (temporaryExpiresAt != null)
-                    TemporaryCountdownCapsule(expiresAt: temporaryExpiresAt),
+                    TemporaryCountdownCapsule(
+                      key: ValueKey(conversation!.id),
+                      expiresAt: temporaryExpiresAt,
+                      pausedRemainingMilliseconds: temporaryPausedRemaining,
+                      animationKey: conversation!.temporaryExpiryRevision,
+                      animateOnMount: activatedTemporary,
+                      animateOnChange: true,
+                    ),
                   Flexible(child: titleWidget),
                   if (_developerMode)
                     Container(
@@ -717,26 +731,20 @@ extension _ChatPageUiExt on _ChatPageState {
               ),
             ),
           ),
-          // ── 临时对话开关（搜索按钮左侧）──
-          // 图标为虚线框对话气泡风格：开启后气泡内带打勾
-          // （原生 Material 图标组：chat_bubble_outline ↔ mark_chat_read_outlined）。
+          // Temporary conversation control (left of search).
           IconButton(
             icon: Icon(
-              isTemporary
-                  ? Icons.mark_chat_read_outlined
-                  : Icons.chat_bubble_outline,
+              isTemporary ? Icons.timer : Icons.timer_outlined,
               color: isTemporary ? cs.primary : null,
             ),
             tooltip: isTemporary
-                ? AppLocalizations.of(context)!.conversationCloseTemporary
+                ? AppLocalizations.of(context)!.conversationKeep
                 : AppLocalizations.of(context)!.conversationTemporary,
             onPressed: conversation == null
                 ? null
-                : () {
-                    ref
-                        .read(conversationsProvider.notifier)
-                        .toggleTemporary(conversation.id);
-                  },
+                : () => ref
+                    .read(conversationsProvider.notifier)
+                    .toggleTemporary(conversation.id),
           ),
           // ── Search toggle ──
           IconButton(
@@ -746,9 +754,13 @@ extension _ChatPageUiExt on _ChatPageState {
                   _isSearching ? Theme.of(context).colorScheme.primary : null,
             ),
             tooltip: AppLocalizations.of(context)!.chatSearchMessages,
-            onPressed: () => _isSearching
-                ? _closeSearch()
-                : setState(() => _isSearching = true),
+            onPressed: () => setState(() {
+              _isSearching = !_isSearching;
+              if (!_isSearching) {
+                _searchMode = SearchMode.current;
+                _liveMarkdownSearchPreviews.clear();
+              }
+            }),
           ),
         ],
       ),
@@ -760,7 +772,11 @@ extension _ChatPageUiExt on _ChatPageState {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.conversationRename),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.conversationRename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -774,12 +790,20 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           TextButton(
             onPressed: () =>
                 _saveConversationTitle(dialogContext, conversation, controller),
-            child: Text(AppLocalizations.of(context)!.actionConfirm),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionConfirm,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -805,9 +829,8 @@ extension _ChatPageUiExt on _ChatPageState {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: Theme.of(
-        context,
-      ).colorScheme.errorContainer.withValues(alpha: 0.3),
+      color:
+          Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3),
       child: Row(
         children: [
           Icon(
@@ -832,12 +855,14 @@ extension _ChatPageUiExt on _ChatPageState {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: Text(
+            child: ConstrainedText(
               AppLocalizations.of(context)!.appSettings,
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.error,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -880,7 +905,7 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(AppLocalizations.of(context)!.chatCopied),
-            duration: const Duration(seconds: 1),
+            duration: Duration(seconds: 1),
           ),
         );
       },
@@ -950,20 +975,27 @@ extension _ChatPageUiExt on _ChatPageState {
     return showDialog<MessageSaveOption>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(AppLocalizations.of(context)!.chatSaveMarkdownTitle),
+        title: ConstrainedText(
+          AppLocalizations.of(context)!.chatSaveMarkdownTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               AppLocalizations.of(context)!.chatSaveToolCallChoice,
-              style: const TextStyle(fontSize: 13),
+              style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.article_outlined, size: 18),
-              label:
-                  Text(AppLocalizations.of(context)!.chatSaveCompleteMessage),
+              label: ConstrainedText(
+                AppLocalizations.of(context)!.chatSaveCompleteMessage,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.full),
             ),
             const SizedBox(height: 8),
@@ -977,7 +1009,11 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(AppLocalizations.of(context)!.actionCancel),
+            child: ConstrainedText(
+              AppLocalizations.of(context)!.actionCancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1012,8 +1048,9 @@ extension _ChatPageUiExt on _ChatPageState {
         final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.chatSavedToPath(outputPath)),
+            content: Text(
+              AppLocalizations.of(context)!.chatSavedToPath(outputPath),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1023,7 +1060,8 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
+              AppLocalizations.of(context)!.chatSaveFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1066,11 +1104,11 @@ extension _ChatPageUiExt on _ChatPageState {
           .replaceFirst(RegExp(r'\.md$', caseSensitive: false), '')
           .trim();
       if (fileName.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-          content: Text(AppLocalizations.of(context)!.chatFilenameRequired),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatFilenameRequired),
+          ),
+        );
         return;
       }
 
@@ -1114,7 +1152,8 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.chatSavedToAppFiles(folderPath)),
+              AppLocalizations.of(context)!.chatSavedToAppFiles(folderPath),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1124,7 +1163,8 @@ extension _ChatPageUiExt on _ChatPageState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
+              AppLocalizations.of(context)!.chatSaveFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );

@@ -3,12 +3,14 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/built_in_assistants.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/provider_config_display_names.dart';
 import '../providers/update_provider.dart';
 import '../services/chat_adapter.dart'
     show AvailableModel, availableLlmModels, resolveModelRef;
@@ -23,6 +25,8 @@ import 'notification_settings_page.dart';
 import 'browser_cookies_page.dart';
 import 'log_viewer_page.dart';
 import 'theme_display_settings_page.dart';
+
+import '../widgets/constrained_text.dart';
 
 part 'settings_page_theme_task.dart';
 part 'settings_page_provider_system.dart';
@@ -50,29 +54,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: AnimatedBuilder(
-          animation: _scrollController,
-          builder: (context, child) {
-            final scrollProgress = _scrollController.hasClients
-                ? (_scrollController.offset / 160).clamp(0.0, 1.0).toDouble()
-                : 0.0;
-            final colorScheme = Theme.of(context).colorScheme;
-            return AppBar(
-              title: child,
-              centerTitle: true,
-              backgroundColor: Color.lerp(
-                colorScheme.surface,
-                colorScheme.surfaceContainerHigh,
-                scrollProgress,
-              ),
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-            );
-          },
-          child: Text(strings.settingsPageTitle),
+      appBar: AppBar(
+        title: ConstrainedText(
+          strings.settingsPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
+        centerTitle: true,
       ),
       body: ListView(
         controller: _scrollController,
@@ -124,8 +112,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }) {
     return ListTile(
       leading: leading,
-      title: Text(title),
-      subtitle: subtitle != null ? Text(subtitle) : null,
+      title: ConstrainedText(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: subtitle != null
+          ? ConstrainedText(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            )
+          : null,
       trailing: trailing,
       onTap: onTap,
       contentPadding: EdgeInsets.zero,

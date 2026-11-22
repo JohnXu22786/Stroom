@@ -9,6 +9,7 @@ import '../services/data_migration_service.dart';
 import '../services/data_integrity_json_parser.dart' as json_parser;
 import '../services/startup_data_validation_unavailable.dart';
 import '../services/startup_preferences.dart';
+import '../utils/web_file_store.dart';
 
 // ====================================================================
 // Startup Issue Severity
@@ -120,7 +121,11 @@ class StartupCheckService {
   ///
   /// 每次启动都执行此检查（包括版本已是最新时的恢复性检查）。
   static Future<MigrationResult> checkFormatVersion() async {
-    return DataMigrationService.checkAndMigrate();
+    final dataResult = await DataMigrationService.checkAndMigrate();
+    if (kIsWeb && await WebFileStore.migrateAttachmentValuesToBlobs()) {
+      return const MigrationResult(needsMigration: true, restartRequired: true);
+    }
+    return dataResult;
   }
 
   // ================================================================

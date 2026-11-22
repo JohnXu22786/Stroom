@@ -23,6 +23,8 @@ import 'mermaid_chart_page.dart';
 import 'text_preview_edit_page.dart';
 import 'text_storage_shared.dart';
 
+import '../widgets/constrained_text.dart';
+
 /// 文本储存区页面 - 管理文本文件，支持导入、创建、预览和导出
 class TextStoragePage extends ConsumerStatefulWidget {
   final int tabIndex;
@@ -74,22 +76,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     'env',
   };
 
-  String _uniqueTextName(
-    String baseName,
-    List<TextRecord> records,
-    Set<String> usedInBatch,
-  ) {
-    bool taken(String name) =>
-        usedInBatch.contains(name) ||
-        records.any((r) => r.name == name && r.folder == _currentFolder);
-    if (!taken(baseName)) return baseName;
-    int i = 2;
-    while (taken('$baseName ($i)')) {
-      i++;
-    }
-    return '$baseName ($i)';
-  }
-
   // ====================================================================
   // Import text files
   // ====================================================================
@@ -102,6 +88,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
+    var importedCount = 0;
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -136,7 +123,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final records = ref.read(textRecordsProvider);
       final usedInBatch = <String>{};
-      var count = 0;
       for (final file in files) {
         final bytes = await file.readAsBytes();
         final content = utf8.decode(bytes);
@@ -146,17 +132,22 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(l10n.textStorageSkipUnsupportedFormat(format))));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.textStorageSkipUnsupportedFormat(format)),
+              ),
+            );
           }
           continue;
         }
-        final displayName = _uniqueTextName(
+        final displayName = uniqueTextRecordName(
           p.basenameWithoutExtension(rawName),
+          format,
+          _currentFolder,
           records,
           usedInBatch,
         );
-        usedInBatch.add(displayName);
+        usedInBatch.add('$displayName\u0000$format');
 
         await TextManifest.saveTextRecord(
           TextRecord(
@@ -170,7 +161,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
           content,
         );
-        count++;
+        importedCount++;
       }
 
       if (mounted) {
@@ -181,10 +172,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
       // 没有任何文件被导入（如全部跳过）时不显示成功提示
-      if (mounted && count > 0) {
+      if (mounted && importedCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.textStorageImportSuccess(count)),
+            content: Text(l10n.textStorageImportSuccess(importedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -194,6 +185,16 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
+      }
+      // 保存是逐文件完成的；如果后续文件读取或保存失败，刷新已经成功
+      // 写入的记录，避免它们直到用户手动刷新才出现在列表中。
+      if (importedCount > 0) {
+        try {
+          await ref.read(textRecordsProvider.notifier).loadRecords();
+          await ref.read(textFolderListProvider.notifier).loadFolders();
+        } catch (_) {
+          // Keep showing the original import error even if refreshing fails.
+        }
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -228,8 +229,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(l10n.textStorageSaved),
-            duration: const Duration(seconds: 2)),
+          content: Text(l10n.textStorageSaved),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -242,8 +244,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final content = await TextManifest.readText(file.storagePath);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(AppLocalizations.of(context)!.textStorageLoadFailed)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.textStorageLoadFailed),
+        ),
+      );
       return;
     }
 
@@ -286,8 +291,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final content = await TextManifest.readText(file.storagePath);
       if (content == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.textStorageReadFailed)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l10n.textStorageReadFailed)));
         }
         return;
       }
@@ -351,13 +357,24 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final selectedFiles = ids
           .map((id) => records.firstWhere((record) => record.id == id))
           .toList();
-      validateUserVisibleExportPaths(
-        files: selectedFiles.map(
-          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
-        ),
-      );
+      final selectedPaths = selectedFiles
+          .map(
+            (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+          )
+          .toList();
+      validateUserVisibleExportPaths(files: selectedPaths);
+      final resolvedOutputPaths = useArchive
+          ? const <String>[]
+          : await resolveNonClobberingExportPaths(
+              files: selectedPaths,
+              directory: outputDir,
+              pathExists: (path) async =>
+                  await FileSystemEntity.type(path, followLinks: false) !=
+                  FileSystemEntityType.notFound,
+            );
 
-      for (final file in selectedFiles) {
+      for (var index = 0; index < selectedFiles.length; index++) {
+        final file = selectedFiles[index];
         final content = await TextManifest.readText(file.storagePath);
         if (content == null) continue;
 
@@ -371,10 +388,13 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           final data = Uint8List.fromList(utf8.encode(content));
           archiveFiles[relativePath] = data;
         } else {
-          final fileDir = p.join(outputDir, file.folder);
+          final outputPath = resolvedOutputPaths[index];
+          final fileDir = p.dirname(outputPath);
           await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsString(content);
+          await writeUserVisibleExportFile(
+            outputPath,
+            Uint8List.fromList(utf8.encode(content)),
+          );
         }
         exportedCount++;
       }
@@ -430,18 +450,30 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text(l10n.textStorageFolderExportTitle),
+              title: ConstrainedText(
+                l10n.textStorageFolderExportTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: Text(l10n.textStorageWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text(l10n.textStorageCancel),
+                  child: ConstrainedText(
+                    l10n.textStorageCancel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: Text(l10n.textStorageDownloadZip),
+                  child: ConstrainedText(
+                    l10n.textStorageDownloadZip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -520,7 +552,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final records = ref.read(textRecordsProvider);
       var exportedCount = 0;
-      final exportPaths = <String>{};
 
       final selectedFolders = <String>{
         ...names,
@@ -538,6 +569,16 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             ),
           )
           .toList();
+      final outputPaths = await resolveNonClobberingExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        directory: outputDir,
+        folders: selectedFolders,
+        pathExists: (path) async =>
+            await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound,
+      );
       validateUserVisibleExportPaths(
         files: folderFiles.map(
           (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
@@ -545,22 +586,23 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         folders: selectedFolders,
       );
       for (final folderName in selectedFolders) {
-        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+        await createUserVisibleExportDirectory(outputDir, folderName);
       }
 
-      for (final file in folderFiles) {
+      for (var i = 0; i < folderFiles.length; i++) {
+        final file = folderFiles[i];
         final content = await TextManifest.readText(file.storagePath);
         if (content == null) continue;
-
-        final exportName = '${file.name}.${file.format}';
-        final relativePath = p.posix.join(file.folder, exportName);
-        if (!exportPaths.add(relativePath)) {
-          throw StateError('导出路径重复: $relativePath');
-        }
-        final fileDir = p.join(outputDir, file.folder);
-        await Directory(fileDir).create(recursive: true);
-        final outputPath = p.join(fileDir, exportName);
-        await File(outputPath).writeAsString(content);
+        final outputPath = outputPaths[i];
+        final fileDir = p.dirname(outputPath);
+        await createUserVisibleExportDirectory(
+          outputDir,
+          p.relative(fileDir, from: outputDir),
+        );
+        await writeUserVisibleExportFile(
+          outputPath,
+          Uint8List.fromList(utf8.encode(content)),
+        );
         exportedCount++;
       }
 
@@ -595,41 +637,28 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   // ====================================================================
 
   Future<void> _copyFile(String id, String selectedFolder) async {
-    final l10n = AppLocalizations.of(context)!;
     final records = ref.read(textRecordsProvider);
-    try {
-      final source = records.firstWhere((r) => r.id == id);
-      String copyName = '${source.name}_副本';
-      int copyIdx = 2;
-      while (records.any(
-        (r) => r.name == copyName && r.folder == selectedFolder,
-      )) {
-        copyName = '${source.name}_副本 ($copyIdx)';
-        copyIdx++;
-      }
-      await TextManifest.addRecord(
-        TextRecord(
-          name: copyName,
-          hash: source.hash,
-          format: source.format,
-          createdAt: DateTime.now(),
-          size: source.size,
-          folder: selectedFolder,
-          textLength: source.textLength,
-        ),
-      );
-      await ref.read(textRecordsProvider.notifier).loadRecords();
-      await ref.read(textFolderListProvider.notifier).loadFolders();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.textStorageCopyFailed(e.toString())),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
+    final source = records.firstWhere((r) => r.id == id);
+    final copyName = uniqueTextRecordName(
+      '${source.name}_副本',
+      source.format,
+      selectedFolder,
+      records,
+      {},
+    );
+    await TextManifest.addRecord(
+      TextRecord(
+        name: copyName,
+        hash: source.hash,
+        format: source.format,
+        createdAt: DateTime.now(),
+        size: source.size,
+        folder: selectedFolder,
+        textLength: source.textLength,
+      ),
+    );
+    await ref.read(textRecordsProvider.notifier).loadRecords();
+    await ref.read(textFolderListProvider.notifier).loadFolders();
   }
 
   // ====================================================================
@@ -666,9 +695,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                   ),
                 ),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.textStorageCreateNew,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -685,9 +716,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                   ),
                 ),
                 icon: const Icon(Icons.file_download_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.textStorageImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -707,15 +740,15 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              file.format.toUpperCase(),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+          child: ConstrainedText(
+            file.format.toUpperCase(),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
@@ -739,7 +772,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       // 文本类型文件重命名时显示格式下拉框（与创建页一致）
       renameFormatOptions: kTextFileFormats,
       extraPopupMenuItems: (file) => [
-        // 默认菜单已包含「预览」，这里只补充页面特有的导出项
+        // 默认菜单已包含「打开」，这里只补充页面特有的导出项
         PopupMenuItem(
           value: 'export',
           child: ListTile(

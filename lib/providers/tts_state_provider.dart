@@ -8,7 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 import 'locale_provider.dart';
 
+import '../utils/folder_copy_lock.dart';
+import '../utils/folder_membership_lock.dart';
+import '../utils/folder_operation_rollback.dart';
 import '../utils/file_manifest.dart';
+import '../utils/tts_audio_saver.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import 'tts_state_shared.dart';
@@ -43,6 +47,7 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   SynthesisConfigNotifier() : super(const SynthesisConfig());
 
   Future<void> _loading = Future<void>.value();
+  Future<void> _saveQueue = Future<void>.value();
   Future<void> get ready => _loading;
 
   /// 已知的 voice ID 白名单（非语音名称）
@@ -65,7 +70,8 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
         final configMap = Map<String, dynamic>.from(
           (jsonDecode(configJson) as Map).cast<String, dynamic>(),
         );
-        var config = SynthesisConfig.fromMap(configMap);
+        final persistedConfig = SynthesisConfig.fromMap(configMap);
+        var config = persistedConfig;
         // 统一强制为 wav 格式，忽略旧数据中的 mp3
         config = config.copyWith(format: 'wav');
 
@@ -77,7 +83,20 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
                 !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(voice))) {
           config = config.copyWith(voice: 'female');
           // 覆写持久化值
-          await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
+          late final bool persisted;
+          try {
+            persisted = await prefs.setString(
+              'synthesis_config',
+              jsonEncode(config.toMap()),
+            );
+          } catch (_) {
+            state = persistedConfig;
+            rethrow;
+          }
+          if (!persisted) {
+            state = persistedConfig;
+            return;
+          }
         }
 
         state = config;
@@ -88,29 +107,43 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   }
 
   Future<void> saveConfig(SynthesisConfig config) async {
-    try {
-      state = config;
+    await _enqueueConfigSave((_) => config);
+  }
+
+  Future<void> _enqueueConfigSave(
+    SynthesisConfig Function(SynthesisConfig current) buildConfig,
+  ) {
+    final save = _saveQueue.catchError((Object _) {}).then((_) async {
+      await _loading;
+      final config = buildConfig(state);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
-    } catch (e) {
-      debugPrint('Failed to save synthesis config: $e');
-    }
+      final persisted = await prefs.setString(
+        'synthesis_config',
+        jsonEncode(config.toMap()),
+      );
+      if (!persisted) {
+        throw StateError('Failed to persist synthesis config');
+      }
+      state = config;
+    });
+    _saveQueue = save;
+    return save;
   }
 
   Future<void> updateVoice(String voice) async {
-    await saveConfig(state.copyWith(voice: voice));
+    await _enqueueConfigSave((current) => current.copyWith(voice: voice));
   }
 
   Future<void> updateSpeed(double speed) async {
-    await saveConfig(state.copyWith(speed: speed));
+    await _enqueueConfigSave((current) => current.copyWith(speed: speed));
   }
 
   Future<void> updateVolume(double volume) async {
-    await saveConfig(state.copyWith(volume: volume));
+    await _enqueueConfigSave((current) => current.copyWith(volume: volume));
   }
 
   Future<void> updateFormat(String format) async {
-    await saveConfig(state.copyWith(format: format));
+    await _enqueueConfigSave((current) => current.copyWith(format: format));
   }
 
   Future<void> resetToDefaults() async {
@@ -228,33 +261,63 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await FileManifest.loadRecords();
-
-    // 更新 oldName 本身的记录
-    for (final r in records) {
-      if (r.folder == oldName) {
-        await FileManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    // 更新所有后代文件夹的记录
-    final oldDescendants =
-        await FileManifest.getAllDescendantFolderPaths(oldName);
-    for (final desc in oldDescendants) {
-      final suffix = desc.substring(oldName.length); // e.g., "/sub"
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await FileManifest.moveRecord(r.id, newDescPath);
+    final originalFolders = await FileManifest.getAllFolders();
+    final recordsToRestore = List<AudioRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
+    await runFolderOperationWithRollback<AudioRecord>(
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: FileManifest.loadRecords,
+      getFolders: FileManifest.getAllFolders,
+      moveRecordIfFolder: FileManifest.moveRecordIfFolder,
+      addFolder: FileManifest.addFolder,
+      removeFolder: FileManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
+        // 更新 oldName 本身的记录
+        for (final r in records) {
+          if (r.folder == oldName) {
+            await moveOperationRecord(r.id, r.folder, newPath);
+          }
         }
-      }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await FileManifest.addFolderPath(newDescPath);
-    }
 
-    await FileManifest.addFolderPath(newPath);
-    // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
-    await FileManifest.removeFolderFromCache(oldName);
-    await loadRecords();
+        // 更新所有后代文件夹的记录
+        final oldDescendants =
+            await FileManifest.getAllDescendantFolderPaths(oldName);
+        for (final desc in oldDescendants) {
+          final suffix = desc.substring(oldName.length); // e.g., "/sub"
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await moveOperationRecord(r.id, r.folder, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await FileManifest.addFolderPath(newDescPath);
+        }
+
+        await FileManifest.addFolderPath(newPath);
+        // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
+        await FileManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in oldDescendants) {
+          await FileManifest.removeFolderMetadataFromCache(desc);
+        }
+        await loadRecords();
+      },
+    );
   }
 
   /// 移动文件夹（保持层级结构，整体搬入目标文件夹）
@@ -281,51 +344,90 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await FileManifest.loadRecords();
-
-    // 移动 oldName 本身的记录到 newPath
-    for (final r in records) {
-      if (r.folder == oldName) {
-        await FileManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    // 移动所有后代文件夹的记录
-    final oldDescendants =
-        await FileManifest.getAllDescendantFolderPaths(oldName);
-    for (final desc in oldDescendants) {
-      final suffix = desc.substring(oldName.length); // e.g., "/sub"
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await FileManifest.moveRecord(r.id, newDescPath);
-        }
-      }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await FileManifest.addFolderPath(newDescPath);
-    }
-
-    // 更新文件夹缓存
-    await FileManifest.addFolderPath(newPath);
+    final originalFolders = await FileManifest.getAllFolders();
+    final recordsToRestore = List<AudioRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
     if (targetFolderClean.isNotEmpty) {
-      await FileManifest.addFolder(targetFolderClean); // 确保目标存在
-      // 空文件夹移动不经过 moveRecord，祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+      var ancestor = targetFolderClean;
       while (ancestor.isNotEmpty) {
-        await FileManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = FileManifest.getParentFolderPath(ancestor);
       }
     }
-    // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
-    await FileManifest.removeFolderFromCache(oldName);
-    await loadRecords();
+    await runFolderOperationWithRollback<AudioRecord>(
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: FileManifest.loadRecords,
+      getFolders: FileManifest.getAllFolders,
+      moveRecordIfFolder: FileManifest.moveRecordIfFolder,
+      addFolder: FileManifest.addFolder,
+      removeFolder: FileManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
+        // 移动 oldName 本身的记录到 newPath
+        for (final r in records) {
+          if (r.folder == oldName) {
+            await moveOperationRecord(r.id, r.folder, newPath);
+          }
+        }
+
+        // 移动所有后代文件夹的记录
+        final oldDescendants =
+            await FileManifest.getAllDescendantFolderPaths(oldName);
+        for (final desc in oldDescendants) {
+          final suffix = desc.substring(oldName.length); // e.g., "/sub"
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await moveOperationRecord(r.id, r.folder, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await FileManifest.addFolderPath(newDescPath);
+        }
+
+        // 更新文件夹缓存
+        await FileManifest.addFolderPath(newPath);
+        if (targetFolderClean.isNotEmpty) {
+          await FileManifest.addFolder(targetFolderClean); // 确保目标存在
+          // 空文件夹移动不经过 moveRecord，祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+          while (ancestor.isNotEmpty) {
+            await FileManifest.addFolder(ancestor);
+            ancestor = FileManifest.getParentFolderPath(ancestor);
+          }
+        }
+        // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
+        await FileManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in oldDescendants) {
+          await FileManifest.removeFolderMetadataFromCache(desc);
+        }
+        await loadRecords();
+      },
+    );
   }
 
   /// 复制文件夹（保持层级结构，整体复制到目标文件夹）
   Future<void> copyFolder(String sourceFolder, String targetFolder) async {
     final baseName = FileManifest.getFolderBaseName(sourceFolder);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetFolderClean =
-        targetFolder.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetFolderClean = targetFolder.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetFolderClean.isEmpty ? baseName : '$targetFolderClean/$baseName';
 
@@ -338,6 +440,65 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       return;
     }
 
+    await FolderCopyLock.withLock(
+      'audio',
+      newPath,
+      () => FolderMembershipLock.withCopyLock(
+        'audio',
+        sourceFolder,
+        () =>
+            _copyFolderToDestination(sourceFolder, targetFolderClean, newPath),
+      ),
+    );
+  }
+
+  Future<void> _copyFolderToDestination(
+    String sourceFolder,
+    String targetFolderClean,
+    String newPath,
+  ) async {
+    final prefix = '$sourceFolder/';
+    final initialRecords = (await FileManifest.loadRecords()).where(
+      (record) =>
+          record.folder == sourceFolder || record.folder.startsWith(prefix),
+    );
+    final initialKeys =
+        initialRecords.map((record) => record.storageFileName).toSet();
+    var retry = false;
+    Future<void> publishWithLocks() async {
+      final records = (await FileManifest.loadRecordsStrict())
+          .where(
+            (record) =>
+                record.folder == sourceFolder ||
+                record.folder.startsWith(prefix),
+          )
+          .toList();
+      if (records.any(
+        (record) => !initialKeys.contains(record.storageFileName),
+      )) {
+        retry = true;
+        return;
+      }
+      await FolderMembershipLock.afterCopySnapshotForTesting?.call();
+      await _copyFolderSnapshot(
+        sourceFolder,
+        targetFolderClean,
+        newPath,
+        records,
+      );
+    }
+
+    await FileManifest.withCopySourceLocks(initialKeys, publishWithLocks);
+    if (retry)
+      await _copyFolderToDestination(sourceFolder, targetFolderClean, newPath);
+  }
+
+  Future<void> _copyFolderSnapshot(
+    String sourceFolder,
+    String targetFolderClean,
+    String newPath,
+    List<AudioRecord> records,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await FileManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
@@ -345,58 +506,101 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     // Snapshot: addRecord mutates the manifest cache, which loadRecords
     // returns directly — iterating it while copying would throw
     // ConcurrentModificationError.
-    final records = List<AudioRecord>.from(await FileManifest.loadRecords());
 
-    // 复制 sourceFolder 本身的记录
-    for (final r in records) {
-      if (r.folder == sourceFolder) {
-        await FileManifest.addRecord(AudioRecord(
-          name: r.name,
-          hash: r.hash,
-          format: r.format,
-          createdAt: DateTime.now(),
-          size: r.size,
-          folder: newPath,
-          sourceText: r.sourceText,
-          duration: r.duration,
-        ));
-      }
-    }
-
-    // 复制所有后代文件夹的记录
-    final descendants =
-        await FileManifest.getAllDescendantFolderPaths(sourceFolder);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceFolder.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await FileManifest.addRecord(AudioRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newDescPath,
-            sourceText: r.sourceText,
-          ));
-        }
-      }
-      // 空子文件夹（无记录）也需要保留在缓存中
-      await FileManifest.addFolderPath(newDescPath);
-    }
-
-    await FileManifest.addFolderPath(newPath);
+    final rollbackFolderAncestors = <String>{};
     if (targetFolderClean.isNotEmpty) {
-      await FileManifest.addFolder(targetFolderClean);
-      // 空文件夹复制不经过 addRecord，祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+      var ancestor = targetFolderClean;
       while (ancestor.isNotEmpty) {
-        await FileManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = FileManifest.getParentFolderPath(ancestor);
       }
     }
-    await loadRecords();
+    final rollbackRecordIds = <String>{};
+    Future<void> addCopiedRecord(AudioRecord record) async {
+      rollbackRecordIds.add(record.id);
+      await FileManifest.addRecord(record);
+    }
+
+    await runFolderOperationWithRollback<AudioRecord>(
+      originalRecords: const [],
+      originalFolders: existing,
+      rollbackFolderSubtrees: {newPath},
+      rollbackRecordIds: rollbackRecordIds,
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceFolder,
+        destinationFolder: newPath,
+        originalFolders: existing,
+        originalRecords: records,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: FileManifest.loadRecords,
+      getFolders: FileManifest.getAllFolders,
+      moveRecordIfFolder: FileManifest.moveRecordIfFolder,
+      addFolder: FileManifest.addFolder,
+      removeFolder: FileManifest.removeFolderFromCache,
+      deleteRecords: FileManifest.deleteRecords,
+      operation: (moveOperationRecord) async {
+        // 复制 sourceFolder 本身的记录
+        for (final r in records) {
+          if (r.folder == sourceFolder) {
+            await addCopiedRecord(
+              AudioRecord(
+                name: r.name,
+                hash: r.hash,
+                format: r.format,
+                createdAt: DateTime.now(),
+                size: r.size,
+                folder: newPath,
+                sourceText: r.sourceText,
+                duration: r.duration,
+              ),
+            );
+          }
+        }
+
+        // 复制所有后代文件夹的记录
+        final descendants = await FileManifest.getAllDescendantFolderPaths(
+          sourceFolder,
+        );
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceFolder.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await addCopiedRecord(
+                AudioRecord(
+                  name: r.name,
+                  hash: r.hash,
+                  format: r.format,
+                  createdAt: DateTime.now(),
+                  size: r.size,
+                  folder: newDescPath,
+                  sourceText: r.sourceText,
+                  duration: r.duration,
+                ),
+              );
+            }
+          }
+          // 空子文件夹（无记录）也需要保留在缓存中
+          await FileManifest.addFolderPath(newDescPath);
+        }
+
+        await FileManifest.addFolderPath(newPath);
+        if (targetFolderClean.isNotEmpty) {
+          await FileManifest.addFolder(targetFolderClean);
+          // 空文件夹复制不经过 addRecord，祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+          while (ancestor.isNotEmpty) {
+            await FileManifest.addFolder(ancestor);
+            ancestor = FileManifest.getParentFolderPath(ancestor);
+          }
+        }
+        await loadRecords();
+      },
+    );
   }
 }
 
@@ -615,19 +819,12 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       sourceText: text,
     );
 
-    return FileManifest.withStorageFileSaveLock('$hash.$format', () async {
-      // Save audio file using hash as filename.
-      await FileManifest.writeFile('$hash.$format', audioData);
-
-      // Save source text companion file.
-      if (text.isNotEmpty) {
-        final textBytes = Uint8List.fromList(utf8.encode(text));
-        await FileManifest.writeFile('$hash.txt', textBytes);
-      }
-
-      await FileManifest.addRecord(record);
-      return record;
-    });
+    final textBytes =
+        text.isEmpty ? null : Uint8List.fromList(utf8.encode(text));
+    return FileManifest.withStorageFileSaveLock(
+      record.storageFileName,
+      () => writeTtsAudioAndPublish(record, audioData, textBytes),
+    );
   }
 
   /// Parse JSON-type custom param values from string to actual JSON

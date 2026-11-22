@@ -1,9 +1,13 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+
 import '../models/chat_message.dart';
 import '../services/attachment_storage.dart';
 import '../utils/format_file_size.dart';
+
+import 'constrained_text.dart';
 
 /// A larger, clickable attachment preview chip for sent messages.
 ///
@@ -35,14 +39,6 @@ class MessageAttachmentPreview extends StatelessWidget {
     }
   }
 
-  String _displayName() {
-    final name = attachment.fileName;
-    if (name.length > 16) {
-      return '${name.substring(0, 14)}…';
-    }
-    return name;
-  }
-
   @override
   Widget build(BuildContext context) {
     final isImage = attachment.fileType == 'image';
@@ -67,10 +63,7 @@ class MessageAttachmentPreview extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: cs.outlineVariant,
-                    width: 0.5,
-                  ),
+                  border: Border.all(color: cs.outlineVariant, width: 0.5),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: isImage
@@ -91,27 +84,27 @@ class MessageAttachmentPreview extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             // File name
-            Text(
-              _displayName(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurface,
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isImage ? 160 : 80),
+              child: ConstrainedText(
+                attachment.fileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
               ),
             ),
             // File size
-            Text(
+            ConstrainedText(
               formatFileSize(attachment.fileSize),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -126,10 +119,7 @@ class _ImageThumbnail extends StatefulWidget {
   final String storagePath;
   final IconData fileIcon;
 
-  const _ImageThumbnail({
-    required this.storagePath,
-    required this.fileIcon,
-  });
+  const _ImageThumbnail({required this.storagePath, required this.fileIcon});
 
   @override
   State<_ImageThumbnail> createState() => _ImageThumbnailState();

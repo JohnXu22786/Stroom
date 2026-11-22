@@ -5,3 +5,10 @@ output-class: AppLocalizations
 preferred-supported-locales:
   - en_US
   - zh_CN
+  - es_ES
+  - ja_JP
+  - de_DE
+  - ko_KR
+  - pt_BR
+  - fr_FR
+  - ar_SA

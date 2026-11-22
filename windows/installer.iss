@@ -26,6 +26,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinese_simplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -34,8 +35,16 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\stroom.exe"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\stroom.exe"; Tasks: desktopicon
 
+[CustomMessages]
+english.CreateDesktopIcon=Create a desktop shortcut
+chinese_simplified.CreateDesktopIcon=创建桌面快捷方式
+english.ShortcutsGroup=Shortcuts:
+chinese_simplified.ShortcutsGroup=快捷方式：
+english.LaunchStroom=Launch Stroom
+chinese_simplified.LaunchStroom=运行 Stroom
+
 [Tasks]
-Name: desktopicon; Description: "创建桌面快捷方式"; GroupDescription: "快捷方式："
+Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:ShortcutsGroup}"
 
 [Run]
-Filename: "{app}\stroom.exe"; Description: "运行 Stroom"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\stroom.exe"; Description: "{cm:LaunchStroom}"; Flags: postinstall nowait skipifsilent

@@ -12,11 +12,10 @@ build. The Flutter SDK itself also supplies packages, so the graph can vary
 with the Flutter version used for a build. This note does not duplicate or
 claim to enumerate that graph. CI and release workflows use Flutter 3.47.8.
 
-`function_tree` is retained because the current math evaluator exposes syntax
-that the proposed Dendrocas rewrite does not support directly; a replacement
-needs a separate compatibility review. `cupertino_icons` is constrained by
-Chewie's dependency range, and the test-only `cross_file` dependency is
-constrained by `file_picker_platform_interface`.
+`visual_math` 0.1.1 no longer depends on `function_tree`; the earlier 0.1.0
+release resolved it transitively. `cupertino_icons` is constrained by Chewie's
+dependency range, and the test-only `cross_file` dependency is constrained by
+`file_picker_platform_interface`.
 
 `fvp: ^0.39.1` is declared by Stroom. The [`fvp` 0.39.1 package archive](https://pub.dev/packages/fvp/versions/0.39.1)
 is BSD-3-Clause licensed, and Flutter's generated package registry shows that

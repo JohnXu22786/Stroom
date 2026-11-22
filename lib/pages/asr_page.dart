@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 
 import 'package:stroom/widgets/stroom_menu_style.dart';
+import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -31,6 +32,10 @@ import '../widgets/app_media_picker_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
 import 'provider_config_page.dart';
+
+import '../widgets/constrained_text.dart';
+import '../widgets/error_detail_dialog_header.dart';
+import '../widgets/save_to_folder_selector.dart';
 
 // ============================================================================
 // Helper: Pair model config with its source provider info
@@ -532,7 +537,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.asrPageTitle),
+        title: ConstrainedText(
+          l10n.asrPageTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           if ((_selectedAudios.isNotEmpty || _retrySourcesIncomplete) &&
@@ -540,7 +549,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
-              label: Text(l10n.clear),
+              label: ConstrainedText(
+                l10n.clear,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),
@@ -630,9 +643,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: Text(
+                child: ConstrainedText(
                   AppLocalizations.of(context)!.configure,
                   style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -694,10 +709,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedIndex,
-                    hint: Text(
+                    hint: ConstrainedText(
                       _modelSelectionRequired || _selectedModelReference != null
                           ? AppLocalizations.of(context)!.reselectModel
                           : AppLocalizations.of(context)!.selectAsrModel,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     isDense: true,
@@ -748,8 +764,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
-                        child: Text(
+                        child: ConstrainedText(
                           displayText,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -782,9 +799,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ),
             ),
             icon: const Icon(Icons.link, size: 20),
-            label: Text(
+            label: ConstrainedText(
               AppLocalizations.of(context)!.enterPublicAudioUrl,
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -807,9 +826,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.mic, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.recordingSelection,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -827,9 +848,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.audio_file_outlined, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   AppLocalizations.of(context)!.audioFiles,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -908,7 +931,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                               ? _showUrlInputDialog
                               : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
-                      label: Text(AppLocalizations.of(context)!.asrReselect),
+                      label: ConstrainedText(
+                        AppLocalizations.of(context)!.asrReselect,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -951,7 +978,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          ConstrainedText(
                             '${index + 1}. ${audio.name}',
                             style: TextStyle(
                               fontSize: 13,
@@ -1035,9 +1062,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
                       icon: const Icon(Icons.preview, size: 14),
-                      label: Text(
+                      label: ConstrainedText(
                         AppLocalizations.of(context)!.asrErrorDetails,
                         style: TextStyle(fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       onPressed: () => _showErrorDetailDialog(context),
                       style: TextButton.styleFrom(
@@ -1090,10 +1119,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  _transcriptionResult!.length > 200
-                      ? '${_transcriptionResult!.substring(0, 200)}...'
-                      : _transcriptionResult!,
+                ConstrainedText(
+                  _transcriptionResult!,
                   style: TextStyle(color: cs.onPrimaryContainer, fontSize: 12),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
@@ -1126,7 +1153,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Save-to folder selector (above start button)
-            _buildSaveToSelector(cs),
+            _buildSaveToSelector(),
             const SizedBox(height: 4),
             if (_selectedAudios.isNotEmpty)
               Padding(
@@ -1157,7 +1184,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         ),
                       )
                     : const Icon(Icons.transcribe, size: 20),
-                label: Text(
+                label: ConstrainedText(
                   _isProcessing
                       ? AppLocalizations.of(context)!.asrWorking
                       : AppLocalizations.of(context)!.asrStart,
@@ -1165,6 +1192,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1178,43 +1207,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // Save-to Folder Selector
   // ==================================================================
 
-  Widget _buildSaveToSelector(ColorScheme cs) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: _pickSaveFolder,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context)!.saveTo,
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _saveFolder.isEmpty
-                    ? AppLocalizations.of(context)!.rootFolder
-                    : _saveFolder,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildSaveToSelector() {
+    final l10n = AppLocalizations.of(context)!;
+    return SaveToFolderSelector(
+      label: l10n.saveTo,
+      folder: _saveFolder.isEmpty ? l10n.rootFolder : _saveFolder,
+      onTap: _pickSaveFolder,
     );
   }
 
@@ -1343,6 +1341,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final cs = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
+      constraints: modalBottomSheetWidthConstraints(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1757,38 +1756,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
-                    const SizedBox(width: 8),
-                    Text(
-                      AppLocalizations.of(ctx)!.asrErrorDetails,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red[700],
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
+              ErrorDetailDialogHeader(
+                title: AppLocalizations.of(ctx)!.asrErrorDetails,
+                onClose: () => Navigator.pop(ctx),
               ),
               // Body with scrollable content
               Flexible(
@@ -1929,7 +1899,11 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.asrEnterAudioUrl),
+      title: ConstrainedText(
+        AppLocalizations.of(context)!.asrEnterAudioUrl,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1955,11 +1929,19 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.cancel),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.cancel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         FilledButton(
           onPressed: _submit,
-          child: Text(AppLocalizations.of(context)!.add),
+          child: ConstrainedText(
+            AppLocalizations.of(context)!.add,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

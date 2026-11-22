@@ -149,6 +149,16 @@ class DataIntegrityChecker {
         validateConversations: !prefsKeysRead.contains('conversations'),
       );
     }
+    final manifestError = await ManifestDatabase.webManifestIntegrityError();
+    if (manifestError != null) {
+      semanticIssues.add(
+        DataIntegrityIssue(
+          part: 'media',
+          message: manifestError,
+          isCorruption: true,
+        ),
+      );
+    }
 
     return DataIntegrityReport([
       ..._jsonIssues(jsonChecks, jsonValidation.parseErrors),

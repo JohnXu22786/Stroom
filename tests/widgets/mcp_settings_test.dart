@@ -12,10 +12,6 @@ import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
-import 'package:stroom/services/llm_credential_store.dart';
-
-ProviderEntriesNotifier? _providerEntriesNotifier;
-bool _providerEntriesLoadFinished = false;
 
 /// Builds the test app with all required provider overrides.
 /// Uses a large screen size to avoid needing to scroll.
@@ -25,17 +21,10 @@ Widget _buildTestApp({Future<void>? updateGate}) {
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
         final notifier = updateGate == null
-            ? ProviderEntriesNotifier(
-                credentialStore: _TestLlmCredentialStore(),
-              )
-            : _BlockingProviderEntriesNotifier(
-                updateGate,
-                credentialStore: _TestLlmCredentialStore(),
-              );
-        _providerEntriesNotifier = notifier;
+            ? ProviderEntriesNotifier()
+            : _BlockingProviderEntriesNotifier(updateGate);
         // load() is normally called in the provider factory, so we call it here too.
-        _providerEntriesLoadFinished = false;
-        notifier.load().whenComplete(() => _providerEntriesLoadFinished = true);
+        notifier.load();
         return notifier;
       }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
@@ -49,43 +38,8 @@ Widget _buildTestApp({Future<void>? updateGate}) {
   );
 }
 
-Future<void> _pumpTestApp(
-  WidgetTester tester, {
-  Future<void>? updateGate,
-}) async {
-  await tester.pumpWidget(_buildTestApp(updateGate: updateGate));
-  for (var attempt = 0;
-      attempt < 1000 && !_providerEntriesLoadFinished;
-      attempt++) {
-    await tester.pump(const Duration(milliseconds: 10));
-  }
-  expect(_providerEntriesLoadFinished, isTrue);
-  expect(_providerEntriesNotifier?.state.isLoaded, isTrue);
-  await tester.pumpAndSettle();
-}
-
-class _TestLlmCredentialStore implements LlmCredentialStore {
-  final Map<String, String> _values = {};
-
-  @override
-  Future<String?> read(String reference) async => _values[reference];
-
-  @override
-  Future<void> write(String reference, String secret) async {
-    _values[reference] = secret;
-  }
-
-  @override
-  Future<void> delete(String reference) async {
-    _values.remove(reference);
-  }
-}
-
 class _BlockingProviderEntriesNotifier extends ProviderEntriesNotifier {
-  _BlockingProviderEntriesNotifier(
-    this._updateGate, {
-    required super.credentialStore,
-  });
+  _BlockingProviderEntriesNotifier(this._updateGate);
 
   final Future<void> _updateGate;
 
@@ -184,8 +138,9 @@ Future<void> _openCustomMcpConfig(
     ]),
   });
 
-  await _pumpTestApp(tester, updateGate: updateGate);
-  await tester.tap(find.text('MCP供应商'));
+  await tester.pumpWidget(_buildTestApp(updateGate: updateGate));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('MCP（模型上下文协议）'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Custom MCP'));
   await tester.pumpAndSettle();
@@ -792,10 +747,11 @@ void main() {
         ]),
       });
 
-      await _pumpTestApp(tester);
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
 
       // Navigate to the built-in Jina AI MCP server details page.
-      await tester.tap(find.text('MCP供应商'));
+      await tester.tap(find.text('MCP（模型上下文协议）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Jina AI'));
       await tester.pumpAndSettle();
@@ -899,9 +855,10 @@ void main() {
           ]),
         });
 
-        await _pumpTestApp(tester);
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
 
-        await tester.tap(find.text('MCP供应商'));
+        await tester.tap(find.text('MCP（模型上下文协议）'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Jina AI'));
         await tester.pumpAndSettle();

@@ -66,7 +66,11 @@ class _AsrCompressionRequest {
   }
   if (request.compression == 'adpcm') {
     return (
-      adpcmToWav(encodeAdpcm(pcm, AdpcmConfig()), sampleRate: info.sampleRate),
+      adpcmToWav(
+        encodeAdpcm(pcm, AdpcmConfig()),
+        sampleRate: info.sampleRate,
+        sampleCount: pcm.length,
+      ),
       'wav',
     );
   }
@@ -1846,7 +1850,14 @@ class AsrService {
         onYield: onYield,
         checkCancelled: checkCancelled,
       );
-      return (adpcmToWav(adpcm, sampleRate: info.sampleRate), 'wav');
+      return (
+        adpcmToWav(
+          adpcm,
+          sampleRate: info.sampleRate,
+          sampleCount: pcm.length,
+        ),
+        'wav',
+      );
     }
     return (
       await encodeFlacWithEventLoopYield(
@@ -2294,7 +2305,12 @@ class AsrService {
     if (trimmed.isEmpty) {
       _throwLocalValidation('音频链接为空');
     }
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    final uri = Uri.tryParse(trimmed);
+    final scheme = uri?.scheme.toLowerCase();
+    if (uri == null ||
+        !uri.hasAuthority ||
+        uri.host.isEmpty ||
+        (scheme != 'http' && scheme != 'https')) {
       _throwLocalValidation('无效的音频链接，必须以 http:// 或 https:// 开头');
     }
     _failClosedOnUncertainPriorChunks(priorChunks);
@@ -3844,9 +3860,9 @@ AsrConfig createAsrConfigFromProviderModel({
         ? (maxFileSizeMb * 1024 * 1024).toInt()
         : AsrConfig.defaultMaxAudioFileSizeBytes,
     preprocessing: providerTypeConfig['preprocessing'] as String? ?? 'none',
-    compression: providerTypeConfig['compression'] as String? ?? 'none',
-    chunking: providerTypeConfig['chunking'] as String? ?? 'none',
-    fallbackMethod: providerTypeConfig['fallbackMethod'] as String? ?? 'none',
+    compression: providerTypeConfig['compression'] as String? ?? 'flac',
+    chunking: providerTypeConfig['chunking'] as String? ?? 'silence',
+    fallbackMethod: providerTypeConfig['fallbackMethod'] as String? ?? 'all',
   );
 }
 

@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/mcp.dart';
 import '../models/tts_models.dart';
 import 'http_tool_service.dart';
@@ -94,6 +96,8 @@ class ConnectivityTestService {
   static Future<ConnectivityTestResult> runProviderTest({
     required ProviderConfigItem config,
     required String testContent,
+    required AppLocalizations localizations,
+    required Locale locale,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -111,13 +115,17 @@ class ConnectivityTestService {
           arguments: content,
           apiKey: HttpToolService.extractHttpToolApiKey(toolName, typeConfig),
           url: typeConfig['url'] as String? ?? config.host,
+          locale: locale,
         );
-        final succeeded = !result.startsWith('错误:');
+        final succeeded = !isErrorResult(result, localizations);
         return _finish(
           stopwatch,
           succeeded,
-          succeeded ? 'HTTP 工具请求成功' : 'HTTP 工具请求失败',
+          succeeded
+              ? localizations.connectivityTestHttpSuccess
+              : localizations.connectivityTestHttpFailure,
           result,
+          localizations,
         );
       }
 
@@ -126,7 +134,13 @@ class ConnectivityTestService {
         typeConfig: typeConfig,
       );
       if (serverConfig == null) {
-        return _finish(stopwatch, false, 'MCP 配置无效', '缺少有效的传输类型配置。');
+        return _finish(
+          stopwatch,
+          false,
+          localizations.connectivityTestInvalidMcpConfig,
+          localizations.connectivityTestMissingTransport,
+          localizations,
+        );
       }
       final isMobile = defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS;
@@ -135,27 +149,41 @@ class ConnectivityTestService {
         return _finish(
           stopwatch,
           false,
-          '当前平台不支持 stdio',
-          'stdio MCP 需要启动本地进程，请在桌面版 Stroom 中测试。',
+          localizations.connectivityTestStdioUnsupported,
+          localizations.connectivityTestStdioDesktopOnly,
+          localizations,
         );
       }
 
       final rawMethod = content['method'];
       if (rawMethod != null && rawMethod is! String) {
-        return _finish(stopwatch, false, '测试内容无效', 'method 必须是字符串。');
+        return _finish(
+          stopwatch,
+          false,
+          localizations.connectivityTestInvalidContent,
+          localizations.connectivityTestMethodMustBeString,
+          localizations,
+        );
       }
       final method = rawMethod as String? ?? 'tools/list';
       if (method != 'tools/list') {
         return _finish(
           stopwatch,
           false,
-          '不支持的测试方法',
-          '为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。',
+          localizations.connectivityTestUnsupportedMethod,
+          localizations.connectivityTestReadOnlyMethodOnly,
+          localizations,
         );
       }
       final rawParams = content['params'];
       if (rawParams != null && rawParams is! Map) {
-        return _finish(stopwatch, false, '测试内容无效', 'params 必须是 JSON 对象。');
+        return _finish(
+          stopwatch,
+          false,
+          localizations.connectivityTestInvalidContent,
+          localizations.connectivityTestParamsMustBeObject,
+          localizations,
+        );
       }
 
       final client = McpClient(config: serverConfig);
@@ -167,8 +195,9 @@ class ConnectivityTestService {
           return _finish(
             stopwatch,
             false,
-            '无法连接 MCP 服务',
-            '请检查地址、认证信息、网络，或查看应用日志获取连接详情。',
+            localizations.connectivityTestMcpConnectionFailed,
+            localizations.connectivityTestCheckConnectionSettings,
+            localizations,
           );
         }
         final tools = await client
@@ -179,25 +208,39 @@ class ConnectivityTestService {
             )
             .timeout(const Duration(seconds: 35));
         final names = tools.map((tool) => tool.name).take(12).join(', ');
-        final suffix = tools.length > 12 ? '，其余工具已省略' : '';
+        final suffix = tools.length > 12
+            ? localizations.connectivityTestRemainingToolsOmitted
+            : '';
         return _finish(
           stopwatch,
           true,
-          'MCP 连通性测试成功',
-          '连接及 tools/list 请求成功，共发现 ${tools.length} 个工具'
-              '${names.isEmpty ? '' : '：$names'}$suffix',
+          localizations.connectivityTestMcpSuccess,
+          localizations.connectivityTestMcpSuccessDetails(
+            tools.length,
+            names.isEmpty ? '' : localizations.connectivityTestToolNames(names),
+            suffix,
+          ),
+          localizations,
         );
       } finally {
         client.dispose();
       }
     } catch (error) {
-      return _finish(stopwatch, false, '连通性测试失败', _readableError(error));
+      return _finish(
+        stopwatch,
+        false,
+        localizations.connectivityTestFailedSummary,
+        _readableError(error, localizations),
+        localizations,
+      );
     }
   }
 
   static Future<ConnectivityTestResult> runBuiltinTest({
     required String toolName,
     required String testContent,
+    required AppLocalizations localizations,
+    required Locale locale,
   }) async {
     final stopwatch = Stopwatch()..start();
     try {
@@ -209,33 +252,47 @@ class ConnectivityTestService {
             return _finish(
               stopwatch,
               false,
-              '测试参数会修改待办数据',
-              '为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。',
+              localizations.connectivityTestTodoMutationBlocked,
+              localizations.connectivityTestTodoReadOnly,
+              localizations,
             );
           }
-          result = await TodoToolService.handleTodo(arguments);
+          result = await TodoToolService.handleTodo(arguments, locale: locale);
           break;
         case 'web_search':
-          result = await WebSearchService.handleWebSearch(arguments);
+          result = await WebSearchService.handleWebSearch(
+            arguments,
+            locale: locale,
+          );
           break;
         default:
           return _finish(
             stopwatch,
             false,
-            '未知的内置工具',
-            '找不到工具 "$toolName" 的测试执行器。',
+            localizations.connectivityTestUnknownBuiltin,
+            localizations.connectivityTestBuiltinExecutorMissing(toolName),
+            localizations,
           );
       }
 
-      final succeeded = !result.startsWith('错误:');
+      final succeeded = !isErrorResult(result, localizations);
       return _finish(
         stopwatch,
         succeeded,
-        succeeded ? '内置工具测试成功' : '内置工具测试失败',
+        succeeded
+            ? localizations.connectivityTestBuiltinSuccess
+            : localizations.connectivityTestBuiltinFailure,
         result,
+        localizations,
       );
     } catch (error) {
-      return _finish(stopwatch, false, '内置工具测试失败', _readableError(error));
+      return _finish(
+        stopwatch,
+        false,
+        localizations.connectivityTestBuiltinFailure,
+        _readableError(error, localizations),
+        localizations,
+      );
     }
   }
 
@@ -244,12 +301,13 @@ class ConnectivityTestService {
     bool succeeded,
     String summary,
     String details,
+    AppLocalizations localizations,
   ) {
     stopwatch.stop();
     const maxDetailsLength = 4000;
     final visibleDetails = details.length <= maxDetailsLength
         ? details
-        : '${details.substring(0, maxDetailsLength)}\n…（结果已截断）';
+        : '${details.substring(0, maxDetailsLength)}\n${localizations.connectivityTestResultTruncated}';
     return ConnectivityTestResult(
       succeeded: succeeded,
       summary: summary,
@@ -258,9 +316,40 @@ class ConnectivityTestService {
     );
   }
 
-  static String _readableError(Object error) {
-    if (error is FormatException) return error.message;
-    if (error is TimeoutException) return '请求超时，请检查服务响应和网络。';
+  static String _readableError(Object error, AppLocalizations localizations) {
+    if (error is FormatException) {
+      if (error.message == '测试内容顶层必须是 JSON 对象') {
+        return localizations.connectivityTestTopLevelObjectRequired;
+      }
+      return error.message;
+    }
+    if (error is TimeoutException) {
+      const mcpTimeoutPrefix = 'MCP request timed out: ';
+      final message = error.message;
+      if (message != null && message.startsWith(mcpTimeoutPrefix)) {
+        return localizations.connectivityTestMcpRequestTimeout(
+          message.substring(mcpTimeoutPrefix.length),
+        );
+      }
+      return localizations.connectivityTestRequestTimeout;
+    }
     return error.toString();
+  }
+
+  @visibleForTesting
+  static bool isErrorResult(String result, AppLocalizations localizations) {
+    if (result.startsWith('错误:') ||
+        result.startsWith('错误：') ||
+        result.startsWith('Error:')) {
+      return true;
+    }
+    const placeholder = '\u0000';
+    final incompleteMessage = localizations.toolResultWebSearchIncomplete(
+      placeholder,
+      placeholder,
+    );
+    final placeholderIndex = incompleteMessage.indexOf(placeholder);
+    return placeholderIndex >= 0 &&
+        result.startsWith(incompleteMessage.substring(0, placeholderIndex));
   }
 }

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, Link, Platform;
+import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show
@@ -11,10 +13,21 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/startup/startup_update_recovery.dart';
+
+class _ApplicationCachePathProvider extends PathProviderPlatform {
+  _ApplicationCachePathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationCachePath() async => path;
+}
 
 /// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse]
 /// wrapped in a list (matching the [/releases] array response).
@@ -88,6 +101,92 @@ Dio _createNon200Dio(int statusCode) {
   return dio;
 }
 
+enum _ExecutableHeaderFormat { pe, elf, machO }
+
+List<int> _validApplicationExecutableHeader({
+  bool universalMachO = false,
+  _ExecutableHeaderFormat? format,
+}) {
+  format ??= Platform.isWindows
+      ? _ExecutableHeaderFormat.pe
+      : Platform.isMacOS
+          ? _ExecutableHeaderFormat.machO
+          : _ExecutableHeaderFormat.elf;
+  final bytes = Uint8List(switch (format) {
+    _ExecutableHeaderFormat.pe => 228,
+    _ExecutableHeaderFormat.machO => 133,
+    _ExecutableHeaderFormat.elf => 128,
+  });
+  final data = ByteData.sublistView(bytes);
+  if (format == _ExecutableHeaderFormat.pe) {
+    bytes[0] = 0x4d;
+    bytes[1] = 0x5a;
+    data.setUint32(60, 64, Endian.little);
+    bytes.setRange(64, 68, const [0x50, 0x45, 0, 0]);
+    data.setUint16(70, 1, Endian.little);
+    data.setUint16(86, 0x0002, Endian.little);
+    data.setUint16(84, 96, Endian.little);
+    data.setUint16(88, 0x10b, Endian.little);
+    data.setUint32(104, 0x1000, Endian.little);
+    data.setUint32(192, 4, Endian.little);
+    data.setUint32(196, 0x1000, Endian.little);
+    data.setUint32(200, 4, Endian.little);
+    data.setUint32(204, 224, Endian.little);
+    data.setUint32(220, 0x20000000, Endian.little);
+    bytes[224] = 0xc3;
+    return bytes;
+  }
+  if (format == _ExecutableHeaderFormat.machO) {
+    bytes.setRange(0, 4, const [0xcf, 0xfa, 0xed, 0xfe]);
+    data.setUint32(4, 0x0100000c, Endian.little);
+    data.setUint32(12, 2, Endian.little);
+    data.setUint32(16, 2, Endian.little);
+    data.setUint32(20, 96, Endian.little);
+    data.setUint32(32, 0x19, Endian.little);
+    data.setUint32(36, 72, Endian.little);
+    data.setUint64(72, 0, Endian.little);
+    data.setUint64(80, bytes.length, Endian.little);
+    data.setUint32(92, 5, Endian.little);
+    data.setUint32(104, 0x80000028, Endian.little);
+    data.setUint32(108, 24, Endian.little);
+    data.setUint64(112, 128, Endian.little);
+    bytes.setRange(128, 132, const [0xc0, 0x03, 0x5f, 0xd6]);
+    if (universalMachO) {
+      final fat = Uint8List(32 + bytes.length);
+      final fatData = ByteData.sublistView(fat);
+      fat.setRange(0, 4, const [0xca, 0xfe, 0xba, 0xbe]);
+      fatData.setUint32(4, 1, Endian.big);
+      fatData.setUint32(8, 0x01000007, Endian.big);
+      fatData.setUint32(12, 3, Endian.big);
+      fatData.setUint32(16, 32, Endian.big);
+      fatData.setUint32(20, bytes.length, Endian.big);
+      fat.setRange(32, fat.length, bytes);
+      return fat;
+    }
+    return bytes;
+  }
+  bytes.setRange(0, 4, const [0x7f, 0x45, 0x4c, 0x46]);
+  bytes[4] = 2;
+  bytes[5] = 1;
+  bytes[6] = 1;
+  data.setUint16(16, 2, Endian.little);
+  data.setUint16(18, 62, Endian.little);
+  data.setUint32(20, 1, Endian.little);
+  data.setUint64(24, 0x400000, Endian.little);
+  data.setUint64(32, 64, Endian.little);
+  data.setUint16(52, 64, Endian.little);
+  data.setUint16(54, 56, Endian.little);
+  data.setUint16(56, 1, Endian.little);
+  data.setUint32(64, 1, Endian.little);
+  data.setUint32(68, 5, Endian.little);
+  data.setUint64(72, 120, Endian.little);
+  data.setUint64(80, 0x400000, Endian.little);
+  data.setUint64(96, 8, Endian.little);
+  data.setUint64(104, 8, Endian.little);
+  bytes[120] = 0xc3;
+  return bytes;
+}
+
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
     {String body = '',
@@ -157,6 +256,265 @@ String _githubReleases(List<(String, bool, String, String)> releases) {
 }
 
 void main() {
+  group('ZIP self-update extraction', () {
+    test('selects a named app executable from a valid package layout',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final zipFile = File('${tempDir.path}/update.zip');
+      final executableName = Platform.isWindows ? 'stroom.exe' : 'stroom';
+      final executableBytes = _validApplicationExecutableHeader();
+      final executable = ArchiveFile(
+        'Stroom.app/Contents/MacOS/$executableName',
+        executableBytes.length,
+        executableBytes,
+      )..mode = 0x1ed;
+      final archive = Archive()
+        ..addFile(ArchiveFile('README.txt', 4, utf8.encode('info')))
+        ..addFile(executable);
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+
+      final notifier = UpdateNotifier();
+      await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+      expect(
+        notifier.findExecutableForTesting(
+          outputDir.path,
+          currentExecutableName: executableName,
+        ),
+        '${outputDir.path}/Stroom.app/Contents/MacOS/$executableName',
+      );
+    });
+
+    test('uses a valid executable fallback when the app name differs',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final zipFile = File('${tempDir.path}/update.zip');
+      final executableName = Platform.isWindows ? 'other-app.exe' : 'other-app';
+      final executableBytes = _validApplicationExecutableHeader();
+      final executable = ArchiveFile(
+        'bundle/$executableName',
+        executableBytes.length,
+        executableBytes,
+      )..mode = 0x1ed;
+      final archive = Archive()..addFile(executable);
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      final notifier = UpdateNotifier();
+
+      await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+      expect(
+        notifier.findExecutableForTesting(
+          outputDir.path,
+          currentExecutableName: Platform.isWindows ? 'stroom.exe' : 'stroom',
+        ),
+        '${outputDir.path}/bundle/$executableName',
+      );
+    });
+
+    test('rejects a valid executable from another platform format', () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final foreignFormat = Platform.isMacOS
+          ? _ExecutableHeaderFormat.elf
+          : _ExecutableHeaderFormat.machO;
+      final executableName = Platform.isWindows ? 'stroom.exe' : 'stroom';
+      final executableBytes =
+          _validApplicationExecutableHeader(format: foreignFormat);
+      final executable = ArchiveFile(
+        'bundle/$executableName',
+        executableBytes.length,
+        executableBytes,
+      )..mode = 0x1ed;
+      final archive = Archive()..addFile(executable);
+      final zipFile = File('${tempDir.path}/update.zip');
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      final notifier = UpdateNotifier();
+
+      await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+      expect(
+        () => notifier.findExecutableForTesting(
+          outputDir.path,
+          currentExecutableName: executableName,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    }, skip: !Platform.isWindows && !Platform.isMacOS && !Platform.isLinux);
+
+    test(
+      'accepts a valid universal Mach-O executable package',
+      () async {
+        final tempDir =
+            await Directory.systemTemp.createTemp('stroom_zip_test_');
+        addTearDown(() => tempDir.delete(recursive: true));
+        final outputDir = Directory('${tempDir.path}/update');
+        await outputDir.create();
+        final zipFile = File('${tempDir.path}/update.zip');
+        final executableBytes =
+            _validApplicationExecutableHeader(universalMachO: true);
+        final executable = ArchiveFile(
+          'Stroom.app/Contents/MacOS/stroom',
+          executableBytes.length,
+          executableBytes,
+        )..mode = 0x1ed;
+        final archive = Archive()..addFile(executable);
+        await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+        final notifier = UpdateNotifier();
+
+        await notifier.extractZipForTesting(zipFile.path, outputDir.path);
+
+        expect(
+          notifier.findExecutableForTesting(
+            outputDir.path,
+            currentExecutableName: 'stroom',
+          ),
+          '${outputDir.path}/Stroom.app/Contents/MacOS/stroom',
+        );
+      },
+      skip: !Platform.isMacOS,
+    );
+
+    test(
+        'rejects packages without an app executable before update side effects',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final installDir = Directory('${tempDir.path}/install');
+      await installDir.create();
+      final installedFile = File('${installDir.path}/stroom');
+      await installedFile.writeAsString('installed app');
+      final zipFile = File('${tempDir.path}/update.zip');
+      final helperScript = ArchiveFile.string(
+        'Stroom.app/Contents/MacOS/install.sh',
+        '#!/bin/sh\necho helper\n',
+      )..mode = 0x1ed;
+      final truncatedExecutable = ArchiveFile(
+        'Stroom.app/Contents/MacOS/${Platform.isWindows ? 'stroom.exe' : 'stroom'}',
+        4,
+        Platform.isWindows
+            ? [0x4d, 0x5a, 0, 0]
+            : Platform.isMacOS
+                ? [0xcf, 0xfa, 0xed, 0xfe]
+                : [0x7f, 0x45, 0x4c, 0x46],
+      )..mode = 0x1ed;
+      final archive = Archive()
+        ..addFile(ArchiveFile(
+            'Stroom.app/Contents/Resources/data.txt', 4, utf8.encode('data')))
+        ..addFile(helperScript)
+        ..addFile(truncatedExecutable);
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      final notifier = UpdateNotifier();
+      var createScriptCalled = false;
+      var startScriptCalled = false;
+
+      await expectLater(
+        notifier.selfUpdateFromZipForTesting(
+          zipFile.path,
+          installDir.path,
+          createScript: (_, __, ___) async {
+            createScriptCalled = true;
+            return '${tempDir.path}/replacement.sh';
+          },
+          startScript: (_) async {
+            startScriptCalled = true;
+          },
+        ),
+        throwsA(isA<FormatException>()),
+      );
+
+      expect(createScriptCalled, isFalse);
+      expect(startScriptCalled, isFalse);
+      expect(await installedFile.readAsString(), 'installed app');
+    });
+
+    test('Windows replacement cleans extracted files only after xcopy succeeds',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_update_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final updateDir = '${tempDir.path}/extracted';
+      final scriptPath =
+          await UpdateNotifier().createWindowsUpdateScriptForTesting(
+        tempDir.path,
+        updateDir,
+        '$updateDir/stroom.exe',
+      );
+      final script = await File(scriptPath).readAsString();
+      final copyIndex = script.indexOf('xcopy /E /Y');
+      final failureGuardIndex = script.indexOf('if errorlevel 1 exit /b');
+      final cleanupIndex = script.indexOf('rmdir /S /Q "$updateDir"');
+
+      expect(copyIndex, greaterThanOrEqualTo(0));
+      expect(failureGuardIndex, greaterThan(copyIndex));
+      expect(cleanupIndex, greaterThan(failureGuardIndex));
+      expect(script.indexOf('start ""'), greaterThan(cleanupIndex));
+      expect(script.indexOf('del "%~f0"'), greaterThan(cleanupIndex));
+    });
+
+    test('Unix replacement cleans extracted files only after cp succeeds',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_update_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final updateDir = '${tempDir.path}/extracted';
+      final scriptPath =
+          await UpdateNotifier().createUnixUpdateScriptForTesting(
+        tempDir.path,
+        updateDir,
+        '$updateDir/stroom',
+      );
+      final script = await File(scriptPath).readAsString();
+      final copyIndex =
+          script.indexOf('cp -R "$updateDir/"* "${tempDir.path}/"');
+      final failureGuardIndex = script.indexOf(r'|| exit $?');
+      final cleanupIndex = script.indexOf('rm -rf -- "$updateDir"');
+
+      expect(copyIndex, greaterThanOrEqualTo(0));
+      expect(failureGuardIndex, greaterThan(copyIndex));
+      expect(cleanupIndex, greaterThan(failureGuardIndex));
+      expect(script.indexOf('chmod +x'), greaterThan(cleanupIndex));
+      expect(script.indexOf(r'rm -- "$0"'), greaterThan(cleanupIndex));
+    });
+
+    test('rejects archive entries that escape the extraction directory',
+        () async {
+      final tempDir = await Directory.systemTemp.createTemp('stroom_zip_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final outputDir = Directory('${tempDir.path}/update');
+      await outputDir.create();
+      final outsideFile = File('${tempDir.path}/outside.txt');
+      final absoluteFile = File('${tempDir.path}/outside_absolute.txt');
+      final trailingSpaceFile =
+          File('${tempDir.path}/outside_trailing_space.txt');
+      final zipFile = File('${tempDir.path}/update.zip');
+
+      for (final entryName in [
+        '../outside.txt',
+        absoluteFile.path,
+        '.. /outside_trailing_space.txt',
+      ]) {
+        final archive = Archive()
+          ..addFile(ArchiveFile(entryName, 6, utf8.encode('escape')));
+        await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+        await expectLater(
+          UpdateNotifier().extractZipForTesting(zipFile.path, outputDir.path),
+          throwsA(isA<FormatException>()),
+        );
+      }
+      expect(await outsideFile.exists(), isFalse);
+      expect(await absoluteFile.exists(), isFalse);
+      expect(await trailingSpaceFile.exists(), isFalse);
+    });
+  });
+
   group('Version', () {
     test('parse standard semver "0.2.12"', () {
       final v = Version.parse('0.2.12');
@@ -731,6 +1089,67 @@ void main() {
       expect(notifier.state.downloadUrl, isNot(contains('releases/tag')));
     });
 
+    test(
+        'startup rollback lookup isolates exact source release from update state',
+        () async {
+      final assets = _allPlatformAssets('v0.2.12-hotfix.1');
+      final dio = _createMockDio(_githubRelease(
+        'v0.2.12-hotfix.1',
+        body: 'Recorded source release',
+        assets: assets,
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      final originalState = notifier.state;
+
+      final candidate =
+          await notifier.findStartupRollbackCandidate('0.2.12-hotfix.1');
+
+      expect(candidate?.version, '0.2.12-hotfix.1');
+      expect(candidate?.releaseNotes, 'Recorded source release');
+      expect(candidate?.downloadUrl, contains('/releases/download/'));
+      expect(identical(notifier.state, originalState), isTrue);
+    });
+
+    test('startup rollback lookup never falls back to a release page',
+        () async {
+      final dio = _createMockDio(_githubRelease('v0.2.12'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      expect(
+        await notifier.findStartupRollbackCandidate('0.2.12'),
+        isNull,
+      );
+      expect(notifier.state.updateAvailable, isFalse);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test('startup rollback lookup excludes iOS installer-less candidates',
+        () async {
+      final originalPlatform =
+          debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final dio = _createMockDio(_githubRelease(
+          'v0.2.12',
+          assets: [
+            {
+              'name': 'stroom-ios-release-v0.2.12.ipa',
+              'browser_download_url':
+                  'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.12/stroom-ios-release-v0.2.12.ipa',
+            },
+          ],
+        ));
+        final notifier = UpdateNotifier(dio: dio);
+
+        expect(
+          await notifier.findStartupRollbackCandidate('0.2.12'),
+          isNull,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
     test('downloadUrl falls back to html_url when no assets provided',
         () async {
       SharedPreferences.setMockInitialValues({});
@@ -995,7 +1414,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3], // minimal binary data
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },
@@ -1019,6 +1438,191 @@ void main() {
       // downloadError might be set due to auto-install failure in test environment
       // but that is acceptable - the key is download completed
     });
+
+    test('persists exact update attempt before installer flow starts',
+        () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        latestVersion: '0.2.14-rc.2+build.4',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14-rc.2/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      final attempt = await StartupUpdateAttempt.load();
+      expect(attempt?.targetVersion, '0.2.14-rc.2+build.4');
+      expect(attempt?.sourceVersion, isNotEmpty);
+    });
+
+    test('rollback installer attempt preserves the failed-update evidence',
+        () async {
+      await StartupUpdateAttempt.record(
+        sourceVersion: '0.2.12',
+        targetVersion: '0.2.13',
+      );
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.downloadUpdate(
+        downloadDir: tempDir,
+        downloadUrlOverride:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.12/update.zip',
+        targetVersion: '0.2.12',
+        recordStartupAttempt: false,
+      );
+
+      final attempt = await StartupUpdateAttempt.load();
+      expect(attempt?.sourceVersion, '0.2.12');
+      expect(attempt?.targetVersion, '0.2.13');
+    });
+
+    test('does not start installer when the exact attempt cannot be recorded',
+        () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        latestVersion: 'dev',
+        downloadUrl: 'https://example.com/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      expect(notifier.state.downloadComplete, isTrue);
+      expect(
+        notifier.state.downloadError,
+        'The update attempt could not be recorded, so the installer was not started. Check storage permissions and try again.',
+      );
+    });
+
+    test('downloadUpdate uses the app cache instead of shared temp storage',
+        () async {
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _ApplicationCachePathProvider(tempDir);
+      addTearDown(() => PathProviderPlatform.instance = previousPathProvider);
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/update.zip',
+      );
+
+      await notifier.downloadUpdate();
+
+      expect(notifier.state.downloadedFilePath,
+          '${tempDir}${Platform.pathSeparator}update.zip');
+      expect(
+        await File(notifier.state.downloadedFilePath!).readAsBytes(),
+        <int>[1, 2, 3],
+      );
+    });
+
+    test('downloadUpdate rejects encoded path traversal filenames', () async {
+      var requestCount = 0;
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestCount++;
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final downloadDirectory = Directory('$tempDir/downloads')..createSync();
+      final victim = File('$tempDir/victim');
+      await victim.writeAsString('keep me');
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/..%2Fvictim',
+      );
+
+      await notifier.downloadUpdate(downloadDir: downloadDirectory.path);
+
+      expect(requestCount, 0);
+      expect(await victim.readAsString(), 'keep me');
+      expect(notifier.state.downloadComplete, false);
+      expect(notifier.state.downloadedFilePath, isNull);
+      expect(notifier.state.downloadError, isNotNull);
+    });
+
+    test('downloadUpdate replaces a destination symlink safely', () async {
+      if (Platform.isWindows) return;
+
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ),
+          );
+        },
+      ));
+      final downloadDirectory = Directory('$tempDir/downloads')..createSync();
+      final victim = File('$tempDir/victim');
+      await victim.writeAsString('keep me');
+      await Link('${downloadDirectory.path}/update.zip').create(victim.path);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        downloadUrl: 'https://example.com/releases/update.zip',
+      );
+
+      await notifier.downloadUpdate(downloadDir: downloadDirectory.path);
+
+      expect(await victim.readAsString(), 'keep me');
+      expect(
+        await File('${downloadDirectory.path}/update.zip').readAsBytes(),
+        <int>[1, 2, 3],
+      );
+      expect(notifier.state.downloadComplete, true);
+    },
+        skip: Platform.isWindows
+            ? 'Symlink creation may require privileges'
+            : false);
 
     test('downloadUpdate transitions through download lifecycle states',
         () async {
@@ -1052,7 +1656,7 @@ void main() {
       completer.complete(Response(
         requestOptions: RequestOptions(path: ''),
         statusCode: 200,
-        data: <int>[1, 2, 3],
+        data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
       ));
       await future;
 
@@ -1060,6 +1664,85 @@ void main() {
       expect(notifier.state.downloadComplete, true);
       // After auto-install completes, isInstalling should be false
       expect(notifier.state.isInstalling, false);
+    });
+
+    test('cancelDownload removes staging data and allows retry', () async {
+      final requestStarted = Completer<void>();
+      var requestCount = 0;
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestCount++;
+          if (requestCount == 1) {
+            requestStarted.complete();
+            // Leave the first request pending until its token is cancelled.
+          } else {
+            handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+            ));
+          }
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/update.zip',
+        downloadError: 'Download failed: previous attempt',
+      );
+
+      final download = notifier.downloadUpdate(downloadDir: tempDir);
+      await requestStarted.future;
+      expect(notifier.state.isDownloading, true);
+      expect(notifier.state.downloadError, isNull);
+      notifier.cancelDownload();
+      await download;
+
+      expect(notifier.state.isDownloading, false);
+      expect(notifier.state.downloadComplete, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(notifier.state.downloadedFilePath, isNull);
+      expect(Directory(tempDir).listSync(), isEmpty);
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+      expect(notifier.state.downloadComplete, true);
+      expect(requestCount, 2);
+    });
+
+    test('background download completes without starting installation',
+        () async {
+      final requestStarted = Completer<void>();
+      final response = Completer<Response<dynamic>>();
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestStarted.complete();
+          response.future.then(handler.resolve);
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = const UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/update.zip',
+      );
+
+      final download = notifier.downloadUpdate(downloadDir: tempDir);
+      await requestStarted.future;
+      notifier.downloadInBackground();
+      response.complete(Response(
+        requestOptions: RequestOptions(path: 'https://example.com/update.zip'),
+        statusCode: 200,
+        data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
+      ));
+      await download;
+
+      expect(notifier.state.downloadComplete, true);
+      expect(notifier.state.downloadInBackground, true);
+      expect(notifier.state.isInstalling, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(await File(notifier.state.downloadedFilePath!).readAsBytes(),
+          <int>[1, 2, 3]);
     });
 
     test('downloadUpdate handles network error', () async {
@@ -1095,7 +1778,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 404,
-              data: 'Not Found',
+              data: ResponseBody.fromString('Not Found', 404),
             ),
           );
         },
@@ -1166,7 +1849,10 @@ void main() {
           dio: Dio(BaseOptions()),
           localizations: () =>
               appLocalizationsForLocale(const Locale('en', 'US')),
-        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
         await english.installDownloadedFile();
         expect(
           english.state.downloadError,
@@ -1177,9 +1863,89 @@ void main() {
           dio: Dio(BaseOptions()),
           localizations: () =>
               appLocalizationsForLocale(const Locale('zh', 'CN')),
-        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        )..state = UpdateState(
+            latestVersion: '0.2.14',
+            downloadedFilePath: '$tempDir/update.apk',
+          );
         await chinese.installDownloadedFile();
         expect(chinese.state.downloadError, '安装失败，请手动打开 APK 安装');
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
+    test(
+        'localizes Android installer error codes without showing platform text',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      var errorCode = 'ACTIVITY_NOT_FOUND';
+      var platformMessage = '未找到 APK 安装程序，请手动安装';
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: errorCode, message: platformMessage);
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      try {
+        final cases = [
+          (
+            'ACTIVITY_NOT_FOUND',
+            '未找到 APK 安装程序，请手动安装',
+            'Could not find an app to install this APK. Open it manually.',
+            '未找到可安装 APK 的应用，请手动打开 APK 安装。',
+          ),
+          (
+            'SECURITY_EXCEPTION',
+            '缺少安装权限，请在设置中允许安装未知来源应用',
+            'Allow Stroom to install unknown apps in system settings.',
+            '请在系统设置中允许 Stroom 安装未知来源应用。',
+          ),
+          (
+            'INSTALL_FAILED',
+            'APK 安装失败: private platform details',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+          (
+            'NULL_FILEPATH',
+            '安装文件路径为空',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+          (
+            'UNRECOGNIZED_CODE',
+            'unrecognized private platform details',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+        ];
+        for (final (code, message, englishText, chineseText) in cases) {
+          errorCode = code;
+          platformMessage = message;
+          for (final (locale, expected) in [
+            (const Locale('en', 'US'), englishText),
+            (const Locale('zh', 'CN'), chineseText),
+          ]) {
+            final notifier = UpdateNotifier(
+              dio: Dio(BaseOptions()),
+              localizations: () => appLocalizationsForLocale(locale),
+            )..state = UpdateState(
+                latestVersion: '0.2.14',
+                downloadedFilePath: '$tempDir/update.apk',
+              );
+
+            await notifier.installDownloadedFile();
+
+            expect(notifier.state.downloadError, expected);
+            expect(
+              notifier.state.downloadError,
+              isNot(contains(platformMessage)),
+            );
+          }
+        }
       } finally {
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(channel, null);
@@ -2093,6 +2859,25 @@ void main() {
       expect(notifier.state.availableVersions![0].version, '0.2.14');
     });
 
+    test('current release with a v-prefixed installed version is not offered',
+        () async {
+      // A build from a v-prefixed tag can report the installed version as
+      // "v0.2.13". The release list uses the normalized "0.2.13" version,
+      // and its published_at can be later than the timestamp baked from the
+      // release draft. The current release must still be excluded.
+      UpdateNotifier.debugAppVersionOverride = 'v0.2.13';
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.13', false, 'Current version', '2024-06-15T10:05:00Z'),
+      ]);
+      final notifier = UpdateNotifier(dio: _createMockDioForList(releases));
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
     test(
         'baked time with explicit offset is normalized to UTC+0 before comparing',
         () async {
@@ -2257,7 +3042,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: <int>[1, 2, 3],
+              data: ResponseBody.fromBytes(<int>[1, 2, 3], 200),
             ),
           );
         },

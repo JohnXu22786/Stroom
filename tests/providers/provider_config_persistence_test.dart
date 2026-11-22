@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
@@ -5,8 +6,103 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/provider_preset_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/services/llm_credential_store.dart';
+
+class _FailingProviderCorruptBackupStore
+    extends InMemorySharedPreferencesStore {
+  _FailingProviderCorruptBackupStore(
+    Map<String, Object> data, {
+    this.failedBackupCount,
+  }) : super.withData(data);
+
+  int? failedBackupCount;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key.startsWith('flutter.provider_entries_corrupt_')) {
+      if (failedBackupCount == null || failedBackupCount! > 0) {
+        failedBackupCount =
+            failedBackupCount == null ? null : failedBackupCount! - 1;
+        return Future<bool>.value(false);
+      }
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _ThrowingProviderCorruptBackupStore
+    extends InMemorySharedPreferencesStore {
+  _ThrowingProviderCorruptBackupStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key.startsWith('flutter.provider_entries_corrupt_')) {
+      throw StateError('backup unavailable');
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _FailingProviderEntriesStore extends InMemorySharedPreferencesStore {
+  _FailingProviderEntriesStore(
+    Map<String, Object> data, {
+    this.failedKey = 'flutter.provider_entries',
+    this.failedWriteCount = 0,
+  }) : super.withData(data);
+
+  final String failedKey;
+  int failedWriteCount;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == failedKey && failedWriteCount > 0) {
+      failedWriteCount--;
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _FailingProviderRollbackStore extends InMemorySharedPreferencesStore {
+  _FailingProviderRollbackStore(Map<String, Object> data)
+      : super.withData(data);
+
+  bool isArmed = false;
+  int providerEntriesWrites = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (isArmed && key == 'flutter.provider_entries') {
+      providerEntriesWrites++;
+      if (providerEntriesWrites == 2) return Future<bool>.value(false);
+    }
+    if (isArmed && key == 'flutter.mcp_provider_groups') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _GatedProviderEntriesStore extends InMemorySharedPreferencesStore {
+  _GatedProviderEntriesStore(Map<String, Object> data) : super.withData(data);
+
+  final firstProviderEntriesWriteStarted = Completer<void>();
+  final releaseFirstProviderEntriesWrite = Completer<void>();
+  bool isArmed = false;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (isArmed &&
+        key == 'flutter.provider_entries' &&
+        !firstProviderEntriesWriteStarted.isCompleted) {
+      firstProviderEntriesWriteStarted.complete();
+      await releaseFirstProviderEntriesWrite.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +112,23 @@ void main() {
   });
 
   group('ProviderEntriesNotifier.load - corrupt data handling', () {
+    test('non-list legacy chat_configs are backed up before removal', () async {
+      const legacyJson = '{"providerName":"Recover me","key":"secret"}';
+      SharedPreferences.setMockInitialValues({'chat_configs': legacyJson});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final backupKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(backupKeys, hasLength(1));
+      expect(prefs.getString(backupKeys.single), legacyJson);
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
     test(
         'non-array provider_entries is quarantined before migration '
         'overwrite', () async {
@@ -50,270 +163,996 @@ void main() {
         isTrue,
       );
       // 迁移后的 llm 条目被加载进状态。
-      expect(notifier.state.entries.any((e) => e.id == 'migrated_llm'), isTrue);
+      expect(
+        notifier.state.entries.any((e) => e.id == 'migrated_llm'),
+        isTrue,
+      );
     });
 
-    test(
-      'unparseable provider_entries is quarantined and defaults loaded',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'provider_entries': 'not-json{{{',
-        });
-
-        final notifier = ProviderEntriesNotifier();
-        await notifier.load();
-
-        final prefs = await SharedPreferences.getInstance();
-        final corruptKeys = prefs
-            .getKeys()
-            .where((k) => k.startsWith('provider_entries_corrupt_'))
-            .toList();
-        expect(corruptKeys, isNotEmpty);
-        expect(
-          corruptKeys.any((k) => prefs.getString(k) == 'not-json{{{'),
-          isTrue,
-          reason: '原始损坏数据必须保留（含 API key 的配置不可恢复地丢失）',
-        );
-        // 回退默认预置，应用仍可正常使用。
-        expect(notifier.state.entries, isNotEmpty);
-      },
-    );
-
-    test(
-      'persists a fresh non-LLM provider edit without an LLM key change',
-      () async {
-        SharedPreferences.setMockInitialValues({});
-        final notifier = ProviderEntriesNotifier();
-        await notifier.load();
-
-        final added = ProviderEntry(
-          id: 'fresh-ocr-entry',
-          type: 'ocr',
-          name: 'Fresh OCR provider',
-        );
-        await notifier.addFirst(added);
-
-        final prefs = await SharedPreferences.getInstance();
-        final stored =
-            jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-        expect(
-          stored.whereType<Map>().any((entry) => entry['id'] == added.id),
-          isTrue,
-        );
-      },
-    );
-
-    test('does not overwrite provider settings changed after load', () async {
-      const initialEntries =
-          '[{"id":"original-tts","type":"tts","name":"Original TTS","configs":[]}]';
-      const externalEntries =
-          '[{"id":"external-tts","type":"tts","name":"External TTS","configs":[]}]';
+    test('unparseable provider_entries is quarantined and defaults loaded',
+        () async {
       SharedPreferences.setMockInitialValues({
-        'provider_entries': initialEntries,
+        'provider_entries': 'not-json{{{',
       });
 
       final notifier = ProviderEntriesNotifier();
-      addTearDown(notifier.dispose);
       await notifier.load();
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('provider_entries', externalEntries);
-
-      await expectLater(
-        notifier.addFirst(
-          ProviderEntry(
-            id: 'stale-added-tts',
-            type: 'tts',
-            name: 'Stale added TTS',
-          ),
-        ),
-        throwsA(isA<StateError>()),
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty);
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == 'not-json{{{'),
+        isTrue,
+        reason: '原始损坏数据必须保留（含 API key 的配置不可恢复地丢失）',
       );
-      expect(prefs.getString('provider_entries'), externalEntries);
+      // 回退默认预置，应用仍可正常使用。
+      expect(notifier.state.entries, isNotEmpty);
     });
 
-    test('required updates fail when the provider entry was removed', () async {
+    test('mixed valid and corrupt entries are backed up before persistence',
+        () async {
+      final original = jsonEncode([
+        {
+          'id': 'valid_llm',
+          'type': 'llm',
+          'name': 'LLM供应商',
+          'configs': [],
+        },
+        {
+          'id': 'corrupt_provider',
+          'type': 'llm',
+          'name': 'Corrupt provider',
+          'configs': 'invalid configs',
+          'apiKey': 'recover-me',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'provider_entries': original});
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      await notifier.addFirst(
+        ProviderEntry(id: 'new_provider', type: 'llm', name: 'New provider'),
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      final corruptKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, hasLength(1));
+      expect(prefs.getString(corruptKeys.single), original);
+      expect(
+        (jsonDecode(prefs.getString('provider_entries')!) as List)
+            .whereType<Map>()
+            .any((entry) => entry['id'] == 'new_provider'),
+        isTrue,
+      );
+    });
+
+    test('legacy configs survive a malformed non-built-in LLM entry', () async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': jsonEncode([
           {
-            'id': 'removed-entry',
-            'type': 'tts',
-            'name': 'Removed entry',
-            'configs': [],
+            'id': 'corrupt_llm',
+            'type': 'llm',
+            'name': 'Corrupt LLM',
+            'configs': 'invalid configs',
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.5},
+            ],
           },
         ]),
       });
+
       final notifier = ProviderEntriesNotifier();
-      addTearDown(notifier.dispose);
       await notifier.load();
-      await notifier.remove('removed-entry');
+
+      final migrated = notifier.state.entries
+          .where((entry) => entry.id == 'migrated_llm')
+          .toList();
+      expect(migrated, hasLength(1));
+      expect(migrated.single.configs, hasLength(1));
+      expect(migrated.single.configs.single.providerName, 'Legacy provider');
+      expect(migrated.single.configs.single.key, 'legacy-key');
+      expect(
+        migrated.single.configs.single.models.single.modelId,
+        'legacy-model',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+      expect(
+        prefs.getKeys().where(
+              (key) => key.startsWith('provider_entries_corrupt_'),
+            ),
+        isNotEmpty,
+        reason: 'the corrupt current entry should remain recoverable',
+      );
+    });
+
+    test(
+      'top-level corrupt provider entries and legacy settings survive failed backup',
+      () async {
+        const legacyChatConfigsJson = '[{"providerName":"Legacy provider",'
+            '"host":"https://legacy.example.com","key":"legacy-key",'
+            '"models":[{"modelId":"legacy-model"}]}]';
+        const corruptProviderEntries = [
+          '{"not":"an array"}',
+          'not-json{{{',
+        ];
+
+        for (final originalProviderEntries in corruptProviderEntries) {
+          SharedPreferences.setMockInitialValues({});
+          final previousStore = SharedPreferencesStorePlatform.instance;
+          SharedPreferencesStorePlatform.instance =
+              _FailingProviderCorruptBackupStore({
+            'flutter.provider_entries': originalProviderEntries,
+            'flutter.chat_configs': legacyChatConfigsJson,
+          });
+          try {
+            final notifier = ProviderEntriesNotifier();
+            await notifier.load();
+
+            final prefs = await SharedPreferences.getInstance();
+            expect(
+              prefs.getString('provider_entries'),
+              originalProviderEntries,
+              reason:
+                  'A failed backup must not overwrite corrupt provider data',
+            );
+            expect(
+              prefs.getString('chat_configs'),
+              legacyChatConfigsJson,
+              reason: 'Legacy provider data must remain available for recovery',
+            );
+          } finally {
+            SharedPreferencesStorePlatform.instance = previousStore;
+          }
+        }
+      },
+    );
+
+    test('CRUD does not overwrite corrupt entries when backup returns false',
+        () async {
+      final corruptProviderEntries = <String>[
+        'not-json{{{',
+        jsonEncode([
+          {'id': 'corrupt_provider', 'type': 'llm', 'configs': 'invalid'},
+        ]),
+        jsonEncode([
+          {'id': 'valid_llm', 'type': 'llm', 'name': 'LLM', 'configs': []},
+          {
+            'id': 'corrupt_provider',
+            'type': 'llm',
+            'name': 'Corrupt provider',
+            'configs': 'invalid configs',
+            'apiKey': 'recover-me',
+          },
+        ]),
+      ];
+
+      for (final original in corruptProviderEntries) {
+        SharedPreferences.setMockInitialValues({});
+        final previousStore = SharedPreferencesStorePlatform.instance;
+        SharedPreferencesStorePlatform.instance =
+            _FailingProviderCorruptBackupStore({
+          'flutter.provider_entries': original,
+        });
+        try {
+          final notifier = ProviderEntriesNotifier();
+          await notifier.load();
+          final loadedIds =
+              notifier.state.entries.map((entry) => entry.id).toList();
+
+          await expectLater(
+            notifier.addFirst(
+              ProviderEntry(id: 'new_provider', type: 'llm', name: 'New'),
+            ),
+            throwsA(isA<StateError>()),
+          );
+
+          final prefs = await SharedPreferences.getInstance();
+          expect(prefs.getString('provider_entries'), original);
+          expect(
+            notifier.state.entries.map((entry) => entry.id).toList(),
+            loadedIds,
+          );
+        } finally {
+          SharedPreferencesStorePlatform.instance = previousStore;
+        }
+      }
+    });
+
+    test('CRUD does not overwrite corrupt entries when backup throws',
+        () async {
+      const original = 'not-json{{{';
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _ThrowingProviderCorruptBackupStore({
+        'flutter.provider_entries': original,
+      });
+      try {
+        final notifier = ProviderEntriesNotifier();
+        await notifier.load();
+        final loadedIds =
+            notifier.state.entries.map((entry) => entry.id).toList();
+
+        await expectLater(
+          notifier.addFirst(
+            ProviderEntry(id: 'new_provider', type: 'llm', name: 'New'),
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('provider_entries'), original);
+        expect(
+          notifier.state.entries.map((entry) => entry.id).toList(),
+          loadedIds,
+        );
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
+
+    test('CRUD proceeds after a later corrupt backup succeeds', () async {
+      const original = 'not-json{{{';
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailingProviderCorruptBackupStore(
+        {'flutter.provider_entries': original},
+        failedBackupCount: 1,
+      );
+      SharedPreferencesStorePlatform.instance = store;
+      try {
+        final notifier = ProviderEntriesNotifier();
+        await notifier.load();
+        store.failedBackupCount = 0;
+
+        await notifier.addFirst(
+          ProviderEntry(id: 'new_provider', type: 'llm', name: 'New'),
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        final backupKeys = prefs
+            .getKeys()
+            .where((key) => key.startsWith('provider_entries_corrupt_'))
+            .toList();
+        expect(
+          backupKeys.any((key) => prefs.getString(key) == original),
+          isTrue,
+        );
+        expect(
+          (jsonDecode(prefs.getString('provider_entries')!) as List)
+              .whereType<Map>()
+              .any((entry) => entry['id'] == 'new_provider'),
+          isTrue,
+        );
+        expect(
+          notifier.state.entries.any((entry) => entry.id == 'new_provider'),
+          isTrue,
+        );
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
+
+    test('usable LLM entry does not suppress unmatched legacy configs',
+        () async {
+      final existingEntriesJson = jsonEncode([
+        {
+          'id': 'existing_llm',
+          'type': 'llm',
+          'name': 'Custom LLM',
+          'providerName': 'Existing provider',
+          'host': 'https://existing.example.com',
+          'key': 'existing-key',
+          'models': [
+            {'modelId': 'existing-model'},
+          ],
+        },
+        'corrupt entry',
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': existingEntriesJson,
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'supportStream': true},
+            ],
+          },
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'supportStream': true},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntries =
+          notifier.state.entries.where((entry) => entry.type == 'llm').toList();
+      expect(llmEntries, hasLength(1));
+      expect(llmEntries.single.id, 'existing_llm');
+      expect(llmEntries.single.configs, hasLength(2));
+      expect(
+        llmEntries.single.configs.map((config) => config.providerName),
+        containsAll(['Existing provider', 'Legacy provider']),
+      );
+      expect(
+        llmEntries.single.configs.last.models.single.modelId,
+        'legacy-model',
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+      final corruptKeys = prefs
+          .getKeys()
+          .where((key) => key.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, hasLength(1));
+      expect(prefs.getString(corruptKeys.single), existingEntriesJson);
+
+      final backupFailureEntriesJson = jsonEncode([
+        {
+          'id': 'existing_llm',
+          'type': 'llm',
+          'name': 'Custom LLM',
+          'configs': [
+            {
+              'id': 'existing_config',
+              'providerName': 'Existing provider',
+              'host': 'https://existing.example.com',
+              'key': 'existing-key',
+              'models': [
+                {'modelId': 'existing-model'},
+              ],
+            },
+          ],
+        },
+        {'id': 'existing_ocr', 'type': 'ocr', 'name': 'OCR', 'configs': []},
+        {'id': 'existing_asr', 'type': 'asr', 'name': 'ASR', 'configs': []},
+        'corrupt entry',
+      ]);
+      const legacyChatConfigsJson = '[{"providerName":"Legacy provider",'
+          '"host":"https://legacy.example.com","key":"legacy-key",'
+          '"models":[{"modelId":"legacy-model"}]}]';
+      final failedBackupStoreData = <String, Object>{
+        'flutter.provider_entries': backupFailureEntriesJson,
+        'flutter.chat_configs': legacyChatConfigsJson,
+      };
+      SharedPreferences.setMockInitialValues({});
+      final previousStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _FailingProviderCorruptBackupStore(failedBackupStoreData);
+      try {
+        final failureNotifier = ProviderEntriesNotifier();
+        await failureNotifier.load();
+
+        final failurePrefs = await SharedPreferences.getInstance();
+        expect(failurePrefs.getString('chat_configs'), legacyChatConfigsJson);
+      } finally {
+        SharedPreferencesStorePlatform.instance = previousStore;
+      }
+    });
+
+    test('legacy configs with distinct model settings are preserved once',
+        () async {
+      final representedConfig = {
+        'id': 'existing_config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {
+            'modelId': 'legacy-model',
+            'typeConfig': {
+              'temperature': 0.2,
+              'customSetting': 0.2,
+            },
+          },
+        ],
+      };
+      Map<String, dynamic> legacyConfig(double temperature) => {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': temperature,
+                'typeConfig': {'customSetting': temperature},
+              },
+            ],
+          };
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Custom LLM',
+            'configs': [representedConfig],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          legacyConfig(0.2),
+          legacyConfig(0.7),
+          legacyConfig(0.7),
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(3));
+      expect(
+        llmEntry.configs
+            .map((config) => config.models.single.typeConfig['temperature']),
+        orderedEquals([0.2, 0.2, 0.7]),
+      );
+      expect(
+        llmEntry.configs
+            .map((config) => config.models.single.typeConfig['customSetting']),
+        orderedEquals([0.2, 0.2, 0.7]),
+      );
+      expect(
+        llmEntry.configs.map((config) => config.models.single.supportStream),
+        orderedEquals([false, true, true]),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('legacy LLM entries preserve represented model settings', () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Legacy LLM',
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {
+                'modelId': 'legacy-model',
+                'temperature': 0.2,
+                'typeConfig': {'context': 4000},
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.2},
+            ],
+          },
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'temperature': 0.7},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(3));
+      expect(
+        llmEntry.configs
+            .map((config) => config.models.single.typeConfig['temperature']),
+        orderedEquals([0.2, 0.2, 0.7]),
+      );
+      expect(
+        llmEntry.configs.first.models.single.typeConfig['context'],
+        4000,
+      );
+      expect(
+        llmEntry.configs[1].models.single.typeConfig['context'],
+        isNull,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('new migrated entry deduplicates identical legacy configs', () async {
+      final legacyConfig = {
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {
+            'modelId': 'legacy-model',
+            'temperature': 0.7,
+          },
+        ],
+      };
+      SharedPreferences.setMockInitialValues({
+        'chat_configs': jsonEncode([legacyConfig, legacyConfig]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final migrated = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'migrated_llm',
+      );
+      expect(migrated.configs, hasLength(1));
+      expect(
+        migrated.configs.single.models.single.typeConfig['temperature'],
+        0.7,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('represented legacy configs are not duplicated during migration',
+        () async {
+      final config = {
+        'id': 'existing_config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy.example.com',
+        'key': 'legacy-key',
+        'models': [
+          {'modelId': 'legacy-model', 'supportStream': true},
+        ],
+      };
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing_llm',
+            'type': 'llm',
+            'name': 'Custom LLM',
+            'configs': [config],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Legacy provider',
+            'host': 'https://legacy.example.com',
+            'key': 'legacy-key',
+            'models': [
+              {'modelId': 'legacy-model', 'supportStream': true},
+            ],
+          },
+        ]),
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final llmEntry = notifier.state.entries.singleWhere(
+        (entry) => entry.id == 'existing_llm',
+      );
+      expect(llmEntry.configs, hasLength(1));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+  });
+
+  test('removing an MCP group rolls back when persistence fails', () async {
+    const groupId = 'custom_group';
+    final originalEntries = [
+      ProviderEntry(
+        id: 'mcp',
+        type: 'mcp',
+        name: 'MCP',
+        configs: [ProviderConfigItem(id: 'server', groupId: groupId)],
+      ),
+      ProviderEntry(id: 'ocr', type: 'ocr', name: 'OCR'),
+      ProviderEntry(id: 'asr', type: 'asr', name: 'ASR'),
+    ];
+    final originalGroups = [
+      ...builtinMcpProviderGroups,
+      const McpProviderGroup(id: groupId, name: 'Custom'),
+    ];
+    final initialEntries =
+        jsonEncode(originalEntries.map((entry) => entry.toMap()).toList());
+    final initialGroups =
+        jsonEncode(originalGroups.map((group) => group.toMap()).toList());
+    SharedPreferences.setMockInitialValues({
+      'provider_entries': initialEntries,
+      'mcp_provider_groups': initialGroups,
+    });
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderEntriesStore(
+      {
+        'flutter.provider_entries': initialEntries,
+        'flutter.mcp_provider_groups': initialGroups,
+      },
+      failedKey: 'flutter.mcp_provider_groups',
+    );
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.failedWriteCount = 1;
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeRemoval = prefs.getString('provider_entries');
+      final savedGroupsBeforeRemoval = prefs.getString('mcp_provider_groups');
+
+      await expectLater(
+        notifier.removeMcpGroup(groupId),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        notifier.state.mcpGroups.map((group) => group.id),
+        contains(groupId),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'mcp')
+            .configs
+            .firstWhere((config) => config.id == 'server')
+            .groupId,
+        groupId,
+      );
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
+      await prefs.reload();
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeRemoval);
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('removing an MCP group reports when rollback also fails', () async {
+    const groupId = 'custom_group';
+    final originalEntries = [
+      ProviderEntry(
+        id: 'mcp',
+        type: 'mcp',
+        name: 'MCP',
+        configs: [ProviderConfigItem(id: 'server', groupId: groupId)],
+      ),
+      ProviderEntry(id: 'ocr', type: 'ocr', name: 'OCR'),
+      ProviderEntry(id: 'asr', type: 'asr', name: 'ASR'),
+    ];
+    final originalGroups = [
+      ...builtinMcpProviderGroups,
+      const McpProviderGroup(id: groupId, name: 'Custom'),
+    ];
+    final initialEntries =
+        jsonEncode(originalEntries.map((entry) => entry.toMap()).toList());
+    final initialGroups =
+        jsonEncode(originalGroups.map((group) => group.toMap()).toList());
+    SharedPreferences.setMockInitialValues({
+      'provider_entries': initialEntries,
+      'mcp_provider_groups': initialGroups,
+    });
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderRollbackStore({
+      'flutter.provider_entries': initialEntries,
+      'flutter.mcp_provider_groups': initialGroups,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeRemoval = prefs.getString('provider_entries');
+      final savedGroupsBeforeRemoval = prefs.getString('mcp_provider_groups');
+      store.isArmed = true;
+
+      await expectLater(
+        notifier.removeMcpGroup(groupId),
+        throwsA(isA<ProviderEntriesRollbackException>()),
+      );
+
+      expect(
+        notifier.state.mcpGroups.map((group) => group.id),
+        contains(groupId),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'mcp')
+            .configs
+            .firstWhere((config) => config.id == 'server')
+            .groupId,
+        groupId,
+      );
+      await prefs.reload();
+      final persistedEntries =
+          jsonDecode(prefs.getString('provider_entries')!) as List;
+      final persistedMcpEntry = persistedEntries
+          .whereType<Map>()
+          .singleWhere((entry) => entry['id'] == 'mcp');
+      final persistedServer = (persistedMcpEntry['configs'] as List)
+          .whereType<Map>()
+          .singleWhere((config) => config['id'] == 'server');
+      expect(persistedServer['groupId'], builtinMcpServicesGroupId);
+      expect(
+        prefs.getString('provider_entries'),
+        isNot(savedEntriesBeforeRemoval),
+      );
+      expect(prefs.getString('mcp_provider_groups'), savedGroupsBeforeRemoval);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('provider update surfaces a failed persistence write', () async {
+    const savedEntries = '[{"id":"existing_llm","type":"llm",'
+        '"name":"Before","configs":[]}]';
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderEntriesStore({
+      'flutter.provider_entries': savedEntries,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final prefs = await SharedPreferences.getInstance();
+      final savedEntriesBeforeUpdate = prefs.getString('provider_entries')!;
+      store.failedWriteCount = 1;
 
       await expectLater(
         notifier.update(
-          'removed-entry',
-          ProviderEntry(id: 'removed-entry', type: 'tts', name: 'Stale save'),
-          requirePersistence: true,
+          'existing_llm',
+          ProviderEntry(
+            id: 'existing_llm',
+            type: 'llm',
+            name: 'After',
+          ),
         ),
         throwsA(isA<StateError>()),
       );
 
       expect(
-        notifier.state.entries.any((entry) => entry.id == 'removed-entry'),
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'existing_llm')
+            .name,
+        'Before',
+      );
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeUpdate);
+      await prefs.reload();
+      expect(prefs.getString('provider_entries'), savedEntriesBeforeUpdate);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('provider addition does not publish when persistence fails', () async {
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderEntriesStore(
+      const {},
+      failedWriteCount: 1,
+    );
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final originalEntries = notifier.state.entries;
+
+      await expectLater(
+        notifier.addFirst(
+          ProviderEntry(id: 'new_llm', type: 'llm', name: 'New provider'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(notifier.state.entries, same(originalEntries));
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'new_llm'),
         isFalse,
       );
-    });
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), isNull);
+      await prefs.reload();
+      expect(prefs.getString('provider_entries'), isNull);
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
 
-    test(
-      'does not retry a stale required update after a persistence conflict',
+  test('provider addition is published only after persistence completes',
       () async {
-        SharedPreferences.setMockInitialValues({});
-        final notifier = ProviderEntriesNotifier();
-        addTearDown(notifier.dispose);
-        await notifier.load();
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _GatedProviderEntriesStore(const {});
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      final originalEntries = notifier.state.entries;
+      store.isArmed = true;
 
-        final prefs = await SharedPreferences.getInstance();
-        final originalTts = notifier.state.entries.firstWhere(
-          (entry) => entry.id == 'builtin_tts',
-        );
-        final staleUpdate = ProviderEntry(
-          id: originalTts.id,
-          type: originalTts.type,
-          name: 'Stale TTS edit',
-          configs: originalTts.configs.map((config) => config.copy()).toList(),
-          legacyFields: originalTts.legacyFields,
-        );
-        final externallyUpdatedEntries = notifier.state.entries
-            .map((entry) {
-              if (entry.id != originalTts.id) return entry;
-              return ProviderEntry(
-                id: entry.id,
-                type: entry.type,
-                name: 'Newer external TTS edit',
-                configs: [
-                  ProviderConfigItem(
-                    id: 'newer-external-config',
-                    providerName: 'Newer external config',
-                  ),
-                ],
-                legacyFields: entry.legacyFields,
-              );
-            })
-            .map((entry) => entry.toMap())
-            .toList();
-        final externalJson = jsonEncode(externallyUpdatedEntries);
-        await prefs.setString('provider_entries', externalJson);
+      final add = notifier.addFirst(
+        ProviderEntry(id: 'new_llm', type: 'llm', name: 'New provider'),
+      );
+      await store.firstProviderEntriesWriteStarted.future;
 
-        await expectLater(
-          notifier.update(
-            originalTts.id,
-            staleUpdate,
-            requirePersistence: true,
-          ),
-          throwsA(isA<StateError>()),
-        );
-        await expectLater(
-          notifier.update(
-            originalTts.id,
-            staleUpdate,
-            requirePersistence: true,
-          ),
-          throwsA(isA<StateError>()),
-        );
+      expect(notifier.state.entries, same(originalEntries));
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'new_llm'),
+        isFalse,
+      );
 
-        final savedEntries =
-            jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-        final savedTts = savedEntries.whereType<Map>().singleWhere(
-              (entry) => entry['id'] == originalTts.id,
-            );
-        expect(savedTts['name'], 'Newer external TTS edit');
-        expect(
-          (savedTts['configs'] as List).single['id'],
-          'newer-external-config',
-        );
-      },
+      store.releaseFirstProviderEntriesWrite.complete();
+      await add;
+
+      expect(
+        notifier.state.entries.any((entry) => entry.id == 'new_llm'),
+        isTrue,
+      );
+    } finally {
+      if (!store.releaseFirstProviderEntriesWrite.isCompleted) {
+        store.releaseFirstProviderEntriesWrite.complete();
+      }
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('provider update ignores an unrelated group write failure', () async {
+    const savedEntries = '[{"id":"existing_llm","type":"llm",'
+        '"name":"Before","configs":[]}]';
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _FailingProviderEntriesStore(
+      {'flutter.provider_entries': savedEntries},
+      failedKey: 'flutter.mcp_provider_groups',
     );
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.failedWriteCount = 1;
 
-    test(
-      'does not retry a stale update after a provider source change during credential migration',
-      () async {
-        const accountId = 'racing-account';
-        const credentialRef = 'stroom.llm.credential.racing-account';
-        SharedPreferences.setMockInitialValues({
-          'provider_entries': jsonEncode([
-            {
-              'id': 'racing-llm-entry',
-              'type': 'llm',
-              'name': 'Original entry',
-              'configs': [
-                {
-                  'id': accountId,
-                  'providerName': 'Original provider',
-                  'key': 'migration-secret',
-                  'models': [],
-                },
-              ],
-            },
-          ]),
-        });
-        final prefs = await SharedPreferences.getInstance();
-        final credentialStore = _RacingCredentialStore(
-          prefs: prefs,
-          credentialRef: credentialRef,
-          externalEntries: jsonEncode([
-            {
-              'id': 'racing-llm-entry',
-              'type': 'llm',
-              'name': 'Newer external entry',
-              'configs': [
-                {
-                  'id': accountId,
-                  'providerName': 'Newer external provider',
-                  'credentialRef': credentialRef,
-                  'models': [],
-                },
-              ],
-            },
-          ]),
-        );
-        final notifier = ProviderEntriesNotifier(
-          credentialStore: credentialStore,
-        );
-        addTearDown(notifier.dispose);
-        await notifier.load();
+      await notifier.update(
+        'existing_llm',
+        ProviderEntry(
+          id: 'existing_llm',
+          type: 'llm',
+          name: 'After',
+        ),
+      );
 
-        final original = notifier.state.entries.singleWhere(
-          (entry) => entry.id == 'racing-llm-entry',
-        );
-        final staleUpdate = ProviderEntry(
-          id: original.id,
-          type: original.type,
-          name: 'Stale update',
-          configs: original.configs.map((config) => config.copy()).toList(),
-          legacyFields: original.legacyFields,
-        );
-        credentialStore.arm();
-
-        await expectLater(
-          notifier.update(original.id, staleUpdate, requirePersistence: true),
-          throwsA(isA<StateError>()),
-        );
-        await expectLater(
-          notifier.update(original.id, staleUpdate, requirePersistence: true),
-          throwsA(isA<StateError>()),
-        );
-
-        final savedEntries =
-            jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-        final savedEntry = savedEntries
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'existing_llm')
+            .name,
+        'After',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        (jsonDecode(prefs.getString('provider_entries')!) as List)
             .whereType<Map>()
-            .singleWhere((entry) => entry['id'] == 'racing-llm-entry');
-        expect(savedEntry['name'], 'Newer external entry');
-        expect(
-          ((savedEntry['configs'] as List).single as Map)['providerName'],
-          'Newer external provider',
-        );
-      },
-    );
+            .singleWhere((entry) => entry['id'] == 'existing_llm')['name'],
+        'After',
+      );
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('overlapping provider updates retain both edits', () async {
+    final savedEntries = jsonEncode([
+      {'id': 'first', 'type': 'llm', 'name': 'First before', 'configs': []},
+      {'id': 'second', 'type': 'llm', 'name': 'Second before', 'configs': []},
+    ]);
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _GatedProviderEntriesStore({
+      'flutter.provider_entries': savedEntries,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.isArmed = true;
+
+      final firstUpdate = notifier.update(
+        'first',
+        ProviderEntry(id: 'first', type: 'llm', name: 'First after'),
+      );
+      await store.firstProviderEntriesWriteStarted.future;
+      final secondUpdate = notifier.update(
+        'second',
+        ProviderEntry(id: 'second', type: 'llm', name: 'Second after'),
+      );
+      store.releaseFirstProviderEntriesWrite.complete();
+      await Future.wait([firstUpdate, secondUpdate]);
+
+      expect(
+        notifier.state.entries.map((entry) => entry.name),
+        containsAll(['First after', 'Second after']),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final persistedNames =
+          (jsonDecode(prefs.getString('provider_entries')!) as List)
+              .map((entry) => entry['name']);
+      expect(persistedNames, containsAll(['First after', 'Second after']));
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
+  });
+
+  test('concurrent provider addition is retained during update persistence',
+      () async {
+    const savedEntries = '[{"id":"existing_llm","type":"llm",'
+        '"name":"Before","configs":[]}]';
+    SharedPreferences.setMockInitialValues({});
+    final previousStore = SharedPreferencesStorePlatform.instance;
+    final store = _GatedProviderEntriesStore({
+      'flutter.provider_entries': savedEntries,
+    });
+    SharedPreferencesStorePlatform.instance = store;
+    try {
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+      store.isArmed = true;
+
+      final update = notifier.update(
+        'existing_llm',
+        ProviderEntry(
+          id: 'existing_llm',
+          type: 'llm',
+          name: 'After',
+        ),
+      );
+      await store.firstProviderEntriesWriteStarted.future;
+      final add = notifier.addFirst(
+        ProviderEntry(id: 'new_llm', type: 'llm', name: 'New'),
+      );
+      store.releaseFirstProviderEntriesWrite.complete();
+      await Future.wait([update, add]);
+
+      expect(
+        notifier.state.entries.map((entry) => entry.id),
+        containsAll(['existing_llm', 'new_llm']),
+      );
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'existing_llm')
+            .name,
+        'After',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final persistedIds =
+          (jsonDecode(prefs.getString('provider_entries')!) as List)
+              .map((entry) => entry['id']);
+      expect(persistedIds, containsAll(['existing_llm', 'new_llm']));
+    } finally {
+      SharedPreferencesStorePlatform.instance = previousStore;
+    }
   });
 
   group('built-in provider display localization', () {
@@ -476,41 +1315,4 @@ void main() {
       );
     });
   });
-}
-
-class _RacingCredentialStore implements LlmCredentialStore {
-  final SharedPreferences prefs;
-  final String credentialRef;
-  final String externalEntries;
-  final Map<String, String> values = {};
-  var _armed = false;
-  var _sourceChanged = false;
-
-  _RacingCredentialStore({
-    required this.prefs,
-    required this.credentialRef,
-    required this.externalEntries,
-  });
-
-  void arm() => _armed = true;
-
-  @override
-  Future<String?> read(String reference) async {
-    if (_armed && !_sourceChanged && reference == credentialRef) return null;
-    return values[reference];
-  }
-
-  @override
-  Future<void> write(String reference, String secret) async {
-    if (_armed && !_sourceChanged && reference == credentialRef) {
-      _sourceChanged = true;
-      await prefs.setString('provider_entries', externalEntries);
-    }
-    values[reference] = secret;
-  }
-
-  @override
-  Future<void> delete(String reference) async {
-    values.remove(reference);
-  }
 }

@@ -3,6 +3,7 @@
 // - 松手提交 onReorder（移除后插入索引语义）
 // - 点击/删除回调照常工作
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/drag_sort_area.dart';
 
@@ -175,15 +176,18 @@ void main() {
       expect(closeCenter.dx > textRect.right, isTrue,
           reason: '删除按钮应在文字右侧而非压在文字上');
 
-      // 文字完整显示（无省略号）：渲染宽度 == 文本自然宽度
+      // 文字完整显示（无省略号）：渲染槽位至少能容纳文本自然宽度。
       final painter = TextPainter(
         text: const TextSpan(text: 'del-a', style: TextStyle(fontSize: 13)),
         maxLines: 1,
         textDirection: TextDirection.ltr,
         textScaler: MediaQuery.textScalerOf(tester.element(find.text('del-a'))),
       )..layout();
-      expect(textRect.width, closeTo(painter.width, 1.0),
-          reason: '删除按钮不应挤占文字宽度（Flexible 均分会截断文字）');
+      final paragraph =
+          tester.renderObject<RenderParagraph>(find.text('del-a'));
+      expect(paragraph.didExceedMaxLines, isFalse, reason: '删除按钮不应导致文字省略');
+      expect(textRect.width, greaterThanOrEqualTo(painter.width),
+          reason: '文字槽位应足以显示完整标签');
 
       // 删除按钮保持固定 24×19 点击区
       final control = find

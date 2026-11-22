@@ -10,6 +10,18 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get galleryPermissionTitle => '需要访问相册';
+
+  @override
+  String get galleryPermissionMessage => '请在系统设置中允许 Stroom 访问照片和视频。';
+
+  @override
+  String get galleryPermissionCancel => '取消';
+
+  @override
+  String get galleryPermissionOpenSettings => '打开设置';
+
+  @override
   String get languageSettingsTitle => '语言';
 
   @override
@@ -35,6 +47,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get languageNameChinese => '简体中文';
+
+  @override
+  String get languageNameKorean => '韩语';
+
+  @override
+  String get languageNamePortuguese => '葡萄牙语（巴西）';
 
   @override
   String get languageSearchHint => '搜索语言';
@@ -164,6 +182,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get builtInPromptMarketTitle => '助手市场';
+
+  @override
+  String get assistantAddTitle => '添加助手';
+
+  @override
+  String get assistantBuiltInTab => '内置助手';
+
+  @override
+  String get assistantImportTab => '导入助手';
+
+  @override
+  String get assistantBuiltInHint => '浏览可直接使用的内置助手，点击条目可预览后再添加。';
+
+  @override
+  String get assistantImportHint => '连接远程助手目录，或通过助手文件 URL 导入。';
+
+  @override
+  String get assistantImportAction => '连接目录或导入文件';
 
   @override
   String get builtInPromptClose => '关闭';
@@ -364,6 +400,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskFlowUseTemplate => '使用';
 
   @override
+  String get taskFlowOcrInputMissing => '找不到图片文件，请重新选择图片。';
+
+  @override
+  String get taskFlowOcrInputReadFailed => '无法读取图片文件，请检查文件访问权限后重试。';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR 请求大小预算（$size MiB）';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return '任务流图片输入上限（$size MiB）';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return '图片超过$limit，请缩小图片后重试。';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => '纯文本模板';
 
   @override
@@ -392,7 +453,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 \$...\$，独立公式使用 \$\$...\$\$。只返回转录结果，不添加说明或推断。';
 
   @override
-  String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+  String get ocrDefaultImagesOnly => '默认（不添加自定义指令；仍使用默认 OCR 提示）';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -459,7 +520,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+      '这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。';
 
   @override
   String get ocrInstructionManageEmpty => '暂无指令';
@@ -855,6 +916,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return '检查助手更新失败：$error';
+  }
+
+  @override
   String get aboutPrivacyContent =>
       'Stroom 尊重并保护所有使用服务用户的个人隐私权。\n\n1. 相机权限：仅用于拍摄照片，不会收集或上传任何图像数据。\n\n2. 相册权限：仅用于选择照片和保存照片，所有照片都保存在本地设备。\n\n3. 数据安全：所有拍摄的照片都保存在您的设备本地，我们不会访问或上传任何数据。\n\n4. 第三方服务：本应用不包含任何第三方分析或广告服务。\n\n如果您有任何疑问，请联系我们。';
 
@@ -1014,6 +1080,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateDownloading => '正在下载更新...';
 
   @override
+  String get updateCancelDownload => '取消下载';
+
+  @override
+  String get updateDownloadInBackground => '后台下载';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return '网络错误：$details';
   }
@@ -1069,6 +1141,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get updateApkInstallerUnavailable => '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied => '请在系统设置中允许 Stroom 安装未知来源应用。';
+
+  @override
+  String get updateRestartDialogTitle => '更新检测';
+
+  @override
+  String get updateRestartDialogBody => '检测到应用已更新，建议重启应用以确保稳定性。';
+
+  @override
+  String get updateRestartDialogLater => '稍后重启';
+
+  @override
+  String get updateRestartDialogNow => '立即重启';
 
   @override
   String get contextCompactionHistoryIntro => '以下是需要压缩的对话历史：';
@@ -1326,7 +1416,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get conversationKeep => '保留对话';
+
+  @override
+  String get conversationTemporaryStatus => '临时';
+
+  @override
+  String get conversationTemporaryWarning => '即将过期';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。';
+
+  @override
+  String get conversationEnableTemporary => '开启临时模式';
+
+  @override
+  String get chatLoadingConversation => '正在加载对话…';
+
+  @override
+  String get chatEmptyConversation => '发送消息以开始对话。';
+
+  @override
+  String get chatNoActiveConversation => '请选择或新建对话以开始聊天。';
+
+  @override
+  String get chatConversationLoadError => '无法加载此对话。';
+
+  @override
+  String get chatRetryLoadConversation => '重试';
 
   @override
   String get taskListTitle => '任务列表';
@@ -1354,6 +1478,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '确定要清除所有已完成任务吗？此操作不可撤销。';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
@@ -1875,6 +2003,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatDataDetails => '数据详情';
+
+  @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR 诊断';
+
+  @override
+  String get chatErrorDetailRequestUrl => '请求 URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => '请求标头';
+
+  @override
+  String get chatErrorDetailRequestBody => '请求正文';
+
+  @override
+  String get chatErrorDetailStatusCode => '状态码';
+
+  @override
+  String get chatErrorDetailResponseHeaders => '响应标头';
+
+  @override
+  String get chatErrorDetailResponseBody => '响应正文';
+
+  @override
+  String get chatErrorDetailEmpty => '暂无详细信息';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中间内容已省略，共 $count 字]';
+  }
 
   @override
   String get chatAudioPreviewClose => '关闭';
@@ -2639,6 +2796,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unifiedTaskSynthesisText => '合成文本';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => '查看完整合成文本';
+
+  @override
   String get unifiedTaskStatus => '状态';
 
   @override
@@ -2732,6 +2892,74 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get catcatchSkipped => '已跳过（无需处理）';
+
+  @override
+  String catCatchDetailMediaResources(Object count) {
+    return '获取到$count个媒体资源';
+  }
+
+  @override
+  String catCatchDetailResources(Object count) {
+    return '获取到$count个资源';
+  }
+
+  @override
+  String catCatchDetailBrowserResources(Object count) {
+    return '浏览器中获取到$count个资源';
+  }
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return '获取到$total个资源（播放列表$segments个分段）';
+  }
+
+  @override
+  String catCatchDetailChooseResource(Object count) {
+    return '共$count个资源，请用户选择';
+  }
+
+  @override
+  String get catCatchDetailAutoSelectFirst => '自动选择第1个结果，进入下载';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining => '剩余1个结果，自动进入下载';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) {
+    return '.$extension 格式无需转换，已跳过';
+  }
+
+  @override
+  String get catCatchDetailSkipNoExtension => '. 格式无需转换，已跳过';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) {
+    return '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+  }
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return '按时长$duration筛选，$count个资源全部匹配';
+  }
+
+  @override
+  String catCatchDurationHours(Object count) {
+    return '$count小时';
+  }
+
+  @override
+  String catCatchDurationMinutes(Object count) {
+    return '$count分钟';
+  }
+
+  @override
+  String catCatchDurationSeconds(Object count) {
+    return '$count秒';
+  }
 
   @override
   String get catcatchRetryStep => '重试此步骤';
@@ -2926,6 +3154,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get topicItemPin => '置顶';
 
   @override
+  String get topicItemMarkUnread => '标记为未读';
+
+  @override
+  String get topicItemMarkRead => '标记为已读';
+
+  @override
   String get topicItemRename => '重命名';
 
   @override
@@ -2951,6 +3185,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appMediaUnreadable => '无法读取文件';
+
+  @override
+  String appMediaLoadError(Object error) {
+    return '加载文件失败：$error';
+  }
 
   @override
   String appMediaClearSelection(Object count) {
@@ -3422,6 +3661,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get folderPickerSubfolders => '子文件夹';
+
+  @override
+  String get folderPickerNoFolders => '没有文件夹';
 
   @override
   String get folderPickerExistingFolders => '现有文件夹';
@@ -4658,7 +4900,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM（约 4 倍压缩）';
 
   @override
-  String get providerCompressionFlac => 'FLAC（无损，约 2 倍）';
+  String get providerCompressionFlac => 'FLAC（无损，约 2 倍，推荐）';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -4806,7 +5048,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPreprocessing => '音频预处理';
 
   @override
-  String get providerPreprocessingHelp => '降低音频文件大小，不影响转写准确率。';
+  String get providerPreprocessingHelp => '降低音频文件大小，但重采样可能会改变音频并影响转写准确率。';
 
   @override
   String get providerPreprocessingMethod => '预处理方式';
@@ -4862,11 +5104,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPreprocessNone => '无';
 
   @override
-  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道）';
+  String get providerPreprocessResample => 'WAV 重采样（16 kHz 单声道）';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。';
+      '重采样至 16 kHz 并混合为单声道；此操作可能会改变音频。';
 
   @override
   String get providerPreprocessNoneHelp => '不进行预处理，原样发送。';
@@ -5891,6 +6133,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerBuiltinBadge => '内置';
 
   @override
+  String get providerBuiltinTtsName => 'TTS（文本转语音）';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM（大语言模型）';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR（光学字符识别）';
+
+  @override
+  String get providerBuiltinAsrName => 'STT（语音转文本）';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP（模型上下文协议）';
+
+  @override
+  String get providerBuiltinSearchGroupName => '搜索';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => '其他 MCP 服务';
+
+  @override
   String get providerConnectivityTest => '连通性测试';
 
   @override
@@ -6133,6 +6396,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paramTypeJsonLabel => 'JSON';
 
   @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return '不支持的类型：$type';
+  }
+
+  @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return '参数“$name”使用了不支持的类型“$type”，请替换为支持的类型或删除该参数后再保存。';
+  }
+
+  @override
   String get paramTypeStringHint => '例如: cheerful';
 
   @override
@@ -6152,6 +6425,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ankiBrowseCardsTooltip => '浏览卡片';
+
+  @override
+  String get ankiStatsTotalCards => '总卡片数';
+
+  @override
+  String get ankiStatsNewCards => '待学习';
+
+  @override
+  String get ankiStatsLearning => '学习中';
+
+  @override
+  String get ankiStatsDueForReview => '待复习';
+
+  @override
+  String get ankiStatsReviewHistory => '历史复习次数';
+
+  @override
+  String get ankiStatsLearningProgress => '学习进度';
+
+  @override
+  String get ankiStatsReviewRate => '复习率';
+
+  @override
+  String get ankiBrowserSearchHint => '搜索卡片...';
+
+  @override
+  String get ankiBrowserEmpty => '无卡片';
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb 同步';
@@ -6362,6 +6662,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ankiSyncStatusLoginSuccess => '登录成功。密码未保存，同步密钥已加密保存。';
+
+  @override
+  String get ankiSyncLoginSuccessPromptTitle => '登录成功';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage => '现在同步收藏集吗？';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => '立即同步';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => '继续使用';
 
   @override
   String get ankiSyncStatusLoginSuccessNoSave =>
@@ -9069,6 +9381,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR 请求 JSON 大小为 $encodedBytes 字节，超过配置的 $budgetBytes 字节上限。';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR识别失败：$details';
   }
@@ -9547,6 +9864,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get startupSafetyUpdateButton => '更新应用';
 
   @override
+  String get startupSafetyRollbackButton => '恢复到之前的版本';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '没有找到记录版本的直接安装包。请先导出数据，再手动安装该版本。';
+
+  @override
+  String get startupSafetyRollbackRecommended => '更新失败前记录的推荐版本';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => '版本说明';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => '没有可用的版本说明。';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => '确认恢复版本';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return '即将下载并打开版本 $version。请先导出数据。操作系统可能会拒绝安装较旧版本，Stroom 不会绕过安装器限制。';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '继续';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '无法记录本次更新尝试，因此没有启动安装程序。请检查存储权限后重试。';
+
+  @override
   String get startupSafetyCheckingUpdates => '正在检查更新...';
 
   @override
@@ -9712,6 +10060,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appLogDelete => '删除';
 
   @override
+  String get appLogDeleteUnconfirmed => '无法确认删除结果。';
+
+  @override
   String get appLogConfirmDeleteTitle => '确认删除';
 
   @override
@@ -9788,6 +10139,92 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appLogCopyDone => '已复制全部日志内容';
+
+  @override
+  String get appLogSettings => '日志设置';
+
+  @override
+  String get appLogSettingsTitle => '应用日志设置';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count 个文件 · 已用 $size';
+  }
+
+  @override
+  String get appLogRetentionDays => '保留期限';
+
+  @override
+  String appLogDays(int count) {
+    return '$count 天';
+  }
+
+  @override
+  String get appLogMinimumLevel => '记录详细度';
+
+  @override
+  String get appLogStorageLimit => '日志空间上限';
+
+  @override
+  String get appLogUnlimited => '不限制';
+
+  @override
+  String get appLogSettingsHelp => '超出保留期限或空间上限的旧日志会自动清理；当前小时的日志文件会保留。';
+
+  @override
+  String get appLogSettingsSaved => '日志设置已保存';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return '保存日志设置失败：$error';
+  }
+
+  @override
+  String get appLogSave => '保存';
+
+  @override
+  String get appLogLevelDebug => '调试 · 最详细';
+
+  @override
+  String get appLogLevelInfo => '信息';
+
+  @override
+  String get appLogLevelWarning => '警告';
+
+  @override
+  String get appLogLevelError => '错误';
+
+  @override
+  String get appLogFilter => '筛选日志';
+
+  @override
+  String get appLogSearch => '关键词';
+
+  @override
+  String get appLogSource => '来源';
+
+  @override
+  String get appLogLevel => '级别';
+
+  @override
+  String get appLogAnyLevel => '全部级别';
+
+  @override
+  String get appLogFromTime => '开始时间';
+
+  @override
+  String get appLogUntilTime => '结束时间';
+
+  @override
+  String get appLogClearFilters => '清除筛选';
+
+  @override
+  String get appLogNoMatches => '没有符合筛选条件的日志';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '显示 $visible / $total 行';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Stroom 后台任务';
@@ -10401,6 +10838,612 @@ class AppLocalizationsZh extends AppLocalizations {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
   }
+
+  @override
+  String get startupErrorTitle => '应用启动失败';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get renderErrorTitle => '界面渲染异常';
+
+  @override
+  String get renderErrorDebugTitle => '界面渲染异常（调试模式）';
+
+  @override
+  String get renderErrorRestartMessage => '请尝试重启应用。';
+
+  @override
+  String get batchDlgFileName => '文件名';
+
+  @override
+  String get batchDlgFolderName => '文件夹名';
+
+  @override
+  String get batchDlgFileNameConflict => '同一文件夹内存在同名文件';
+
+  @override
+  String get batchDlgFolderNameConflict => '目标位置已存在同名文件夹';
+
+  @override
+  String get batchDlgFolderNameSwapConflict => '文件夹之间不能在同一批次互换名称';
+
+  @override
+  String get batchDlgControlCharacterError => '名称不能包含控制字符';
+
+  @override
+  String get batchDlgNameWhitespaceError => '名称不能以空白开头或结尾，可添加空白清理规则';
+
+  @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind不能为空';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind不能以空白结尾';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind不能超过$count个字符';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind不能包含 Windows 非法字符';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind不能以 . 结尾';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind不能使用 Windows 保留名称';
+  }
+
+  @override
+  String get batchDlgIntermediateNameTooLong => '中间名称过长，请调整规则';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return '该项目没有$date，请调整模板';
+  }
+
+  @override
+  String get batchDlgCreatedDate => '创建时间';
+
+  @override
+  String get batchDlgModifiedDate => '修改时间';
+
+  @override
+  String get connectivityTestHttpSuccess => 'HTTP 工具请求成功';
+
+  @override
+  String get connectivityTestHttpFailure => 'HTTP 工具请求失败';
+
+  @override
+  String get connectivityTestInvalidMcpConfig => 'MCP 配置无效';
+
+  @override
+  String get connectivityTestMissingTransport => '缺少有效的传输类型配置。';
+
+  @override
+  String get connectivityTestStdioUnsupported => '当前平台不支持 stdio';
+
+  @override
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。';
+
+  @override
+  String get connectivityTestInvalidContent => '测试内容无效';
+
+  @override
+  String get connectivityTestMethodMustBeString => 'method 必须是字符串。';
+
+  @override
+  String get connectivityTestUnsupportedMethod => '不支持的测试方法';
+
+  @override
+  String get connectivityTestReadOnlyMethodOnly =>
+      '为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。';
+
+  @override
+  String get connectivityTestParamsMustBeObject => 'params 必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestMcpConnectionFailed => '无法连接 MCP 服务';
+
+  @override
+  String get connectivityTestCheckConnectionSettings =>
+      '请检查地址、认证信息和网络，或查看应用日志获取连接详情。';
+
+  @override
+  String get connectivityTestRemainingToolsOmitted => '；其余工具已省略';
+
+  @override
+  String get connectivityTestMcpSuccess => 'MCP 连通性测试成功';
+
+  @override
+  String connectivityTestToolNames(Object names) {
+    return '：$names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return '连接及 tools/list 请求成功，共发现 $count 个工具$names$suffix。';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked => '测试参数会修改待办数据';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      '为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。';
+
+  @override
+  String get connectivityTestUnknownBuiltin => '未知的内置工具';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return '找不到工具“$toolName”的测试执行器。';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => '内置工具测试成功';
+
+  @override
+  String get connectivityTestBuiltinFailure => '内置工具测试失败';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired => '测试内容顶层必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestRequestTimeout => '请求超时，请检查服务响应和网络。';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP 请求超时：$method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '…（结果已截断）';
+
+  @override
+  String get toolResultWebSearchEmptyQuery => '错误：搜索关键词不能为空。';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return '错误：不支持的搜索引擎“$source”。可选值：google、bing、baidu。';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return '首选引擎 $preferred $reason，已切换到 $fallback。';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound => '未找到相关搜索结果。';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return '未找到相关搜索结果（$sources 均明确返回无结果）。';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return '搜索不完整：$sources 明确返回无结果；其他引擎不可用或返回了无法解析的页面：$failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return '错误：所有搜索引擎均不可用。$failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return '来自 $source 的搜索结果：';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => '链接';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => '摘要';
+
+  @override
+  String get toolResultWebSearchEmptyResults => '未找到相关搜索结果。';
+
+  @override
+  String get toolResultTodoInvalid => '错误：todos 参数必须是数组（省略或传 null 表示读取待办列表）。';
+
+  @override
+  String get toolResultTodoEmpty => '当前没有待办事项。';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return '$count 个待办事项未完成';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return '错误：MCP 服务器“$server”重新连接失败。';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return '错误：MCP 服务器“$server”当前不可用。';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return '错误：MCP 服务器“$server”连接失败或未返回任何工具，请检查服务器配置。';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return '真实工具“$tool”在此服务器上的调用名为“$alias”。';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return '同名工具“$tool”由多个 MCP 服务器提供；请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return '错误：真实工具“$tool”存在名称冲突，请使用上面列出的调用名。';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return '错误：MCP 服务器“$server”没有名为“$tool”的工具。';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return '该服务器可用的工具：$tools。请改用这些工具名调用。';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return '错误：MCP 工具“$tool”当前使用了冲突别名。请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return '错误：工具“$tool”已停用。';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return '错误：未知工具“$tool”';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => '未找到相关结果';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable => '暂不可用';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '（MCP 服务器 $server）';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults => '未返回可解析的搜索结果';
+
+  @override
+  String get toolResultSearchTitleLabel => '标题';
+
+  @override
+  String get toolResultSearchContentLabel => '内容';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return '错误：$provider API Key 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return '错误：$provider 实例 URL 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return '错误：$provider 请求失败 (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return '错误：$provider 请求失败：$detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return '错误：未知的 HTTP 工具“$provider”';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return '错误：MCP 服务器“$server”未连接。';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return '错误：MCP 工具“$tool”无响应。';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return '错误：$detail';
+  }
+
+  @override
+  String get httpToolBraveDescription =>
+      '使用 Brave Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolBochaDescription =>
+      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolSearxngDescription =>
+      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
+
+  @override
+  String get httpToolSearchQueryDescription => '搜索关键词。';
+
+  @override
+  String get httpToolSearchCountDescription => '返回结果数量。';
+
+  @override
+  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive => '所选的 .apkg 文件已损坏或不是有效的压缩包。';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      '同步服务器响应无效或不完整。请确认服务器支持 Anki sync v10。';
+
+  @override
+  String get ankiSyncStatusLoginRequired => '请先登录 Anki 同步账户，再继续操作。';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl => '请输入有效的 HTTP 或 HTTPS 同步服务器地址。';
+
+  @override
+  String get ankiSyncStatusHttpsRequired => '远程自建同步服务器必须使用 HTTPS。';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout => '同步请求超时。请检查服务器地址和网络后重试。';
+
+  @override
+  String get ankiSyncStatusTlsFailure => '无法验证服务器证书。请检查证书或配置自定义 CA。';
+
+  @override
+  String get ankiSyncStatusConnectionFailure => '无法连接到同步服务器。请检查服务器地址和网络。';
+
+  @override
+  String get ankiSyncStatusRequestFailure => '同步请求失败。请检查服务器和网络后重试。';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return '同步服务器返回了 HTTP $statusCode。';
+  }
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return '同步响应超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String get ankiSyncStatusLocalFileFailure => '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt => '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
+  @override
+  String get emojiCategorySmileys => '表情';
+
+  @override
+  String get emojiCategoryPeople => '人物';
+
+  @override
+  String get emojiCategoryAnimals => '动物';
+
+  @override
+  String get emojiCategoryFood => '食物';
+
+  @override
+  String get emojiCategoryActivities => '活动';
+
+  @override
+  String get emojiCategoryTravel => '旅行';
+
+  @override
+  String get emojiCategoryObjects => '物品';
+
+  @override
+  String get emojiCategorySymbols => '符号';
+
+  @override
+  String get emojiCategoryFlags => '旗帜';
+
+  @override
+  String get languageNameSpanish => '西班牙语';
+
+  @override
+  String get languageNameJapanese => '日语';
+
+  @override
+  String get languageNameFrench => '法语';
+
+  @override
+  String get languageNameGerman => '德语';
+
+  @override
+  String get languageNameArabic => '阿拉伯语';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
+  }
+
+  @override
+  String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      '请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -10408,6 +11451,18 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   AppLocalizationsZhCn() : super('zh_CN');
 
   @override
+  String get galleryPermissionTitle => '需要访问相册';
+
+  @override
+  String get galleryPermissionMessage => '请在系统设置中允许 Stroom 访问照片和视频。';
+
+  @override
+  String get galleryPermissionCancel => '取消';
+
+  @override
+  String get galleryPermissionOpenSettings => '打开设置';
+
+  @override
   String get languageSettingsTitle => '语言';
 
   @override
@@ -10433,6 +11488,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get languageNameChinese => '简体中文';
+
+  @override
+  String get languageNameKorean => '韩语';
+
+  @override
+  String get languageNamePortuguese => '葡萄牙语（巴西）';
 
   @override
   String get languageSearchHint => '搜索语言';
@@ -10562,6 +11623,24 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get builtInPromptMarketTitle => '助手市场';
+
+  @override
+  String get assistantAddTitle => '添加助手';
+
+  @override
+  String get assistantBuiltInTab => '内置助手';
+
+  @override
+  String get assistantImportTab => '导入助手';
+
+  @override
+  String get assistantBuiltInHint => '浏览可直接使用的内置助手，点击条目可预览后再添加。';
+
+  @override
+  String get assistantImportHint => '连接远程助手目录，或通过助手文件 URL 导入。';
+
+  @override
+  String get assistantImportAction => '连接目录或导入文件';
 
   @override
   String get builtInPromptClose => '关闭';
@@ -10762,6 +11841,31 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get taskFlowUseTemplate => '使用';
 
   @override
+  String get taskFlowOcrInputMissing => '找不到图片文件，请重新选择图片。';
+
+  @override
+  String get taskFlowOcrInputReadFailed => '无法读取图片文件，请检查文件访问权限后重试。';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR 请求大小预算（$size MiB）';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return '任务流图片输入上限（$size MiB）';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return '图片超过$limit，请缩小图片后重试。';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => '纯文本模板';
 
   @override
@@ -10790,7 +11894,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
       '请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 \$...\$，独立公式使用 \$\$...\$\$。只返回转录结果，不添加说明或推断。';
 
   @override
-  String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+  String get ocrDefaultImagesOnly => '默认（不添加自定义指令；仍使用默认 OCR 提示）';
 
   @override
   String get ocrDefaultSystemPrompt =>
@@ -10857,7 +11961,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrInstructionManageGuidance =>
-      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+      '这些指令适用于所有识别模型。未选择指令时，不会添加自定义指令；仍会使用默认 OCR 提示。';
 
   @override
   String get ocrInstructionManageEmpty => '暂无指令';
@@ -11253,6 +12357,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return '检查助手更新失败：$error';
+  }
+
+  @override
   String get aboutPrivacyContent =>
       'Stroom 尊重并保护所有使用服务用户的个人隐私权。\n\n1. 相机权限：仅用于拍摄照片，不会收集或上传任何图像数据。\n\n2. 相册权限：仅用于选择照片和保存照片，所有照片都保存在本地设备。\n\n3. 数据安全：所有拍摄的照片都保存在您的设备本地，我们不会访问或上传任何数据。\n\n4. 第三方服务：本应用不包含任何第三方分析或广告服务。\n\n如果您有任何疑问，请联系我们。';
 
@@ -11412,6 +12521,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get updateDownloading => '正在下载更新...';
 
   @override
+  String get updateCancelDownload => '取消下载';
+
+  @override
+  String get updateDownloadInBackground => '后台下载';
+
+  @override
   String updateCheckNetworkError(Object details) {
     return '网络错误：$details';
   }
@@ -11467,6 +12582,24 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get updateApkInstallerUnavailable => '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied => '请在系统设置中允许 Stroom 安装未知来源应用。';
+
+  @override
+  String get updateRestartDialogTitle => '更新检测';
+
+  @override
+  String get updateRestartDialogBody => '检测到应用已更新，建议重启应用以确保稳定性。';
+
+  @override
+  String get updateRestartDialogLater => '稍后重启';
+
+  @override
+  String get updateRestartDialogNow => '立即重启';
 
   @override
   String get contextCompactionHistoryIntro => '以下是需要压缩的对话历史：';
@@ -11724,7 +12857,41 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get conversationTemporary => '临时对话';
 
   @override
+  String get conversationSetTemporary => '设为临时对话';
+
+  @override
   String get conversationCloseTemporary => '关闭临时对话';
+
+  @override
+  String get conversationKeep => '保留对话';
+
+  @override
+  String get conversationTemporaryStatus => '临时';
+
+  @override
+  String get conversationTemporaryWarning => '即将过期';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      '此对话将在一小时后删除。发送消息会重新计时。关闭临时模式即可保留对话。';
+
+  @override
+  String get conversationEnableTemporary => '开启临时模式';
+
+  @override
+  String get chatLoadingConversation => '正在加载对话…';
+
+  @override
+  String get chatEmptyConversation => '发送消息以开始对话。';
+
+  @override
+  String get chatNoActiveConversation => '请选择或新建对话以开始聊天。';
+
+  @override
+  String get chatConversationLoadError => '无法加载此对话。';
+
+  @override
+  String get chatRetryLoadConversation => '重试';
 
   @override
   String get taskListTitle => '任务列表';
@@ -11752,6 +12919,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
+
+  @override
+  String get unifiedTaskListConfirmClearCompletedMessage =>
+      '确定要清除所有已完成任务吗？此操作不可撤销。';
 
   @override
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
@@ -12273,6 +13444,35 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatDataDetails => '数据详情';
+
+  @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR 诊断';
+
+  @override
+  String get chatErrorDetailRequestUrl => '请求 URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => '请求标头';
+
+  @override
+  String get chatErrorDetailRequestBody => '请求正文';
+
+  @override
+  String get chatErrorDetailStatusCode => '状态码';
+
+  @override
+  String get chatErrorDetailResponseHeaders => '响应标头';
+
+  @override
+  String get chatErrorDetailResponseBody => '响应正文';
+
+  @override
+  String get chatErrorDetailEmpty => '暂无详细信息';
+
+  @override
+  String chatErrorDetailOmittedContentMarker(int count) {
+    return '[中间内容已省略，共 $count 字]';
+  }
 
   @override
   String get chatAudioPreviewClose => '关闭';
@@ -13037,6 +14237,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get unifiedTaskSynthesisText => '合成文本';
 
   @override
+  String get unifiedTaskViewFullSynthesisText => '查看完整合成文本';
+
+  @override
   String get unifiedTaskStatus => '状态';
 
   @override
@@ -13130,6 +14333,74 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get catcatchSkipped => '已跳过（无需处理）';
+
+  @override
+  String catCatchDetailMediaResources(Object count) {
+    return '获取到$count个媒体资源';
+  }
+
+  @override
+  String catCatchDetailResources(Object count) {
+    return '获取到$count个资源';
+  }
+
+  @override
+  String catCatchDetailBrowserResources(Object count) {
+    return '浏览器中获取到$count个资源';
+  }
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return '获取到$total个资源（播放列表$segments个分段）';
+  }
+
+  @override
+  String catCatchDetailChooseResource(Object count) {
+    return '共$count个资源，请用户选择';
+  }
+
+  @override
+  String get catCatchDetailAutoSelectFirst => '自动选择第1个结果，进入下载';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining => '剩余1个结果，自动进入下载';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) {
+    return '.$extension 格式无需转换，已跳过';
+  }
+
+  @override
+  String get catCatchDetailSkipNoExtension => '. 格式无需转换，已跳过';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) {
+    return '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+  }
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return '按时长$duration筛选，$count个资源全部匹配';
+  }
+
+  @override
+  String catCatchDurationHours(Object count) {
+    return '$count小时';
+  }
+
+  @override
+  String catCatchDurationMinutes(Object count) {
+    return '$count分钟';
+  }
+
+  @override
+  String catCatchDurationSeconds(Object count) {
+    return '$count秒';
+  }
 
   @override
   String get catcatchRetryStep => '重试此步骤';
@@ -13324,6 +14595,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get topicItemPin => '置顶';
 
   @override
+  String get topicItemMarkUnread => '标记为未读';
+
+  @override
+  String get topicItemMarkRead => '标记为已读';
+
+  @override
   String get topicItemRename => '重命名';
 
   @override
@@ -13349,6 +14626,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get appMediaUnreadable => '无法读取文件';
+
+  @override
+  String appMediaLoadError(Object error) {
+    return '加载文件失败：$error';
+  }
 
   @override
   String appMediaClearSelection(Object count) {
@@ -13820,6 +15102,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get folderPickerSubfolders => '子文件夹';
+
+  @override
+  String get folderPickerNoFolders => '没有文件夹';
 
   @override
   String get folderPickerExistingFolders => '现有文件夹';
@@ -15056,7 +16341,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerCompressionAdpcm => 'ADPCM（约 4 倍压缩）';
 
   @override
-  String get providerCompressionFlac => 'FLAC（无损，约 2 倍）';
+  String get providerCompressionFlac => 'FLAC（无损，约 2 倍，推荐）';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -15204,7 +16489,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerPreprocessing => '音频预处理';
 
   @override
-  String get providerPreprocessingHelp => '降低音频文件大小，不影响转写准确率。';
+  String get providerPreprocessingHelp => '降低音频文件大小，但重采样可能会改变音频并影响转写准确率。';
 
   @override
   String get providerPreprocessingMethod => '预处理方式';
@@ -15260,11 +16545,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerPreprocessNone => '无';
 
   @override
-  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道）';
+  String get providerPreprocessResample => 'WAV 重采样（16 kHz 单声道）';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。';
+      '重采样至 16 kHz 并混合为单声道；此操作可能会改变音频。';
 
   @override
   String get providerPreprocessNoneHelp => '不进行预处理，原样发送。';
@@ -16289,6 +17574,27 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerBuiltinBadge => '内置';
 
   @override
+  String get providerBuiltinTtsName => 'TTS（文本转语音）';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM（大语言模型）';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR（光学字符识别）';
+
+  @override
+  String get providerBuiltinAsrName => 'STT（语音转文本）';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP（模型上下文协议）';
+
+  @override
+  String get providerBuiltinSearchGroupName => '搜索';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => '其他 MCP 服务';
+
+  @override
   String get providerConnectivityTest => '连通性测试';
 
   @override
@@ -16531,6 +17837,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get paramTypeJsonLabel => 'JSON';
 
   @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return '不支持的类型：$type';
+  }
+
+  @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return '参数“$name”使用了不支持的类型“$type”，请替换为支持的类型或删除该参数后再保存。';
+  }
+
+  @override
   String get paramTypeStringHint => '例如: cheerful';
 
   @override
@@ -16550,6 +17866,33 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ankiBrowseCardsTooltip => '浏览卡片';
+
+  @override
+  String get ankiStatsTotalCards => '总卡片数';
+
+  @override
+  String get ankiStatsNewCards => '待学习';
+
+  @override
+  String get ankiStatsLearning => '学习中';
+
+  @override
+  String get ankiStatsDueForReview => '待复习';
+
+  @override
+  String get ankiStatsReviewHistory => '历史复习次数';
+
+  @override
+  String get ankiStatsLearningProgress => '学习进度';
+
+  @override
+  String get ankiStatsReviewRate => '复习率';
+
+  @override
+  String get ankiBrowserSearchHint => '搜索卡片...';
+
+  @override
+  String get ankiBrowserEmpty => '无卡片';
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb 同步';
@@ -16760,6 +18103,18 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ankiSyncStatusLoginSuccess => '登录成功。密码未保存，同步密钥已加密保存。';
+
+  @override
+  String get ankiSyncLoginSuccessPromptTitle => '登录成功';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage => '现在同步收藏集吗？';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => '立即同步';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => '继续使用';
 
   @override
   String get ankiSyncStatusLoginSuccessNoSave =>
@@ -19467,6 +20822,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String bgTaskOcrRequestSizeExceeded(int encodedBytes, int budgetBytes) {
+    return 'OCR 请求 JSON 大小为 $encodedBytes 字节，超过配置的 $budgetBytes 字节上限。';
+  }
+
+  @override
   String bgTaskOcrError(String details) {
     return 'OCR识别失败：$details';
   }
@@ -19945,6 +21305,37 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get startupSafetyUpdateButton => '更新应用';
 
   @override
+  String get startupSafetyRollbackButton => '恢复到之前的版本';
+
+  @override
+  String get startupSafetyRollbackNoCandidate =>
+      '没有找到记录版本的直接安装包。请先导出数据，再手动安装该版本。';
+
+  @override
+  String get startupSafetyRollbackRecommended => '更新失败前记录的推荐版本';
+
+  @override
+  String get startupSafetyRollbackReleaseNotes => '版本说明';
+
+  @override
+  String get startupSafetyRollbackNoReleaseNotes => '没有可用的版本说明。';
+
+  @override
+  String get startupSafetyRollbackConfirmTitle => '确认恢复版本';
+
+  @override
+  String startupSafetyRollbackConfirmMessage(String version) {
+    return '即将下载并打开版本 $version。请先导出数据。操作系统可能会拒绝安装较旧版本，Stroom 不会绕过安装器限制。';
+  }
+
+  @override
+  String get startupSafetyRollbackContinue => '继续';
+
+  @override
+  String get startupSafetyUpdateAttemptUnavailable =>
+      '无法记录本次更新尝试，因此没有启动安装程序。请检查存储权限后重试。';
+
+  @override
   String get startupSafetyCheckingUpdates => '正在检查更新...';
 
   @override
@@ -20110,6 +21501,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get appLogDelete => '删除';
 
   @override
+  String get appLogDeleteUnconfirmed => '无法确认删除结果。';
+
+  @override
   String get appLogConfirmDeleteTitle => '确认删除';
 
   @override
@@ -20186,6 +21580,92 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get appLogCopyDone => '已复制全部日志内容';
+
+  @override
+  String get appLogSettings => '日志设置';
+
+  @override
+  String get appLogSettingsTitle => '应用日志设置';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count 个文件 · 已用 $size';
+  }
+
+  @override
+  String get appLogRetentionDays => '保留期限';
+
+  @override
+  String appLogDays(int count) {
+    return '$count 天';
+  }
+
+  @override
+  String get appLogMinimumLevel => '记录详细度';
+
+  @override
+  String get appLogStorageLimit => '日志空间上限';
+
+  @override
+  String get appLogUnlimited => '不限制';
+
+  @override
+  String get appLogSettingsHelp => '超出保留期限或空间上限的旧日志会自动清理；当前小时的日志文件会保留。';
+
+  @override
+  String get appLogSettingsSaved => '日志设置已保存';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return '保存日志设置失败：$error';
+  }
+
+  @override
+  String get appLogSave => '保存';
+
+  @override
+  String get appLogLevelDebug => '调试 · 最详细';
+
+  @override
+  String get appLogLevelInfo => '信息';
+
+  @override
+  String get appLogLevelWarning => '警告';
+
+  @override
+  String get appLogLevelError => '错误';
+
+  @override
+  String get appLogFilter => '筛选日志';
+
+  @override
+  String get appLogSearch => '关键词';
+
+  @override
+  String get appLogSource => '来源';
+
+  @override
+  String get appLogLevel => '级别';
+
+  @override
+  String get appLogAnyLevel => '全部级别';
+
+  @override
+  String get appLogFromTime => '开始时间';
+
+  @override
+  String get appLogUntilTime => '结束时间';
+
+  @override
+  String get appLogClearFilters => '清除筛选';
+
+  @override
+  String get appLogNoMatches => '没有符合筛选条件的日志';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '显示 $visible / $total 行';
+  }
 
   @override
   String get iosContinuedTaskTitle => 'Stroom 后台任务';
@@ -20799,4 +22279,610 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
   }
+
+  @override
+  String get startupErrorTitle => '应用启动失败';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get renderErrorTitle => '界面渲染异常';
+
+  @override
+  String get renderErrorDebugTitle => '界面渲染异常（调试模式）';
+
+  @override
+  String get renderErrorRestartMessage => '请尝试重启应用。';
+
+  @override
+  String get batchDlgFileName => '文件名';
+
+  @override
+  String get batchDlgFolderName => '文件夹名';
+
+  @override
+  String get batchDlgFileNameConflict => '同一文件夹内存在同名文件';
+
+  @override
+  String get batchDlgFolderNameConflict => '目标位置已存在同名文件夹';
+
+  @override
+  String get batchDlgFolderNameSwapConflict => '文件夹之间不能在同一批次互换名称';
+
+  @override
+  String get batchDlgControlCharacterError => '名称不能包含控制字符';
+
+  @override
+  String get batchDlgNameWhitespaceError => '名称不能以空白开头或结尾，可添加空白清理规则';
+
+  @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind不能为空';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind不能以空白结尾';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind不能超过$count个字符';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind不能包含 Windows 非法字符';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind不能以 . 结尾';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind不能使用 Windows 保留名称';
+  }
+
+  @override
+  String get batchDlgIntermediateNameTooLong => '中间名称过长，请调整规则';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return '该项目没有$date，请调整模板';
+  }
+
+  @override
+  String get batchDlgCreatedDate => '创建时间';
+
+  @override
+  String get batchDlgModifiedDate => '修改时间';
+
+  @override
+  String get connectivityTestHttpSuccess => 'HTTP 工具请求成功';
+
+  @override
+  String get connectivityTestHttpFailure => 'HTTP 工具请求失败';
+
+  @override
+  String get connectivityTestInvalidMcpConfig => 'MCP 配置无效';
+
+  @override
+  String get connectivityTestMissingTransport => '缺少有效的传输类型配置。';
+
+  @override
+  String get connectivityTestStdioUnsupported => '当前平台不支持 stdio';
+
+  @override
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。';
+
+  @override
+  String get connectivityTestInvalidContent => '测试内容无效';
+
+  @override
+  String get connectivityTestMethodMustBeString => 'method 必须是字符串。';
+
+  @override
+  String get connectivityTestUnsupportedMethod => '不支持的测试方法';
+
+  @override
+  String get connectivityTestReadOnlyMethodOnly =>
+      '为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。';
+
+  @override
+  String get connectivityTestParamsMustBeObject => 'params 必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestMcpConnectionFailed => '无法连接 MCP 服务';
+
+  @override
+  String get connectivityTestCheckConnectionSettings =>
+      '请检查地址、认证信息和网络，或查看应用日志获取连接详情。';
+
+  @override
+  String get connectivityTestRemainingToolsOmitted => '；其余工具已省略';
+
+  @override
+  String get connectivityTestMcpSuccess => 'MCP 连通性测试成功';
+
+  @override
+  String connectivityTestToolNames(Object names) {
+    return '：$names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return '连接及 tools/list 请求成功，共发现 $count 个工具$names$suffix。';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked => '测试参数会修改待办数据';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      '为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。';
+
+  @override
+  String get connectivityTestUnknownBuiltin => '未知的内置工具';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return '找不到工具“$toolName”的测试执行器。';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => '内置工具测试成功';
+
+  @override
+  String get connectivityTestBuiltinFailure => '内置工具测试失败';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired => '测试内容顶层必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestRequestTimeout => '请求超时，请检查服务响应和网络。';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP 请求超时：$method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '…（结果已截断）';
+
+  @override
+  String get toolResultWebSearchEmptyQuery => '错误：搜索关键词不能为空。';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return '错误：不支持的搜索引擎“$source”。可选值：google、bing、baidu。';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return '首选引擎 $preferred $reason，已切换到 $fallback。';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound => '未找到相关搜索结果。';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return '未找到相关搜索结果（$sources 均明确返回无结果）。';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return '搜索不完整：$sources 明确返回无结果；其他引擎不可用或返回了无法解析的页面：$failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return '错误：所有搜索引擎均不可用。$failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return '来自 $source 的搜索结果：';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => '链接';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => '摘要';
+
+  @override
+  String get toolResultWebSearchEmptyResults => '未找到相关搜索结果。';
+
+  @override
+  String get toolResultTodoInvalid => '错误：todos 参数必须是数组（省略或传 null 表示读取待办列表）。';
+
+  @override
+  String get toolResultTodoEmpty => '当前没有待办事项。';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return '$count 个待办事项未完成';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return '错误：MCP 服务器“$server”重新连接失败。';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return '错误：MCP 服务器“$server”当前不可用。';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return '错误：MCP 服务器“$server”连接失败或未返回任何工具，请检查服务器配置。';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return '真实工具“$tool”在此服务器上的调用名为“$alias”。';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return '同名工具“$tool”由多个 MCP 服务器提供；请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return '错误：真实工具“$tool”存在名称冲突，请使用上面列出的调用名。';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return '错误：MCP 服务器“$server”没有名为“$tool”的工具。';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return '该服务器可用的工具：$tools。请改用这些工具名调用。';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return '错误：MCP 工具“$tool”当前使用了冲突别名。请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return '错误：工具“$tool”已停用。';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return '错误：未知工具“$tool”';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => '未找到相关结果';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable => '暂不可用';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '（MCP 服务器 $server）';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults => '未返回可解析的搜索结果';
+
+  @override
+  String get toolResultSearchTitleLabel => '标题';
+
+  @override
+  String get toolResultSearchContentLabel => '内容';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return '错误：$provider API Key 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return '错误：$provider 实例 URL 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return '错误：$provider 请求失败 (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return '错误：$provider 请求失败：$detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return '错误：未知的 HTTP 工具“$provider”';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return '错误：MCP 服务器“$server”未连接。';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return '错误：MCP 工具“$tool”无响应。';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return '错误：$detail';
+  }
+
+  @override
+  String get httpToolBraveDescription =>
+      '使用 Brave Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolBochaDescription =>
+      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolSearxngDescription =>
+      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
+
+  @override
+  String get httpToolSearchQueryDescription => '搜索关键词。';
+
+  @override
+  String get httpToolSearchCountDescription => '返回结果数量。';
+
+  @override
+  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive => '所选的 .apkg 文件已损坏或不是有效的压缩包。';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      '同步服务器响应无效或不完整。请确认服务器支持 Anki sync v10。';
+
+  @override
+  String get ankiSyncStatusLoginRequired => '请先登录 Anki 同步账户，再继续操作。';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl => '请输入有效的 HTTP 或 HTTPS 同步服务器地址。';
+
+  @override
+  String get ankiSyncStatusHttpsRequired => '远程自建同步服务器必须使用 HTTPS。';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout => '同步请求超时。请检查服务器地址和网络后重试。';
+
+  @override
+  String get ankiSyncStatusTlsFailure => '无法验证服务器证书。请检查证书或配置自定义 CA。';
+
+  @override
+  String get ankiSyncStatusConnectionFailure => '无法连接到同步服务器。请检查服务器地址和网络。';
+
+  @override
+  String get ankiSyncStatusRequestFailure => '同步请求失败。请检查服务器和网络后重试。';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return '同步服务器返回了 HTTP $statusCode。';
+  }
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return '同步响应超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String get ankiSyncStatusLocalFileFailure => '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt => '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
+  @override
+  String get emojiCategorySmileys => '表情';
+
+  @override
+  String get emojiCategoryPeople => '人物';
+
+  @override
+  String get emojiCategoryAnimals => '动物';
+
+  @override
+  String get emojiCategoryFood => '食物';
+
+  @override
+  String get emojiCategoryActivities => '活动';
+
+  @override
+  String get emojiCategoryTravel => '旅行';
+
+  @override
+  String get emojiCategoryObjects => '物品';
+
+  @override
+  String get emojiCategorySymbols => '符号';
+
+  @override
+  String get emojiCategoryFlags => '旗帜';
+
+  @override
+  String get languageNameSpanish => '西班牙语';
+
+  @override
+  String get languageNameJapanese => '日语';
+
+  @override
+  String get languageNameFrench => '法语';
+
+  @override
+  String get languageNameGerman => '德语';
+
+  @override
+  String get languageNameArabic => '阿拉伯语';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
+  }
+
+  @override
+  String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
+
+  @override
+  String get ocrSamplingTemperatureOutOfRange =>
+      '已保存的温度值超出 0–2 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingTopPOutOfRange =>
+      '已保存的 top-P 值超出 0–1 范围。请调整滑块，或在保存前关闭此选项。';
+
+  @override
+  String get ocrSamplingSliderRepairRequired => '保存前请调整所有超出范围的采样参数滑块，或关闭相应选项。';
+
+  @override
+  String get endpointResponsesApi => 'OpenAI Responses API';
+
+  @override
+  String get providerResponsesEndpointHelp =>
+      '请填写此供应商配置的 Responses API 地址，例如 /v1/responses；Stroom 会按原样请求该地址。';
 }

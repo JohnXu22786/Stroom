@@ -1,0 +1,7 @@
+# Connectivity test saved status
+
+`ConnectivityTestDialog` is opened from both provider configuration and built-in tool details. Its saved state previously placed the localized confirmation beside a fixed icon in a `Row` without giving the text a finite width. In a de-DE widget test at 320 × 640 and 1.8× text scale, the row caused a 364 px horizontal `RenderFlex` overflow. The label now receives the remaining row width through `Expanded` and uses the shared `ConstrainedText`; its complete localized value, original primary color, icon, and leading alignment are preserved.
+
+The primary acceptance capture is the [production dialog at de-DE and normal 1× text scale](german-saved-320x640-dpr1-text1_0.png), rendered at 320 × 640 CSS pixels and device-pixel ratio 1 in light theme. The saved label is fully visible and stationary at this size. The [1.8× supporting capture](german-saved-320x640-dpr1-text1_8.png) shows the narrow large-text state, and the [playable 1.8× reveal](german-saved-status-reveal.webm) shows the same production component moving the full saved label inside its finite slot. The local fixture's save callback completes without a provider/network request; Chromium reported no page errors.
+
+`tests/widgets/connectivity_test_dialog_test.dart` measures the long German string against its actual slot, checks the icon and absence of layout exceptions, and confirms that a fitting English label has enough room in dark theme. Existing dialog tests continue to cover JSON editing, save/run state, and returned response content.

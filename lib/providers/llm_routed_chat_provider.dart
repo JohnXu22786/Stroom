@@ -19,7 +19,6 @@ import '../services/clova_studio_protocol.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
-      kAntigravityProtocolId => const {'antigravity'},
       'clova.studio.chat' => const {'clova-studio'},
       'amazon-q.chat' => const {'amazon-q'},
       'oneminai.chat' => const {'oneminai'},
@@ -162,20 +161,7 @@ String llmRoutedChatProtocolForAccountModel({
   String? apiProtocolOverride,
 }) {
   if (account.connectorType == 'antigravity') {
-    final model = account.models
-        .where((item) => item.upstreamModelId == upstreamModelId)
-        .firstOrNull;
-    final configured = apiProtocolOverride ??
-        model?.config['apiProtocolOverride'] ??
-        account.endpointConfig['apiProtocol'] ??
-        apiProtocol ??
-        apiProtocolFromLegacyEndpointType(endpointType);
-    if (configured is String &&
-        configured.isNotEmpty &&
-        configured != kAntigravityProtocolId) {
-      throw StateError('Antigravity uses its provider-native protocol.');
-    }
-    return kAntigravityProtocolId;
+    throw StateError('Antigravity has no supported public inference route.');
   }
   if (account.connectorType == 'clova-studio') {
     return kClovaStudioProtocolId;

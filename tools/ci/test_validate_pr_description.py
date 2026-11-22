@@ -26,6 +26,14 @@ class ValidatePrDescriptionTest(unittest.TestCase):
 
         self.assertEqual(validate_pr_body(body), [])
 
+    def test_accepts_the_ui_consistency_heading_from_the_pr_template(self):
+        body = VALID_BODY + (
+            "\n## UI consistency (when UI is affected)\n"
+            "- [x] Checked the responsive layout and screenshot.\n"
+        )
+
+        self.assertEqual(validate_pr_body(body), [])
+
     def test_accepts_the_standard_english_change_type_labels(self):
         labels = (
             "Bug fix",

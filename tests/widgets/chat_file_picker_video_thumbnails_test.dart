@@ -41,6 +41,84 @@ void main() {
   }
 
   group('ChatFilePickerDialog video thumbnails', () {
+    testWidgets(
+      'video picker preserves identity for same-named videos in different folders',
+      (tester) async {
+        final firstBytes = Uint8List.fromList([1, 2, 3]);
+        final secondBytes = Uint8List.fromList([4, 5, 6, 7]);
+        await VideoManifest.writeFile('first_hash.mp4', firstBytes);
+        await VideoManifest.writeFile('second_hash.mov', secondBytes);
+        await VideoManifest.addRecord(
+          VideoRecord(
+            id: 'first-video',
+            name: 'duplicate',
+            hash: 'first_hash',
+            format: 'mp4',
+            createdAt: DateTime(2024),
+            size: firstBytes.length,
+            folder: 'first-folder',
+            duration: 1000,
+          ),
+        );
+        await VideoManifest.addRecord(
+          VideoRecord(
+            id: 'second-video',
+            name: 'duplicate',
+            hash: 'second_hash',
+            format: 'mov',
+            createdAt: DateTime(2025),
+            size: secondBytes.length,
+            folder: 'second-folder',
+            duration: 2000,
+          ),
+        );
+
+        List<VideoPickerResult>? result;
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showAppVideoPickerDialog(context);
+                },
+                child: const Text('Open Video Picker'),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Open Video Picker'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('second-folder'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('duplicate').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('media_picker_back_item')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('first-folder'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('duplicate').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(result, hasLength(2));
+        expect(result![0].bytes, orderedEquals(secondBytes));
+        expect(result![0].record.id, 'second-video');
+        expect(result![0].record.folder, 'second-folder');
+        expect(result![0].record.format, 'mov');
+        expect(result![0].record.duration, 2000);
+        expect(result![1].bytes, orderedEquals(firstBytes));
+        expect(result![1].record.id, 'first-video');
+        expect(result![1].record.folder, 'first-folder');
+        expect(result![1].record.format, 'mp4');
+        expect(result![1].record.duration, 1000);
+      },
+    );
+
     for (final (locale, title, empty) in [
       (const Locale('en', 'US'), 'Choose app videos', 'No videos available'),
       (const Locale('zh', 'CN'), '选择应用内视频', '暂无视频'),

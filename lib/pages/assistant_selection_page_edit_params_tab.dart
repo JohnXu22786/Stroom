@@ -209,7 +209,11 @@ Widget _buildEditParamsTab({
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.assistantRoundsLabel,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.assistantRoundsLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -288,7 +292,11 @@ Widget _buildEditParamsTab({
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
               decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.assistantSeedValue,
+                label: ConstrainedText(
+                  AppLocalizations.of(context)!.assistantSeedValue,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 hintText:
                     AppLocalizations.of(context)!.assistantIntegerSeedHint,
                 border: OutlineInputBorder(),
@@ -316,11 +324,18 @@ Widget _buildEditParamsTab({
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Text(
-                AppLocalizations.of(context)!.chatCustomParameters,
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.chatCustomParameters,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.add_circle_outline, size: 20),
                 tooltip: AppLocalizations.of(context)!.assistantAddParameter,

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/update_dialog.dart';
 
 /// Wraps the given [notifier] and shows [UpdateDialog] via [showDialog],
@@ -15,12 +16,22 @@ Future<void> _showDialog({
   required WidgetTester tester,
   required UpdateNotifier notifier,
   Locale locale = const Locale('zh', 'CN'),
+  Size? size,
+  ThemeData? theme,
 }) async {
+  if (size != null) {
+    await tester.binding.setSurfaceSize(size);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [updateProvider.overrideWith((ref) => notifier)],
       child: MaterialApp(
         locale: locale,
+        theme: theme,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
@@ -93,8 +104,345 @@ String _githubRelease(
 ''';
 }
 
+void _expectStatusClips(WidgetTester tester, Finder status) {
+  final widget = tester.widget<ConstrainedText>(status);
+  final context = tester.element(status);
+  final painter = TextPainter(
+    text: TextSpan(
+      text: widget.data,
+      style: DefaultTextStyle.of(context).style.merge(widget.style),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.localeOf(context),
+    maxLines: widget.maxLines,
+  )..layout();
+
+  expect(painter.width, greaterThan(tester.getSize(status).width));
+}
+
 void main() {
   group('UpdateDialog - Shared Dialog', () {
+    testWidgets('bounds the completed download status at large text scale', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          downloadComplete: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('de', 'DE'),
+        size: const Size(320, 640),
+        theme: ThemeData.light(),
+      );
+
+      final status = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == 'Download abgeschlossen',
+      );
+      expect(status, findsOneWidget);
+      _expectStatusClips(tester, status);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('bounds the installing status at large text scale', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          downloadComplete: true,
+          isInstalling: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('de', 'DE'),
+        size: const Size(320, 640),
+        theme: ThemeData.dark(),
+      );
+
+      final status = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText && widget.data == 'Wird installiert…',
+      );
+      expect(status, findsOneWidget);
+      _expectStatusClips(tester, status);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does not expose manual release selection', (tester) async {
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          latestVersion: '0.5.5',
+          releaseNotes: 'Latest fixes',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          availableVersions: [
+            const AvailableUpdate(
+              version: '0.5.5',
+              releaseNotes: 'Latest fixes',
+              downloadUrl: 'https://example.com/latest.zip',
+            ),
+            const AvailableUpdate(
+              version: '0.5.4',
+              releaseNotes: 'Older fixes',
+              downloadUrl: 'https://example.com/older.zip',
+            ),
+          ],
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+      );
+
+      expect(find.text('Latest version: 0.5.5'), findsOneWidget);
+      expect(find.text('v0.5.5'), findsNothing);
+      expect(find.text('v0.5.4'), findsNothing);
+      expect(find.text('Older fixes'), findsNothing);
+      expect(find.text('Update now'), findsOneWidget);
+      await tester.tap(find.text('Remind me later'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows byte progress and fixed cancel/background actions', (
+      tester,
+    ) async {
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          isDownloading: true,
+          downloadProgress: 0.5,
+          downloadReceivedBytes: 512,
+          downloadTotalBytes: 1024,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+      );
+
+      expect(find.text('512 B / 1.0 KB  ·  50%'), findsOneWidget);
+      expect(find.text('Cancel download'), findsOneWidget);
+      expect(find.text('Download in background'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Download in background'));
+      await tester.pumpAndSettle();
+      expect(notifier.state.downloadInBackground, true);
+      expect(find.byType(UpdateDialog), findsNothing);
+    });
+
+    testWidgets('download actions fit narrow dark dialogs with larger text', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          isDownloading: true,
+          downloadProgress: 0.5,
+          downloadReceivedBytes: 1024,
+          downloadTotalBytes: 2048,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+        size: const Size(280, 760),
+        theme: ThemeData.dark(),
+      );
+
+      expect(find.text('Cancel download'), findsOneWidget);
+      expect(find.text('Download in background'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('download actions use the selected locale', (tester) async {
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: '0.5.5',
+          downloadUrl: 'https://example.com/latest.zip',
+          updateAvailable: true,
+          isDownloading: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('es', 'ES'),
+        size: const Size(900, 800),
+      );
+
+      expect(find.text('Cancelar descarga'), findsOneWidget);
+      expect(find.text('Descargar en segundo plano'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('phone layout gives the primary action a full-width target', (
+      tester,
+    ) async {
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          latestVersion: 'v0.5.5',
+          releaseNotes: List.filled(
+            20,
+            'A long release note that needs a readable scrolling area. ',
+          ).join(),
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.5.5/Stroom.apk',
+          updateAvailable: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+        size: const Size(390, 844),
+      );
+
+      final primaryAction = find.ancestor(
+        of: find.text('Update now'),
+        matching: find.byType(FilledButton),
+      );
+      final actionArea = find
+          .ancestor(
+            of: primaryAction,
+            matching: find.byType(OverflowBar),
+          )
+          .first;
+      final primaryRect = tester.getRect(primaryAction);
+      expect(
+        primaryRect.width,
+        greaterThanOrEqualTo(tester.getSize(actionArea).width * 0.65),
+      );
+      expect(
+        primaryRect.bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(AlertDialog)).bottom),
+      );
+
+      await tester.tap(find.text('Remind me later'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('very narrow phones stack all actions without wrapping', (
+      tester,
+    ) async {
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          latestVersion: 'v0.5.5',
+          releaseNotes: List.filled(
+            20,
+            'A long release note with a URL that needs a readable scrolling area. ',
+          ).join(),
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.5.5/Stroom.apk',
+          updateAvailable: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+        size: const Size(280, 760),
+      );
+
+      final skipButton = find.ancestor(
+        of: find.text('Skip this version'),
+        matching: find.byType(TextButton),
+      );
+      final remindButton = find.ancestor(
+        of: find.text('Remind me later'),
+        matching: find.byType(TextButton),
+      );
+      final primaryButton = find.ancestor(
+        of: find.text('Update now'),
+        matching: find.byType(FilledButton),
+      );
+      final skipRect = tester.getRect(skipButton.first);
+      final remindRect = tester.getRect(remindButton.first);
+      final primaryRect = tester.getRect(primaryButton.first);
+
+      expect(skipRect.bottom, lessThanOrEqualTo(remindRect.top));
+      expect(remindRect.bottom, lessThanOrEqualTo(primaryRect.top));
+      expect(skipRect.width, greaterThanOrEqualTo(primaryRect.width * 0.9));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('larger text stacks secondary actions on a regular phone', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: 'v0.5.5',
+          releaseNotes:
+              '## What\'s Changed\n* A long release note with a URL that remains scrollable.',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.5.5/Stroom.apk',
+          updateAvailable: true,
+        ),
+      );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+        size: const Size(390, 844),
+      );
+
+      final skipRect = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Skip this version'),
+              matching: find.byType(TextButton),
+            )
+            .first,
+      );
+      final remindRect = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Remind me later'),
+              matching: find.byType(TextButton),
+            )
+            .first,
+      );
+      final primaryRect = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Update now'),
+              matching: find.byType(FilledButton),
+            )
+            .first,
+      );
+
+      expect(skipRect.bottom, lessThanOrEqualTo(remindRect.top));
+      expect(remindRect.bottom, lessThanOrEqualTo(primaryRect.top));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('labels follow the selected locale', (tester) async {
       final notifier = _setupNotifier(
         state: const UpdateState(
@@ -273,7 +621,7 @@ void main() {
       // Verify progress bar and percentage text
       expect(find.byType(LinearProgressIndicator), findsOneWidget);
       expect(find.text('正在下载更新...'), findsOneWidget);
-      expect(find.text('45%'), findsOneWidget);
+      expect(find.text('0 B'), findsOneWidget);
       // The "立即更新" button should NOT be visible during download
       expect(find.text('立即更新'), findsNothing);
       // Skip and remind buttons should NOT be visible during download
@@ -515,9 +863,9 @@ void main() {
     });
   });
 
-  group('UpdateDialog - Multi-version selection', () {
+  group('UpdateDialog - Automatic version selection', () {
     testWidgets(
-      'shows version selection list when multiple versions available',
+      'shows the provider default release without a picker',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final container = ProviderContainer(
@@ -574,15 +922,14 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Should show version selection items (prefixed with 'v' in the list)
-        expect(find.text('v0.2.16'), findsOneWidget);
-        expect(find.text('v0.2.15'), findsOneWidget);
-        // Should show the currently selected version in header
-        expect(find.textContaining('0.2.16'), findsWidgets);
+        expect(find.text('v0.2.16'), findsNothing);
+        expect(find.text('v0.2.15'), findsNothing);
+        expect(find.text('最新版本: 0.2.16'), findsOneWidget);
+        expect(notifier.state.latestVersion, '0.2.16');
       },
     );
 
-    testWidgets('tapping a version in list selects it and updates display', (
+    testWidgets('keeps the default release and URL aligned', (
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({});
@@ -640,17 +987,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The header should show the first version (0.2.16)
-      expect(find.textContaining('0.2.16'), findsWidgets);
-
-      // Tap the second version in the list (shown as 'v0.2.15')
-      await tester.tap(find.text('v0.2.15'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Now the header should show the newly selected version (0.2.15)
-      expect(notifier.state.selectedVersionIndex, 1);
-      expect(notifier.state.latestVersion, '0.2.15');
+      expect(find.text('v0.2.15'), findsNothing);
+      expect(notifier.state.selectedVersionIndex, 0);
+      expect(notifier.state.latestVersion, '0.2.16');
+      expect(notifier.state.releaseNotes, 'Version 0.2.16 notes');
+      expect(notifier.state.downloadUrl, 'https://example.com/v0.2.16.zip');
     });
 
     testWidgets('single version dialog still works (backward compat)', (

@@ -1,9 +1,22 @@
-/// A single emoji category containing a label and a list of emoji strings.
+/// Stable identity for an emoji category.
+enum EmojiCategoryType {
+  smileys,
+  people,
+  animals,
+  food,
+  activities,
+  travel,
+  objects,
+  symbols,
+  flags,
+}
+
+/// A single emoji category containing a list of emoji strings.
 class EmojiCategory {
-  final String label;
+  final EmojiCategoryType type;
   final List<String> emojis;
 
-  const EmojiCategory({required this.label, required this.emojis});
+  const EmojiCategory({required this.type, required this.emojis});
 }
 
 /// Categorized emoji collection organized by standard Unicode groups.
@@ -12,7 +25,7 @@ class EmojiCategories {
 
   static const List<EmojiCategory> categories = [
     // 表情 & 情感
-    EmojiCategory(label: '表情', emojis: [
+    EmojiCategory(type: EmojiCategoryType.smileys, emojis: [
       '😀',
       '😃',
       '😄',
@@ -148,7 +161,7 @@ class EmojiCategories {
     ]),
 
     // 人物 & 身体
-    EmojiCategory(label: '人物', emojis: [
+    EmojiCategory(type: EmojiCategoryType.people, emojis: [
       '👋',
       '🤚',
       '✋',
@@ -294,7 +307,7 @@ class EmojiCategories {
     ]),
 
     // 动物 & 自然
-    EmojiCategory(label: '动物', emojis: [
+    EmojiCategory(type: EmojiCategoryType.animals, emojis: [
       '🐶',
       '🐱',
       '🐭',
@@ -516,7 +529,7 @@ class EmojiCategories {
     ]),
 
     // 食物 & 饮品
-    EmojiCategory(label: '食物', emojis: [
+    EmojiCategory(type: EmojiCategoryType.food, emojis: [
       '🍏',
       '🍎',
       '🍐',
@@ -651,7 +664,7 @@ class EmojiCategories {
     ]),
 
     // 活动
-    EmojiCategory(label: '活动', emojis: [
+    EmojiCategory(type: EmojiCategoryType.activities, emojis: [
       '⚽',
       '🏀',
       '🏈',
@@ -759,7 +772,7 @@ class EmojiCategories {
     ]),
 
     // 旅行 & 地点
-    EmojiCategory(label: '旅行', emojis: [
+    EmojiCategory(type: EmojiCategoryType.travel, emojis: [
       '🚗',
       '🚕',
       '🚙',
@@ -916,7 +929,7 @@ class EmojiCategories {
     ]),
 
     // 物品
-    EmojiCategory(label: '物品', emojis: [
+    EmojiCategory(type: EmojiCategoryType.objects, emojis: [
       '⌚',
       '📱',
       '💻',
@@ -1193,7 +1206,7 @@ class EmojiCategories {
     ]),
 
     // 符号
-    EmojiCategory(label: '符号', emojis: [
+    EmojiCategory(type: EmojiCategoryType.symbols, emojis: [
       '❤️',
       '🧡',
       '💛',
@@ -1456,7 +1469,7 @@ class EmojiCategories {
     ]),
 
     // 旗帜
-    EmojiCategory(label: '旗帜', emojis: [
+    EmojiCategory(type: EmojiCategoryType.flags, emojis: [
       '🏳️',
       '🏴',
       '🏁',

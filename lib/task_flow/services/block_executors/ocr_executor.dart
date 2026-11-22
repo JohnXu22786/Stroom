@@ -36,6 +36,107 @@ Future<Uint8List> _readInputBytesUpTo(File file, int maxBytes) async {
   return bytes.takeBytes();
 }
 
+String _localizedSafeOcrTaskError(
+  Object error, {
+  required AppLocalizations localizations,
+  Iterable<String> excludedValues = const [],
+}) {
+  final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+    error.toString(),
+    excludedValues: excludedValues,
+  );
+  if (sanitized == null) {
+    return OcrDiagnosticSnapshot.safeTaskError(
+      error,
+      excludedValues: excludedValues,
+      localizations: localizations,
+    );
+  }
+
+  final hiddenPrefixes = <String>{
+    'OCR 错误详情已隐藏',
+    'OCR error details were hidden',
+    'Los detalles del error de OCR estaban ocultos',
+    'OCR エラーの詳細は非表示になりました',
+    '错误详情已隐藏',
+    'Error details were hidden',
+    'Los detalles del error estaban ocultos',
+    'エラーの詳細は非表示になりました',
+    '请求失败',
+    '请重试',
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+  };
+  var isHiddenSummary = false;
+  String? details;
+  for (final prefix in hiddenPrefixes) {
+    if (sanitized == prefix) {
+      isHiddenSummary = true;
+      break;
+    }
+    if (sanitized.startsWith('$prefix（') && sanitized.endsWith('）')) {
+      isHiddenSummary = true;
+      details = sanitized.substring(prefix.length + 1, sanitized.length - 1);
+      break;
+    }
+  }
+  if (isHiddenSummary) {
+    final localizedError = details == null
+        ? localizations.bgTaskOcrErrorDetailsHidden
+        : '${localizations.bgTaskOcrErrorDetailsHidden}（$details）';
+    if (!OcrDiagnosticSnapshot.containsCredential(
+      localizedError,
+      excludedValues: excludedValues,
+    )) {
+      return localizedError;
+    }
+  }
+
+  if (sanitized == localizations.ocrProcessingOcrFailed ||
+      sanitized == localizations.bgTaskOcrErrorDetailsHidden) {
+    return sanitized;
+  }
+  final httpStatus = RegExp(r'^HTTP\s+[1-5]\d{2}$').firstMatch(sanitized);
+  if (httpStatus != null) {
+    final localizedError =
+        '${localizations.bgTaskOcrErrorDetailsHidden}（${httpStatus.group(0)}）';
+    if (!OcrDiagnosticSnapshot.containsCredential(
+      localizedError,
+      excludedValues: excludedValues,
+    )) {
+      return localizedError;
+    }
+  }
+  return OcrDiagnosticSnapshot.safeTaskError(
+    error,
+    excludedValues: excludedValues,
+    localizations: localizations,
+  );
+}
+
+String _safeOcrFinishReason(
+  String? reason, {
+  Iterable<String> excludedValues = const [],
+}) {
+  const knownReasons = {
+    'stop',
+    'length',
+    'max_tokens',
+    'content_filter',
+    'function_call',
+    'tool_calls',
+  };
+  if (reason == null || reason.length > 48 || !knownReasons.contains(reason)) {
+    return 'unknown';
+  }
+  return OcrDiagnosticSnapshot.containsCredential(
+    reason,
+    excludedValues: excludedValues,
+  )
+      ? 'unknown'
+      : reason;
+}
+
 Future<String> executeOcrBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -54,13 +155,23 @@ Future<String> executeOcrBlock({
   /// Allows bounded reads to be observed in preflight limit tests.
   Future<Uint8List> Function(File, int)? readInputBytes,
 
-  /// Controlled Dio client for request/response contract tests.
+  /// Allows WebFileStore reads to be held and released in cancellation tests.
+  Future<Uint8List?> Function(String, {int? maxBytes})? readWebFileBytes,
+
+  /// Allows the input-existence check to be held in cancellation tests.
+  Future<bool> Function(String)? checkInputExists,
+
+  /// Allows payload preparation to be held and released in cancellation tests.
+  Future<OcrImagePayload> Function(Uint8List)? prepareImagePayload,
+
+  /// Shared Dio client for this request. The executor does not own or close it.
   Dio? ocrDio,
   Future<AiGatewayFacade>? routingRuntime,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
+  final strings = localizations ?? appLocalizationsForLocale(null);
 
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
@@ -79,12 +190,21 @@ Future<String> executeOcrBlock({
   try {
     if (kIsWeb) {
       usesWebFileStore = true;
-      inputExists = await WebFileStore.exists(input);
+      inputExists = await (checkInputExists ?? WebFileStore.exists)(input);
     } else {
       final existsInWebFileStore =
           WebFileStore.isTestMode && await WebFileStore.exists(input);
       usesWebFileStore = existsInWebFileStore;
-      inputExists = existsInWebFileStore || await file.exists();
+      inputExists = existsInWebFileStore ||
+          await (checkInputExists ?? ((_) => file.exists()))(input);
+    }
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
     if (!inputExists) {
       failSubTask(
@@ -93,15 +213,24 @@ Future<String> executeOcrBlock({
         execNotifier,
         execId,
         flowSubTask.id,
-        '输入文件不存在: $input',
+        strings.taskFlowOcrInputMissing,
+        localizations: strings,
       );
       throw BlockExecutionException(
-        '输入文件不存在',
+        strings.taskFlowOcrInputMissing,
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
     }
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     failSubTask(
       bgNotifier,
@@ -109,10 +238,11 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '读取文件失败: $e',
+      strings.taskFlowOcrInputReadFailed,
+      localizations: strings,
     );
     throw BlockExecutionException(
-      '读取文件失败',
+      strings.taskFlowOcrInputReadFailed,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
@@ -129,10 +259,11 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '未配置OCR模型或模型引用已失效，请重新选择',
+      strings.taskFlowOcrModelUnavailable,
+      localizations: strings,
     );
     throw BlockExecutionException(
-      '未配置OCR模型',
+      strings.taskFlowOcrModelUnavailable,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
@@ -149,8 +280,7 @@ Future<String> executeOcrBlock({
     host: config.host,
     apiKey: config.key,
     model: model.modelId,
-    systemPrompt: (localizations ?? appLocalizationsForLocale(null))
-        .ocrDefaultSystemPrompt,
+    systemPrompt: strings.ocrDefaultSystemPrompt,
     requestSizeBudgetBytes: requestSizeBudgetBytes,
     routingGroupId:
         selectedGroupId ?? llmOcrModelGroupIdForConfig(config.id, model.id),
@@ -170,19 +300,26 @@ Future<String> executeOcrBlock({
       imageFormat: 'png',
     );
   } catch (e) {
-    final safeError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-          e.toString(),
-          excludedValues: [config.key],
-        ) ??
-        OcrDiagnosticSnapshot.safeTaskError(e, excludedValues: [config.key]);
-    bgNotifier.updateStep(taskId, 0, failed: true, error: safeError);
+    final safeError = _localizedSafeOcrTaskError(
+      e,
+      localizations: strings,
+      excludedValues: [config.key],
+    );
+    bgNotifier.updateStep(
+      taskId,
+      0,
+      failed: true,
+      error: safeError,
+    );
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      '识别失败: $safeError',
+      '${strings.unifiedTaskOcrFailed}: $safeError',
+      ocrCredentialValuesForSanitization: [config.key],
+      localizations: strings,
     );
     throw BlockExecutionException(
       safeError,
@@ -196,11 +333,31 @@ Future<String> executeOcrBlock({
       ? maxRequestImageBytes
       : maxFlowImageInputBytes;
 
+  String safePreflightError(String error) {
+    if (!OcrDiagnosticSnapshot.containsCredential(
+      error,
+      excludedValues: [config.key],
+    )) {
+      return error;
+    }
+    return _localizedSafeOcrTaskError(
+      error,
+      localizations: strings,
+      excludedValues: [config.key],
+    );
+  }
+
   BlockExecutionException oversizedInputException() {
     final limitLabel = maxRequestImageBytes < maxFlowImageInputBytes
-        ? 'OCR 请求大小预算（${ocrRequestSizeBudgetMib(requestSizeBudgetBytes)} MiB）'
-        : '任务流图片输入上限（${ocrRequestSizeBudgetMib(maxFlowImageInputBytes)} MiB）';
-    final error = 'OCR 输入图片超过$limitLabel允许的范围，请缩小图片后重试';
+        ? strings.taskFlowOcrRequestSizeLimit(
+            ocrRequestSizeBudgetMib(requestSizeBudgetBytes),
+          )
+        : strings.taskFlowImageInputSizeLimit(
+            ocrRequestSizeBudgetMib(maxFlowImageInputBytes),
+          );
+    final error = safePreflightError(
+      strings.taskFlowOcrInputTooLarge(limitLabel),
+    );
     failSubTask(
       bgNotifier,
       taskId,
@@ -208,6 +365,8 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       error,
+      ocrCredentialValuesForSanitization: [config.key],
+      localizations: strings,
     );
     return BlockExecutionException(
       error,
@@ -218,19 +377,27 @@ Future<String> executeOcrBlock({
 
   try {
     if (usesWebFileStore) {
-      final storedBytes =
-          await WebFileStore.read(input, maxBytes: maxInputBytes);
+      final readWebFile = readWebFileBytes ?? WebFileStore.read;
+      final storedBytes = await readWebFile(input, maxBytes: maxInputBytes);
       if (storedBytes == null) {
+        if (!isFlowExecutionActive(execNotifier, execId)) {
+          throw BlockExecutionException(
+            '任务流已结束或删除',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
         failSubTask(
           bgNotifier,
           taskId,
           execNotifier,
           execId,
           flowSubTask.id,
-          '输入文件不存在: $input',
+          strings.taskFlowOcrInputMissing,
+          localizations: strings,
         );
         throw BlockExecutionException(
-          '输入文件不存在',
+          strings.taskFlowOcrInputMissing,
           blockType: def.typeKey.name,
           blockTitle: def.label,
         );
@@ -248,8 +415,24 @@ Future<String> executeOcrBlock({
       throw oversizedInputException();
     }
   } on WebFileStoreReadLimitExceededException {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     throw oversizedInputException();
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
     failSubTask(
       bgNotifier,
@@ -257,10 +440,11 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '读取文件失败: $e',
+      strings.taskFlowOcrInputReadFailed,
+      localizations: strings,
     );
     throw BlockExecutionException(
-      '读取文件失败',
+      strings.taskFlowOcrInputReadFailed,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
@@ -268,21 +452,47 @@ Future<String> executeOcrBlock({
 
   late final OcrImagePayload payload;
   try {
-    payload = await prepareOcrImagePayload(
-      imageBytes,
-      maxReencodedPngBytes: maxReencodedPngBytes,
-    );
-  } on FormatException catch (error) {
+    payload = await (prepareImagePayload ??
+        (bytes) => prepareOcrImagePayload(
+              bytes,
+              maxReencodedPngBytes: maxReencodedPngBytes,
+            ))(imageBytes);
+  } on OcrImagePayloadException catch (error) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+    final localizedError = switch (error.failure) {
+      OcrImagePayloadFailure.empty => strings.ocrImageEmpty,
+      OcrImagePayloadFailure.unsupportedFormat =>
+        strings.ocrImageUnsupportedFormat,
+      OcrImagePayloadFailure.unsupportedSpecialFormat =>
+        strings.ocrImageUnsupportedSpecialFormat,
+      OcrImagePayloadFailure.decodeFailed => strings.ocrImageDecodeFailed,
+      OcrImagePayloadFailure.dimensionsTooLarge =>
+        strings.ocrImageDimensionsTooLarge,
+      OcrImagePayloadFailure.orientationPngTooLarge =>
+        strings.ocrImageOrientationPngTooLarge,
+      OcrImagePayloadFailure.orientationFailed =>
+        strings.ocrImageOrientationFailed,
+    };
+    final safeError = safePreflightError(localizedError);
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      error.message,
+      safeError,
+      ocrCredentialValuesForSanitization: [config.key],
+      localizations: strings,
     );
     throw BlockExecutionException(
-      error.message,
+      safeError,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
@@ -336,8 +546,18 @@ Future<String> executeOcrBlock({
           );
         }
         bgNotifier.setResult(taskId, ocrResult.text, isComplete: false);
-        final error = 'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
-        bgNotifier.updateStep(taskId, 0, failed: true, error: error);
+        final error = strings.bgTaskOcrResultIncomplete(
+          _safeOcrFinishReason(
+            ocrResult.finishReason,
+            excludedValues: [config.key],
+          ),
+        );
+        bgNotifier.updateStep(
+          taskId,
+          0,
+          failed: true,
+          error: error,
+        );
         failSubTask(
           bgNotifier,
           taskId,
@@ -345,6 +565,7 @@ Future<String> executeOcrBlock({
           execId,
           flowSubTask.id,
           error,
+          localizations: strings,
         );
         throw BlockExecutionException(
           error,
@@ -388,23 +609,36 @@ Future<String> executeOcrBlock({
     );
     return result;
   } catch (e) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      bgNotifier.removeTask(taskId);
+      if (e is BlockExecutionException) rethrow;
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     if (e is BlockExecutionException) rethrow;
-    final safeError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-          e.toString(),
-          excludedValues: [config.key],
-        ) ??
-        OcrDiagnosticSnapshot.safeTaskError(
-          e,
-          excludedValues: [config.key],
-        );
-    bgNotifier.updateStep(taskId, 0, failed: true, error: safeError);
+    final safeError = _localizedSafeOcrTaskError(
+      e,
+      localizations: strings,
+      excludedValues: [config.key],
+    );
+    bgNotifier.updateStep(
+      taskId,
+      0,
+      failed: true,
+      error: safeError,
+    );
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      '识别失败: $safeError',
+      '${strings.unifiedTaskOcrFailed}: $safeError',
+      ocrCredentialValuesForSanitization: [config.key],
+      localizations: strings,
     );
     throw BlockExecutionException(
       safeError,

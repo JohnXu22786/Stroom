@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
+import '../utils/file_manifest.dart';
 import 'app_log_service.dart';
 import 'backup_service.dart';
 import 'backup_service_shared.dart' show collectAttachmentPathsForSafety;
@@ -52,6 +53,10 @@ class DataSafetyStatus {
   /// 失败迁移的目标格式版本（冻结记录，仅展示用）。
   final int? targetFormatVersion;
 
+  /// Whether the pre-migration snapshot was successfully restored after the
+  /// migration failure. Null in legacy markers means safety is unproven.
+  final bool? preMigrationDataSafe;
+
   final DateTime? updatedAt;
 
   const DataSafetyStatus({
@@ -59,6 +64,7 @@ class DataSafetyStatus {
     this.frozenByVersion,
     this.failedMigration,
     this.targetFormatVersion,
+    this.preMigrationDataSafe,
     this.updatedAt,
   });
 
@@ -75,6 +81,8 @@ class DataSafetyStatus {
         if (failedMigration != null) 'failedMigration': failedMigration,
         if (targetFormatVersion != null)
           'targetFormatVersion': targetFormatVersion,
+        if (preMigrationDataSafe != null)
+          'preMigrationDataSafe': preMigrationDataSafe,
         'updatedAt': (updatedAt ?? DateTime.now()).toIso8601String(),
       };
 
@@ -92,6 +100,7 @@ class DataSafetyStatus {
     final frozenByVersion = json['frozenByVersion'];
     final failedMigration = json['failedMigration'];
     final targetFormatVersion = json['targetFormatVersion'];
+    final preMigrationDataSafe = json['preMigrationDataSafe'];
     final updatedAtValue = json['updatedAt'];
     if (frozenByVersion != null && frozenByVersion is! String ||
         failedMigration != null && failedMigration is! String ||
@@ -99,6 +108,7 @@ class DataSafetyStatus {
             (targetFormatVersion is! num ||
                 !targetFormatVersion.isFinite ||
                 targetFormatVersion != targetFormatVersion.toInt()) ||
+        preMigrationDataSafe != null && preMigrationDataSafe is! bool ||
         updatedAtValue != null && updatedAtValue is! String) {
       throw const FormatException('数据安全状态字段格式无效');
     }
@@ -122,6 +132,7 @@ class DataSafetyStatus {
       frozenByVersion: frozenByVersion as String?,
       failedMigration: failedMigration as String?,
       targetFormatVersion: (targetFormatVersion as num?)?.toInt(),
+      preMigrationDataSafe: preMigrationDataSafe as bool?,
       updatedAt: updatedAt,
     );
   }
@@ -214,6 +225,7 @@ class DataSafetyManager {
   static Future<void> freezeForMigrationFailure({
     required int targetFormatVersion,
     required String description,
+    required bool preMigrationDataSafe,
   }) async {
     final current = await loadStatus();
     if (current.isUnreadable) {
@@ -225,6 +237,7 @@ class DataSafetyManager {
       frozenByVersion: appVersion,
       failedMigration: description,
       targetFormatVersion: targetFormatVersion,
+      preMigrationDataSafe: preMigrationDataSafe,
       updatedAt: DateTime.now(),
     ));
     await AppLogService.error(
@@ -440,24 +453,35 @@ class DataSafetyManager {
         return;
       }
       try {
-        final records = <Map<String, dynamic>>[
-          ...await ManifestDatabase.getAllImageRecords(),
-          ...await ManifestDatabase.getAllAudioRecords(),
-          ...await ManifestDatabase.getAllVideoRecords(),
-          ...await ManifestDatabase.getAllTextRecords(),
-        ];
-        for (final record in records) {
-          final hash = record['hash'] as String?;
-          if (hash == null) continue;
-          final format = record['format'] as String? ?? 'jpg';
-          // 媒体文件本体 + 缩略图 + TTS 转写旁车文本
-          referenced.add('$hash.$format');
-          referenced.add('${hash}_thumb_v2.png');
-          if (format != 'jpg') {
-            referenced.add('${hash}_thumb.jpg');
+        void addMediaReferences(
+          List<Map<String, dynamic>> records, {
+          bool audio = false,
+        }) {
+          for (final record in records) {
+            final hash = record['hash'] as String?;
+            if (hash == null) continue;
+            final format = record['format'] as String? ?? 'jpg';
+            // Audio filenames must use the same Windows-safe encoding as the
+            // manifest so cleanup does not treat a live file as an orphan.
+            referenced.add(audio
+                ? AudioRecord.storageFileNameFor(hash: hash, format: format)
+                : '$hash.$format');
+            if (audio) referenced.add('$hash.$format');
+            referenced.add('${hash}_thumb_v2.png');
+            if (format != 'jpg') {
+              referenced.add('${hash}_thumb.jpg');
+            }
+            referenced.add('$hash.txt');
           }
-          referenced.add('$hash.txt');
         }
+
+        addMediaReferences(await ManifestDatabase.getAllImageRecords());
+        addMediaReferences(
+          await ManifestDatabase.getAllAudioRecords(),
+          audio: true,
+        );
+        addMediaReferences(await ManifestDatabase.getAllVideoRecords());
+        addMediaReferences(await ManifestDatabase.getAllTextRecords());
       } catch (e) {
         debugPrint('[DataSafetyManager] 收集媒体引用失败，中止孤儿清理: $e');
         return;
@@ -473,24 +497,120 @@ class DataSafetyManager {
       ];
       final cutoff = DateTime.now().subtract(orphanGracePeriod);
       var deleted = 0;
+
+      Future<void> deleteIfOrphaned(
+        File file, {
+        bool checkReferences = true,
+      }) async {
+        final name = p.basename(file.path);
+        if (checkReferences && referenced.contains(name)) return;
+        try {
+          final stat = await file.stat();
+          if (stat.modified.isAfter(cutoff)) return;
+          await file.delete();
+          deleted++;
+          debugPrint('[DataSafetyManager] 清理孤儿文件: $name');
+        } catch (e) {
+          debugPrint('[DataSafetyManager] 清理孤儿文件失败 $name: $e');
+        }
+      }
+
       for (final dirPath in dirsToScan) {
         final dir = Directory(dirPath);
-        if (!await dir.exists()) continue;
-        final entries = await dir.list().toList();
+        final directoryType = await FileSystemEntity.type(
+          dirPath,
+          followLinks: false,
+        );
+        if (directoryType != FileSystemEntityType.directory) continue;
+
+        final journaledBackupNames = <String>{};
+        var hasUnreadableDeleteJournal = false;
+        await for (final entry in dir.list(followLinks: false)) {
+          if (entry is! File ||
+              !p.basename(entry.path).startsWith('.manifest-delete-journal-')) {
+            continue;
+          }
+          try {
+            final decoded = jsonDecode(await entry.readAsString());
+            if (decoded is! Map || decoded['files'] is! Map) {
+              throw const FormatException('Invalid media deletion journal');
+            }
+            for (final backupName in (decoded['files'] as Map).values) {
+              if (backupName is! String ||
+                  p.basename(backupName) != backupName ||
+                  !backupName.startsWith('.manifest-delete-backup-')) {
+                throw const FormatException(
+                  'Invalid media deletion backup name',
+                );
+              }
+              journaledBackupNames.add(backupName);
+            }
+          } catch (e) {
+            // Preserve possible recovery data when a journal cannot be read.
+            hasUnreadableDeleteJournal = true;
+            debugPrint(
+              '[DataSafetyManager] 读取媒体删除日志失败，保留备份文件: $e',
+            );
+          }
+        }
+
+        final entries = await dir.list(followLinks: false).toList();
         for (final entry in entries) {
           if (entry is! File) continue;
           final name = p.basename(entry.path);
-          if (referenced.contains(name)) continue;
-          try {
-            final stat = await entry.stat();
-            if (stat.modified.isAfter(cutoff)) continue;
-            await entry.delete();
-            deleted++;
-            debugPrint('[DataSafetyManager] 清理孤儿文件: $name');
-          } catch (e) {
-            debugPrint('[DataSafetyManager] 清理孤儿文件失败 $name: $e');
+          if (name.startsWith('.manifest-delete-journal-')) continue;
+          if (name.startsWith('.manifest-delete-backup-') &&
+              (hasUnreadableDeleteJournal ||
+                  journaledBackupNames.contains(name))) {
+            continue;
+          }
+          await deleteIfOrphaned(entry);
+        }
+      }
+
+      // Compressed attachment caches are disposable but live one directory
+      // below attachments: temp_compressed/<conversationId>/<cache-file>.
+      // Restrict this scan to that namespace and one level so user folders
+      // under attachments are never recursively traversed.
+      final attachmentsRoot = Directory(p.join(appDir, 'attachments'));
+      final compressedCacheRoot = Directory(
+        p.join(appDir, 'attachments', 'temp_compressed'),
+      );
+      try {
+        final attachmentsType = await FileSystemEntity.type(
+          attachmentsRoot.path,
+          followLinks: false,
+        );
+        final cacheRootType = await FileSystemEntity.type(
+          compressedCacheRoot.path,
+          followLinks: false,
+        );
+        if (attachmentsType == FileSystemEntityType.directory &&
+            cacheRootType == FileSystemEntityType.directory) {
+          final conversations =
+              await compressedCacheRoot.list(followLinks: false).toList();
+          for (final entry in conversations) {
+            if (entry is! Directory) continue;
+            try {
+              final cacheFiles =
+                  await Directory(entry.path).list(followLinks: false).toList();
+              for (final cacheFile in cacheFiles) {
+                if (cacheFile is File) {
+                  await deleteIfOrphaned(
+                    File(cacheFile.path),
+                    checkReferences: false,
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint(
+                '[DataSafetyManager] 读取压缩缓存目录失败 ${entry.path}: $e',
+              );
+            }
           }
         }
+      } catch (e) {
+        debugPrint('[DataSafetyManager] 扫描压缩缓存目录失败: $e');
       }
       if (deleted > 0) {
         await AppLogService.info(

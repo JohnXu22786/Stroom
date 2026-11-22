@@ -1,5 +1,53 @@
 part of 'home_page.dart';
 
+/// The centered dot and localized label shown in one home status item.
+class HomeStatusLabel extends StatelessWidget {
+  const HomeStatusLabel({
+    super.key,
+    required this.label,
+    required this.dotColor,
+  });
+
+  final String label;
+  final Color dotColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Center(
+      child: IntrinsicWidth(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Flexible(
+              child: ConstrainedText(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                softWrap: true,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Aggregated task counts for the home status card.
 ///
 /// Watches all three task providers plus flow executions and computes the
@@ -88,8 +136,9 @@ extension _HomePageHomeContentExt on _HomePageState {
                     Icon(Icons.auto_awesome, size: 24, color: cs.primary),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         AppLocalizations.of(context)!.homeWelcome,
+                        maxLines: 1,
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -139,8 +188,12 @@ extension _HomePageHomeContentExt on _HomePageState {
                       for (final card in _moduleCards())
                         SizedBox(
                           width: cardWidth,
-                          height: cardWidth / 1.2,
-                          child: card,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: cardWidth / 1.2,
+                            ),
+                            child: card,
+                          ),
                         ),
                     ],
                   );
@@ -183,6 +236,7 @@ extension _HomePageHomeContentExt on _HomePageState {
         icon: Icons.language,
         label: AppLocalizations.of(context)!.homeWebDownloadTitle,
         subtitle: AppLocalizations.of(context)!.homeWebDownloadSubtitle,
+        subtitleSpeed: 24,
         color: Colors.purple,
         onTap: () {
           Navigator.push(
@@ -260,6 +314,7 @@ extension _HomePageHomeContentExt on _HomePageState {
     required IconData icon,
     required String label,
     required String subtitle,
+    double subtitleSpeed = 24,
     required Color color,
     required VoidCallback onTap,
   }) {
@@ -289,23 +344,21 @@ extension _HomePageHomeContentExt on _HomePageState {
                 child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(height: 4),
-              Text(
-                label,
+              ConstrainedText.home(
+                text: label,
+                marqueeTextAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 1),
-              Text(
-                subtitle,
+              ConstrainedText.home(
+                text: subtitle,
                 style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                speed: subtitleSpeed,
               ),
             ],
           ),
@@ -353,8 +406,10 @@ extension _HomePageHomeContentExt on _HomePageState {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      AppLocalizations.of(context)!.homeTaskFlowTitle,
+                    ConstrainedText.home(
+                      text: AppLocalizations.of(context)!.homeTaskFlowTitle,
+                      maxLines: null,
+                      overflow: TextOverflow.clip,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -362,8 +417,10 @@ extension _HomePageHomeContentExt on _HomePageState {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      taskFlows.isEmpty
+                    ConstrainedText.home(
+                      maxLines: null,
+                      overflow: TextOverflow.clip,
+                      text: taskFlows.isEmpty
                           ? AppLocalizations.of(context)!.homeTaskFlowEmpty
                           : AppLocalizations.of(context)!
                               .homeTaskFlowManage(taskFlows.length),
@@ -434,32 +491,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: true,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                HomeStatusLabel(label: label, dotColor: dotColor),
               ],
             ),
           ),
@@ -479,59 +511,100 @@ extension _HomePageHomeContentExt on _HomePageState {
             // Header row: "最近任务" on left, "查看全部 >" on right
             Padding(
               padding: const EdgeInsets.only(left: 4, right: 6),
-              child: Row(
-                children: [
-                  Text(
-                    AppLocalizations.of(context)!.homeRecentTasks,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const Spacer(),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const UnifiedTaskListPage(initialTab: 0),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final minHeadingWidth = math.min(48.0, constraints.maxWidth);
+                  final viewAll = AppLocalizations.of(context)!.homeViewAll;
+                  final actionStyle = DefaultTextStyle.of(context).style.merge(
+                        TextStyle(
+                          fontSize: 12,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w500,
                         ),
                       );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
+                  final textDirection = Directionality.of(context);
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  final locale = Localizations.localeOf(context);
+                  final labelPainter = TextPainter(
+                    text: TextSpan(text: viewAll, style: actionStyle),
+                    textDirection: textDirection,
+                    textScaler: textScaler,
+                    locale: locale,
+                  )..layout();
+                  final arrowPainter = TextPainter(
+                    text: TextSpan(text: '>', style: actionStyle),
+                    textDirection: textDirection,
+                    textScaler: textScaler,
+                    locale: locale,
+                  )..layout();
+                  final naturalActionWidth =
+                      labelPainter.width + arrowPainter.width + 13;
+                  final actionWidth = math.min(
+                    constraints.maxWidth - minHeadingWidth,
+                    naturalActionWidth,
+                  );
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: ConstrainedText.home(
+                          text: AppLocalizations.of(context)!.homeRecentTasks,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)!.homeViewAll,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.primary,
-                              fontWeight: FontWeight.w500,
+                      SizedBox(
+                        width: actionWidth,
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const UnifiedTaskListPage(initialTab: 0),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: ConstrainedText.home(
+                                      text: AppLocalizations.of(context)!
+                                          .homeViewAll,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.end,
+                                      marqueeTextAlign: TextAlign.end,
+                                      style: actionStyle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 1),
+                                  Text(
+                                    '>',
+                                    style: actionStyle.copyWith(height: 1.2),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 1),
-                          Text(
-                            '>',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.primary,
-                              fontWeight: FontWeight.w500,
-                              height: 1.2,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 4),

@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -10,9 +12,12 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from evaluate import (
     EvaluationError,
+    MAX_PNG_ENCODED_BYTES,
+    _read_fixture_png,
     compare_reports,
     evaluate_predictions,
     main,
@@ -69,6 +74,187 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_ragged_pipe_table_annotation_is_rejected(self):
+        for table in ("A | B\nx | y | z", "A | B\n| C |"):
+            with self.subTest(table=table):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "ragged-table",
+                            "gold_text": table,
+                            "table_text": table,
+                            "categories": ["english", "table"],
+                        }
+                    ]
+                }
+
+                with self.assertRaisesRegex(
+                    EvaluationError, "table_text rows must have consistent columns"
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": "ragged-table", "text": table}]),
+                    )
+
+    def test_rectangular_pipe_table_annotation_scores_exact_prediction(self):
+        for table in ("A | B\nx | y", "A | B\nA | B |"):
+            with self.subTest(table=table):
+                report = evaluate_predictions(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "rectangular-table",
+                                "gold_text": table,
+                                "table_text": table,
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    },
+                    predictions(
+                        [{"fixture_id": "rectangular-table", "text": table}]
+                    ),
+                )
+
+                self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_scores_exact_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **x**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_rejects_mismatched_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **y**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_cli_rejects_table_category_without_reference_annotation(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "unannotated-table",
+                                "gold_text": "A | B",
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path.write_text(
+                json.dumps(
+                    predictions(
+                        [{"fixture_id": "unannotated-table", "text": "A | B"}]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unannotated-table: table fixture needs table_text", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_rejects_formula_category_without_reference_annotation(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "unannotated-formula",
+                                "gold_text": "x=1",
+                                "categories": ["english", "formula"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path.write_text(
+                json.dumps(
+                    predictions(
+                        [{"fixture_id": "unannotated-formula", "text": "x=1"}]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            "unannotated-formula: formula fixture needs formula_text", result.stderr
+        )
+        self.assertNotIn("Traceback", result.stderr)
+
     def _run_cli_with_output(self, directory, output_path):
         directory_path = Path(directory)
         manifest_path = directory_path / "manifest.json"
@@ -113,6 +299,42 @@ class EvaluateTests(unittest.TestCase):
             self.assertEqual(result.stderr, "")
             report = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "pending")
+
+    def test_cli_stdout_uses_utf8_when_locale_encoding_is_ascii(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions([])
+            input_data["run"]["model_id"] = "识别📄"
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+            for errors in ("strict", "backslashreplace"):
+                with self.subTest(errors=errors):
+                    environment = dict(os.environ)
+                    environment["PYTHONIOENCODING"] = f"ascii:{errors}"
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "evaluate.py"),
+                            "--manifest",
+                            str(manifest_path),
+                            "--predictions",
+                            str(predictions_path),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        env=environment,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    self.assertNotIn("Traceback", result.stderr)
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["run"]["model_id"], "识别📄")
 
     def test_cli_rejects_output_that_is_the_predictions_file(self):
         with TemporaryDirectory() as directory:
@@ -255,6 +477,146 @@ class EvaluateTests(unittest.TestCase):
                 json.loads(report_path.read_text(encoding="utf-8"))["status"],
                 "fixtures_verified",
             )
+
+    def test_cli_rejects_fixture_image_as_prediction_output(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture_path = root / "fixtures" / "fixture.png"
+            fixture_path.parent.mkdir()
+            original_fixture = b"fixture image bytes"
+            fixture_path.write_bytes(original_fixture)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "fixture",
+                                "gold_text": "fixture text",
+                                "categories": ["english"],
+                                "image": "fixtures/fixture.png",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path = root / "predictions.json"
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(fixture_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(
+                "output path conflicts with input file fixture image", result.stderr
+            )
+            self.assertEqual(fixture_path.read_bytes(), original_fixture)
+
+    def test_cli_rejects_prediction_output_symlink_to_fixture_image(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture_path = root / "fixtures" / "fixture.png"
+            fixture_path.parent.mkdir()
+            original_fixture = b"fixture image bytes"
+            fixture_path.write_bytes(original_fixture)
+            output_alias = root / "output.png"
+            output_alias.symlink_to(fixture_path)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "fixture",
+                                "gold_text": "fixture text",
+                                "categories": ["english"],
+                                "image": "fixtures/fixture.png",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path = root / "predictions.json"
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(output_alias),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(
+                "output path conflicts with input file fixture image", result.stderr
+            )
+            self.assertEqual(fixture_path.read_bytes(), original_fixture)
+
+    def test_cli_reports_invalid_fixture_image_path_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "fixture",
+                                "gold_text": "fixture text",
+                                "categories": ["english"],
+                                "image": "invalid\u0000path.png",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path = root / "predictions.json"
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(root / "report.json"),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertTrue(result.stderr.startswith("evaluation error:"))
+            self.assertNotIn("Traceback", result.stderr)
 
     def test_cli_rejects_output_that_is_the_baseline_file(self):
         with TemporaryDirectory() as directory:
@@ -567,7 +929,7 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1 / 3)
 
-    def test_reading_order_uses_first_occurrence_for_repeated_anchors(self):
+    def test_reading_order_uses_later_occurrence_when_first_is_out_of_order(self):
         manifest = {
             "fixtures": [
                 {
@@ -586,7 +948,49 @@ class EvaluateTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_matches_distinct_repeated_anchor_occurrence(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-substring-anchor",
+                    "gold_text": "B AB B",
+                    "reading_order": ["AB", "B"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "repeated-substring-anchor", "text": "B AB B"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_matches_ordered_overlapping_anchor_spans(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "overlapping-anchor-spans",
+                    "gold_text": "B AB",
+                    "reading_order": ["AB", "B"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "overlapping-anchor-spans", "text": "B AB"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
 
     def test_reading_order_rejects_repeated_anchors_in_genuinely_reversed_order(self):
         manifest = {
@@ -676,6 +1080,77 @@ class EvaluateTests(unittest.TestCase):
         self.assertIn("evaluation error: cannot read", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_cli_reports_excessive_json_nesting_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(
+                "[" * 10000 + "0" + "]" * 10000, encoding="utf-8"
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("JSON nesting exceeds parser limit", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_cli_reports_oversized_integer_in_fixture_manifest_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            valid_manifest = json.dumps(small_manifest())
+            manifest_path.write_text(
+                valid_manifest[:-1] + ',"oversized":' + "9" * 5000 + "}",
+                encoding="utf-8",
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    ["--manifest", str(manifest_path), "--verify-fixtures"]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("evaluation error: cannot read fixture manifest", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_cli_reports_oversized_integer_in_predictions_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            valid_predictions = json.dumps(predictions([]))
+            predictions_path.write_text(
+                valid_predictions[:-1] + ',"oversized":' + "9" * 5000 + "}",
+                encoding="utf-8",
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("evaluation error: cannot read", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_cli_reports_invalid_utf8_fixture_manifest_without_traceback(self):
         with TemporaryDirectory() as directory:
             manifest_path = Path(directory) / "manifest.json"
@@ -690,6 +1165,29 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn(
             "evaluation error: cannot read fixture manifest", stderr.getvalue()
+        )
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_cli_reports_excessive_json_nesting_in_fixture_manifest_without_traceback(
+        self,
+    ):
+        with TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            manifest_path.write_text(
+                "[" * 10000 + "0" + "]" * 10000, encoding="utf-8"
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    ["--manifest", str(manifest_path), "--verify-fixtures"]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn(
+            "evaluation error: cannot read fixture manifest: "
+            "JSON nesting exceeds parser limit",
+            stderr.getvalue(),
         )
         self.assertNotIn("Traceback", stderr.getvalue())
 
@@ -789,6 +1287,7 @@ class EvaluateTests(unittest.TestCase):
             "APIKey",
             "password",
             "passwd",
+            "pwd",
             "passphrase",
             "passcode",
             "bearer",
@@ -834,6 +1333,273 @@ class EvaluateTests(unittest.TestCase):
         self.assertNotIn(secret_value, stderr.getvalue())
         self.assertIn("credential-like field name", stderr.getvalue())
 
+    def test_unsupported_prediction_field_is_redacted_from_cli_error(self):
+        secret_value = "sk-test-12345678901234567890"
+        secret_field = f"token={secret_value}"
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions(
+                [{"fixture_id": "ordered-lines", "text": "AB", secret_field: 1}]
+            )
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertNotIn(secret_field, stderr.getvalue())
+        self.assertNotIn(secret_value, stderr.getvalue())
+        self.assertIn("unsupported fields", stderr.getvalue())
+        self.assertIn("credential-like field name", stderr.getvalue())
+        with self.assertRaisesRegex(
+            EvaluationError, "prediction contains unsupported fields.*author-1"
+        ):
+            evaluate_predictions(
+                small_manifest(),
+                predictions([{"fixture_id": "ordered-lines", "author-1": 1}]),
+            )
+        with self.assertRaisesRegex(
+            EvaluationError, "prediction contains unsupported fields.*<int>"
+        ):
+            evaluate_predictions(
+                small_manifest(),
+                predictions([{"fixture_id": "ordered-lines", 1: "unsupported"}]),
+            )
+
+    def test_credential_like_fixture_ids_are_redacted_but_benign_ids_remain(self):
+        secret_value = "sk-test-12345678901234567890"
+        secret_id = f"fixture-{secret_value}"
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest = {
+                "fixtures": [
+                    {"id": "safe-id", "gold_text": "x", "categories": ["english"]}
+                ]
+            }
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            predictions_path.write_text(
+                json.dumps(predictions([{"fixture_id": secret_id, "text": "x"}])),
+                encoding="utf-8",
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertNotIn(secret_id, stderr.getvalue())
+        self.assertNotIn(secret_value, stderr.getvalue())
+        self.assertIn("unknown fixture_id: '[redacted]'", stderr.getvalue())
+
+        manifest["fixtures"][0]["id"] = secret_id
+        accepted = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": secret_id, "text": "x"}]),
+        )
+        self.assertEqual(accepted["run"]["model_id"], "offline-evaluator-test")
+
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": secret_id, "text": 1}]),
+            )
+
+        author_manifest = {
+            "fixtures": [
+                {"id": "author-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "author-1: text must be a string or null"
+        ):
+            evaluate_predictions(
+                author_manifest,
+                predictions([{"fixture_id": "author-1", "text": 1}]),
+            )
+
+        manifest["fixtures"].append(
+            {"id": secret_id, "gold_text": "y", "categories": ["english"]}
+        )
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate fixture id: \\[redacted\\]"
+        ):
+            evaluate_predictions(manifest, predictions([]))
+
+        manifest = {
+            "fixtures": [
+                {"id": secret_id, "gold_text": "x", "categories": []}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: categories must be strings"
+        ):
+            evaluate_predictions(manifest, predictions([]))
+
+        manifest = {
+            "fixtures": [
+                {"id": "clientsecret-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "clientsecret-1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "clientSecret1"
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "clientSecret1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "apiKey-1"
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "apiKey-1", "text": 1}]),
+            )
+
+        for credential_id in (
+            "clientSecrets",
+            "apiKeys",
+            "author-1-apiKey-1",
+            "provider-apiKey-prod",
+            "api-keys-prod",
+            "apiKeys-prod",
+        ):
+            with self.subTest(credential_id=credential_id):
+                manifest["fixtures"][0]["id"] = credential_id
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "\\[redacted\\]: text must be a string or null",
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": credential_id, "text": 1}]),
+                    )
+
+        for credential_id in ("key1", "keys", "auth1"):
+            with self.subTest(credential_id=credential_id):
+                manifest["fixtures"][0]["id"] = credential_id
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "\\[redacted\\]: text must be a string or null",
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": credential_id, "text": 1}]),
+                    )
+
+        opaque_credential_id = f"fixture_{secret_value}_tail"
+        manifest["fixtures"][0]["id"] = "safe-id"
+        with self.assertRaisesRegex(
+            EvaluationError, "unknown fixture_id: '\\[redacted\\]'"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": opaque_credential_id, "text": "x"}]),
+            )
+
+        manifest = {
+            "fixtures": [
+                {"id": "safe-id", "gold_text": "x", "categories": ["english"]},
+                {"id": "safe-id", "gold_text": "y", "categories": ["english"]},
+            ]
+        }
+        with self.assertRaisesRegex(EvaluationError, "duplicate fixture id: safe-id"):
+            evaluate_predictions(manifest, predictions([]))
+
+        with self.assertRaisesRegex(
+            EvaluationError, "unknown fixture_id: 'safe-missing'"
+        ):
+            evaluate_predictions(
+                {
+                    "fixtures": [
+                        {"id": "safe-id", "gold_text": "x", "categories": ["english"]}
+                    ]
+                },
+                predictions([{"fixture_id": "safe-missing", "text": "x"}]),
+            )
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate prediction for fixture: safe-id"
+        ):
+            evaluate_predictions(
+                {
+                    "fixtures": [
+                        {"id": "safe-id", "gold_text": "x", "categories": ["english"]}
+                    ]
+                },
+                predictions(
+                    [
+                        {"fixture_id": "safe-id", "text": "x"},
+                        {"fixture_id": "safe-id", "text": "x"},
+                    ]
+                ),
+            )
+
+    def test_benign_fixture_ids_are_preserved_in_validation_diagnostics(self):
+        manifest = {
+            "fixtures": [
+                {"id": "secretary-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "secretary-1: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "secretary-1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "monkey"
+        with self.assertRaisesRegex(
+            EvaluationError, "monkey: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "monkey", "text": 1}]),
+            )
+
+        manifest = {
+            "fixtures": [
+                {"id": "authentication", "gold_text": "x", "categories": ["english"]},
+                {"id": "authentication", "gold_text": "y", "categories": ["english"]},
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate fixture id: authentication"
+        ):
+            evaluate_predictions(manifest, predictions([]))
+
     def test_safe_run_settings_are_retained(self):
         input_data = predictions([])
         input_data["run"]["settings"] = {
@@ -848,6 +1614,18 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions(small_manifest(), input_data)
 
         self.assertEqual(report["run"]["settings"], input_data["run"]["settings"])
+
+    def test_excessively_nested_run_settings_are_rejected(self):
+        input_data = predictions([])
+        nested_setting = "leaf"
+        for _ in range(65):
+            nested_setting = [nested_setting]
+        input_data["run"]["settings"] = {"nested": nested_setting}
+
+        with self.assertRaisesRegex(
+            EvaluationError, "settings exceeds maximum nesting depth"
+        ):
+            evaluate_predictions(small_manifest(), input_data)
 
     def test_double_encoded_credential_like_query_key_is_rejected(self):
         input_data = predictions([])
@@ -1537,7 +2315,7 @@ class EvaluateTests(unittest.TestCase):
                         "id": "table-with-formula",
                         "gold_text": expected,
                         "table_text": expected,
-                        "categories": ["english", "table", "formula"],
+                        "categories": ["english", "table"],
                     }
                 ]
             },
@@ -1796,6 +2574,30 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_plain_text_tsv_annotation_requires_table_structure(self):
+        expected = "A\tB\nx\ty"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+
+        def report_for(actual):
+            input_data = predictions([{"fixture_id": "table", "text": actual}])
+            input_data["run"]["output_format"] = "plain_text"
+            return evaluate_predictions(manifest, input_data)
+
+        flattened = report_for("A B x y")
+        structured = report_for(expected)
+
+        self.assertEqual(flattened["metrics"]["table_fidelity"]["value"], 0)
+        self.assertEqual(structured["metrics"]["table_fidelity"]["value"], 1)
+
     def test_plain_text_tsv_table_scores_table_fidelity(self):
         expected = "Code | Count\nP-12 | 3"
         manifest = {
@@ -1857,6 +2659,7 @@ class EvaluateTests(unittest.TestCase):
                 {
                     "id": "markdown-table",
                     "gold_text": "Inventory\nCode Count\nP-12 3",
+                    "table_text": "Code Count\nP-12 3",
                     "categories": ["english", "table"],
                 }
             ]
@@ -1982,6 +2785,7 @@ class EvaluateTests(unittest.TestCase):
                     "id": "table-with-following-pipes",
                     "gold_text": f"{table}\n{following_text}",
                     "table_text": table,
+                    "formula_text": "|x| = 2",
                     "categories": ["english", "table", "formula"],
                 }
             ]
@@ -2084,6 +2888,7 @@ class EvaluateTests(unittest.TestCase):
                 {
                     "id": "absolute-value",
                     "gold_text": "The absolute value is |x|.",
+                    "formula_text": "|x|",
                     "categories": ["english", "formula"],
                 }
             ]
@@ -2939,6 +3744,7 @@ class EvaluateTests(unittest.TestCase):
                         {
                             "id": "sizing-delimiters",
                             "gold_text": expected,
+                            "formula_text": expected,
                             "categories": ["formula"],
                         }
                     ]
@@ -3143,6 +3949,7 @@ class EvaluateTests(unittest.TestCase):
 
     def test_latex_indexed_roots_match_unicode_root_symbols(self):
         for fixture_id, formula, prediction in (
+            ("square-root", "√x", r"$\sqrt[2]{x}$"),
             ("cube-root", "∛(x+1)", r"$\sqrt[3]{x+1}$"),
             ("fourth-root", "∜x", r"$\sqrt[4]{x}$"),
         ):
@@ -4140,6 +4947,157 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["formula_fidelity"]["value"], 0
                 )
 
+    def test_formula_fidelity_allows_hangul_prose_before_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hangul-prose-formula",
+                    "gold_text": "식 x=1",
+                    "formula_text": "x=1",
+                    "categories": ["mixed_language", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "hangul-prose-formula", "text": "식 x=1"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_rejects_hangul_attached_to_formula(self):
+        text = "식x=1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hangul-attached-formula",
+                    "gold_text": text,
+                    "formula_text": "x=1",
+                    "categories": ["mixed_language", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": "hangul-attached-formula", "text": text}]),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_accepts_japanese_prose_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "japanese-prose-formula",
+                    "gold_text": "x=1です",
+                    "formula_text": "x=1",
+                    "categories": ["mixed_language", "formula"],
+                }
+            ]
+        }
+
+        for text in ("x=1です", "これは x=1です"):
+            with self.subTest(text=text):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "japanese-prose-formula", "text": text}]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 1
+                )
+
+    def test_formula_fidelity_accepts_hangul_prose_after_formula(self):
+        text = "x=1입니다"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "hangul-prose-after-formula",
+                        "gold_text": text,
+                        "formula_text": "x=1",
+                        "categories": ["mixed_language", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [{"fixture_id": "hangul-prose-after-formula", "text": text}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_allows_english_prose_after_formula_starting_with_i(self):
+        for text in ("x=1\nI think so", "x=1\nI think so…"):
+            with self.subTest(text=text):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "english-prose-after-formula",
+                            "gold_text": text,
+                            "formula_text": "x=1",
+                            "categories": ["english", "formula"],
+                        }
+                    ]
+                }
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [
+                            {
+                                "fixture_id": "english-prose-after-formula",
+                                "text": text,
+                            }
+                        ]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["character_error_rate"]["value"], 0
+                )
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 1
+                )
+
+    def test_formula_fidelity_still_rejects_adjacent_math_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "formula-with-adjacent-math",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+
+        for text in (
+            "x=1y",
+            "x=1 + y",
+            "x=1 plus y",
+            "x=1 I is identity",
+            "x=1 I, think so",
+            "x=1 I think so + y",
+        ):
+            with self.subTest(text=text):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "formula-with-adjacent-math", "text": text}]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
     def test_formula_fidelity_rejects_written_operator_after_formula(self):
         manifest = {
             "fixtures": [
@@ -4720,9 +5678,193 @@ class EvaluateTests(unittest.TestCase):
             }.issubset(summary["categories"])
         )
 
+    def test_oversized_fixture_png_is_rejected_before_opening(self):
+        image_path = Mock()
+        image_path.stat.return_value.st_size = MAX_PNG_ENCODED_BYTES + 1
+        image_path.stat.return_value.st_mode = stat.S_IFREG | 0o644
+
+        with patch("evaluate.os.open") as open_file:
+            with self.assertRaisesRegex(
+                EvaluationError,
+                "oversized: PNG exceeds the maximum encoded fixture size",
+            ):
+                _read_fixture_png(image_path, "oversized")
+
+        open_file.assert_not_called()
+
+    def test_fixture_png_growth_after_stat_is_bounded_and_rejected(self):
+        with TemporaryDirectory() as directory:
+            fixture_path = Path(directory) / "growing.png"
+            fixture_path.write_bytes(b"x" * MAX_PNG_ENCODED_BYTES)
+
+            def stat_then_grow():
+                before_growth = fixture_path.stat()
+                with fixture_path.open("ab") as growing_file:
+                    growing_file.write(b"y" * 4096)
+                return before_growth
+
+            image_path = Mock()
+            image_path.__fspath__ = Mock(return_value=str(fixture_path))
+            image_path.stat.side_effect = stat_then_grow
+
+            with self.assertRaisesRegex(
+                EvaluationError,
+                "growing: PNG exceeds the maximum encoded fixture size",
+            ):
+                _read_fixture_png(image_path, "growing")
+
+            image_path.stat.assert_called_once_with()
+
+    def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "fixtures/self-loop.png"
+            (fixture_root / fixture["image"]).symlink_to("self-loop.png")
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertRegex(result.stderr, r"^evaluation error: .*cannot resolve")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_fixture_verification_rejects_fifo_without_blocking(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            fixtures_dir = fixture_root / "fixtures"
+            fixtures_dir.mkdir()
+            fifo_path = fixtures_dir / "input.png"
+            os.mkfifo(fifo_path)
+            fifo_alias = fixtures_dir / "input-symlink.png"
+            fifo_alias.symlink_to(fifo_path.name)
+
+            for image_path in (fifo_path, fifo_alias):
+                with self.subTest(image_path=image_path.name):
+                    manifest = json.loads((ROOT / "manifest.json").read_text())
+                    manifest["fixtures"][0]["image"] = str(
+                        image_path.relative_to(fixture_root)
+                    )
+                    manifest_path = fixture_root / "manifest.json"
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "evaluate.py"),
+                            "--manifest",
+                            str(manifest_path),
+                            "--verify-fixtures",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertRegex(
+                        result.stderr, r"^evaluation error: .*regular file"
+                    )
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_fixture_verification_rejects_image_path_outside_fixture_root(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "../outside.png"
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(EvaluationError, "image path escapes fixture root"):
+                verify_fixtures(manifest_path)
+
+    def test_fixture_read_error_redacts_untrusted_path_and_os_exception(self):
+        path_marker = "apiKey-marker\x1b[31m"
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            manifest["fixtures"][0]["id"] = "fixture-demo"
+            manifest["fixtures"][0]["image"] = (
+                f"fixtures/demo-{path_marker}\npath.png"
+            )
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(EvaluationError) as raised:
+                verify_fixtures(manifest_path)
+
+        diagnostic = str(raised.exception)
+        self.assertIn("fixture-demo", diagnostic)
+        self.assertIn("cannot read fixture image", diagnostic)
+        self.assertNotIn(path_marker, diagnostic)
+        self.assertNotIn("path.png", diagnostic)
+        self.assertNotIn(directory, diagnostic)
+        self.assertNotIn("No such file or directory", diagnostic)
+
+    def test_fixture_read_error_keeps_benign_identifier_and_category(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            manifest["fixtures"][0]["id"] = "fixture-demo"
+            manifest["fixtures"][0]["image"] = "fixtures/missing-demo.png"
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(EvaluationError) as raised:
+                verify_fixtures(manifest_path)
+
+        diagnostic = str(raised.exception)
+        self.assertIn("fixture-demo", diagnostic)
+        self.assertIn("cannot read fixture image", diagnostic)
+        self.assertNotIn("missing-demo.png", diagnostic)
+        self.assertNotIn(directory, diagnostic)
+
     def test_fixture_verification_rejects_truncated_png_with_matching_digest(self):
         image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
         self._assert_fixture_png_rejected(image_bytes)
+
+    def test_fixture_verification_rejects_png_dimension_above_limit(self):
+        oversized_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 8193, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b""))
+            + png_chunk(b"IEND", b"")
+        )
+
+        self._assert_fixture_png_rejected(
+            oversized_png, "PNG exceeds the benchmark fixture resource limits"
+        )
+
+    def test_fixture_verification_rejects_png_pixel_count_above_limit(self):
+        oversized_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 3000, 2000, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b""))
+            + png_chunk(b"IEND", b"")
+        )
+
+        self._assert_fixture_png_rejected(
+            oversized_png, "PNG exceeds the benchmark fixture resource limits"
+        )
 
     def test_fixture_verification_rejects_transparency_chunk_after_image_data(self):
         malformed_png = (
@@ -4817,6 +5959,16 @@ class EvaluateTests(unittest.TestCase):
         )
         self._assert_fixture_png_rejected(malformed_png)
 
+    def test_fixture_verification_rejects_chromaticity_pair_sum_above_png_range(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", 80000, 80000, 1, 1, 1, 1, 1, 1))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
     def test_fixture_verification_rejects_unsupported_exif_chunk(self):
         malformed_png = (
             b"\x89PNG\r\n\x1a\n"
@@ -4831,7 +5983,7 @@ class EvaluateTests(unittest.TestCase):
         valid_png = (
             b"\x89PNG\r\n\x1a\n"
             + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
-            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([1] * 8)))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([50000] * 8)))
             + png_chunk(b"gAMA", struct.pack(">I", 100000))
             + png_chunk(b"sBIT", b"\x08\x08\x08")
             + png_chunk(b"sRGB", b"\x00")
@@ -4882,8 +6034,8 @@ class EvaluateTests(unittest.TestCase):
 
         self._assert_fixture_png_rejected(malformed_png)
 
-    def _assert_fixture_png_rejected(self, image_bytes):
-        with TemporaryDirectory() as directory:
+    def _assert_fixture_png_rejected(self, image_bytes, message="PNG"):
+        with TemporaryDirectory(dir=ROOT) as directory:
             fixture_root = Path(directory)
             shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
             manifest = json.loads((ROOT / "manifest.json").read_text())
@@ -4894,11 +6046,11 @@ class EvaluateTests(unittest.TestCase):
             manifest_path = fixture_root / "manifest.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-            with self.assertRaisesRegex(EvaluationError, "PNG"):
+            with self.assertRaisesRegex(EvaluationError, message):
                 verify_fixtures(manifest_path)
 
     def _assert_fixture_png_accepted(self, image_bytes):
-        with TemporaryDirectory() as directory:
+        with TemporaryDirectory(dir=ROOT) as directory:
             fixture_root = Path(directory)
             shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
             manifest = json.loads((ROOT / "manifest.json").read_text())

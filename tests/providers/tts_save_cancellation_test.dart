@@ -497,4 +497,106 @@ void main() {
     expect(records.single.folder, 'Narration');
     expect(await FileManifest.readFile('$hash.txt'), isNotNull);
   });
+
+  test('cancelled regeneration keeps the original audio record and bytes',
+      () async {
+    final original = AudioRecord(
+      name: 'Original speech',
+      hash: hash,
+      format: 'wav',
+      createdAt: DateTime.now(),
+      size: audio.length,
+      sourceText: 'Original text',
+    );
+    await FileManifest.writeFile(original.storageFileName, audio);
+    await FileManifest.addRecord(original);
+
+    final synthesisStarted = Completer<void>();
+    final finishSynthesis = Completer<Uint8List>();
+    notifier.debugSynthesize = (_, __, ___) {
+      synthesisStarted.complete();
+      return finishSynthesis.future;
+    };
+    final taskId = notifier.addTask(
+      title: original.name,
+      text: 'Replacement text',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+      replaceRecordId: original.id,
+    );
+    final task =
+        container.read(taskListProvider).firstWhere((t) => t.id == taskId);
+    expect(
+      task.copyWith(status: TaskStatus.failed).replaceRecordId,
+      original.id,
+    );
+    expect(
+      SynthesisTask.fromMap(task.toMap()).replaceRecordId,
+      original.id,
+    );
+    await synthesisStarted.future;
+    notifier.pauseTask(taskId);
+    finishSynthesis.complete(pcmToWav(Uint8List.fromList([1, 2, 3, 4])));
+
+    await waitForStatus(taskId, TaskStatus.paused);
+
+    expect(
+      (await FileManifest.loadRecords())
+          .any((record) => record.id == original.id),
+      isTrue,
+    );
+    expect(await FileManifest.readFile(original.storageFileName), audio);
+  });
+
+  test('successful regeneration replaces original after saving new audio',
+      () async {
+    final original = AudioRecord(
+      name: 'Original speech',
+      hash: hash,
+      format: 'wav',
+      createdAt: DateTime.now(),
+      size: audio.length,
+      sourceText: 'Original text',
+    );
+    await FileManifest.writeFile(original.storageFileName, audio);
+    await FileManifest.addRecord(original);
+
+    final replacementAudio = pcmToWav(Uint8List.fromList([1, 2, 3, 4]));
+    final beforeCommit = Completer<void>();
+    final allowCommit = Completer<void>();
+    notifier.debugSynthesize = (_, __, ___) async => replacementAudio;
+    notifier.debugBeforeSaveCommit = () async {
+      beforeCommit.complete();
+      await allowCommit.future;
+    };
+
+    final taskId = notifier.addTask(
+      title: original.name,
+      text: 'Replacement text',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+      replaceRecordId: original.id,
+    );
+    await beforeCommit.future;
+
+    expect(
+      (await FileManifest.loadRecords())
+          .any((record) => record.id == original.id),
+      isTrue,
+    );
+    expect(await FileManifest.readFile(original.storageFileName), audio);
+
+    allowCommit.complete();
+    await waitForStatus(taskId, TaskStatus.completed);
+
+    final records = await FileManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(records.single.name, original.name);
+    expect(records.single.hash, computeAudioHash(replacementAudio));
+    expect(await FileManifest.readFile(original.storageFileName), isNull);
+    expect(
+      await FileManifest.readFile(records.single.storageFileName),
+      replacementAudio,
+    );
+  });
 }

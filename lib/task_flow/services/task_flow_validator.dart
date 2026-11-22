@@ -1,11 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as p;
 
 import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
+import '../../services/attachment_storage.dart';
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
+import '../../utils/file_manifest.dart';
+import '../../utils/image_manifest.dart';
 import '../../utils/provider_models.dart';
+import '../../utils/video_manifest.dart';
 import '../../utils/web_file_store.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_payload.dart';
@@ -29,6 +34,7 @@ class TaskFlowValidationException implements Exception {
   final int? blockIndex;
   final int? inputIndex;
   final bool isInputError;
+  final bool isStorageError;
 
   const TaskFlowValidationException(
     this.message, {
@@ -37,11 +43,41 @@ class TaskFlowValidationException implements Exception {
     this.blockIndex,
     this.inputIndex,
     this.isInputError = false,
+    this.isStorageError = false,
   });
 
   @override
   String toString() =>
       blockIndex == null ? message : '步骤 ${blockIndex! + 1}：$message';
+}
+
+/// Resolve a picked file's durable storage reference for this runtime.
+/// Native execution records may outlive the app-container path that was
+/// current when the picker first selected the file.
+Future<String> resolveTaskFlowInputReference(FlowRunInput input) async {
+  final manifestPath = input.manifestStoragePath;
+  final manifestType = input.manifestType;
+  if (manifestPath != null && manifestType != null) {
+    final path = switch (manifestType) {
+      FlowInputManifestType.image =>
+        await ImageManifest.readFilePath(manifestPath),
+      FlowInputManifestType.audio =>
+        await FileManifest.readFilePath(manifestPath),
+      FlowInputManifestType.video =>
+        await VideoManifest.readFilePath(manifestPath),
+    };
+    if (path == null || path.isEmpty) {
+      throw FileSystemException('Manifest input is missing', manifestPath);
+    }
+    return path;
+  }
+  final storagePath = input.ownedStoragePath;
+  if (storagePath == null) return input.text;
+  if (kIsWeb) return storagePath;
+  return p.join(
+    await AttachmentStorage.getStorageDirPath(),
+    p.basename(storagePath),
+  );
 }
 
 /// Validate the entire chain and every input before creating execution records.
@@ -204,8 +240,16 @@ Future<void> validateTaskFlow(
   final firstType = flow.blocks.first.getDefinition()!.inputType;
   final inputType = firstType == IOType.any ? flow.inputType : firstType;
   for (var i = 0; i < inputs.length; i++) {
-    final text = inputs[i].text;
     String? error;
+    var storageError = false;
+    late final String text;
+    try {
+      text = await resolveTaskFlowInputReference(inputs[i]);
+    } catch (_) {
+      storageError = true;
+      error = '文件不存在、为空或无法读取，请重新选择文件';
+      text = inputs[i].text;
+    }
     var checkLargeImage = false;
     var checkTextEncoding = false;
     final inputName = inputs[i].fileName ?? text;
@@ -251,16 +295,19 @@ Future<void> validateTaskFlow(
       }
     }
 
-    if (text.trim().isEmpty) {
+    if (error == null && text.trim().isEmpty) {
       error = '输入为空，请重新输入或选择文件';
-    } else if ([
-      IOType.audio,
-      IOType.image,
-      IOType.video,
-      IOType.file,
-    ].contains(inputType)) {
+    } else if (error == null &&
+        [
+          IOType.audio,
+          IOType.image,
+          IOType.video,
+          IOType.file,
+        ].contains(inputType)) {
       try {
-        if (kIsWeb) {
+        final webStoreReference = kIsWeb ||
+            (WebFileStore.isTestMode && await WebFileStore.exists(text));
+        if (webStoreReference) {
           final bytes = await WebFileStore.read(text);
           if (bytes?.isNotEmpty != true) throw const FileSystemException();
           checkFile(bytes!, bytes.length);
@@ -289,9 +336,11 @@ Future<void> validateTaskFlow(
           }
         }
       } catch (_) {
+        storageError = true;
         error = '文件不存在、为空或无法读取，请重新选择文件';
       }
-    } else if (flow.blocks.first.typeKey == BlockType.catcatch) {
+    } else if (error == null &&
+        flow.blocks.first.typeKey == BlockType.catcatch) {
       final uri = Uri.tryParse(text.trim());
       if (uri == null ||
           !['http', 'https'].contains(uri.scheme) ||
@@ -307,6 +356,7 @@ Future<void> validateTaskFlow(
         blockIndex: 0,
         inputIndex: i,
         isInputError: true,
+        isStorageError: storageError,
       );
     }
   }

@@ -258,7 +258,6 @@ class ChatMessage {
   /// causing SharedPreferences write failures, UI freezes, and silent data
   /// corruption (the "flash crash + half-broken history" bug).
   ///
-  /// The sanitized copy is returned; the original map is NOT modified.
   static Map<String, dynamic>? _sanitizeRawMap(
     Map<String, dynamic>? raw, {
     bool compactRequest = false,
@@ -299,7 +298,18 @@ class ChatMessage {
   /// with a message. Raw requests are diagnostics only; chat history is restored
   /// from the protocol-neutral message list, so older request messages can be
   /// represented by a marker while the current user input remains inspectable.
-  static Map<String, dynamic> compactRawRequest(Map<String, dynamic> raw) {
+  static Map<String, dynamic> compactRawRequest(
+    Map<String, dynamic> raw, {
+    bool compactText = true,
+  }) {
+    if (!compactText) {
+      final serializable = _sanitizeJsonValue(raw);
+      final sanitized = DataSanitizer.sanitizeForDisplay(serializable);
+      return sanitized is Map
+          ? Map<String, dynamic>.from(sanitized)
+          : <String, dynamic>{};
+    }
+
     final body = raw['body'];
     if (body is! Map) return Map<String, dynamic>.from(raw);
     final messages = body['messages'];
@@ -635,11 +645,6 @@ class ChatMessage {
     return null;
   }
 
-  static Map<String, dynamic>? _compactDeserializedRawRequest(dynamic value) {
-    final rawRequest = safeCastToMap(value);
-    return rawRequest == null ? null : compactRawRequest(rawRequest);
-  }
-
   static bool _matchesJoinedSections(
     List<String>? sections,
     String value, {
@@ -886,7 +891,7 @@ class ChatMessage {
           : null,
       // Use safe casting so non-Map rawRequest/rawResponse values don't throw
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
-      rawRequest: _compactDeserializedRawRequest(map['rawRequest']),
+      rawRequest: safeCastToMap(map['rawRequest']),
       rawResponse: safeCastToMap(map['rawResponse']),
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,

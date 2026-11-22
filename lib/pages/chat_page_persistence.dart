@@ -21,13 +21,14 @@ bool? applyTemporaryCountdownFallback(
     conversationMap
       ..remove('isTemporary')
       ..remove('temporaryExpiresAt')
-      ..remove('temporaryExpiryVersion');
+      ..remove('temporaryExpiryVersion')
+      ..remove('temporaryPausedRemainingMilliseconds');
     return false;
   }
 
   if (wasTemporary == true) {
-    if (!persistedStateIsAuthoritative ||
-        conversationMap['isTemporary'] == true) {
+    if (conversationMap['isTemporary'] == true) return true;
+    if (!persistedStateIsAuthoritative) {
       _resetTemporaryExpiryOnMap(conversationMap, startedAt);
       return true;
     }
@@ -36,11 +37,28 @@ bool? applyTemporaryCountdownFallback(
   }
 
   if (conversationMap['isTemporary'] == true) {
-    _resetTemporaryExpiryOnMap(conversationMap, startedAt);
     return true;
   }
 
   return null;
+}
+
+void _copyTemporaryCountdownState(
+  Map<String, dynamic> target,
+  Map<String, dynamic> source,
+) {
+  for (final key in [
+    'isTemporary',
+    'temporaryExpiresAt',
+    'temporaryExpiryVersion',
+    'temporaryPausedRemainingMilliseconds',
+  ]) {
+    if (source.containsKey(key)) {
+      target[key] = source[key];
+    } else {
+      target.remove(key);
+    }
+  }
 }
 
 extension _ChatPagePersistenceExt on _ChatPageState {
@@ -78,48 +96,42 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     }
   }
 
-  /// 保存当前 `_history` 到对话。
-  ///
-  /// [resetTemporaryCountdown] 仅在"产生对话"时置 true（发送消息）：
-  /// 用于触发临时对话 1 小时倒计时重置。切换对话前的存档保存、
-  /// 编辑截断、删除消息等非产生事件保持 false。
-  Future<void> _saveMessages({
+  /// 保存当前 `_history` 到对话；临时计时器状态由生成生命周期单独管理。
+  Future<bool> _saveMessages({
     String? capturedConvId,
-    bool resetTemporaryCountdown = false,
-    bool? capturedIsTemporary,
-    List<ChatMessage>? messagesOverride,
-    bool completeHistorySnapshot = false,
+    Map<String, dynamic>? capturedTemporaryState,
+    List<ChatMessage>? historyOverride,
+    bool requireNotifierPersistence = false,
   }) async {
-    final historySnapshot = List<ChatMessage>.from(
-      messagesOverride ?? _history,
-    );
-    bool? conversationWasTemporary = capturedIsTemporary;
+    final historySnapshot = List<ChatMessage>.from(historyOverride ?? _history);
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-      if (convId == null) return;
-      if (resetTemporaryCountdown && capturedIsTemporary == null) {
-        final conversation = ref
-            .read(conversationsProvider)
-            .where((conversation) => conversation.id == convId)
-            .firstOrNull;
-        conversationWasTemporary = conversation?.isTemporary;
-      }
-      await ref.read(conversationsProvider.notifier).updateMessages(
-            convId,
-            [...historySnapshot],
-            resetTemporaryCountdown: resetTemporaryCountdown,
-            completeHistorySnapshot: completeHistorySnapshot,
-          );
+      if (convId == null) return false;
+      final persisted =
+          await ref.read(conversationsProvider.notifier).updateMessages(
+        convId,
+        [...historySnapshot],
+      );
+      return persisted;
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
       debugPrint('_saveMessages via notifier failed: $e\n$s');
-      await AppLogService.error('ChatPage', '通过 notifier 保存消息失败, 尝试直接写入', e, s);
+      await AppLogService.error(
+        'ChatPage',
+        requireNotifierPersistence
+            ? '通过 notifier 持久化消息失败'
+            : '通过 notifier 保存消息失败, 尝试直接写入',
+        e,
+        s,
+      );
+      if (requireNotifierPersistence) return false;
       try {
         final prefs = await SharedPreferences.getInstance();
         final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-        if (convId == null) return;
-        var fallbackTemporaryState = conversationWasTemporary;
+        if (convId == null) return false;
+        var fallbackTemporaryState =
+            capturedTemporaryState?['isTemporary'] == true;
         var fallbackTemporaryStateWasRead = false;
         try {
           final currentConversation = ref
@@ -195,22 +207,35 @@ extension _ChatPagePersistenceExt on _ChatPageState {
               } else {
                 list.insert(0, targetMap);
               }
-              if (resetTemporaryCountdown) {
-                fallbackTemporaryState = applyTemporaryCountdownFallback(
+              if (fallbackTemporaryState == false) {
+                applyTemporaryCountdownFallback(
                   targetMap,
-                  wasTemporary: fallbackTemporaryState,
-                  persistedStateIsAuthoritative:
-                      existingIdx >= 0 && !fallbackTemporaryStateWasRead,
+                  wasTemporary: false,
+                  persistedStateIsAuthoritative: true,
                   startedAt: savedAt,
+                );
+              } else if (fallbackTemporaryStateWasRead &&
+                  fallbackTemporaryState == true &&
+                  targetMap['isTemporary'] != true &&
+                  capturedTemporaryState != null) {
+                _copyTemporaryCountdownState(
+                  targetMap,
+                  capturedTemporaryState,
                 );
               }
               final json = jsonEncode(list);
-              await prefs.setString('conversations', json);
+              if (!await prefs.setString('conversations', json)) {
+                await AppLogService.error(
+                  'ChatPage',
+                  '保存消息失败 (Tier A: SharedPreferences 写入返回 false)',
+                );
+                return false;
+              }
               await AppLogService.warning(
                 'ChatPage',
                 '通过直接写入 SharedPreferences 成功保存消息 (Tier A)',
               );
-              return;
+              return true;
             }
           }
         } catch (eA, sA) {
@@ -238,15 +263,19 @@ extension _ChatPagePersistenceExt on _ChatPageState {
             'sortOrder': 0,
             'draftText': '',
           };
-          if (resetTemporaryCountdown && fallbackTemporaryState == true) {
-            _resetTemporaryExpiryOnMap(convMap, savedAt);
+          if (fallbackTemporaryState == true &&
+              capturedTemporaryState != null) {
+            _copyTemporaryCountdownState(convMap, capturedTemporaryState);
           }
           final json = jsonEncode([convMap]);
-          await prefs.setString('conversations', json);
+          if (!await prefs.setString('conversations', json)) {
+            throw StateError('SharedPreferences Tier B save returned false');
+          }
           await AppLogService.error(
             'ChatPage',
             '通过直接写入 SharedPreferences 成功保存消息 (Tier B - 仅当前对话)',
           );
+          return true;
         } catch (eB, sB) {
           debugPrint('_saveMessages Tier B failed: $eB\n$sB');
           await AppLogService.error(
@@ -261,25 +290,50 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         await AppLogService.error('ChatPage', '保存消息失败 (外层兜底)', eOuter, sOuter);
       }
     }
+    return false;
   }
 
-  Future<void> _onMessageSend(
+  Future<StreamResult?> _onMessageSend(
     String text,
     List<Attachment> attachments, {
     List<ChatMessage>? historyForRequestPrefix,
+    void Function(String messageId)? onUserMessageCreated,
+    bool allowDuringHistoryModification = false,
   }) async {
+    if (_isModifyingHistory && !allowDuringHistoryModification) return null;
     // Guard: only block sending if THIS conversation is streaming,
     // not if another conversation happens to be streaming elsewhere.
     String? convId = ref.read(activeConversationIdProvider);
+    ConversationsNotifier? temporaryCountdownNotifier;
+    var countdownPaused = false;
+    var countdownResolved = false;
+    var pendingSendReserved = false;
     if (convId != null &&
         ref.read(streamingConversationsProvider).contains(convId)) {
-      return;
+      return null;
     }
     // Synchronous guard: prevent double-send from rapid Enter / button taps
     // during the async gap between the guard above and the synchronous
     // _streams insertion inside manager.startStreaming.
-    if (convId != null && _pendingSendConvIds.contains(convId)) return;
+    if (convId != null && _pendingSendConvIds.contains(convId)) return null;
     try {
+      if (convId != null) {
+        _pendingSendConvIds.add(convId);
+        pendingSendReserved = true;
+        final conversationsNotifier = ref.read(conversationsProvider.notifier);
+        temporaryCountdownNotifier = conversationsNotifier;
+        final temporaryConversation = ref
+            .read(conversationsProvider)
+            .where(
+              (conversation) =>
+                  conversation.id == convId && conversation.isTemporary,
+            )
+            .firstOrNull;
+        if (temporaryConversation != null) {
+          countdownPaused = true;
+          await conversationsNotifier.pauseTemporaryCountdown(convId);
+        }
+      }
       await AppLogService.info(
         'ChatPage',
         '发送消息, convId=$convId, text长度=${text.length}, '
@@ -291,12 +345,29 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         convId = ref.read(activeConversationIdProvider);
         await AppLogService.info('ChatPage', '新对话创建完成: $convId');
       }
-      if (convId == null) return;
+      if (convId == null) return null;
       // 登记在 convId 解析**之后**（含新建对话路径）：否则无活跃对话
       // 时两次极速回车都不会被 pending 拦截，第二条消息已入库却在
       // _startStreaming 的流式守卫处被静默丢弃（孤儿消息）。
-      if (_pendingSendConvIds.contains(convId)) return;
-      _pendingSendConvIds.add(convId);
+      if (!pendingSendReserved) {
+        if (_pendingSendConvIds.contains(convId)) return null;
+        _pendingSendConvIds.add(convId);
+        pendingSendReserved = true;
+      }
+
+      final temporaryConversation = ref
+          .read(conversationsProvider)
+          .where(
+            (conversation) =>
+                conversation.id == convId && conversation.isTemporary,
+          )
+          .firstOrNull;
+      final conversationsNotifier = ref.read(conversationsProvider.notifier);
+      temporaryCountdownNotifier = conversationsNotifier;
+      if (temporaryConversation != null && !countdownPaused) {
+        countdownPaused = true;
+        await conversationsNotifier.pauseTemporaryCountdown(convId);
+      }
 
       // 附件归属当前对话：图片压缩磁盘缓存按（对话, 哈希）隔离存储，
       // 发送前必须登记（选中时对话可能尚未创建）。若归属发生变化
@@ -310,23 +381,25 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       }
 
       await _ensureHistoryLoaded(convId);
-      if (!mounted || ref.read(activeConversationIdProvider) != convId) return;
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+        return null;
+      }
 
       // Save the current enabled tools to the conversation before sending.
       // This ensures the tool preferences are persisted even if the user
       // switches conversations or navigates away during streaming.
       _saveEnabledToolsToConversation();
-      final conversationWasTemporary = ref.read(conversationsProvider).any(
+      final activeTemporaryConversation = ref
+          .read(conversationsProvider)
+          .where(
             (conversation) =>
                 conversation.id == convId && conversation.isTemporary,
-          );
-
-      // The UI keeps a bounded recent window, while each model request still
-      // receives the conversation's complete persisted context.
-      final completeContext = await ref
-          .read(conversationsProvider.notifier)
-          .loadFullMessagesForContext(convId);
-      if (!mounted || ref.read(activeConversationIdProvider) != convId) return;
+          )
+          .firstOrNull;
+      final capturedTemporaryState =
+          temporaryConversation == null || activeTemporaryConversation == null
+              ? null
+              : activeTemporaryConversation.toMap();
 
       final userMsgId = 'u${DateTime.now().microsecondsSinceEpoch}';
 
@@ -346,18 +419,12 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           createdAt: DateTime.now(),
         ),
       );
+      onUserMessageCreated?.call(userMsgId);
 
       // Persist the user message before starting the background stream. If the
       // page is disposed during generation, the next page instance can load
       // this message even before the manager's periodic partial save runs.
-      final currentById = {for (final message in _history) message.id: message};
-      final historyForStream = completeContext
-          .map((message) => currentById[message.id] ?? message)
-          .toList();
-      final contextIds = historyForStream.map((message) => message.id).toSet();
-      historyForStream.addAll(
-        _history.where((message) => !contextIds.contains(message.id)),
-      );
+      final historyForStream = List<ChatMessage>.from(_history);
       final requestHistory = historyForRequestPrefix == null
           ? null
           : <ChatMessage>[
@@ -366,18 +433,33 @@ extension _ChatPagePersistenceExt on _ChatPageState {
             ];
       final saveFuture = _saveMessages(
         capturedConvId: convId,
-        resetTemporaryCountdown: true,
-        capturedIsTemporary: conversationWasTemporary,
+        capturedTemporaryState: capturedTemporaryState,
       );
 
-      await _startStreaming(
-        text,
-        capturedConvId: convId,
-        historyOverride: historyForStream,
-        requestHistoryOverride: requestHistory,
-        historyOnSuccess: requestHistory ?? historyForStream,
-      );
-      await saveFuture;
+      StreamResult? result;
+      var successful = false;
+      try {
+        result = await _startStreaming(
+          text,
+          capturedConvId: convId,
+          historyOverride: historyForStream,
+          requestHistoryOverride: requestHistory,
+          historyOnSuccess: requestHistory,
+        );
+        await saveFuture;
+        successful = result != null &&
+            !result.cancelled &&
+            !result.failed &&
+            result.assistantMessage?.isError != true;
+      } finally {
+        if (capturedTemporaryState != null) {
+          countdownResolved = true;
+          await conversationsNotifier.finishTemporaryCountdown(
+            convId,
+            successful: successful,
+          );
+        }
+      }
 
       // Reload _history from conversation provider to ensure it reflects the
       // manager's persisted messages. Post-stream code in _startStreaming may
@@ -391,7 +473,15 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           '[STREAM-SEND] _onMessageSend: after sync, _history.length=${_history.length}',
         );
       } catch (_) {}
+      return result;
     } finally {
+      if (countdownPaused && !countdownResolved) {
+        countdownResolved = true;
+        await temporaryCountdownNotifier?.finishTemporaryCountdown(
+          convId!,
+          successful: false,
+        );
+      }
       if (convId != null) _pendingSendConvIds.remove(convId);
     }
   }

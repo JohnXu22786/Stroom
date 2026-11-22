@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,17 +18,19 @@ import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
-import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_launch_snapshot.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
+import 'package:stroom/task_flow/models/flow_temporary_output.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/task_flow/services/task_flow_scheduler.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/utils/provider_models.dart';
@@ -39,33 +42,18 @@ class _Documents extends PathProviderPlatform {
   Future<String?> getApplicationDocumentsPath() async => path;
 }
 
-class _MemoryCredentialStore implements LlmCredentialStore {
-  final _values = <String, String>{};
-
+class _FailOnDocumentsLookup extends PathProviderPlatform {
+  _FailOnDocumentsLookup(this.path, {this.failOnCall = 2});
+  final String path;
+  final int failOnCall;
+  var calls = 0;
   @override
-  Future<String?> read(String reference) async => _values[reference];
-
-  @override
-  Future<void> write(String reference, String secret) async {
-    _values[reference] = secret;
+  Future<String?> getApplicationDocumentsPath() async {
+    if (++calls == failOnCall) {
+      throw const FileSystemException('documents lookup failed');
+    }
+    return path;
   }
-
-  @override
-  Future<void> delete(String reference) async {
-    _values.remove(reference);
-  }
-}
-
-class _TestProviderEntriesNotifier extends ProviderEntriesNotifier {
-  _TestProviderEntriesNotifier()
-      : super(credentialStore: _MemoryCredentialStore()) {
-    _load = load();
-  }
-
-  late final Future<void> _load;
-
-  @override
-  Future<void> get ready => _load;
 }
 
 const _dispatchWait = Duration(seconds: 10);
@@ -75,9 +63,7 @@ Future<void> _waitFor(bool Function() ready, String description) async {
   while (!ready()) {
     if (timer.elapsed >= _dispatchWait) {
       throw TimeoutException(
-        'Timed out waiting for $description',
-        _dispatchWait,
-      );
+          'Timed out waiting for $description', _dispatchWait);
     }
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
@@ -91,20 +77,20 @@ class _ManualDownloads extends CatCatchNotifier {
   final confirmed = <String>[];
   void Function(String)? onSelect;
   void Function(String)? onConfirm;
+  void setTasksForTest(List<catcatch.CatCatchTask> tasks) => state = tasks;
+  List<catcatch.CatCatchTask> get tasksForTest => state;
 
   @override
-  String addTask(
-    String url,
-    int expectedDurationSec, {
-    String videoFolder = '',
-    String audioFolder = '',
-    String? taskId,
-    bool deferSingleResourceSelection = false,
-    bool flowManagedSelection = false,
-  }) {
+  String addTask(String url, int expectedDurationSec,
+      {String videoFolder = '',
+      String audioFolder = '',
+      String? taskId,
+      bool flowManagedSelection = false,
+      bool deferSingleResourceSelection = false}) {
     final id = taskId!;
     idsByUrl[url] = id;
     final confirming = url.endsWith('/confirm');
+    final recovering = url.endsWith('/recovery');
     state = [
       ...state,
       catcatch.CatCatchTask(
@@ -112,35 +98,40 @@ class _ManualDownloads extends CatCatchNotifier {
         url: url,
         expectedDurationSec: expectedDurationSec,
         createdAt: DateTime(2026),
+        status: recovering
+            ? catcatch.TaskStatus.paused
+            : catcatch.TaskStatus.running,
         detectedMedia: [
-          const MediaResource(
-            url: 'https://x/one.mp4',
-            name: 'one',
-            ext: 'mp4',
-          ),
-          if (!url.endsWith('/single'))
+          url.endsWith('/unclassified')
+              ? const MediaResource(
+                  url: 'https://x/one.bin', name: 'one', ext: 'bin')
+              : const MediaResource(
+                  url: 'https://x/one.mp4', name: 'one', ext: 'mp4'),
+          if (!url.endsWith('/single') && !url.endsWith('/unclassified'))
             const MediaResource(
-              url: 'https://x/two.mp4',
-              name: 'two',
-              ext: 'mp4',
-            ),
+                url: 'https://x/two.mp4', name: 'two', ext: 'mp4'),
         ],
         selectedMedia: confirming
             ? const MediaResource(
-                url: 'https://x/one.mp4',
-                name: 'one',
-                ext: 'mp4',
-              )
+                url: 'https://x/one.mp4', name: 'one', ext: 'mp4')
             : null,
-        metadata: confirming ? {'pendingConfirm': 'special_format'} : {},
+        metadata: {
+          if (flowManagedSelection)
+            catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
+          if (confirming) 'pendingConfirm': 'special_format',
+          if (recovering)
+            catcatch.CatCatchTask.webViewRecoveryRequiredKey: 'true',
+          if (deferSingleResourceSelection)
+            'deferSingleResourceSelection': 'true',
+        },
         steps: [
-          catcatch.StepStatus.running(
-            confirming
-                ? catcatch.StepType.converting
-                : (url.endsWith('/first') || url.endsWith('/single'))
-                    ? catcatch.StepType.userSelecting
-                    : catcatch.StepType.fetching,
-          ),
+          catcatch.StepStatus.running(confirming
+              ? catcatch.StepType.converting
+              : (url.endsWith('/first') ||
+                      url.endsWith('/single') ||
+                      url.endsWith('/unclassified'))
+                  ? catcatch.StepType.userSelecting
+                  : catcatch.StepType.fetching),
         ],
       ),
     ];
@@ -177,10 +168,10 @@ class _ManualDownloads extends CatCatchNotifier {
         task.id == id
             ? task.copyWith(
                 status: catcatch.TaskStatus.completed,
-                downloadedFilePath: File(
-                  'tests/fixtures/catcatch/video_only.mp4',
-                ).absolute.path,
-              )
+                downloadedFilePath:
+                    File('tests/fixtures/catcatch/video_only.mp4')
+                        .absolute
+                        .path)
             : task,
     ];
   }
@@ -209,17 +200,29 @@ class _GatedNotifier extends TaskFlowExecutionNotifier {
   }
 }
 
+class _FailNextRunningPersistNotifier extends TaskFlowExecutionNotifier {
+  bool failNextRunningPersist = false;
+
+  @override
+  Future<bool> persist() {
+    if (failNextRunningPersist &&
+        state.any(
+            (execution) => execution.status == FlowExecutionStatus.running)) {
+      failNextRunningPersist = false;
+      return Future.value(false);
+    }
+    return super.persist();
+  }
+}
+
 class _Tasks extends TaskListNotifier {
   _Tasks(super.ref);
   ProviderConfigItem? resumedConfig;
   ModelConfig? resumedModel;
   int resumes = 0;
   @override
-  void resumeTask(
-    String taskId, {
-    ProviderConfigItem? providerConfig,
-    ModelConfig? modelConfig,
-  }) {
+  void resumeTask(String taskId,
+      {ProviderConfigItem? providerConfig, ModelConfig? modelConfig}) {
     resumes++;
     resumedConfig = providerConfig;
     resumedModel = modelConfig;
@@ -228,6 +231,39 @@ class _Tasks extends TaskListNotifier {
   @override
   void removeTask(String taskId) {
     state = state.where((t) => t.id != taskId).toList();
+  }
+}
+
+class _BlockingClearTasks extends _Tasks {
+  _BlockingClearTasks(super.ref);
+
+  final clearEntered = Completer<void>();
+  final releaseClear = Completer<void>();
+
+  @override
+  Future<bool> clearDownloadedFilePath(String taskId) async {
+    if (!clearEntered.isCompleted) clearEntered.complete();
+    await releaseClear.future;
+    return super.clearDownloadedFilePath(taskId);
+  }
+}
+
+/// Pause cleanup after the child task state changes but before the caller can
+/// remove the execution record.
+class _PostClearGatedTasks extends _Tasks {
+  _PostClearGatedTasks(super.ref);
+
+  final clearEntered = Completer<void>();
+  final releaseClear = Completer<void>();
+
+  @override
+  Future<bool> clearDownloadedFilePath(String taskId) async {
+    final clearing = super.clearDownloadedFilePath(taskId);
+    if (!clearEntered.isCompleted) {
+      clearEntered.complete();
+      await releaseClear.future;
+    }
+    return clearing;
   }
 }
 
@@ -241,115 +277,85 @@ class _Manager extends ChatStreamManager {
   final assistants = <Assistant?>[];
   final entries = <ProviderEntriesState?>[];
   @override
-  Future<StreamResult> startStreaming({
-    required String text,
-    required String convId,
-    required List<ChatMessage> history,
-    List<ChatMessage>? requestHistoryOverride,
-    List<ChatMessage>? historyOnSuccess,
-    Map<String, String>? customParamValues,
-    List<ToolDefinition> tools = const [],
-    bool reasoning = false,
-    String reasoningEffort = 'medium',
-    Map<String, String> reasoningParamValues = const {},
-    String? selectedAccountId,
-    String? streamingMsgId,
-    Assistant? assistant,
-    ProviderEntriesState? entriesStateOverride,
-  }) async {
+  Future<StreamResult> startStreaming(
+      {required String text,
+      required String convId,
+      required List<ChatMessage> history,
+      List<ChatMessage>? requestHistoryOverride,
+      List<ChatMessage>? historyOnSuccess,
+      bool replaceHistoryOnError = false,
+      List<ToolDefinition> tools = const [],
+      bool reasoning = false,
+      String reasoningEffort = 'medium',
+      Map<String, String> reasoningParamValues = const {},
+      String? streamingMsgId,
+      Assistant? assistant,
+      Map<String, String>? customParamValues,
+      ProviderEntriesState? entriesStateOverride}) async {
     assistants.add(assistant);
     entries.add(entriesStateOverride);
     final reply = ChatMessage(role: 'assistant', content: 'done');
     return StreamResult(
-      history: [...history, reply],
-      assistantMessage: reply,
-      fullReply: reply.content,
-    );
+        history: [...history, reply],
+        assistantMessage: reply,
+        fullReply: reply.content);
   }
 
   @override
   void cancel([String? convId]) {}
 }
 
-ProviderEntriesState _providers(
-  String type,
-  String id, {
-  String api = 'api',
-  String key = 'old-key',
-  String host = 'https://old.invalid',
-  Map<String, dynamic> auth = const {},
-  double speedMax = 2,
-}) =>
-    ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          id: 'entry-$id',
-          type: type,
-          name: 'P',
-          configs: [
-            ProviderConfigItem(
-              id: 'config-$id',
-              providerName: 'P',
-              host: host,
-              key: key,
-              typeConfig: auth,
-              models: [
-                ModelConfig(
-                    id: id, name: 'M', modelId: api, speedMax: speedMax),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
+ProviderEntriesState _providers(String type, String id,
+        {String api = 'api',
+        String key = 'old-key',
+        String host = 'https://old.invalid',
+        Map<String, dynamic> auth = const {},
+        double speedMax = 2}) =>
+    ProviderEntriesState(entries: [
+      ProviderEntry(id: 'entry-$id', type: type, name: 'P', configs: [
+        ProviderConfigItem(
+            id: 'config-$id',
+            providerName: 'P',
+            host: host,
+            key: key,
+            typeConfig: auth,
+            models: [
+              ModelConfig(id: id, name: 'M', modelId: api, speedMax: speedMax)
+            ])
+      ])
+    ]);
 
-Map<String, String> _reference(String id) => {
-      'configId': 'config-$id',
-      'modelId': id,
-    };
+Map<String, String> _reference(String id) =>
+    {'configId': 'config-$id', 'modelId': id};
 FlowSubTask _step(String type, {FlowPayload? result, String? child}) =>
     FlowSubTask(
-      blockTypeKey: type,
-      blockLabel: type,
-      subTaskId: child ?? 'pending_${type}_0',
-      subTaskType: type == 'tts' ? 'synthesis' : 'background',
-      status: result == null ? TaskStatus.waiting : TaskStatus.completed,
-      result: result,
-    );
+        blockTypeKey: type,
+        blockLabel: type,
+        subTaskId: child ?? 'pending_${type}_0',
+        subTaskType: type == 'tts' ? 'synthesis' : 'background',
+        status: result == null ? TaskStatus.waiting : TaskStatus.completed,
+        result: result);
 
 void main() {
   for (final requested in ['missing API model', 'deleted provider']) {
     test('launch preflight rejects assistant bound to $requested', () async {
       final model = _providers('llm', 'live');
       final assistant = Assistant(
-        id: 'assistant',
-        name: 'A',
-        prompt: 'P',
-        defaultModelId: requested == 'deleted provider' ? 'api' : 'missing',
-        defaultProviderName: requested == 'deleted provider' ? 'gone' : 'P',
-      );
-      final flow = TaskFlowDefinition(
-        inputType: IOType.text,
-        blocks: [
-          TaskFlowBlock(
-            typeKey: BlockType.chat,
-            params: const {'assistantId': 'assistant'},
-          ),
-        ],
-      );
+          id: 'assistant',
+          name: 'A',
+          prompt: 'P',
+          defaultModelId: requested == 'deleted provider' ? 'api' : 'missing',
+          defaultProviderName: requested == 'deleted provider' ? 'gone' : 'P');
+      final flow = TaskFlowDefinition(inputType: IOType.text, blocks: [
+        TaskFlowBlock(
+            typeKey: BlockType.chat, params: const {'assistantId': 'assistant'})
+      ]);
       await expectLater(
-        validateTaskFlow(
-          flow,
-          [const FlowRunInput(text: 'input')],
-          providers: model,
-          assistants: [assistant],
-        ),
-        throwsA(
-          isA<TaskFlowValidationException>()
+          validateTaskFlow(flow, [const FlowRunInput(text: 'input')],
+              providers: model, assistants: [assistant]),
+          throwsA(isA<TaskFlowValidationException>()
               .having((e) => e.blockIndex, 'blockIndex', 0)
-              .having((e) => e.message, 'message', contains('模型')),
-        ),
-      );
+              .having((e) => e.message, 'message', contains('模型'))));
     });
   }
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -357,34 +363,26 @@ void main() {
   late PathProviderPlatform previous;
   final containers = <ProviderContainer>[];
   late TaskFlowDefinition flow;
-  ProviderContainer make({
-    TaskFlowExecutionNotifier? notifier,
-    FlowBlockRunner? runner,
-    _ManualDownloads Function(Ref)? downloads,
-    TaskFlowScheduler? scheduler,
-    _Tasks Function(Ref)? tasks,
-    _Assistants? assistants,
-    _Manager? manager,
-  }) {
-    final container = ProviderContainer(
-      overrides: [
-        providerEntriesProvider.overrideWith(
-          (ref) => _TestProviderEntriesNotifier(),
-        ),
-        if (notifier != null)
-          taskFlowExecutionsProvider.overrideWith((ref) => notifier),
-        if (runner != null)
-          taskFlowBlockRunnerProvider.overrideWithValue(runner),
-        if (downloads != null) catcatchTasksProvider.overrideWith(downloads),
-        if (scheduler != null)
-          taskFlowSchedulerProvider.overrideWithValue(scheduler),
-        if (tasks != null) taskListProvider.overrideWith(tasks),
-        if (assistants != null)
-          assistantProvider.overrideWith((ref) => assistants),
-        if (manager != null)
-          chatStreamManagerProvider.overrideWithValue(manager),
-      ],
-    );
+  ProviderContainer make(
+      {TaskFlowExecutionNotifier? notifier,
+      FlowBlockRunner? runner,
+      _ManualDownloads Function(Ref)? downloads,
+      TaskFlowScheduler? scheduler,
+      _Tasks Function(Ref)? tasks,
+      _Assistants? assistants,
+      _Manager? manager}) {
+    final container = ProviderContainer(overrides: [
+      if (notifier != null)
+        taskFlowExecutionsProvider.overrideWith((ref) => notifier),
+      if (runner != null) taskFlowBlockRunnerProvider.overrideWithValue(runner),
+      if (downloads != null) catcatchTasksProvider.overrideWith(downloads),
+      if (scheduler != null)
+        taskFlowSchedulerProvider.overrideWithValue(scheduler),
+      if (tasks != null) taskListProvider.overrideWith(tasks),
+      if (assistants != null)
+        assistantProvider.overrideWith((ref) => assistants),
+      if (manager != null) chatStreamManagerProvider.overrideWithValue(manager),
+    ]);
     containers.add(container);
     container.read(taskFlowListProvider.notifier).state = [flow];
     return container;
@@ -396,19 +394,13 @@ void main() {
     PathProviderPlatform.instance = _Documents(directory.path);
     AppStorage.resetCache();
     SharedPreferences.setMockInitialValues({
-      'assistants': jsonEncode([
-        Assistant(id: 'assistant', name: 'A', prompt: 'P').toMap(),
-      ]),
+      'assistants': jsonEncode(
+          [Assistant(id: 'assistant', name: 'A', prompt: 'P').toMap()])
     });
-    flow = TaskFlowDefinition(
-      id: 'flow',
-      blocks: [
-        TaskFlowBlock(
-          typeKey: BlockType.chat,
-          params: {'assistantId': 'assistant'},
-        ),
-      ],
-    );
+    flow = TaskFlowDefinition(id: 'flow', blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.chat, params: {'assistantId': 'assistant'})
+    ]);
   });
   tearDown(() async {
     for (final container in containers) {
@@ -421,554 +413,427 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test(
-    'pause during start-state save blocks child dispatch until resume',
-    () async {
-      final notifier = _GatedNotifier()
-        ..shouldHold = (records) =>
-            records.any((e) => e.status == FlowExecutionStatus.running);
-      var calls = 0;
-      final container = make(
+  test('pause during start-state save blocks child dispatch until resume',
+      () async {
+    final notifier = _GatedNotifier()
+      ..shouldHold = (records) =>
+          records.any((e) => e.status == FlowExecutionStatus.running);
+    var calls = 0;
+    final container = make(
         notifier: notifier,
         runner: (b, input, id, step) async {
           calls++;
           return const FlowPayload.text('done');
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final ids = await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'input'),
-      ]);
-      await notifier.entered.future;
-      await service.pauseExecution(ids.single);
-      notifier.release.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(calls, 0);
-      expect(
-        notifier.execution(ids.single)!.status,
-        FlowExecutionStatus.paused,
-      );
-      await service.resumeExecution(ids.single);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(calls, 1);
-    },
-  );
+        });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service
+        .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
+    await notifier.entered.future;
+    await service.pauseExecution(ids.single);
+    notifier.release.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(calls, 0);
+    expect(notifier.execution(ids.single)!.status, FlowExecutionStatus.paused);
+    await service.resumeExecution(ids.single);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(calls, 1);
+  });
 
   for (final action in ['cancel', 'pause']) {
-    test(
-      '$action during resume save cannot revive or unpause the execution',
-      () async {
-        final original = _providers('tts', 'voice');
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(
-          'provider_entries',
-          jsonEncode(
-            original.entries.map((e) => e.toCredentialMigrationMap()).toList(),
-          ),
-        );
-        flow = flow.copyWith(
-          blocks: [
-            TaskFlowBlock(
-              typeKey: BlockType.tts,
-              params: {'modelRef': _reference('voice')},
-            ),
-          ],
-        );
-        final notifier = _GatedNotifier();
-        late _Tasks tasks;
-        late ProviderContainer container;
-        final done = Completer<FlowPayload>();
-        var calls = 0;
-        container = make(
+    test('$action during resume save cannot revive or unpause the execution',
+        () async {
+      final original = _providers('tts', 'voice');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('provider_entries',
+          jsonEncode(original.entries.map((e) => e.toMap()).toList()));
+      flow = flow.copyWith(blocks: [
+        TaskFlowBlock(
+            typeKey: BlockType.tts, params: {'modelRef': _reference('voice')})
+      ]);
+      final notifier = _GatedNotifier();
+      late _Tasks tasks;
+      late ProviderContainer container;
+      final done = Completer<FlowPayload>();
+      var calls = 0;
+      container = make(
           notifier: notifier,
           tasks: (ref) => tasks = _Tasks(ref),
           runner: (b, input, id, step) {
             tasks.state = [
               SynthesisTask(
-                id: 'child',
-                title: 'T',
-                text: input.value,
-                status: TaskStatus.paused,
-                providerConfig: original.entries.single.configs.single,
-                modelConfig:
-                    original.entries.single.configs.single.models.single,
-              ),
+                  id: 'child',
+                  title: 'T',
+                  text: input.value,
+                  status: TaskStatus.paused,
+                  providerConfig: original.entries.single.configs.single,
+                  modelConfig:
+                      original.entries.single.configs.single.models.single)
             ];
             notifier.updateSubTaskId(id, step.id, 'child');
             calls++;
             return done.future;
-          },
-        );
-        container.read(taskListProvider);
-        final service = container.read(taskFlowExecutionServiceProvider);
-        final ids = await service.launchFlowMany('flow', [
-          const FlowRunInput(text: 'input'),
-        ]);
-        await _waitFor(() => calls == 1, 'initial synthesis dispatch');
+          });
+      container.read(taskListProvider);
+      final service = container.read(taskFlowExecutionServiceProvider);
+      final ids = await service
+          .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
+      await _waitFor(() => calls == 1, 'initial synthesis dispatch');
+      await service.pauseExecution(ids.single);
+      notifier.shouldHold = (records) =>
+          records.any((e) => e.status == FlowExecutionStatus.running);
+      final resume = service.resumeExecution(ids.single);
+      await notifier.entered.future.timeout(_dispatchWait);
+      if (action == 'cancel') {
+        await service.cancelExecution(ids.single);
+      } else {
         await service.pauseExecution(ids.single);
-        notifier.shouldHold = (records) =>
-            records.any((e) => e.status == FlowExecutionStatus.running);
-        final resume = service.resumeExecution(ids.single);
-        await notifier.entered.future.timeout(_dispatchWait);
-        if (action == 'cancel') {
-          await service.cancelExecution(ids.single);
-        } else {
-          await service.pauseExecution(ids.single);
-        }
-        notifier.release.complete();
-        await resume;
-        done.complete(const FlowPayload.text('done'));
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        expect(calls, 1);
-        expect(tasks.resumes, 0);
-        expect(
+      }
+      notifier.release.complete();
+      await resume;
+      done.complete(const FlowPayload.text('done'));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(calls, 1);
+      expect(tasks.resumes, 0);
+      expect(
           notifier.execution(ids.single)!.status,
           action == 'cancel'
               ? FlowExecutionStatus.cancelled
-              : FlowExecutionStatus.paused,
-        );
-      },
-    );
+              : FlowExecutionStatus.paused);
+    });
   }
 
-  test(
-    'cancel during checkpoint resume save prevents a replacement worker',
-    () async {
-      final notifier = _GatedNotifier();
-      var calls = 0;
-      final container = make(
+  test('cancel during checkpoint resume save prevents a replacement worker',
+      () async {
+    final notifier = _GatedNotifier();
+    var calls = 0;
+    final container = make(
         notifier: notifier,
         runner: (b, input, id, step) async {
           calls++;
           throw StateError('fixture failure');
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final ids = await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'input'),
-      ]);
-      await _waitFor(
-        () =>
-            notifier.execution(ids.single)?.status ==
-            FlowExecutionStatus.failed,
-        'initial runner failure',
-      );
-      notifier.shouldHold = (records) =>
-          records.any((e) => e.status == FlowExecutionStatus.waiting);
-      final resume = service.resumeExecution(ids.single);
-      await notifier.entered.future;
-      await service.cancelExecution(ids.single);
-      notifier.release.complete();
-      await resume;
-      expect(calls, 1);
-      expect(
-        notifier.execution(ids.single)!.status,
-        FlowExecutionStatus.cancelled,
-      );
-    },
-  );
+        });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service
+        .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+    notifier.shouldHold = (records) =>
+        records.any((e) => e.status == FlowExecutionStatus.waiting);
+    final resume = service.resumeExecution(ids.single);
+    await notifier.entered.future;
+    await service.cancelExecution(ids.single);
+    notifier.release.complete();
+    await resume;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(calls, 1);
+    expect(
+        notifier.execution(ids.single)!.status, FlowExecutionStatus.cancelled);
+  });
 
   for (final action in ['cancel', 'pause']) {
-    test(
-      '$action during saved artifact read invalidates checkpoint resume',
-      () async {
-        final file = File('${directory.path}/checkpoint.txt');
-        await file.writeAsString('saved text');
-        final container = make(
-          runner: (b, input, id, step) async => const FlowPayload.text('done'),
-        );
-        final notifier = container.read(taskFlowExecutionsProvider.notifier);
-        final savedFlow = flow.copyWith(
-          blocks: [...flow.blocks, ...flow.blocks],
-        );
-        await notifier.addExecutions([
-          TaskFlowExecution(
+    test('$action during saved artifact read invalidates checkpoint resume',
+        () async {
+      final file = File('${directory.path}/checkpoint.txt');
+      await file.writeAsString('saved text');
+      final container = make(
+          runner: (b, input, id, step) async => const FlowPayload.text('done'));
+      final notifier = container.read(taskFlowExecutionsProvider.notifier);
+      final savedFlow = flow.copyWith(blocks: [...flow.blocks, ...flow.blocks]);
+      await notifier.addExecutions([
+        TaskFlowExecution(
             id: 'read-race',
             flowId: 'flow',
             flowName: 'F',
             status: FlowExecutionStatus.paused,
             inputText: 'original',
             snapshot: FlowLaunchSnapshot.capture(
-              savedFlow,
-              const ProviderEntriesState(),
-              [Assistant(id: 'assistant', name: 'A', prompt: 'P')],
-            ),
+                savedFlow,
+                const ProviderEntriesState(),
+                [Assistant(id: 'assistant', name: 'A', prompt: 'P')]),
             subTasks: [
-              _step(
-                'chat',
-                result: FlowPayload.file(
-                  fileReference: file.path,
-                  type: IOType.text,
-                ),
-              ),
-              _step('chat'),
-            ],
-          ),
-        ]);
-        final service = container.read(taskFlowExecutionServiceProvider);
-        final resume = service.resumeExecution('read-race');
-        if (action == 'cancel') {
-          await service.cancelExecution('read-race');
-        } else {
-          await service.pauseExecution('read-race');
-        }
-        await resume;
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        expect(
+              _step('chat',
+                  result: FlowPayload.file(
+                      fileReference: file.path, type: IOType.text)),
+              _step('chat')
+            ])
+      ]);
+      final service = container.read(taskFlowExecutionServiceProvider);
+      final resume = service.resumeExecution('read-race');
+      if (action == 'cancel') {
+        await service.cancelExecution('read-race');
+      } else {
+        await service.pauseExecution('read-race');
+      }
+      await resume;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(
           notifier.execution('read-race')!.status,
           action == 'cancel'
               ? FlowExecutionStatus.cancelled
-              : FlowExecutionStatus.paused,
-        );
-      },
-    );
+              : FlowExecutionStatus.paused);
+    });
   }
 
   test(
-    'untouched batch input stays waiting after pause resume and cold restore',
-    () async {
-      final active = Completer<FlowPayload>();
-      final firstDispatched = Completer<void>();
-      final container = make(
-        runner: (b, input, id, step) {
-          if (!firstDispatched.isCompleted) firstDispatched.complete();
-          return active.future;
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final ids = await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'first'),
-        const FlowRunInput(text: 'second'),
-      ]);
-      await firstDispatched.future.timeout(_dispatchWait);
-      await service.pauseExecution(ids.last);
-      await service.resumeExecution(ids.last);
-      expect(
+      'untouched batch input stays waiting after pause resume and cold restore',
+      () async {
+    final active = Completer<FlowPayload>();
+    final firstDispatched = Completer<void>();
+    final container = make(runner: (b, input, id, step) {
+      if (!firstDispatched.isCompleted) firstDispatched.complete();
+      return active.future;
+    });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service.launchFlowMany('flow', [
+      const FlowRunInput(text: 'first'),
+      const FlowRunInput(text: 'second')
+    ]);
+    await firstDispatched.future.timeout(_dispatchWait);
+    await service.pauseExecution(ids.last);
+    await service.resumeExecution(ids.last);
+    expect(
         container
             .read(taskFlowExecutionsProvider.notifier)
             .execution(ids.last)!
             .status,
-        FlowExecutionStatus.waiting,
-      );
-      service.dispose();
-      active.complete(const FlowPayload.text('late'));
-      final oldNotifier = container.read(taskFlowExecutionsProvider.notifier);
-      await _waitFor(
+        FlowExecutionStatus.waiting);
+    service.dispose();
+    active.complete(const FlowPayload.text('late'));
+    final oldNotifier = container.read(taskFlowExecutionsProvider.notifier);
+    await _waitFor(
         () =>
             oldNotifier.execution(ids.first)?.status ==
             FlowExecutionStatus.interrupted,
-        'first batch input interruption',
-      );
-      expect(await oldNotifier.persist(), isTrue);
-      final inputs = <String>[];
-      final fresh = make(
-        runner: (b, input, id, step) async {
-          inputs.add(input.value);
-          return const FlowPayload.text('done');
-        },
-      );
-      await fresh
-          .read(taskFlowExecutionsProvider.notifier)
-          .restoreFromPersistence();
-      await fresh
-          .read(taskFlowExecutionServiceProvider)
-          .restorePendingExecutions();
-      await _waitFor(
-        () => inputs.length == 1,
-        'restored second input dispatch',
-      );
-      await _waitFor(
+        'first batch input interruption');
+    expect(await oldNotifier.persist(), isTrue);
+    final inputs = <String>[];
+    final fresh = make(runner: (b, input, id, step) async {
+      inputs.add(input.value);
+      return const FlowPayload.text('done');
+    });
+    await fresh
+        .read(taskFlowExecutionsProvider.notifier)
+        .restoreFromPersistence();
+    await fresh
+        .read(taskFlowExecutionServiceProvider)
+        .restorePendingExecutions();
+    await _waitFor(() => inputs.length == 1, 'restored second input dispatch');
+    await _waitFor(
         () =>
             fresh
                 .read(taskFlowExecutionsProvider.notifier)
                 .execution(ids.last)
                 ?.status ==
             FlowExecutionStatus.completed,
-        'restored second input completion',
-      );
-      expect(inputs, ['second']);
-      expect(
+        'restored second input completion');
+    expect(inputs, ['second']);
+    expect(
         fresh
             .read(taskFlowExecutionsProvider.notifier)
             .execution(ids.last)!
             .status,
-        FlowExecutionStatus.completed,
-      );
-    },
-  );
+        FlowExecutionStatus.completed);
+  });
 
   test(
-    'snapshot preserves assistants whose display names are credential words',
-    () {
-      final assistants = ['Token', 'Key', 'Secret']
-          .map(
-            (name) => Assistant(id: name, name: name, prompt: 'public prompt'),
-          )
-          .toList();
-      final snapshot = FlowLaunchSnapshot.capture(
-        TaskFlowDefinition(
-          blocks: [
-            for (final a in assistants)
-              TaskFlowBlock(
-                typeKey: BlockType.chat,
-                params: {'assistantId': a.id},
-              ),
-          ],
-        ),
+      'resume cleanup retains completed temporary child ids until references clear',
+      () async {
+    final clearedTaskIds = <String>[];
+    final notifier = TaskFlowExecutionNotifier();
+    final temporaryFlow = TaskFlowDefinition(inputType: IOType.text, blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.tts, params: {flowTemporaryOutputParam: true}),
+      TaskFlowBlock(typeKey: BlockType.asr),
+    ]);
+    final snapshot = FlowLaunchSnapshot.capture(
+      temporaryFlow,
+      const ProviderEntriesState(),
+      const [],
+    );
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'resume-reference-cleanup',
+        flowId: 'flow',
+        flowName: 'F',
+        status: FlowExecutionStatus.paused,
+        inputText: 'input',
+        snapshot: snapshot,
+        subTasks: [
+          FlowSubTask(
+            id: 'temporary-step',
+            blockTypeKey: 'tts',
+            blockLabel: 'TTS',
+            subTaskId: 'completed-child',
+            subTaskType: 'synthesis',
+            status: TaskStatus.completed,
+            outcome: FlowStepOutcome.running,
+          ),
+          _step('asr'),
+        ],
+      ),
+    ]);
+
+    notifier.prepareResume('resume-reference-cleanup');
+    expect(await notifier.persist(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    notifier.dispose();
+
+    final restoredNotifier = TaskFlowExecutionNotifier(
+      clearTemporaryTaskFileReference: (step) async {
+        clearedTaskIds.add(step.subTaskId);
+        return true;
+      },
+    );
+    expect(await restoredNotifier.restore(), isTrue);
+    await restoredNotifier.removeExecution('resume-reference-cleanup');
+    restoredNotifier.dispose();
+
+    expect(clearedTaskIds, contains('completed-child'));
+  });
+
+  test('snapshot preserves assistants whose display names are credential words',
+      () {
+    final assistants = ['Token', 'Key', 'Secret']
+        .map((name) => Assistant(id: name, name: name, prompt: 'public prompt'))
+        .toList();
+    final snapshot = FlowLaunchSnapshot.capture(
+        TaskFlowDefinition(blocks: [
+          for (final a in assistants)
+            TaskFlowBlock(
+                typeKey: BlockType.chat, params: {'assistantId': a.id})
+        ]),
         const ProviderEntriesState(),
-        assistants,
-      );
-      expect(snapshot.assistants.map((a) => a.name), [
-        'Token',
-        'Key',
-        'Secret',
-      ]);
-    },
-  );
+        assistants);
+    expect(snapshot.assistants.map((a) => a.name), ['Token', 'Key', 'Secret']);
+  });
 
   test(
-    'assistant snapshot hydrates only same-ID current authentication parameters',
-    () {
-      Assistant assistant(String id, String secret, String tuning) => Assistant(
-            id: id,
-            name: 'A',
-            prompt: tuning,
-            settings: AssistantSettings(
-              customParameters: [
-                CustomParameter(
-                  name: 'Authorization',
-                  type: 'string',
-                  value: secret,
-                ),
-                CustomParameter(
-                  name: 'publicOption',
-                  type: 'string',
-                  value: tuning,
-                ),
-              ],
-            ),
-          );
-      final snapshot = FlowLaunchSnapshot.capture(
+      'assistant snapshot hydrates only same-ID current authentication parameters',
+      () {
+    Assistant assistant(String id, String secret, String tuning) => Assistant(
+        id: id,
+        name: 'A',
+        prompt: tuning,
+        settings: AssistantSettings(customParameters: [
+          CustomParameter(name: 'Authorization', type: 'string', value: secret),
+          CustomParameter(name: 'publicOption', type: 'string', value: tuning),
+        ]));
+    final snapshot = FlowLaunchSnapshot.capture(
         flow,
         const ProviderEntriesState(),
-        [assistant('assistant', 'old-secret', 'frozen')],
-      );
-      expect(jsonEncode(snapshot.toMap()), isNot(contains('old-secret')));
-      final hydrated = snapshot.resolveAssistants([
-        assistant('other', 'wrong-secret', 'wrong'),
-        assistant('assistant', 'new-secret', 'edited'),
-      ]) as List<Assistant>;
-      expect(hydrated.single.prompt, 'frozen');
-      expect(hydrated.single.settings.customParameters.map((p) => p.value), [
-        'frozen',
-        'new-secret',
-      ]);
-      expect(
-        () => snapshot.resolveAssistants([
-          assistant('other', 'wrong-secret', 'wrong'),
-        ]),
-        throwsStateError,
-      );
-    },
-  );
+        [assistant('assistant', 'old-secret', 'frozen')]);
+    expect(jsonEncode(snapshot.toMap()), isNot(contains('old-secret')));
+    final hydrated = snapshot.resolveAssistants([
+      assistant('other', 'wrong-secret', 'wrong'),
+      assistant('assistant', 'new-secret', 'edited'),
+    ]) as List<Assistant>;
+    expect(hydrated.single.prompt, 'frozen');
+    expect(hydrated.single.settings.customParameters.map((p) => p.value),
+        ['frozen', 'new-secret']);
+    expect(
+        () => snapshot
+            .resolveAssistants([assistant('other', 'wrong-secret', 'wrong')]),
+        throwsStateError);
+  });
 
-  test(
-    'cold chat queue waits for live assistant credential hydration',
-    () async {
-      final assistants = _Assistants();
-      final manager = _Manager();
-      final container = make(assistants: assistants, manager: manager);
-      final frozen = Assistant(
+  test('cold chat queue waits for live assistant credential hydration',
+      () async {
+    final assistants = _Assistants();
+    final manager = _Manager();
+    final container = make(assistants: assistants, manager: manager);
+    final frozen = Assistant(
         id: 'assistant',
         name: 'A',
         prompt: 'launch prompt',
-        settings: AssistantSettings(
-          customParameters: [
-            CustomParameter(
-              name: 'Authorization',
-              type: 'string',
-              value: 'old-secret',
-            ),
-          ],
-        ),
-      );
-      final notifier = container.read(taskFlowExecutionsProvider.notifier);
-      await notifier.addExecutions([
-        TaskFlowExecution(
+        settings: AssistantSettings(customParameters: [
+          CustomParameter(
+              name: 'Authorization', type: 'string', value: 'old-secret')
+        ]));
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await notifier.addExecutions([
+      TaskFlowExecution(
           id: 'cold',
           flowId: 'flow',
           flowName: 'F',
           status: FlowExecutionStatus.waiting,
           inputText: 'input',
           snapshot: FlowLaunchSnapshot.capture(
-            flow,
-            const ProviderEntriesState(),
-            [frozen],
-          ),
-          subTasks: [_step('chat')],
-        ),
-      ]);
-      await container.read(providerEntriesProvider.notifier).ready;
-      final restoring = container
-          .read(taskFlowExecutionServiceProvider)
-          .restorePendingExecutions();
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(manager.assistants, isEmpty);
-      assistants.state = [
-        frozen.copyWith(
+              flow, const ProviderEntriesState(), [frozen]),
+          subTasks: [_step('chat')])
+    ]);
+    await container.read(providerEntriesProvider.notifier).ready;
+    final restoring = container
+        .read(taskFlowExecutionServiceProvider)
+        .restorePendingExecutions();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(manager.assistants, isEmpty);
+    assistants.state = [
+      frozen.copyWith(
           prompt: 'edited',
-          settings: AssistantSettings(
-            customParameters: [
-              CustomParameter(
-                name: 'Authorization',
-                type: 'string',
-                value: 'new-secret',
-              ),
-            ],
-          ),
-        ),
-      ];
-      assistants.loaded.complete();
-      await restoring;
-      // Cold dispatch is fire-and-forget; its durable writes can take longer
-      // than a fixed delay when the complete suite runs concurrently.
-      final deadline = DateTime.now().add(const Duration(seconds: 3));
-      while (
-          notifier.execution('cold')!.status != FlowExecutionStatus.completed &&
-              DateTime.now().isBefore(deadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-      expect(manager.assistants.single!.prompt, 'launch prompt');
-      expect(
-        manager.assistants.single!.settings.customParameters.single.value,
-        'new-secret',
-      );
-      expect(notifier.execution('cold')!.status, FlowExecutionStatus.completed);
-    },
-  );
+          settings: AssistantSettings(customParameters: [
+            CustomParameter(
+                name: 'Authorization', type: 'string', value: 'new-secret')
+          ]))
+    ];
+    assistants.loaded.complete();
+    await restoring;
+    // Cold dispatch is fire-and-forget; its durable writes can take longer
+    // than a fixed delay when the complete suite runs concurrently.
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (
+        notifier.execution('cold')!.status != FlowExecutionStatus.completed &&
+            DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(manager.assistants.single!.prompt, 'launch prompt');
+    expect(manager.assistants.single!.settings.customParameters.single.value,
+        'new-secret');
+    expect(notifier.execution('cold')!.status, FlowExecutionStatus.completed);
+  });
 
   test(
-    'saved chat model uses stable binding despite an earlier duplicate API ID',
-    () {
-      final selected = _providers('llm', 'selected');
-      final assistant = Assistant(
+      'saved chat model uses stable binding despite an earlier duplicate API ID',
+      () {
+    final selected = _providers('llm', 'selected');
+    final assistant = Assistant(
         id: 'assistant',
         name: 'A',
         prompt: 'P',
         defaultModelId: 'api',
-        defaultProviderName: 'P',
-      );
-      final snapshot = FlowLaunchSnapshot.capture(flow, selected, [assistant]);
-      final current = ProviderEntriesState(
-        entries: [
-          ..._providers('llm', 'competitor', key: 'wrong-key').entries,
-          ..._providers('llm', 'selected', key: 'current-key').entries,
-        ],
-      );
-      final resolved = snapshot.resolveProviders(current);
-      final available = flattenProviderModels(resolved, 'llm');
-      expect(available.map((m) => m.model.id), ['selected']);
-      expect(available.single.config.key, 'current-key');
-    },
-  );
-
-  test(
-    'chat snapshot hydrates a credential reference from the live config',
-    () {
-      final launch = _providers('llm', 'credentialed', key: 'old-secret');
-      launch.entries.single.configs.single.credentialRef = 'secure-key';
-      final snapshot = FlowLaunchSnapshot.capture(
-        flow,
-        launch,
-        [],
-        selectedChatModel: _reference('credentialed'),
-      );
-      expect(jsonEncode(snapshot.toMap()), isNot(contains('old-secret')));
-
-      final current = _providers('llm', 'credentialed', key: 'fresh-secret');
-      current.entries.single.configs.single.credentialRef = 'secure-key';
-      final resolved = snapshot.resolveProviders(current);
-      final selected = resolveProviderModel(
-        resolved,
-        'llm',
-        _reference('credentialed'),
-      );
-
-      expect(selected?.config.key, 'fresh-secret');
-    },
-  );
-
-  test('launch snapshot rejects an ambiguous requested assistant model', () {
-    final first = _providers('llm', 'first');
-    final second = _providers('llm', 'second');
-    final firstConfig = first.entries.single.configs.single;
-    final secondConfig = second.entries.single.configs.single;
-    firstConfig.models.single.modelId = 'api';
-    secondConfig.models.single.modelId = 'api';
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          id: 'llm',
-          type: 'llm',
-          name: 'P',
-          configs: [firstConfig, secondConfig],
-        ),
-      ],
-    );
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'A',
-      prompt: 'P',
-      defaultModelId: 'api',
-      defaultProviderName: 'P',
-      defaultModelName: 'M | P',
-    );
-
-    expect(
-      () => FlowLaunchSnapshot.capture(flow, providers, [assistant]),
-      throwsStateError,
-    );
+        defaultProviderName: 'P');
+    final snapshot = FlowLaunchSnapshot.capture(flow, selected, [assistant]);
+    final current = ProviderEntriesState(entries: [
+      ..._providers('llm', 'competitor', key: 'wrong-key').entries,
+      ..._providers('llm', 'selected', key: 'current-key').entries,
+    ]);
+    final resolved = snapshot.resolveProviders(current);
+    final available = flattenProviderModels(resolved, 'llm');
+    expect(available.map((m) => m.model.id), ['selected']);
+    expect(available.single.config.key, 'current-key');
   });
 
   test('launch snapshot keeps the chat adapter selected model', () async {
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          id: 'llm',
-          type: 'llm',
-          name: 'P',
-          configs: [
-            ProviderConfigItem(
-              id: 'config',
-              providerName: 'P',
-              host: 'https://example.invalid',
-              key: 'test-key',
-              models: [
-                ModelConfig(id: 'first', name: 'First', modelId: 'first-api'),
-                ModelConfig(
-                  id: 'selected',
-                  name: 'Second',
-                  modelId: 'second-api',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
+    final providers = ProviderEntriesState(entries: [
+      ProviderEntry(id: 'llm', type: 'llm', name: 'P', configs: [
+        ProviderConfigItem(
+            id: 'config',
+            providerName: 'P',
+            host: 'https://example.invalid',
+            key: 'test-key',
+            models: [
+              ModelConfig(id: 'first', name: 'First', modelId: 'first-api'),
+              ModelConfig(
+                  id: 'selected', name: 'Second', modelId: 'second-api'),
+            ])
+      ])
+    ]);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'provider_entries',
-      jsonEncode(
-        providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
-      ),
-    );
+    await prefs.setString('provider_entries',
+        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
     final manager = _Manager();
     manager.adapter.selectModel(providers, 0, 1);
     final container = make(
-      manager: manager,
-      runner: (b, input, id, step) async => const FlowPayload.text('done'),
-    );
+        manager: manager,
+        runner: (b, input, id, step) async => const FlowPayload.text('done'));
     final ids = await container
         .read(taskFlowExecutionServiceProvider)
         .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
@@ -977,9 +842,7 @@ void main() {
         .execution(ids.single)!
         .snapshot!;
     expect(
-      (snapshot.toMap()['chatModels'] as List).single['modelId'],
-      'selected',
-    );
+        (snapshot.toMap()['chatModels'] as List).single['modelId'], 'selected');
   });
 
   test('explicit assistant model ignores stale default provider name', () {
@@ -988,201 +851,100 @@ void main() {
     final firstConfig = first.entries.single.configs.single;
     final secondConfig = second.entries.single.configs.single;
     secondConfig.providerName = 'Other';
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(
+    final providers = ProviderEntriesState(entries: [
+      ProviderEntry(
           id: 'llm',
           type: 'llm',
           name: 'P',
-          configs: [firstConfig, secondConfig],
-        ),
-      ],
-    );
+          configs: [firstConfig, secondConfig])
+    ]);
     final assistant = Assistant(
-      id: 'assistant',
-      name: 'A',
-      prompt: 'P',
-      modelId: 'api',
-      defaultProviderName: 'Other',
-    );
+        id: 'assistant',
+        name: 'A',
+        prompt: 'P',
+        modelId: 'api',
+        defaultProviderName: 'Other');
     final snapshot = FlowLaunchSnapshot.capture(flow, providers, [assistant]);
-    expect(
-      (snapshot.toMap()['chatModels'] as List).single['configId'],
-      'config-first',
-    );
+    expect((snapshot.toMap()['chatModels'] as List).single['configId'],
+        'config-first');
   });
 
-  test(
-    'legacy assistant display name takes precedence over global selection',
-    () {
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'llm',
-            type: 'llm',
-            name: 'P',
-            configs: [
-              ProviderConfigItem(
-                id: 'config',
-                providerName: 'P',
-                host: 'https://example.invalid',
-                key: 'test-key',
-                models: [
-                  ModelConfig(
-                    id: 'global',
-                    name: 'Global',
-                    modelId: 'global-api',
-                  ),
-                  ModelConfig(id: 'named', name: 'Named', modelId: 'named-api'),
-                ],
-              ),
-            ],
-          ),
-        ],
-      );
-      final assistant = Assistant(
+  test('legacy assistant display name takes precedence over global selection',
+      () {
+    final providers = ProviderEntriesState(entries: [
+      ProviderEntry(id: 'llm', type: 'llm', name: 'P', configs: [
+        ProviderConfigItem(
+            id: 'config',
+            providerName: 'P',
+            host: 'https://example.invalid',
+            key: 'test-key',
+            models: [
+              ModelConfig(id: 'global', name: 'Global', modelId: 'global-api'),
+              ModelConfig(id: 'named', name: 'Named', modelId: 'named-api'),
+            ])
+      ])
+    ]);
+    final assistant = Assistant(
         id: 'assistant',
         name: 'Legacy',
         prompt: 'P',
-        defaultModelName: 'Named | P',
-      );
-      final snapshot = FlowLaunchSnapshot.capture(
-        flow,
-        providers,
-        [assistant],
-        selectedChatModel: {'configId': 'config', 'modelId': 'global'},
-      );
-      expect(
-        (snapshot.toMap()['chatModels'] as List).single['modelId'],
-        'named',
-      );
-    },
-  );
+        defaultModelName: 'Named | P');
+    final snapshot = FlowLaunchSnapshot.capture(flow, providers, [assistant],
+        selectedChatModel: {'configId': 'config', 'modelId': 'global'});
+    expect((snapshot.toMap()['chatModels'] as List).single['modelId'], 'named');
+  });
 
-  test(
-    'selected chat model fills an assistant that only has a provider name',
-    () {
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'llm',
-            type: 'llm',
-            name: 'P',
-            configs: [
-              ProviderConfigItem(
-                id: 'config',
-                providerName: 'Current provider',
-                host: 'https://example.invalid',
-                key: 'test-key',
-                models: [
-                  ModelConfig(id: 'selected', name: 'Selected', modelId: 'api'),
-                ],
-              ),
-            ],
-          ),
-        ],
-      );
-      final assistant = Assistant(
-        id: 'assistant',
-        name: 'Legacy',
-        prompt: 'P',
-        defaultProviderName: 'Removed provider',
-      );
-
-      final snapshot = FlowLaunchSnapshot.capture(
-        flow,
-        providers,
-        [assistant],
-        selectedChatModel: {'configId': 'config', 'modelId': 'selected'},
-      );
-
-      expect(
-        (snapshot.toMap()['chatModels'] as List).single['modelId'],
-        'selected',
-      );
-    },
-  );
-
-  test(
-    'unbound assistant without a selected chat model fails before queueing',
-    () async {
-      final providers = _providers('llm', 'first');
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'provider_entries',
-        jsonEncode(
-          providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
-        ),
-      );
-      final container = make(manager: _Manager());
-      final service = container.read(taskFlowExecutionServiceProvider);
-      await expectLater(
+  test('unbound assistant without a selected chat model fails before queueing',
+      () async {
+    final providers = _providers('llm', 'first');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries',
+        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
+    final container = make(manager: _Manager());
+    final service = container.read(taskFlowExecutionServiceProvider);
+    await expectLater(
         service.launchFlowMany('flow', [const FlowRunInput(text: 'input')]),
-        throwsA(
-          isA<TaskFlowValidationException>()
-              .having((e) => e.blockIndex, 'chat step', 0)
-              .having((e) => e.message, 'selection hint', contains('模型')),
-        ),
-      );
-      expect(container.read(taskFlowExecutionsProvider), isEmpty);
-    },
-  );
+        throwsA(isA<TaskFlowValidationException>()
+            .having((e) => e.blockIndex, 'chat step', 0)
+            .having((e) => e.message, 'selection hint', contains('模型'))));
+    expect(container.read(taskFlowExecutionsProvider), isEmpty);
+  });
 
   test('paused download releases its scheduler slot until resumed', () async {
     flow = TaskFlowDefinition(
-      id: 'flow',
-      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
-    );
+        id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
     final first = Completer<FlowPayload>();
     final second = Completer<FlowPayload>();
     final dispatched = <String>[];
-    final container = make(
-      runner: (b, input, id, step) {
-        dispatched.add(input.value);
-        return input.value.endsWith('/first') ? first.future : second.future;
-      },
-    );
+    final container = make(runner: (b, input, id, step) {
+      dispatched.add(input.value);
+      return input.value.endsWith('/first') ? first.future : second.future;
+    });
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
-    final firstId = (await service.launchFlowMany('flow', [
-      const FlowRunInput(text: 'https://example.com/first'),
-    ]))
+    final firstId = (await service.launchFlowMany(
+            'flow', [const FlowRunInput(text: 'https://example.com/first')]))
         .single;
-    await _waitFor(
-      () => dispatched.contains('https://example.com/first'),
-      'first CatCatch execution dispatches',
-    );
-    await service.launchFlowMany('flow', [
-      const FlowRunInput(text: 'https://example.com/second'),
-    ]);
-    await _waitFor(
-      () => scheduler.queuedCount == 1,
-      'second CatCatch execution waits for the first',
-    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await service.launchFlowMany(
+        'flow', [const FlowRunInput(text: 'https://example.com/second')]);
     expect(dispatched, ['https://example.com/first']);
     expect(scheduler.activeWeight, 2);
     await service.pauseExecution(firstId);
     expect(scheduler.holds(firstId), isFalse);
-    await _waitFor(
-      () => dispatched.contains('https://example.com/second'),
-      'second CatCatch execution dispatches after pause',
-    );
-    expect(dispatched, [
-      'https://example.com/first',
-      'https://example.com/second',
-    ]);
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    expect(dispatched,
+        ['https://example.com/first', 'https://example.com/second']);
     final resuming = service.resumeExecution(firstId);
-    await _waitFor(
-      () =>
-          scheduler.queuedCount == 1 &&
-          container
-                  .read(taskFlowExecutionsProvider.notifier)
-                  .execution(firstId)!
-                  .status !=
-              FlowExecutionStatus.running,
-      'resumed CatCatch execution waits behind the second',
-    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
     expect(scheduler.activeWeight, 2);
+    expect(scheduler.queuedCount, 1);
+    expect(
+        container
+            .read(taskFlowExecutionsProvider.notifier)
+            .execution(firstId)!
+            .status,
+        isNot(FlowExecutionStatus.running));
     await service.pauseExecution(firstId);
     await resuming;
     expect(scheduler.queuedCount, 0);
@@ -1193,295 +955,394 @@ void main() {
     first.complete(const FlowPayload.text('done'));
   });
 
-  test(
-    'manual CatCatch wait frees its slot and selection reacquires FIFO',
-    () async {
-      flow = TaskFlowDefinition(
-        id: 'flow',
-        blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
-      );
-      late _ManualDownloads downloads;
-      var downloadsInitialized = false;
-      final container = make(
+  test('manual CatCatch wait frees its slot and selection reacquires FIFO',
+      () async {
+    flow = TaskFlowDefinition(
+        id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
+    final downloadsReady = Completer<_ManualDownloads>();
+    final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
-          downloads = _ManualDownloads(ref);
-          downloadsInitialized = true;
+          final downloads = _ManualDownloads(ref);
+          downloadsReady.complete(downloads);
           return downloads;
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final scheduler = container.read(taskFlowSchedulerProvider);
-      final firstId = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/first'),
-      ]))
-          .single;
-      await _waitFor(
-        () =>
-            downloadsInitialized &&
-            downloads.idsByUrl.containsKey('https://example.com/first') &&
-            scheduler.holds(firstId),
-        'first CatCatch execution acquires its slot',
-      );
-      final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
-      final secondId = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/second'),
-      ]))
-          .single;
-      await _waitFor(
-        () => scheduler.queuedCount == 1,
-        'second CatCatch execution enters the scheduler queue',
-      );
-      await _waitFor(
-        () =>
-            downloadsInitialized &&
-            downloads.idsByUrl.containsKey('https://example.com/second') &&
-            scheduler.holds(secondId),
-        'second CatCatch execution acquires its slot after the manual wait',
-      );
-      expect(scheduler.holds(firstId), isFalse);
-      expect(
-        downloads.idsByUrl.containsKey('https://example.com/second'),
-        isTrue,
-      );
-      expect(scheduler.holds(secondId), isTrue);
+        });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final firstLaunch = service.launchFlowMany(
+        'flow', [const FlowRunInput(text: 'https://example.com/first')]);
+    final downloads = await downloadsReady.future.timeout(_dispatchWait);
+    final firstId = (await firstLaunch).single;
+    await _waitFor(
+        () => downloads.idsByUrl.containsKey('https://example.com/first'),
+        'first CatCatch task creation');
+    final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
+    expect(scheduler.holds(firstId), isTrue);
+    final secondId = (await service.launchFlowMany(
+            'flow', [const FlowRunInput(text: 'https://example.com/second')]))
+        .single;
+    await _waitFor(() => scheduler.queuedCount == 1, 'second queued flow');
+    expect(scheduler.queuedCount, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    expect(scheduler.holds(firstId), isFalse);
+    await _waitFor(
+        () => downloads.idsByUrl.containsKey('https://example.com/second'),
+        'second CatCatch task creation');
+    expect(
+        downloads.idsByUrl.containsKey('https://example.com/second'), isTrue);
+    expect(scheduler.holds(secondId), isTrue);
 
-      final heldAtSelection = <bool>[];
-      downloads.onSelect = (_) => heldAtSelection.add(scheduler.holds(firstId));
-      const media = MediaResource(
-        url: 'https://x/one.mp4',
-        name: 'one',
-        ext: 'mp4',
-      );
-      final selecting = service.performManualCatCatchAction(
-        firstTaskId,
-        true,
-        (notifier) => notifier.selectMedia(firstTaskId, media),
-      );
-      final duplicate = service.performManualCatCatchAction(
-        firstTaskId,
-        true,
-        (notifier) => notifier.selectMedia(firstTaskId, media),
-      );
-      expect(await duplicate, isFalse);
-      await _waitFor(
-        () => scheduler.queuedCount == 1,
-        'manual selection waits behind the second CatCatch execution',
-      );
-      expect(downloads.selected, isEmpty);
-      downloads.finish(downloads.idsByUrl['https://example.com/second']!);
-      expect(await selecting.timeout(const Duration(seconds: 3)), isTrue);
-      expect(heldAtSelection, [true]);
-      expect(downloads.selected, [firstTaskId]);
-    },
-  );
+    final heldAtSelection = <bool>[];
+    downloads.onSelect = (_) => heldAtSelection.add(scheduler.holds(firstId));
+    const media =
+        MediaResource(url: 'https://x/one.mp4', name: 'one', ext: 'mp4');
+    final selecting = service.performManualCatCatchAction(firstTaskId, true,
+        (notifier) => notifier.selectMedia(firstTaskId, media));
+    final duplicate = service.performManualCatCatchAction(firstTaskId, true,
+        (notifier) => notifier.selectMedia(firstTaskId, media));
+    expect(await duplicate, isFalse);
+    expect(scheduler.queuedCount, 1);
+    expect(downloads.selected, isEmpty);
+    downloads.finish(downloads.idsByUrl['https://example.com/second']!);
+    expect(await selecting.timeout(const Duration(seconds: 3)), isTrue);
+    expect(heldAtSelection, [true]);
+    expect(downloads.selected, [firstTaskId]);
+  });
 
-  test(
-    'special-format confirmation also yields and reacquires its slot',
-    () async {
-      flow = TaskFlowDefinition(
-        id: 'flow',
-        blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
-      );
-      late _ManualDownloads downloads;
-      var downloadsInitialized = false;
-      final container = make(
-        scheduler: TaskFlowScheduler(coreCount: 4),
-        downloads: (ref) {
-          downloads = _ManualDownloads(ref);
-          downloadsInitialized = true;
-          return downloads;
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final scheduler = container.read(taskFlowSchedulerProvider);
-      final confirmId = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/confirm'),
-      ]))
-          .single;
-      await _waitFor(
-        () =>
-            downloadsInitialized &&
-            downloads.idsByUrl.containsKey('https://example.com/confirm') &&
-            scheduler.holds(confirmId),
-        'special-format confirmation acquires its slot',
-      );
-      final secondId = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/second'),
-      ]))
-          .single;
-      await _waitFor(
-        () => scheduler.queuedCount == 1,
-        'second CatCatch execution enters the scheduler queue',
-      );
-      await _waitFor(
-        () =>
-            downloadsInitialized &&
-            downloads.idsByUrl.containsKey('https://example.com/second') &&
-            scheduler.holds(secondId),
-        'second CatCatch execution acquires its slot after confirmation wait',
-      );
-      final taskId = downloads.idsByUrl['https://example.com/confirm']!;
-      expect(scheduler.holds(confirmId), isFalse);
-      expect(scheduler.holds(secondId), isTrue);
-
-      final heldAtConfirm = <bool>[];
-      downloads.onConfirm =
-          (_) => heldAtConfirm.add(scheduler.holds(confirmId));
-      final confirming = service.performManualCatCatchAction(
-        taskId,
-        false,
-        (notifier) => notifier.confirmAndContinue(taskId),
-      );
-      await _waitFor(
-        () => scheduler.queuedCount == 1,
-        'special-format confirmation waits behind the second CatCatch execution',
-      );
-      expect(downloads.confirmed, isEmpty);
-      downloads.finish(downloads.idsByUrl['https://example.com/second']!);
-      expect(await confirming.timeout(const Duration(seconds: 3)), isTrue);
-      expect(heldAtConfirm, [true]);
-      expect(downloads.confirmed, [taskId]);
-    },
-  );
-
-  test('resuming a paused manual wait keeps the scheduler slot free', () async {
+  test('browser recovery wait releases its slot and Continue reacquires it',
+      () async {
     flow = TaskFlowDefinition(
       id: 'flow',
       blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
     );
-    late _ManualDownloads downloads;
+    _ManualDownloads? downloads;
     final container = make(
-      scheduler: TaskFlowScheduler(coreCount: 4),
+      scheduler: TaskFlowScheduler(coreCount: 2),
       downloads: (ref) {
         downloads = _ManualDownloads(ref);
-        return downloads;
+        return downloads!;
       },
     );
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
-    container.read(catcatchTasksProvider);
-    final id = (await service.launchFlowMany('flow', [
-      const FlowRunInput(text: 'https://example.com/first'),
-    ]))
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/recovery')],
+    ))
         .single;
     await _waitFor(
       () =>
-          downloads.idsByUrl.containsKey('https://example.com/first') &&
-          !scheduler.holds(id),
-      'manual selection slot release',
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+          false,
+      'browser recovery CatCatch task creation',
     );
+    final taskId = downloads!.idsByUrl['https://example.com/recovery']!;
+    await _waitFor(
+      () => !scheduler.holds(id),
+      'browser recovery wait releases the flow slot',
+    );
+    await _waitFor(
+      () =>
+          container
+              .read(taskFlowExecutionsProvider.notifier)
+              .execution(id)
+              ?.status ==
+          FlowExecutionStatus.paused,
+      'browser recovery marks the live flow paused while waiting',
+    );
+
+    final continued = await service.performManualCatCatchAction(
+      taskId,
+      false,
+      (notifier) => (notifier as _ManualDownloads).finish(taskId),
+    );
+
+    expect(continued, isTrue);
+    expect(scheduler.holds(id), isTrue);
+    expect(
+      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
+      isNot(FlowExecutionStatus.paused),
+    );
+    await _waitFor(
+      () => container
+          .read(taskFlowExecutionsProvider.notifier)
+          .execution(id)!
+          .isTerminal,
+      'browser recovery flow completes',
+    );
+  });
+
+  test('browser recovery Continue does not act if flow resume cannot persist',
+      () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
+    );
+    final notifier = _FailNextRunningPersistNotifier();
+    _ManualDownloads? downloads;
+    final container = make(
+      notifier: notifier,
+      scheduler: TaskFlowScheduler(coreCount: 2),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/recovery')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+          false,
+      'browser recovery CatCatch task creation',
+    );
+    final taskId = downloads!.idsByUrl['https://example.com/recovery']!;
+    await _waitFor(
+      () => !scheduler.holds(id),
+      'browser recovery wait releases the flow slot',
+    );
+    await _waitFor(
+      () =>
+          container
+              .read(taskFlowExecutionsProvider.notifier)
+              .execution(id)
+              ?.status ==
+          FlowExecutionStatus.paused,
+      'browser recovery marks the live flow paused while waiting',
+    );
+
+    notifier.failNextRunningPersist = true;
+    var actionCalled = false;
+    final continued = await service.performManualCatCatchAction(
+      taskId,
+      false,
+      (notifier) {
+        actionCalled = true;
+        (notifier as _ManualDownloads).finish(taskId);
+      },
+    );
+
+    expect(continued, isFalse);
+    expect(actionCalled, isFalse);
+    expect(scheduler.holds(id), isFalse);
+    expect(
+      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
+      FlowExecutionStatus.paused,
+    );
+    expect(
+      downloads!.tasksForTest.firstWhere((task) => task.id == taskId).status,
+      catcatch.TaskStatus.paused,
+    );
+  });
+
+  test('deferred single unclassified resource can be selected', () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.catcatch,
+          params: {
+            'resourceSelectionPolicy': 'automaticWithPrompt',
+            'outputPolicy': 'followDownstream',
+          },
+        ),
+      ],
+    );
+    _ManualDownloads? downloads;
+    final container = make(
+      scheduler: TaskFlowScheduler(coreCount: 4),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/unclassified')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/unclassified') ??
+          false,
+      'unclassified CatCatch task creation',
+    );
+    final activeDownloads = downloads!;
+    final taskId =
+        activeDownloads.idsByUrl['https://example.com/unclassified']!;
+    await _waitFor(
+        () => scheduler.holds(id), 'CatCatch worker acquires its slot');
+    await _waitFor(() => !scheduler.holds(id), 'deferred resource picker');
+
+    var heldDuringSelection = false;
+    activeDownloads.onSelect = (_) => heldDuringSelection = scheduler.holds(id);
+    const media =
+        MediaResource(url: 'https://x/one.bin', name: 'one', ext: 'bin');
+    expect(
+      await service.performManualCatCatchAction(
+        taskId,
+        true,
+        (notifier) => notifier.selectMedia(taskId, media),
+        selectedMediaUrl: media.url,
+        selectedMediaIdentity: media.selectionIdentity,
+        selectedMediaHasByteRange: media.hasByteRange,
+      ),
+      isTrue,
+    );
+    expect(heldDuringSelection, isTrue);
+    expect(activeDownloads.selected, [taskId]);
+    await service.cancelExecution(id);
+  });
+
+  test('special-format confirmation also yields and reacquires its slot',
+      () async {
+    flow = TaskFlowDefinition(
+        id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
+    final downloadsReady = Completer<_ManualDownloads>();
+    final container = make(
+        scheduler: TaskFlowScheduler(coreCount: 4),
+        downloads: (ref) {
+          final downloads = _ManualDownloads(ref);
+          downloadsReady.complete(downloads);
+          return downloads;
+        });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final confirmationLaunch = service.launchFlowMany(
+        'flow', [const FlowRunInput(text: 'https://example.com/confirm')]);
+    final downloads = await downloadsReady.future.timeout(_dispatchWait);
+    final confirmId = (await confirmationLaunch).single;
+    await _waitFor(
+        () =>
+            downloads.idsByUrl.containsKey('https://example.com/confirm') &&
+            scheduler.holds(confirmId),
+        'special-format CatCatch slot hold');
+    expect(scheduler.holds(confirmId), isTrue);
+    final secondId = (await service.launchFlowMany(
+            'flow', [const FlowRunInput(text: 'https://example.com/second')]))
+        .single;
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await _waitFor(
+        () => downloads.idsByUrl.containsKey('https://example.com/second'),
+        'second CatCatch task creation');
+    final taskId = downloads.idsByUrl['https://example.com/confirm']!;
+    expect(scheduler.holds(confirmId), isFalse);
+    expect(scheduler.holds(secondId), isTrue);
+
+    final heldAtConfirm = <bool>[];
+    downloads.onConfirm = (_) => heldAtConfirm.add(scheduler.holds(confirmId));
+    final confirming = service.performManualCatCatchAction(
+        taskId, false, (notifier) => notifier.confirmAndContinue(taskId));
+    expect(scheduler.queuedCount, 1);
+    expect(downloads.confirmed, isEmpty);
+    downloads.finish(downloads.idsByUrl['https://example.com/second']!);
+    expect(await confirming.timeout(const Duration(seconds: 3)), isTrue);
+    expect(heldAtConfirm, [true]);
+    expect(downloads.confirmed, [taskId]);
+  });
+
+  test('resuming a paused manual wait keeps the scheduler slot free', () async {
+    flow = TaskFlowDefinition(
+        id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
+    late _ManualDownloads downloads;
+    final container = make(
+        scheduler: TaskFlowScheduler(coreCount: 4),
+        downloads: (ref) {
+          downloads = _ManualDownloads(ref);
+          return downloads;
+        });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    container.read(catcatchTasksProvider);
+    final id = (await service.launchFlowMany(
+            'flow', [const FlowRunInput(text: 'https://example.com/first')]))
+        .single;
+    await _waitFor(
+        () =>
+            downloads.idsByUrl.containsKey('https://example.com/first') &&
+            !scheduler.holds(id),
+        'manual selection slot release');
     expect(scheduler.holds(id), isFalse);
     await service.pauseExecution(id);
     await service.resumeExecution(id).timeout(const Duration(seconds: 2));
     expect(scheduler.holds(id), isFalse);
     expect(
-      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
-      FlowExecutionStatus.running,
-    );
+        container
+            .read(taskFlowExecutionsProvider.notifier)
+            .execution(id)!
+            .status,
+        FlowExecutionStatus.running);
     final taskId = downloads.idsByUrl['https://example.com/first']!;
     expect(container.read(catcatchTasksProvider).single.id, taskId);
     await service.cancelExecution(id);
   });
 
-  test(
-    'a single detected resource does not yield a live download slot',
-    () async {
-      flow = TaskFlowDefinition(
-        id: 'flow',
-        blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
-      );
-      late _ManualDownloads downloads;
-      var downloadsInitialized = false;
-      final container = make(
+  test('a single detected resource does not yield a live download slot',
+      () async {
+    flow = TaskFlowDefinition(
+        id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
+    late _ManualDownloads downloads;
+    final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
           downloads = _ManualDownloads(ref);
-          downloadsInitialized = true;
           return downloads;
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final scheduler = container.read(taskFlowSchedulerProvider);
-      final id = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/single'),
-      ]))
-          .single;
-      await _waitFor(
-        () =>
-            downloadsInitialized &&
-            downloads.idsByUrl.containsKey('https://example.com/single') &&
-            scheduler.holds(id),
-        'single-resource CatCatch download keeps its scheduler slot',
-      );
-      expect(scheduler.holds(id), isTrue);
-      expect(
-        downloads.idsByUrl.containsKey('https://example.com/single'),
-        isTrue,
-      );
-      await service.cancelExecution(id);
-    },
-  );
+        });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+            'flow', [const FlowRunInput(text: 'https://example.com/single')]))
+        .single;
+    await Future<void>.delayed(const Duration(milliseconds: 550));
+    expect(scheduler.holds(id), isTrue);
+    expect(
+        downloads.idsByUrl.containsKey('https://example.com/single'), isTrue);
+    await service.cancelExecution(id);
+  });
 
   for (final stop in ['pause', 'cancel']) {
     test('$stop while CatCatch selection queues prevents selection', () async {
       flow = TaskFlowDefinition(
-        id: 'flow',
-        blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
-      );
-      late _ManualDownloads downloads;
-      var downloadsInitialized = false;
+          id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
+      final downloadsReady = Completer<_ManualDownloads>();
       final container = make(
-        scheduler: TaskFlowScheduler(coreCount: 4),
-        downloads: (ref) {
-          downloads = _ManualDownloads(ref);
-          downloadsInitialized = true;
-          return downloads;
-        },
-      );
+          scheduler: TaskFlowScheduler(coreCount: 4),
+          downloads: (ref) {
+            final downloads = _ManualDownloads(ref);
+            downloadsReady.complete(downloads);
+            return downloads;
+          });
       final service = container.read(taskFlowExecutionServiceProvider);
       final scheduler = container.read(taskFlowSchedulerProvider);
-      final firstId = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/first'),
-      ]))
-          .single;
+      final firstLaunch = service.launchFlowMany(
+          'flow', [const FlowRunInput(text: 'https://example.com/first')]);
+      final downloads = await downloadsReady.future.timeout(_dispatchWait);
+      final firstId = (await firstLaunch).single;
       await _waitFor(
-        () =>
-            downloadsInitialized &&
-            downloads.idsByUrl.containsKey('https://example.com/first') &&
-            scheduler.holds(firstId),
-        'first CatCatch execution enters manual selection',
-      );
+          () =>
+              downloads.idsByUrl.containsKey('https://example.com/first') &&
+              !scheduler.holds(firstId),
+          'first CatCatch manual wait releases its slot');
       final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
-      final secondId = (await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'https://example.com/second'),
-      ]))
+      final secondId = (await service.launchFlowMany(
+              'flow', [const FlowRunInput(text: 'https://example.com/second')]))
           .single;
       await _waitFor(
-        () => scheduler.queuedCount == 1,
-        'second CatCatch execution waits for the first',
-      );
+          () => scheduler.holds(secondId), 'second flow scheduler slot');
+      const media =
+          MediaResource(url: 'https://x/one.mp4', name: 'one', ext: 'mp4');
+      final selecting = service.performManualCatCatchAction(firstTaskId, true,
+          (notifier) => notifier.selectMedia(firstTaskId, media));
       await _waitFor(
-        () =>
-            downloads.idsByUrl.containsKey('https://example.com/second') &&
-            !scheduler.holds(firstId) &&
-            scheduler.holds(secondId),
-        'second CatCatch execution acquires the slot after selection releases it',
-      );
-      const media = MediaResource(
-        url: 'https://x/one.mp4',
-        name: 'one',
-        ext: 'mp4',
-      );
-      final selecting = service.performManualCatCatchAction(
-        firstTaskId,
-        true,
-        (notifier) => notifier.selectMedia(firstTaskId, media),
-      );
-      await _waitFor(
-        () => scheduler.queuedCount == 1,
-        'manual selection queues behind the second execution',
-      );
+          () => scheduler.queuedCount == 1, 'manual selection queue slot');
+      expect(scheduler.queuedCount, 1);
       if (stop == 'pause') {
         await service.pauseExecution(firstId);
       } else {
@@ -1491,56 +1352,40 @@ void main() {
       expect(downloads.selected, isEmpty);
       expect(scheduler.queuedCount, 0);
       expect(
-        await service.performManualCatCatchAction(
-          firstTaskId,
-          true,
-          (notifier) => notifier.selectMedia(firstTaskId, media),
-        ),
-        isFalse,
-      );
+          await service.performManualCatCatchAction(firstTaskId, true,
+              (notifier) => notifier.selectMedia(firstTaskId, media)),
+          isFalse);
     });
   }
 
   test('pausing a queued heavy flow unblocks a lighter flow', () async {
-    final chatFlow = TaskFlowDefinition(
-      id: 'chat',
-      blocks: [
-        TaskFlowBlock(
-          typeKey: BlockType.chat,
-          params: {'assistantId': 'assistant'},
-        ),
-      ],
-    );
+    final chatFlow = TaskFlowDefinition(id: 'chat', blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.chat, params: {'assistantId': 'assistant'})
+    ]);
     final downloadFlow = TaskFlowDefinition(
-      id: 'download',
-      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
-    );
+        id: 'download', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
     final first = Completer<FlowPayload>();
     final dispatched = <String>[];
-    final container = make(
-      runner: (b, input, id, step) {
-        dispatched.add(input.value);
-        return input.value == 'first'
-            ? first.future
-            : Future.value(const FlowPayload.text('done'));
-      },
-    );
+    final container = make(runner: (b, input, id, step) {
+      dispatched.add(input.value);
+      return input.value == 'first'
+          ? first.future
+          : Future.value(const FlowPayload.text('done'));
+    });
     container.read(taskFlowListProvider.notifier).state = [
       chatFlow,
-      downloadFlow,
+      downloadFlow
     ];
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
     await service.launchFlowMany('chat', [const FlowRunInput(text: 'first')]);
     await _waitFor(() => dispatched.contains('first'), 'first chat dispatch');
-    final queued = (await service.launchFlowMany('download', [
-      const FlowRunInput(text: 'https://example.com/download'),
-    ]))
+    final queued = (await service.launchFlowMany('download',
+            [const FlowRunInput(text: 'https://example.com/download')]))
         .single;
     await _waitFor(
-      () => scheduler.queuedCount == 1,
-      'heavy download queue entry',
-    );
+        () => scheduler.queuedCount == 1, 'heavy download queue entry');
     expect(scheduler.queuedCount, 1);
     try {
       await service.pauseExecution(queued);
@@ -1551,9 +1396,7 @@ void main() {
       await service.resumeExecution(queued);
       first.complete(const FlowPayload.text('done'));
       await _waitFor(
-        () => dispatched.length == 3,
-        'resumed heavy download dispatch',
-      );
+          () => dispatched.length == 3, 'resumed heavy download dispatch');
       expect(dispatched, ['first', 'third', 'https://example.com/download']);
     } finally {
       if (!first.isCompleted) first.complete(const FlowPayload.text('done'));
@@ -1563,112 +1406,79 @@ void main() {
 
   test('provider resolution can validate only the remaining blocks', () {
     final prefix = TaskFlowBlock(
-      typeKey: BlockType.asr,
-      params: {'modelRef': _reference('asr')},
-    );
+        typeKey: BlockType.asr, params: {'modelRef': _reference('asr')});
     final suffix = TaskFlowBlock(
-      typeKey: BlockType.tts,
-      params: {'modelRef': _reference('tts')},
-    );
-    final original = ProviderEntriesState(
-      entries: [
-        ..._providers('asr', 'asr').entries,
-        ..._providers('tts', 'tts').entries,
-      ],
-    );
+        typeKey: BlockType.tts, params: {'modelRef': _reference('tts')});
+    final original = ProviderEntriesState(entries: [
+      ..._providers('asr', 'asr').entries,
+      ..._providers('tts', 'tts').entries
+    ]);
     final snapshot = FlowLaunchSnapshot.capture(
-      TaskFlowDefinition(blocks: [prefix, suffix]),
-      original,
-      [],
-    );
+        TaskFlowDefinition(blocks: [prefix, suffix]), original, []);
     final current = _providers('tts', 'tts', key: 'fresh-key');
     final resolved = snapshot.resolveProviders(current, blocks: [suffix])
         as ProviderEntriesState;
-    expect(
-      resolveProviderModel(resolved, 'tts', _reference('tts'))!.config.key,
-      'fresh-key',
-    );
+    expect(resolveProviderModel(resolved, 'tts', _reference('tts'))!.config.key,
+        'fresh-key');
     expect(() => snapshot.resolveProviders(current), throwsStateError);
   });
 
-  test(
-    'spaced credential names are absent from snapshots and hydrated live',
-    () {
-      ProviderEntriesState configured(
-        String secret,
-        String header,
-        String tuning,
-      ) {
-        final providers = _providers('tts', 'voice');
-        final config = providers.entries.single.configs.single;
-        config.typeConfig = {'X API Key': header, 'voice': tuning};
-        config.models.single.customParams = [
-          CustomParam(paramName: 'API Key', defaultValue: secret),
-          CustomParam(paramName: 'temperature', defaultValue: tuning),
-        ];
-        return providers;
-      }
+  test('spaced credential names are absent from snapshots and hydrated live',
+      () {
+    ProviderEntriesState configured(
+        String secret, String header, String tuning) {
+      final providers = _providers('tts', 'voice');
+      final config = providers.entries.single.configs.single;
+      config.typeConfig = {'X API Key': header, 'voice': tuning};
+      config.models.single.customParams = [
+        CustomParam(paramName: 'API Key', defaultValue: secret),
+        CustomParam(paramName: 'temperature', defaultValue: tuning),
+      ];
+      return providers;
+    }
 
-      final launch = configured('old-secret', 'old-header', '0.5');
-      final block = TaskFlowBlock(
-        typeKey: BlockType.tts,
-        params: {'modelRef': _reference('voice')},
-      );
-      final snapshot = FlowLaunchSnapshot.capture(
-        TaskFlowDefinition(blocks: [block]),
-        launch,
-        [],
-      );
-      final encoded = jsonEncode(snapshot.toMap());
-      expect(encoded, isNot(contains('old-secret')));
-      expect(encoded, isNot(contains('old-header')));
-      final current = configured('fresh-secret', 'fresh-header', '0.9');
-      final resolved = snapshot.resolveProviders(current);
-      final config = resolved.entries.single.configs.single;
-      expect(config.typeConfig['X API Key'], 'fresh-header');
-      expect(config.typeConfig['voice'], '0.5');
-      expect(
-        {
-          for (final param in config.models.single.customParams)
-            param.paramName: param.defaultValue,
-        },
-        {'API Key': 'fresh-secret', 'temperature': '0.5'},
-      );
-    },
-  );
+    final launch = configured('old-secret', 'old-header', '0.5');
+    final block = TaskFlowBlock(
+        typeKey: BlockType.tts, params: {'modelRef': _reference('voice')});
+    final snapshot = FlowLaunchSnapshot.capture(
+        TaskFlowDefinition(blocks: [block]), launch, []);
+    final encoded = jsonEncode(snapshot.toMap());
+    expect(encoded, isNot(contains('old-secret')));
+    expect(encoded, isNot(contains('old-header')));
+    final current = configured('fresh-secret', 'fresh-header', '0.9');
+    final resolved = snapshot.resolveProviders(current);
+    final config = resolved.entries.single.configs.single;
+    expect(config.typeConfig['X API Key'], 'fresh-header');
+    expect(config.typeConfig['voice'], '0.5');
+    expect({
+      for (final param in config.models.single.customParams)
+        param.paramName: param.defaultValue
+    }, {
+      'API Key': 'fresh-secret',
+      'temperature': '0.5'
+    });
+  });
 
-  test(
-    'checkpoint resume reuses successful ASR after its model was deleted',
-    () async {
-      final providers = _providers('asr', 'asr');
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'provider_entries',
-        jsonEncode(
-          providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
-        ),
-      );
-      final prefix = TaskFlowBlock(
-        typeKey: BlockType.asr,
-        params: {'modelRef': _reference('asr')},
-      );
-      final savedFlow = flow.copyWith(
-        inputType: IOType.audio,
-        blocks: [prefix, ...flow.blocks],
-      );
-      final snapshot = FlowLaunchSnapshot.capture(savedFlow, providers, [
-        Assistant(id: 'assistant', name: 'A', prompt: 'P'),
-      ]);
-      final inputs = <String>[];
-      final container = make(
-        runner: (b, input, id, step) async {
-          inputs.add(input.value);
-          return const FlowPayload.text('done');
-        },
-      );
-      final notifier = container.read(taskFlowExecutionsProvider.notifier);
-      await notifier.addExecutions([
-        TaskFlowExecution(
+  test('checkpoint resume reuses successful ASR after its model was deleted',
+      () async {
+    final providers = _providers('asr', 'asr');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries',
+        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
+    final prefix = TaskFlowBlock(
+        typeKey: BlockType.asr, params: {'modelRef': _reference('asr')});
+    final savedFlow = flow
+        .copyWith(inputType: IOType.audio, blocks: [prefix, ...flow.blocks]);
+    final snapshot = FlowLaunchSnapshot.capture(savedFlow, providers,
+        [Assistant(id: 'assistant', name: 'A', prompt: 'P')]);
+    final inputs = <String>[];
+    final container = make(runner: (b, input, id, step) async {
+      inputs.add(input.value);
+      return const FlowPayload.text('done');
+    });
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await notifier.addExecutions([
+      TaskFlowExecution(
           id: 'saved',
           flowId: 'flow',
           flowName: 'Saved',
@@ -1678,65 +1488,53 @@ void main() {
           subTasks: [
             _step('asr', result: const FlowPayload.text('transcribed')),
             _step('chat'),
-          ],
-        ),
-      ]);
-      await container.read(providerEntriesProvider.notifier).ready;
-      container.read(providerEntriesProvider.notifier).state =
-          const ProviderEntriesState();
-      await container
-          .read(taskFlowExecutionServiceProvider)
-          .resumeExecution('saved');
-      await _waitFor(
-        () => notifier.execution('saved')!.isTerminal,
-        'checkpoint resume completion',
-      );
-      expect(inputs, ['transcribed']);
-      expect(
-        notifier.execution('saved')!.status,
-        FlowExecutionStatus.completed,
-      );
-    },
-  );
+          ])
+    ]);
+    await container.read(providerEntriesProvider.notifier).ready;
+    container.read(providerEntriesProvider.notifier).state =
+        const ProviderEntriesState();
+    await container
+        .read(taskFlowExecutionServiceProvider)
+        .resumeExecution('saved');
+    await _waitFor(
+        () =>
+            inputs.length == 1 &&
+            notifier.execution('saved')?.status ==
+                FlowExecutionStatus.completed,
+        'checkpoint ASR resume');
+    expect(inputs, ['transcribed']);
+    expect(notifier.execution('saved')!.status, FlowExecutionStatus.completed);
+  });
 
-  test(
-    'checkpoint resume preserves audio MIME for an MP4 media result',
-    () async {
-      final media = await File('${directory.path}/recording.mp4').writeAsBytes([
-        0,
-        0,
-        0,
-        24,
-        ...ascii.encode('ftypisom'),
-        0,
-        0,
-        0,
-        1,
-        ...ascii.encode('isommp41'),
-      ]);
-      flow = flow.copyWith(
-        blocks: [
-          TaskFlowBlock(
-            typeKey: BlockType.catcatch,
-            params: {'audioOutput': true},
-          ),
-          ...flow.blocks,
-        ],
-      );
-      final snapshot = FlowLaunchSnapshot.capture(
+  test('checkpoint resume preserves audio MIME for an MP4 media result',
+      () async {
+    final media = await File('${directory.path}/recording.mp4').writeAsBytes([
+      0,
+      0,
+      0,
+      24,
+      ...ascii.encode('ftypisom'),
+      0,
+      0,
+      0,
+      1,
+      ...ascii.encode('isommp41')
+    ]);
+    flow = flow.copyWith(blocks: [
+      TaskFlowBlock(typeKey: BlockType.catcatch, params: {'audioOutput': true}),
+      ...flow.blocks,
+    ]);
+    final snapshot = FlowLaunchSnapshot.capture(
         flow,
         const ProviderEntriesState(),
-        [Assistant(id: 'assistant', name: 'A', prompt: 'P')],
-      );
-      final received = <FlowPayload>[];
-      final container = make(
-        runner: (block, input, id, step) async {
-          received.add(input);
-          return const FlowPayload.text('done');
-        },
-      );
-      final notifier = container.read(taskFlowExecutionsProvider.notifier);
-      final saved = TaskFlowExecution(
+        [Assistant(id: 'assistant', name: 'A', prompt: 'P')]);
+    final received = <FlowPayload>[];
+    final container = make(runner: (block, input, id, step) async {
+      received.add(input);
+      return const FlowPayload.text('done');
+    });
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    final saved = TaskFlowExecution(
         id: 'saved',
         flowId: flow.id,
         flowName: flow.name,
@@ -1744,156 +1542,396 @@ void main() {
         snapshot: snapshot,
         inputText: 'https://example.com/audio',
         subTasks: [
-          _step(
-            'catcatch',
-            result: FlowPayload.file(
-              fileReference: media.path,
-              type: IOType.audio,
-              mimeType: 'audio/mp4',
-            ),
-          ),
+          _step('catcatch',
+              result: FlowPayload.file(
+                  fileReference: media.path,
+                  type: IOType.audio,
+                  mimeType: 'audio/mp4')),
           _step('chat'),
-        ],
-      );
-      await notifier.addExecutions([TaskFlowExecution.fromMap(saved.toMap())]);
+        ]);
+    await notifier.addExecutions([TaskFlowExecution.fromMap(saved.toMap())]);
 
-      await container
-          .read(taskFlowExecutionServiceProvider)
-          .resumeExecution('saved');
-      await _waitFor(
+    await container
+        .read(taskFlowExecutionServiceProvider)
+        .resumeExecution('saved');
+    await _waitFor(
         () =>
             received.length == 1 &&
             notifier.execution('saved')?.status ==
                 FlowExecutionStatus.completed,
-        'checkpoint audio MP4 resume',
-      );
-      expect(received, hasLength(1));
-      expect(received.single.type, IOType.audio);
-      expect(received.single.mimeType, 'audio/mp4');
-      expect(
-        notifier.execution('saved')!.status,
-        FlowExecutionStatus.completed,
-      );
-    },
-  );
+        'checkpoint audio MP4 resume');
+    expect(received, hasLength(1));
+    expect(received.single.type, IOType.audio);
+    expect(received.single.mimeType, 'audio/mp4');
+    expect(notifier.execution('saved')!.status, FlowExecutionStatus.completed);
+  });
 
   test(
-    'audio MP4 launch persists MIME for dispatch, retry, and prefix-0 resume',
-    () async {
-      final media = await File('${directory.path}/recording.mp4').writeAsBytes([
-        0,
-        0,
-        0,
-        24,
-        ...ascii.encode('ftypisom'),
-        0,
-        0,
-        0,
-        1,
-        ...ascii.encode('isommp41'),
-      ]);
-      final providers = _providers('asr', 'voice');
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'provider_entries',
-        jsonEncode(
-          providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
-        ),
-      );
-      flow = TaskFlowDefinition(
-        id: 'flow',
-        inputType: IOType.audio,
-        blocks: [
-          TaskFlowBlock(
-            typeKey: BlockType.asr,
-            params: {'modelRef': _reference('voice')},
-          ),
-        ],
-      );
-      final received = <FlowPayload>[];
-      final container = make(
-        runner: (block, input, id, step) async {
-          received.add(input);
-          if (received.length < 3) throw StateError('retryable');
-          return const FlowPayload.text('done');
-        },
-      );
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final ids = await service.launchFlowMany('flow', [
-        FlowRunInput(text: media.path, mimeType: 'audio/mp4'),
-      ]);
-      final notifier = container.read(taskFlowExecutionsProvider.notifier);
-      await _waitFor(
+      'audio MP4 launch persists MIME for dispatch, retry, and prefix-0 resume',
+      () async {
+    final media = await File('${directory.path}/recording.mp4').writeAsBytes([
+      0,
+      0,
+      0,
+      24,
+      ...ascii.encode('ftypisom'),
+      0,
+      0,
+      0,
+      1,
+      ...ascii.encode('isommp41')
+    ]);
+    final providers = _providers('asr', 'voice');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries',
+        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.audio, blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.asr, params: {'modelRef': _reference('voice')})
+    ]);
+    final received = <FlowPayload>[];
+    final container = make(runner: (block, input, id, step) async {
+      received.add(input);
+      if (received.length < 3) throw StateError('retryable');
+      return const FlowPayload.text('done');
+    });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service.launchFlowMany(
+        'flow', [FlowRunInput(text: media.path, mimeType: 'audio/mp4')]);
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await _waitFor(
         () =>
             received.length == 1 &&
             notifier.execution(ids.single)?.status ==
                 FlowExecutionStatus.failed,
-        'initial audio MP4 failure',
-      );
-      final original = container.read(taskFlowExecutionsProvider).single;
-      expect(original.toMap()['inputMimeType'], 'audio/mp4');
-      expect(received.single.mimeType, 'audio/mp4');
-      expect(
-        flowFileMimeType(media.path, mimeType: received.single.mimeType),
-        'audio/mp4',
-      );
+        'initial audio MP4 failure');
+    final original = container.read(taskFlowExecutionsProvider).single;
+    expect(original.toMap()['inputMimeType'], 'audio/mp4');
+    expect(received.single.mimeType, 'audio/mp4');
+    expect(flowFileMimeType(media.path, mimeType: received.single.mimeType),
+        'audio/mp4');
 
-      final retryIds = await service.retryExecution(ids.single);
-      await _waitFor(
+    final retryIds = await service.retryExecution(ids.single);
+    await _waitFor(
         () =>
             received.length == 2 &&
             notifier.execution(retryIds.single)?.status ==
                 FlowExecutionStatus.failed,
-        'snapshot audio MP4 retry',
-      );
-      expect(received[1].mimeType, 'audio/mp4');
-      expect(
+        'snapshot audio MP4 retry');
+    expect(received[1].mimeType, 'audio/mp4');
+    expect(
         container
             .read(taskFlowExecutionsProvider.notifier)
             .execution(retryIds.single)!
             .inputMimeType,
-        'audio/mp4',
-      );
+        'audio/mp4');
 
-      await service.resumeExecution(ids.single);
-      await _waitFor(
+    await service.resumeExecution(ids.single);
+    await _waitFor(
         () =>
             received.length == 3 &&
             notifier.execution(ids.single)?.status ==
                 FlowExecutionStatus.completed,
-        'prefix-zero audio MP4 resume',
-      );
-      expect(received[2].type, IOType.audio);
-      expect(received[2].mimeType, 'audio/mp4');
+        'prefix-zero audio MP4 resume');
+    expect(received[2].type, IOType.audio);
+    expect(received[2].mimeType, 'audio/mp4');
 
-      final latestIds = await service.retryExecution(
-        ids.single,
-        useLatestConfiguration: true,
-      );
-      await _waitFor(
+    final latestIds =
+        await service.retryExecution(ids.single, useLatestConfiguration: true);
+    await _waitFor(
         () =>
             received.length == 4 &&
             notifier.execution(latestIds.single)?.status ==
                 FlowExecutionStatus.completed,
-        'latest-configuration audio MP4 retry',
-      );
-      expect(received[3].mimeType, 'audio/mp4');
-      expect(
+        'latest-configuration audio MP4 retry');
+    expect(received[3].mimeType, 'audio/mp4');
+    expect(
         container
             .read(taskFlowExecutionsProvider.notifier)
             .execution(latestIds.single)!
             .inputMimeType,
-        'audio/mp4',
-      );
-      expect(
+        'audio/mp4');
+    expect(
         TaskFlowExecution.fromMap({
           'flowId': 'legacy',
           'flowName': 'Legacy',
         }).inputMimeType,
-        isNull,
-      );
-    },
-  );
+        isNull);
+  });
+
+  test(
+      'owned file input resolves from durable attachment storage on retry and resume',
+      () async {
+    final mediaBytes = Uint8List.fromList([
+      0,
+      0,
+      0,
+      24,
+      ...ascii.encode('ftypisom'),
+      0,
+      0,
+      0,
+      1,
+      ...ascii.encode('isommp41'),
+    ]);
+    final storagePath =
+        await AttachmentStorage.saveFile('recording.mp4', mediaBytes);
+    final basename = storagePath.split('/').last;
+    final expectedPath = '${directory.path}/attachments/$basename';
+    final stalePath = '/previous/app/documents/attachments/$basename';
+    final providers = _providers('asr', 'voice');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries',
+        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.audio, blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.asr, params: {'modelRef': _reference('voice')})
+    ]);
+    final received = <FlowPayload>[];
+    final container = make(runner: (block, input, id, step) async {
+      received.add(input);
+      return const FlowPayload.text('done');
+    });
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service.launchFlowMany('flow', [
+      FlowRunInput(
+        text: stalePath,
+        mimeType: 'audio/mp4',
+        fileName: 'recording.mp4',
+        ownedStoragePath: storagePath,
+      ),
+    ]);
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.completed,
+        'owned file initial launch');
+
+    var saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.failed,
+      ),
+    ];
+    final retryIds = await service.retryExecution(ids.single);
+    await _waitFor(
+        () =>
+            notifier.execution(retryIds.single)?.status ==
+            FlowExecutionStatus.completed,
+        'owned file retry');
+    expect(notifier.execution(retryIds.single)!.inputText, storagePath);
+
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 1);
+    await expectLater(
+      service.retryExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((error) => error.isStorageError, 'storage failure', isTrue)),
+    );
+    final failedRetry = notifier.executions.firstWhere(
+      (execution) =>
+          execution.id != ids.single && execution.id != retryIds.single,
+    );
+    expect(failedRetry.status, FlowExecutionStatus.failed);
+    expect(failedRetry.inputStoragePath, storagePath);
+    expect(failedRetry.error, contains('文件不存在'));
+    PathProviderPlatform.instance = _Documents(directory.path);
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    await service.resumeExecution(ids.single);
+    await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.completed,
+        'owned file prefix-zero resume');
+
+    expect(received, hasLength(3));
+    expect(received.map((input) => input.value), everyElement(expectedPath));
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 1);
+    await expectLater(
+      service.resumeExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+    expect(notifier.execution(ids.single)?.status, FlowExecutionStatus.failed);
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    PathProviderPlatform.instance =
+        _FailOnDocumentsLookup(directory.path, failOnCall: 2);
+    await service.resumeExecution(ids.single);
+    await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.failed,
+        'owned file resolution failure handling');
+    expect(received, hasLength(3));
+    PathProviderPlatform.instance = _Documents(directory.path);
+
+    saved = notifier.execution(ids.single)!;
+    notifier.state = [
+      saved.copyWith(
+        inputText: stalePath,
+        status: FlowExecutionStatus.interrupted,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ];
+    await AttachmentStorage.deleteFile(storagePath);
+    await expectLater(
+      service.resumeExecution(ids.single),
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+    expect(notifier.execution(ids.single)?.status, FlowExecutionStatus.failed);
+
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'cold-owned-input',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.waiting,
+        snapshot: saved.snapshot,
+        inputText: stalePath,
+        inputMimeType: 'audio/mp4',
+        inputType: IOType.audio,
+        inputFileName: 'recording.mp4',
+        inputStoragePath: storagePath,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_0',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ]);
+    await service.restorePendingExecutions();
+    await _waitFor(
+        () =>
+            notifier.execution('cold-owned-input')?.status ==
+            FlowExecutionStatus.failed,
+        'cold restored missing owned file');
+    expect(received, hasLength(3));
+
+    final checkpointFile =
+        await File('${directory.path}/checkpoint.mp4').writeAsBytes(mediaBytes);
+    final checkpointFlow = TaskFlowDefinition(
+      id: 'checkpoint-flow',
+      inputType: IOType.audio,
+      blocks: [
+        TaskFlowBlock(
+            id: 'first',
+            typeKey: BlockType.asr,
+            params: {'modelRef': _reference('voice')}),
+        TaskFlowBlock(
+            id: 'second',
+            typeKey: BlockType.asr,
+            params: {'modelRef': _reference('voice')}),
+      ],
+    );
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'checkpoint-owned-input',
+        flowId: checkpointFlow.id,
+        flowName: checkpointFlow.name,
+        status: FlowExecutionStatus.waiting,
+        snapshot: FlowLaunchSnapshot.capture(checkpointFlow, providers, []),
+        inputText: stalePath,
+        inputMimeType: 'audio/mp4',
+        inputType: IOType.audio,
+        inputFileName: 'recording.mp4',
+        inputStoragePath: storagePath,
+        subTasks: [
+          FlowSubTask(
+            id: 'saved-first-step',
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'completed-asr',
+            subTaskType: 'background',
+            status: TaskStatus.completed,
+            result: FlowPayload.file(
+              fileReference: checkpointFile.path,
+              type: IOType.audio,
+              mimeType: 'audio/mp4',
+            ),
+          ),
+          FlowSubTask(
+            id: 'pending-second-step',
+            blockTypeKey: 'asr',
+            blockLabel: 'ASR',
+            subTaskId: 'pending_asr_1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ],
+      ),
+    ]);
+    await service.restorePendingExecutions();
+    await _waitFor(
+        () =>
+            notifier.execution('checkpoint-owned-input')?.status ==
+            FlowExecutionStatus.completed,
+        'cold restored owned-file checkpoint');
+    expect(received, hasLength(4));
+    expect(received.last.value, checkpointFile.path);
+  });
 
   test('cold restored audio MP4 dispatch uses persisted input MIME', () async {
     final media = await File('${directory.path}/recording.mp4').writeAsBytes([
@@ -1906,37 +1944,30 @@ void main() {
       0,
       0,
       1,
-      ...ascii.encode('isommp41'),
+      ...ascii.encode('isommp41')
     ]);
     flow = TaskFlowDefinition(
-      id: 'flow',
-      inputType: IOType.audio,
-      blocks: [TaskFlowBlock(typeKey: BlockType.asr)],
-    );
+        id: 'flow',
+        inputType: IOType.audio,
+        blocks: [TaskFlowBlock(typeKey: BlockType.asr)]);
     final snapshot = FlowLaunchSnapshot.capture(
-      flow,
-      const ProviderEntriesState(),
-      const [],
-    );
+        flow, const ProviderEntriesState(), const []);
     final received = <FlowPayload>[];
-    final container = make(
-      runner: (block, input, id, step) async {
-        received.add(input);
-        return const FlowPayload.text('done');
-      },
-    );
+    final container = make(runner: (block, input, id, step) async {
+      received.add(input);
+      return const FlowPayload.text('done');
+    });
     final notifier = container.read(taskFlowExecutionsProvider.notifier);
     await notifier.addExecutions([
       TaskFlowExecution(
-        id: 'cold',
-        flowId: flow.id,
-        flowName: flow.name,
-        status: FlowExecutionStatus.waiting,
-        snapshot: snapshot,
-        inputText: media.path,
-        inputMimeType: 'audio/mp4',
-        subTasks: [_step('asr')],
-      ),
+          id: 'cold',
+          flowId: flow.id,
+          flowName: flow.name,
+          status: FlowExecutionStatus.waiting,
+          snapshot: snapshot,
+          inputText: media.path,
+          inputMimeType: 'audio/mp4',
+          subTasks: [_step('asr')])
     ]);
     notifier.state = [];
     await notifier.restoreFromPersistence();
@@ -1944,67 +1975,52 @@ void main() {
         .read(taskFlowExecutionServiceProvider)
         .restorePendingExecutions();
     await _waitFor(
-      () =>
-          received.length == 1 &&
-          notifier.execution('cold')?.status == FlowExecutionStatus.completed,
-      'cold restored audio MP4 dispatch',
-    );
+        () =>
+            received.length == 1 &&
+            notifier.execution('cold')?.status == FlowExecutionStatus.completed,
+        'cold restored audio MP4 dispatch');
     expect(received.single.type, IOType.audio);
     expect(received.single.mimeType, 'audio/mp4');
   });
 
   test(
-    'warm synthesis resume refreshes credentials and preserves captured tuning',
-    () async {
-      final original = _providers(
-        'tts',
-        'voice',
-        auth: {'Authorization': 'old-auth'},
-        speedMax: 2,
-      );
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'provider_entries',
-        jsonEncode(
-          original.entries.map((e) => e.toCredentialMigrationMap()).toList(),
-        ),
-      );
-      flow = flow.copyWith(
-        blocks: [
-          TaskFlowBlock(
-            typeKey: BlockType.tts,
-            params: {'modelRef': _reference('voice')},
-          ),
-        ],
-      );
-      late _Tasks tasks;
-      final result = Completer<FlowPayload>();
-      late ProviderContainer container;
-      container = make(
+      'warm synthesis resume refreshes credentials and preserves captured tuning',
+      () async {
+    final original = _providers('tts', 'voice',
+        auth: {'Authorization': 'old-auth'}, speedMax: 2);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries',
+        jsonEncode(original.entries.map((e) => e.toMap()).toList()));
+    flow = flow.copyWith(blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.tts, params: {'modelRef': _reference('voice')})
+    ]);
+    late _Tasks tasks;
+    final result = Completer<FlowPayload>();
+    late ProviderContainer container;
+    container = make(
         tasks: (ref) => tasks = _Tasks(ref),
         runner: (b, input, id, step) {
           tasks.state = [
             SynthesisTask(
-              id: 'child',
-              title: 'T',
-              text: input.value,
-              status: TaskStatus.paused,
-              providerConfig: original.entries.single.configs.single,
-              modelConfig: original.entries.single.configs.single.models.single,
-            ),
+                id: 'child',
+                title: 'T',
+                text: input.value,
+                status: TaskStatus.paused,
+                providerConfig: original.entries.single.configs.single,
+                modelConfig:
+                    original.entries.single.configs.single.models.single)
           ];
           container
               .read(taskFlowExecutionsProvider.notifier)
               .updateSubTaskId(id, step.id, 'child');
           return result.future;
-        },
-      );
-      container.read(taskListProvider);
-      final service = container.read(taskFlowExecutionServiceProvider);
-      final ids = await service.launchFlowMany('flow', [
-        const FlowRunInput(text: 'input'),
-      ]);
-      await _waitFor(
+        });
+    container.read(taskListProvider);
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service
+        .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
+    await _waitFor(
         () =>
             container
                 .read(taskFlowExecutionsProvider.notifier)
@@ -2013,36 +2029,32 @@ void main() {
                 .single
                 .subTaskId ==
             'child',
-        'initial synthesis child dispatch',
-      );
-      await service.pauseExecution(ids.single);
-      container.read(providerEntriesProvider.notifier).state = _providers(
-        'tts',
-        'voice',
+        'initial synthesis child dispatch');
+    await service.pauseExecution(ids.single);
+    container.read(providerEntriesProvider.notifier).state = _providers(
+        'tts', 'voice',
         key: 'new-key',
         host: 'https://new.invalid',
         auth: {'Authorization': 'new-auth'},
-        speedMax: 9,
-      );
-      await service.resumeExecution(ids.single);
-      expect(tasks.resumes, 1);
-      expect(tasks.resumedConfig?.key, 'new-key');
-      expect(tasks.resumedConfig?.host, 'https://old.invalid');
-      expect(tasks.resumedConfig?.typeConfig['Authorization'], 'new-auth');
-      expect(tasks.resumedModel?.speedMax, 2);
-      await service.cancelExecution(ids.single);
-      result.complete(const FlowPayload.text('late'));
-    },
-  );
+        speedMax: 9);
+    await service.resumeExecution(ids.single);
+    expect(tasks.resumes, 1);
+    expect(tasks.resumedConfig?.key, 'new-key');
+    expect(tasks.resumedConfig?.host, 'https://old.invalid');
+    expect(tasks.resumedConfig?.typeConfig['Authorization'], 'new-auth');
+    expect(tasks.resumedModel?.speedMax, 2);
+    await service.cancelExecution(ids.single);
+    result.complete(const FlowPayload.text('late'));
+  });
 
   test(
-    'synthesis notifier resumes with supplied configs without changing task inputs',
-    () async {
-      final container = make();
-      final tasks = container.read(taskListProvider.notifier);
-      final original = _providers('tts', 'voice');
-      tasks.state = [
-        SynthesisTask(
+      'synthesis notifier resumes with supplied configs without changing task inputs',
+      () async {
+    final container = make();
+    final tasks = container.read(taskListProvider.notifier);
+    final original = _providers('tts', 'voice');
+    tasks.state = [
+      SynthesisTask(
           id: 'child',
           title: 'T',
           text: 'input',
@@ -2050,29 +2062,265 @@ void main() {
           providerConfig: original.entries.single.configs.single,
           modelConfig: original.entries.single.configs.single.models.single,
           customParams: {'voice': 'launch-voice', 'speed': '1.2'},
-          folder: 'launch-folder',
-        ),
-      ];
-      final current = _providers(
-        'tts',
-        'voice',
-        key: 'new-key',
-        host: 'https://new.invalid',
-      );
-      tasks.resumeTask(
-        'child',
+          folder: 'launch-folder')
+    ];
+    final current =
+        _providers('tts', 'voice', key: 'new-key', host: 'https://new.invalid');
+    tasks.resumeTask('child',
         providerConfig: current.entries.single.configs.single,
-        modelConfig: current.entries.single.configs.single.models.single,
-      );
-      expect(tasks.state.single.providerConfig.key, 'new-key');
-      expect(tasks.state.single.providerConfig.host, 'https://new.invalid');
-      expect(tasks.state.single.text, 'input');
-      expect(tasks.state.single.customParams, {
-        'voice': 'launch-voice',
-        'speed': '1.2',
-      });
-      expect(tasks.state.single.folder, 'launch-folder');
-      tasks.removeTask('child');
-    },
-  );
+        modelConfig: current.entries.single.configs.single.models.single);
+    expect(tasks.state.single.providerConfig.key, 'new-key');
+    expect(tasks.state.single.providerConfig.host, 'https://new.invalid');
+    expect(tasks.state.single.text, 'input');
+    expect(tasks.state.single.customParams,
+        {'voice': 'launch-voice', 'speed': '1.2'});
+    expect(tasks.state.single.folder, 'launch-folder');
+    tasks.removeTask('child');
+  });
+
+  test('clearing temporary child paths releases execution routing metadata',
+      () async {
+    final ttsProviders = _providers('tts', 'voice');
+    late _Tasks tasks;
+    late _ManualDownloads downloads;
+    final container = make(
+      tasks: (ref) => tasks = _Tasks(ref),
+      downloads: (ref) => downloads = _ManualDownloads(ref),
+    );
+    container.read(taskListProvider);
+    container.read(catcatchTasksProvider);
+    tasks.state = [
+      SynthesisTask(
+        id: 'tts-child',
+        title: 'Temporary speech',
+        text: 'input',
+        status: TaskStatus.completed,
+        providerConfig: ttsProviders.entries.single.configs.single,
+        modelConfig: ttsProviders.entries.single.configs.single.models.single,
+        customParams: {
+          'voice': 'launch-voice',
+          flowTemporaryExecutionIdKey: 'deleted-execution',
+          flowTemporaryBlockIdKey: 'temporary-block',
+        },
+        downloadedFilePath: 'temporary-output.wav',
+      ),
+    ];
+    downloads.setTasksForTest([
+      catcatch.CatCatchTask(
+        id: 'catcatch-child',
+        url: 'https://example.invalid/audio',
+        expectedDurationSec: 10,
+        status: catcatch.TaskStatus.completed,
+        createdAt: DateTime(2026),
+        metadata: {
+          'audioFolder': 'saved-folder',
+          flowTemporaryExecutionIdKey: 'deleted-execution',
+          flowTemporaryBlockIdKey: 'temporary-block',
+        },
+        downloadedFilePath: 'temporary-output.mp3',
+      ),
+    ]);
+
+    expect(await tasks.clearDownloadedFilePath('tts-child'), isTrue);
+    expect(await downloads.clearDownloadedFilePath('catcatch-child'), isTrue);
+
+    expect(tasks.state.single.downloadedFilePath, isNull);
+    expect(tasks.state.single.customParams, {'voice': 'launch-voice'});
+    final catcatchTask = downloads.tasksForTest.single;
+    expect(catcatchTask.downloadedFilePath, isNull);
+    expect(catcatchTask.metadata, {'audioFolder': 'saved-folder'});
+  });
+
+  test('removing an execution stops temporary output writes before clearing',
+      () async {
+    final ttsProviders = _providers('tts', 'voice');
+    final asrProviders = _providers('asr', 'recognize');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        ...ttsProviders.entries.map((entry) => entry.toMap()),
+        ...asrProviders.entries.map((entry) => entry.toMap()),
+      ]),
+    );
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.text, blocks: [
+      TaskFlowBlock(
+        typeKey: BlockType.tts,
+        params: {
+          'modelRef': _reference('voice'),
+          flowTemporaryOutputParam: true,
+        },
+      ),
+      TaskFlowBlock(
+        typeKey: BlockType.asr,
+        params: {'modelRef': _reference('recognize')},
+      ),
+    ]);
+    late _PostClearGatedTasks tasks;
+    late TaskFlowExecutionNotifier notifier;
+    final runnerStarted = Completer<void>();
+    final runnerReleased = Completer<void>();
+    final runnerFinished = Completer<void>();
+    String? temporaryReference;
+    final container = make(
+      tasks: (ref) => tasks = _PostClearGatedTasks(ref),
+      runner: (block, input, executionId, step) async {
+        if (block.typeKey == BlockType.tts) {
+          tasks.state = [
+            SynthesisTask(
+              id: step.subTaskId,
+              title: 'Temporary speech',
+              text: input.value,
+              status: TaskStatus.running,
+              providerConfig: ttsProviders.entries.single.configs.single,
+              modelConfig:
+                  ttsProviders.entries.single.configs.single.models.single,
+              customParams: {
+                flowTemporaryExecutionIdKey: executionId,
+                flowTemporaryBlockIdKey: block.id,
+              },
+            ),
+          ];
+          runnerStarted.complete();
+          await runnerReleased.future;
+          if (notifier.execution(executionId)?.isTerminal == false) {
+            temporaryReference = await FlowTemporaryArtifactStorage.writeBytes(
+              executionId: executionId,
+              blockId: block.id,
+              fileName: 'speech.wav',
+              bytes: Uint8List.fromList([1, 2, 3]),
+            );
+            tasks.state = [
+              SynthesisTask(
+                id: step.subTaskId,
+                title: 'Temporary speech',
+                text: input.value,
+                status: TaskStatus.completed,
+                providerConfig: ttsProviders.entries.single.configs.single,
+                modelConfig:
+                    ttsProviders.entries.single.configs.single.models.single,
+                customParams: {
+                  flowTemporaryExecutionIdKey: executionId,
+                  flowTemporaryBlockIdKey: block.id,
+                },
+                downloadedFilePath: temporaryReference,
+              ),
+            ];
+          }
+          runnerFinished.complete();
+          return FlowPayload.file(
+            fileReference: temporaryReference ?? 'stopped-before-write',
+            type: IOType.audio,
+            fileName: 'speech.wav',
+          );
+        }
+        return const FlowPayload.text('recognized');
+      },
+    );
+    container.read(taskListProvider);
+    container.read(taskFlowExecutionServiceProvider);
+    notifier = container.read(taskFlowExecutionsProvider.notifier);
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final executionId = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'speak this')],
+    ))
+        .single;
+
+    await runnerStarted.future.timeout(_dispatchWait);
+    final removal = notifier.removeExecution(executionId);
+    await tasks.clearEntered.future.timeout(_dispatchWait);
+    runnerReleased.complete();
+    await runnerFinished.future.timeout(_dispatchWait);
+    tasks.releaseClear.complete();
+    await removal;
+
+    expect(tasks.state.single.downloadedFilePath, isNull);
+    expect(notifier.execution(executionId), isNull);
+    if (temporaryReference != null) {
+      expect(await File(temporaryReference!).exists(), isFalse);
+    }
+  });
+
+  test('pause during task-reference persistence retains the temp artifact',
+      () async {
+    final ttsProviders = _providers('tts', 'voice');
+    final asrProviders = _providers('asr', 'recognize');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        ...ttsProviders.entries.map((entry) => entry.toMap()),
+        ...asrProviders.entries.map((entry) => entry.toMap()),
+      ]),
+    );
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.text, blocks: [
+      TaskFlowBlock(
+        typeKey: BlockType.tts,
+        params: {
+          'modelRef': _reference('voice'),
+          flowTemporaryOutputParam: true,
+        },
+      ),
+      TaskFlowBlock(
+        typeKey: BlockType.asr,
+        params: {'modelRef': _reference('recognize')},
+      ),
+    ]);
+    late _BlockingClearTasks tasks;
+    late String temporaryReference;
+    final container = make(
+      tasks: (ref) => tasks = _BlockingClearTasks(ref),
+      runner: (block, input, executionId, step) async {
+        if (block.typeKey == BlockType.tts) {
+          temporaryReference = await FlowTemporaryArtifactStorage.writeBytes(
+            executionId: executionId,
+            blockId: block.id,
+            fileName: 'speech.wav',
+            bytes: Uint8List.fromList([1, 2, 3]),
+          );
+          tasks.state = [
+            SynthesisTask(
+              id: step.subTaskId,
+              title: 'Temporary speech',
+              text: input.value,
+              status: TaskStatus.completed,
+              providerConfig: ttsProviders.entries.single.configs.single,
+              modelConfig:
+                  ttsProviders.entries.single.configs.single.models.single,
+              downloadedFilePath: temporaryReference,
+            ),
+          ];
+          return FlowPayload.file(
+            fileReference: temporaryReference,
+            type: IOType.audio,
+            fileName: 'speech.wav',
+          );
+        }
+        return const FlowPayload.text('recognized');
+      },
+    );
+    container.read(taskListProvider);
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final executionId = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'speak this')],
+    ))
+        .single;
+
+    await tasks.clearEntered.future.timeout(_dispatchWait);
+    await service.pauseExecution(executionId);
+    tasks.releaseClear.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    expect(
+      container
+          .read(taskFlowExecutionsProvider.notifier)
+          .execution(executionId)
+          ?.status,
+      FlowExecutionStatus.paused,
+    );
+    expect(await File(temporaryReference).exists(), isTrue);
+    await service.cancelExecution(executionId);
+  });
 }

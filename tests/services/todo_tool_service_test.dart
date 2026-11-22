@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/todo_tool_service.dart';
 
@@ -29,10 +30,13 @@ void main() {
             'priority': 'high',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
-      expect(result, contains('1 todos'));
-      final readResult = await TodoToolService.handleTodo({});
+      expect(result, contains('Active todo items: 1'));
+      final readResult = await TodoToolService.handleTodo(
+        {},
+        locale: const Locale('en', 'US'),
+      );
       expect(readResult, contains('Dispatcher task'));
     });
 
@@ -45,9 +49,12 @@ void main() {
             'priority': 'medium',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
-      final result = await TodoToolService.handleTodo({});
+      final result = await TodoToolService.handleTodo(
+        {},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Read via dispatcher'));
     });
 
@@ -60,18 +67,24 @@ void main() {
             'priority': 'high',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
       // 模型把可选数组序列化为 null 时应视为"读取"，绝不能清空列表。
-      final result = await TodoToolService.handleTodo({'todos': null});
+      final result = await TodoToolService.handleTodo(
+        {'todos': null},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Keep me'));
     });
 
     test('returns error for malformed non-List todos (no silent read)',
         () async {
       // 类型非法（如字符串）时返回错误提示而非静默读取，让模型自行修正。
-      final result = await TodoToolService.handleTodo({'todos': 'not-a-list'});
-      expect(result, contains('todos 参数必须是数组'));
+      final result = await TodoToolService.handleTodo(
+        {'todos': 'not-a-list'},
+        locale: const Locale('en', 'US'),
+      );
+      expect(result, contains('must be an array'));
     });
   });
 
@@ -90,13 +103,16 @@ void main() {
             'priority': 'medium',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
       // Check response contains count
-      expect(result, contains('2 todos'));
+      expect(result, contains('Active todo items: 2'));
 
       // Verify state was persisted
-      final readResult = await TodoToolService.handleTodoRead({});
+      final readResult = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
       expect(readResult, contains('Task 1'));
       expect(readResult, contains('Task 2'));
     });
@@ -111,7 +127,7 @@ void main() {
             'priority': 'high',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
       // Second write replaces all
       final result = await TodoToolService.handleTodoWrite({
@@ -122,12 +138,16 @@ void main() {
             'priority': 'low',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
-      expect(result, contains('0 todos')); // completed tasks don't count
+      expect(result,
+          contains('Active todo items: 0')); // completed tasks don't count
 
       // Old task should be gone
-      final readResult = await TodoToolService.handleTodoRead({});
+      final readResult = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
       expect(readResult, contains('Task A'));
       expect(readResult, isNot(contains('Task 1')));
     });
@@ -153,10 +173,10 @@ void main() {
             'priority': 'low',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
       // Only 1 active task: Active task (completed and cancelled are excluded)
-      expect(result, contains('1 todos'));
+      expect(result, contains('Active todo items: 1'));
       expect(result, contains('Active task'));
       expect(result, contains('Done task')); // still in the list
       expect(result, contains('Cancelled task')); // still in the list
@@ -171,10 +191,13 @@ void main() {
             // status and priority missing
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
-      expect(result, contains('1 todos'));
-      final readResult = await TodoToolService.handleTodoRead({});
+      expect(result, contains('Active todo items: 1'));
+      final readResult = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
       expect(readResult, contains('Task with defaults'));
     });
   });
@@ -189,23 +212,73 @@ void main() {
             'priority': 'high',
           },
         ],
-      });
+      }, locale: const Locale('en', 'US'));
 
-      final result = await TodoToolService.handleTodoRead({});
+      final result = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Read task'));
       expect(result, contains('pending'));
       expect(result, contains('high'));
     });
 
+    test('localizes app-authored text and preserves todo JSON', () async {
+      final englishEmpty = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
+      expect(englishEmpty, 'There are no todo items yet.');
+
+      final englishWrite = await TodoToolService.handleTodoWrite(
+        {
+          'todos': [
+            {'content': 'Keep this text', 'status': 'pending'},
+          ],
+        },
+        locale: const Locale('en', 'US'),
+      );
+      expect(englishWrite, contains('Active todo items: 1'));
+      final englishInvalid = await TodoToolService.handleTodo(
+        {'todos': 'invalid'},
+        locale: const Locale('en', 'US'),
+      );
+      expect(englishInvalid, contains('must be an array'));
+      expect(englishWrite, contains('"content":"Keep this text"'));
+
+      await TodoToolService.handleTodoWrite(
+        {'todos': []},
+        locale: const Locale('zh', 'CN'),
+      );
+      final chineseEmpty = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(chineseEmpty, '当前没有待办事项。');
+    });
+
     test('returns empty message when no todos exist', () async {
-      final result = await TodoToolService.handleTodoRead({});
-      expect(result, contains('当前没有待办事项'));
+      await TodoToolService.handleTodoWrite(
+        {'todos': []},
+        locale: const Locale('en', 'US'),
+      );
+      final result = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
+      expect(result, 'There are no todo items yet.');
     });
 
     test('returns empty message after writing empty list', () async {
-      await TodoToolService.handleTodoWrite({'todos': []});
-      final result = await TodoToolService.handleTodoRead({});
-      expect(result, contains('当前没有待办事项'));
+      await TodoToolService.handleTodoWrite(
+        {'todos': []},
+        locale: const Locale('en', 'US'),
+      );
+      final result = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
+      expect(result, 'There are no todo items yet.');
     });
   });
 }

@@ -69,6 +69,9 @@ class OcrTaskRunner {
     required this.title,
     required this.folder,
     required this.onSaved,
+
+    /// Builds a task-scoped service. Mark a dedicated injected Dio as owned
+    /// on the returned service so runner completion can close it.
     OcrService Function(OcrConfig)? serviceFactory,
     Future<String> Function(String, String, {void Function()? beforeCommit})?
         writeText,
@@ -353,10 +356,11 @@ class OcrTaskRunner {
         if (task != null) {
           final safeError = taskSpecificFailure == null
               ? error is OcrRequestTooLargeException
-                  ? error.toString()
+                  ? error.localizedMessage(notifier.localizations)
                   : OcrDiagnosticSnapshot.safeTaskError(
                       error,
                       excludedValues: [config.apiKey],
+                      localizations: notifier.localizations,
                     )
               : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
                     taskSpecificFailure,
@@ -491,6 +495,11 @@ class OcrTaskRunner {
           } else {
             _incompleteDiagnosticService ??= service;
           }
+          final safeFinishReason = OcrDiagnosticSnapshot.safeFinishReason(
+                result.finishReason,
+                excludedValues: [config.apiKey],
+              ) ??
+              'unknown';
           outcomes[imageIndex] = OcrPageOutcome(
             imageIndex: imageIndex,
             status: result.isComplete
@@ -500,7 +509,7 @@ class OcrTaskRunner {
             error: result.isComplete
                 ? null
                 : notifier.localizations.bgTaskOcrResultIncomplete(
-                    result.finishReason ?? 'unknown',
+                    safeFinishReason,
                   ),
           );
         } catch (error) {
@@ -517,10 +526,11 @@ class OcrTaskRunner {
             imageIndex: imageIndex,
             status: OcrPageOutcomeStatus.failed,
             error: error is OcrRequestTooLargeException
-                ? error.toString()
+                ? error.localizedMessage(notifier.localizations)
                 : OcrDiagnosticSnapshot.safeTaskError(
                     error,
                     excludedValues: [config.apiKey],
+                    localizations: notifier.localizations,
                   ),
           );
         } finally {

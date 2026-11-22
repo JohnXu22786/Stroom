@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
@@ -11,6 +12,85 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/app_version.dart';
+import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
+
+final class _DocumentsDirectory extends PathProviderPlatform {
+  _DocumentsDirectory(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+final class _RealIO extends IOOverrides {}
+
+final class _FailingMigrationStagedFile extends Fake implements File {
+  _FailingMigrationStagedFile(this.file, this.destinationPath);
+
+  final File file;
+  final String destinationPath;
+
+  @override
+  String get path => file.path;
+
+  @override
+  Future<bool> exists() => file.exists();
+
+  @override
+  Future<File> rename(String newPath) async {
+    if (p.normalize(newPath) == p.normalize(destinationPath)) {
+      throw FileSystemException('Injected migration destination failure', path);
+    }
+    return file.rename(newPath);
+  }
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) =>
+      file.delete(recursive: recursive);
+
+  @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+}
+
+final class _FailingDeleteFile extends Fake implements File {
+  _FailingDeleteFile(this.file);
+
+  final File file;
+
+  @override
+  String get path => file.path;
+
+  @override
+  Future<FileStat> stat() => file.stat();
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) async {
+    throw FileSystemException('Injected cache delete failure', path);
+  }
+}
+
+final class _FailingListDirectory extends Fake implements Directory {
+  _FailingListDirectory(this.directory);
+
+  final Directory directory;
+
+  @override
+  String get path => directory.path;
+
+  @override
+  Future<bool> exists() => directory.exists();
+
+  @override
+  Stream<FileSystemEntity> list({
+    bool recursive = false,
+    bool followLinks = true,
+  }) =>
+      Stream.error(
+        FileSystemException('Injected cache directory read failure', path),
+      );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +98,7 @@ void main() {
   late String appDir;
   late Directory snapDir;
   late Directory isolatedAppDir;
+  late PathProviderPlatform originalPathProvider;
 
   setUp(() async {
     AppLogService.disableFileLogging();
@@ -27,13 +108,8 @@ void main() {
     isolatedAppDir = await Directory.systemTemp.createTemp(
       'stroom_data_safety_test_',
     );
-    // Other test files run in parallel and may write their own safety marker;
-    // keep this file's marker and integrity fixtures in a private app dir.
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => isolatedAppDir.path,
-    );
+    originalPathProvider = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsDirectory(isolatedAppDir.path);
     appDir = await AppStorage.directory;
     // 只扫描本测试隔离目录中的数据，避免其他并行测试的文件影响判断。
     for (final rel in [
@@ -62,11 +138,7 @@ void main() {
 
   tearDown(() async {
     SnapshotService.debugNow = null;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+    PathProviderPlatform.instance = originalPathProvider;
     AppStorage.resetCache();
     try {
       if (await snapDir.exists()) {
@@ -193,7 +265,9 @@ void main() {
         'version is released', () async {
       // 相同版本 → 冻结保持
       await DataSafetyManager.freezeForMigrationFailure(
-          targetFormatVersion: 5, description: 'v4→v5');
+          targetFormatVersion: 5,
+          description: 'v4→v5',
+          preMigrationDataSafe: true);
       var result = await DataSafetyManager.checkAndRepair();
       expect(result.skippedDueToFreeze, isTrue);
       expect(result.frozen, isTrue);
@@ -263,6 +337,321 @@ void main() {
       expect(await refMedia.exists(), isTrue, reason: '被引用的媒体文件不能删');
       expect(await orphan.exists(), isFalse, reason: '无引用且超 3 天应删除');
       expect(await fresh.exists(), isTrue, reason: '3 天缓冲内的文件应保留');
+    });
+
+    test(
+        'cleanupOrphans removes aged nested compressed caches but keeps recent '
+        'caches and referenced originals', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations':
+            '[{"id":"c1","messages":[{"attachments":[{"storagePath":"attachments/keep-original.png"}]}]}]',
+      });
+      final oldTimestamp = DateTime.now().subtract(const Duration(days: 10));
+      final cacheDir = Directory(
+        p.join(appDir, 'attachments', 'temp_compressed', 'conversation-1'),
+      );
+      await cacheDir.create(recursive: true);
+      final agedCache = File(p.join(cacheDir.path, 'aged-cache.jpg'));
+      await agedCache.writeAsString('regenerable cache');
+      await agedCache.setLastModified(oldTimestamp);
+      final recentCache = File(p.join(cacheDir.path, 'recent-cache.jpg'));
+      await recentCache.writeAsString('recent cache');
+
+      final original = File(p.join(appDir, 'attachments', 'keep-original.png'));
+      await original.writeAsString('original attachment');
+      await original.setLastModified(oldTimestamp);
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedCache.exists(), isFalse,
+          reason: 'aged unreferenced compressed caches are reclaimable');
+      expect(await recentCache.exists(), isTrue,
+          reason: 'the existing three-day grace period applies to caches');
+      expect(await original.exists(), isTrue,
+          reason: 'referenced original attachments must stay intact');
+    });
+
+    test(
+        'cleanupOrphans removes aged cache colliding with a legacy original '
+        'but keeps the original and recent cache', () async {
+      const legacyName = 'legacy-content-hash.jpg';
+      SharedPreferences.setMockInitialValues({
+        'conversations':
+            '[{"id":"c1","messages":[{"attachments":[{"storagePath":"attachments/$legacyName"}]}]}]',
+      });
+      final oldTimestamp = DateTime.now().subtract(const Duration(days: 10));
+      final oldCacheDir = Directory(p.join(
+        appDir,
+        'attachments',
+        'temp_compressed',
+        'conversation-old',
+      ));
+      final recentCacheDir = Directory(p.join(
+        appDir,
+        'attachments',
+        'temp_compressed',
+        'conversation-recent',
+      ));
+      await oldCacheDir.create(recursive: true);
+      await recentCacheDir.create(recursive: true);
+
+      final agedCache = File(p.join(oldCacheDir.path, legacyName));
+      await agedCache.writeAsString('regenerable compressed cache');
+      await agedCache.setLastModified(oldTimestamp);
+      final recentCache = File(p.join(recentCacheDir.path, legacyName));
+      await recentCache.writeAsString('recent compressed cache');
+      final original = File(p.join(appDir, 'attachments', legacyName));
+      await original.parent.create(recursive: true);
+      await original.writeAsString('legacy original attachment');
+      await original.setLastModified(oldTimestamp);
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedCache.exists(), isFalse,
+          reason: 'aged caches are disposable despite a referenced basename');
+      expect(await original.exists(), isTrue,
+          reason: 'the referenced legacy original must remain intact');
+      expect(await recentCache.exists(), isTrue,
+          reason: 'the three-day grace period still applies to caches');
+    });
+
+    test('cleanupOrphans continues past unreadable cache folders and files',
+        () async {
+      final cacheRoot = Directory(
+        p.join(appDir, 'attachments', 'temp_compressed'),
+      );
+      final unreadableDir = Directory(p.join(cacheRoot.path, 'unreadable'));
+      final readableDir = Directory(p.join(cacheRoot.path, 'readable'));
+      await unreadableDir.create(recursive: true);
+      await readableDir.create(recursive: true);
+      final unreadableCache = File(p.join(unreadableDir.path, 'cache.jpg'));
+      await unreadableCache.writeAsString('cache');
+      await unreadableCache.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+      final undeletableCache = File(p.join(readableDir.path, 'locked.jpg'));
+      await undeletableCache.writeAsString('cache');
+      await undeletableCache.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+      final deletableCache = File(p.join(readableDir.path, 'orphan.jpg'));
+      await deletableCache.writeAsString('cache');
+      await deletableCache.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      final outerZone = Zone.current;
+      await IOOverrides.runZoned(() async {
+        await DataSafetyManager.cleanupOrphans();
+      }, createDirectory: (path) {
+        final delegate = outerZone.run(() => Directory(path));
+        if (p.normalize(path) == p.normalize(unreadableDir.path)) {
+          return _FailingListDirectory(delegate);
+        }
+        return delegate;
+      }, createFile: (path) {
+        final delegate = outerZone.run(() => File(path));
+        if (p.normalize(path) == p.normalize(undeletableCache.path)) {
+          return _FailingDeleteFile(delegate);
+        }
+        return delegate;
+      });
+
+      expect(await unreadableCache.exists(), isTrue,
+          reason: 'a cache folder that cannot be listed is left untouched');
+      expect(await undeletableCache.exists(), isTrue,
+          reason: 'failed cache deletion is tolerated');
+      expect(await deletableCache.exists(), isFalse,
+          reason: 'one cache failure must not stop cleanup of other caches');
+    });
+
+    test('cleanupOrphans does not follow a compressed cache root symlink',
+        () async {
+      if (Platform.isWindows) return;
+
+      final attachmentsDir = Directory(p.join(appDir, 'attachments'));
+      await attachmentsDir.create(recursive: true);
+      final cacheTarget = Directory(p.join(appDir, 'cache-target'));
+      final targetConversation = Directory(
+        p.join(cacheTarget.path, 'conversation-1'),
+      );
+      await targetConversation.create(recursive: true);
+      final agedCache = File(p.join(targetConversation.path, 'orphan.jpg'));
+      await agedCache.writeAsString('cache outside the managed namespace');
+      await agedCache.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      await Link(p.join(attachmentsDir.path, 'temp_compressed'))
+          .create(cacheTarget.path);
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedCache.exists(), isTrue,
+          reason: 'a symlink target outside the cache namespace is untouched');
+    });
+
+    test('cleanupOrphans does not follow a managed media root symlink',
+        () async {
+      final externalTarget = Directory(
+        p.join(isolatedAppDir.path, 'external-pictures'),
+      );
+      await externalTarget.create(recursive: true);
+      final agedOrphan = File(p.join(externalTarget.path, 'orphan.jpg'));
+      await agedOrphan.writeAsString('outside the managed app directory');
+      await agedOrphan.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      try {
+        await Link(p.join(appDir, 'pictures')).create(externalTarget.path);
+      } on FileSystemException catch (error) {
+        final errorCode = error.osError?.errorCode;
+        final permissionDenied = Platform.isWindows
+            ? errorCode == 1314
+            : errorCode == 1 || errorCode == 13;
+        if (permissionDenied) {
+          markTestSkipped('symlink creation requires unavailable privileges');
+        }
+        rethrow;
+      }
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await agedOrphan.exists(), isTrue,
+          reason: 'managed media root symlinks must not expose external files');
+    });
+
+    test(
+      'cleanupOrphans preserves journaled backups and removes old unjournaled backups',
+      () async {
+        final picturesDir = Directory(p.join(appDir, 'pictures'));
+        await picturesDir.create(recursive: true);
+        const journaledBackupName = '.manifest-delete-backup-journaled';
+        const unjournaledBackupName = '.manifest-delete-backup-legacy';
+        final journaledBackup =
+            File(p.join(picturesDir.path, journaledBackupName));
+        final unjournaledBackup =
+            File(p.join(picturesDir.path, unjournaledBackupName));
+        final journal = File(
+          p.join(picturesDir.path, '.manifest-delete-journal-test.json'),
+        );
+        await journaledBackup.writeAsString('journaled');
+        await unjournaledBackup.writeAsString('legacy');
+        await journal.writeAsString(
+          '{"files":{"original.jpg":"$journaledBackupName"}}',
+        );
+        final oldTimestamp = DateTime.now().subtract(
+          const Duration(days: 10),
+        );
+        await journaledBackup.setLastModified(oldTimestamp);
+        await unjournaledBackup.setLastModified(oldTimestamp);
+        await journal.setLastModified(oldTimestamp);
+
+        await DataSafetyManager.cleanupOrphans();
+
+        expect(await journal.exists(), isTrue);
+        expect(await journaledBackup.exists(), isTrue);
+        expect(await unjournaledBackup.exists(), isFalse);
+      },
+    );
+
+    test(
+      'cleanupOrphans preserves legacy audio after migration write failure',
+      () async {
+        const hash = 'legacy_audio_hash';
+        const format = 'wa%v';
+        await ManifestDatabase.insertAudioRecord({
+          'id': 'legacy_audio_1',
+          'name': 'legacy audio',
+          'hash': hash,
+          'format': format,
+          'createdAt': DateTime.now().toIso8601String(),
+          'size': 100,
+          'folder': '',
+          'sourceText': '',
+          'duration': 1,
+        });
+        WebFileStore.disableTestMode();
+        addTearDown(WebFileStore.enableTestMode);
+        FileManifest.invalidateCache();
+
+        final audioDir = Directory(p.join(appDir, 'tts_audio'));
+        await audioDir.create(recursive: true);
+        const legacyName = '$hash.$format';
+        final legacyAudio = File(p.join(audioDir.path, legacyName));
+        await legacyAudio.writeAsString('only surviving audio copy');
+        final storageName = AudioRecord.storageFileNameFor(
+          hash: hash,
+          format: format,
+        );
+        final destinationPath = p.join(audioDir.path, storageName);
+        final realIO = IOOverrides.current ?? _RealIO();
+        await IOOverrides.runZoned(
+          () => FileManifest.loadRecords(),
+          createFile: (path) {
+            final file = realIO.createFile(path);
+            return p.basename(path).startsWith('.audio-migration-')
+                ? _FailingMigrationStagedFile(file, destinationPath)
+                : file;
+          },
+        );
+        expect(await legacyAudio.exists(), isTrue,
+            reason: 'failed destination migration must retain its source');
+        expect(await File(destinationPath).exists(), isFalse,
+            reason:
+                'the injected migration write failure blocks the destination');
+        await legacyAudio.setLastModified(
+          DateTime.now().subtract(const Duration(days: 10)),
+        );
+
+        await DataSafetyManager.cleanupOrphans();
+
+        expect(await legacyAudio.exists(), isTrue,
+            reason: 'the live record must keep its legacy source referenced');
+
+        FileManifest.invalidateCache();
+        await FileManifest.loadRecords();
+        expect(await legacyAudio.exists(), isFalse,
+            reason:
+                'a later successful migration retry removes the legacy file');
+        expect(await File(destinationPath).exists(), isTrue,
+            reason:
+                'a later successful migration retry writes the escaped file');
+      },
+    );
+
+    test('cleanupOrphans keeps old audio with a Windows-invalid format',
+        () async {
+      const hash = 'ref_audio_hash_1';
+      const format = 'wa?v';
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'audio_1',
+        'name': 'audio',
+        'hash': hash,
+        'format': format,
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'sourceText': '',
+        'duration': 1,
+      });
+
+      final audioPath = AudioRecord.storageFileNameFor(
+        hash: hash,
+        format: format,
+      );
+      final audio = File(p.join(appDir, 'tts_audio', audioPath));
+      await audio.parent.create(recursive: true);
+      await audio.writeAsString('audio');
+      await audio.setLastModified(
+        DateTime.now().subtract(const Duration(days: 10)),
+      );
+
+      await DataSafetyManager.cleanupOrphans();
+
+      expect(await audio.exists(), isTrue,
+          reason: 'aged audio stored under the manifest-safe name stays alive');
     });
   });
 }

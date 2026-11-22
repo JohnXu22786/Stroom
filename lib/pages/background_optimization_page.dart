@@ -5,13 +5,14 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/background_service.dart';
 import '../services/desktop_app_service.dart';
 import '../services/ios_continued_task_service.dart';
 import 'platform_tutorial_page.dart';
+
+import '../widgets/constrained_text.dart';
 
 /// A page that detects current system environment, checks background optimization
 /// status, and provides tutorials organized by OS categories.
@@ -389,7 +390,11 @@ class _BackgroundOptimizationPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_strings.backgroundOptimizationTitle),
+        title: ConstrainedText(
+          _strings.backgroundOptimizationTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
       ),
       body: ListView(
@@ -502,13 +507,17 @@ class _BackgroundOptimizationPageState
                         size: 24,
                       ),
                 const SizedBox(width: 12),
-                Text(
-                  _isCheckingService
-                      ? _strings.backgroundOptimizationDetecting
-                      : _optimizationStatus,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: _isServiceRunning ? Colors.green : Colors.orange,
+                Expanded(
+                  child: ConstrainedText(
+                    _isCheckingService
+                        ? _strings.backgroundOptimizationDetecting
+                        : _optimizationStatus,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: _isServiceRunning ? Colors.green : Colors.orange,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -556,8 +565,10 @@ class _BackgroundOptimizationPageState
                                 ),
                               )
                             : const Icon(Icons.restart_alt, size: 18),
-                        label: Text(
+                        label: ConstrainedText(
                           _strings.backgroundOptimizationRestartService,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -585,7 +596,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _isOperating ? null : _checkBackgroundService,
                   icon: const Icon(Icons.refresh, size: 18),
-                  label: Text(_strings.backgroundOptimizationRedetect),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationRedetect,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -675,7 +690,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _requestBatteryExemption,
                   icon: const Icon(Icons.battery_charging_full, size: 18),
-                  label: Text(_strings.backgroundOptimizationIgnoreBattery),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationIgnoreBattery,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -687,7 +706,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _requestExactAlarm,
                   icon: const Icon(Icons.alarm_add, size: 18),
-                  label: Text(_strings.backgroundOptimizationExactAlarm),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationExactAlarm,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -945,7 +968,11 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _quitDesktopApp,
                   icon: const Icon(Icons.power_settings_new, size: 18),
-                  label: Text(_strings.backgroundOptimizationQuitApp),
+                  label: ConstrainedText(
+                    _strings.backgroundOptimizationQuitApp,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ),
@@ -972,7 +999,7 @@ class _BackgroundOptimizationPageState
       return;
     }
     try {
-      await windowManager.setPreventClose(true);
+      await DesktopAppService.instance.ensureWindowCloseInterception();
     } catch (e) {
       debugPrint('[BackgroundOptimizationPage] setPreventClose failed: $e');
     }
@@ -993,35 +1020,40 @@ class _BackgroundOptimizationPageState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => _showDetailDialog(theme, title, detail),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(
-                Icons.info_outline,
-                size: 18,
-                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
               ),
-            ),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _showDetailDialog(theme, title, detail),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      subtitle: Text(
-        detail.length > 60 ? '${detail.substring(0, 60)}…' : detail,
-        style: theme.textTheme.bodySmall,
-      ),
-      value: value,
-      onChanged: onChanged,
+          value: value,
+          onChanged: onChanged,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Text(detail, style: theme.textTheme.bodySmall),
+        ),
+      ],
     );
   }
 
@@ -1029,14 +1061,22 @@ class _BackgroundOptimizationPageState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title),
+        title: ConstrainedText(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SingleChildScrollView(
           child: Text(detail, style: theme.textTheme.bodyMedium),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(_strings.backgroundOptimizationGotIt),
+            child: ConstrainedText(
+              _strings.backgroundOptimizationGotIt,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

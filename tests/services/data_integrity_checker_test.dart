@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -8,6 +9,7 @@ import 'package:stroom/services/data_integrity_checker.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/startup/startup_check_service.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -128,6 +130,28 @@ void main() {
           report.corruptions
               .any((i) => i.message.contains('data_format_versions')),
           isTrue);
+    });
+
+    test('corrupt persisted web manifest is reported', () async {
+      await WebFileStore.write(
+        'manifest_database_data',
+        Uint8List.fromList('{not-valid-json'.codeUnits),
+      );
+
+      final invalidJsonReport = await DataIntegrityChecker.checkCurrentData();
+      expect(
+        invalidJsonReport.corruptions.any((issue) => issue.part == 'media'),
+        isTrue,
+      );
+
+      await WebFileStore.write('manifest_database_data', Uint8List(0));
+      final emptyReport = await DataIntegrityChecker.checkCurrentData();
+
+      expect(
+        emptyReport.corruptions.any((issue) => issue.part == 'media'),
+        isTrue,
+        reason: 'a present empty manifest should not be treated as missing',
+      );
     });
 
     test('corrupt synthesis/tasks.json is reported', () async {

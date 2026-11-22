@@ -3048,7 +3048,8 @@ class _WavPreprocessPlan {
         ? (info.sampleRate / outputSampleRate).round().clamp(1, 32)
         : 1;
     outputSampleCount = _resample
-        ? (_workingSampleCount * outputSampleRate / info.sampleRate).round()
+        ? (info.totalSamples * outputSampleRate / info.sampleRate).round() *
+            outputChannels
         : _workingSampleCount;
     _dataSize = outputSampleCount * 2;
     _fileSize = 44 + _dataSize;
@@ -3073,28 +3074,35 @@ class _WavPreprocessPlan {
     return sum / info.numChannels;
   }
 
-  double _filteredSample(int index) {
-    if (!_downsample) return _workingSample(index);
+  double _resamplingSample(int frame, int channel) {
+    if (_downmix) return _workingSample(frame);
+    return _sourceSample(frame * info.numChannels + channel);
+  }
+
+  double _filteredSample(int frame, int channel) {
+    if (!_downsample) return _resamplingSample(frame, channel);
     double sum = 0;
     double weightSum = 0;
     for (var delta = -_filterLength; delta <= _filterLength; delta++) {
-      final sourceIndex = index + delta;
-      if (sourceIndex < 0 || sourceIndex >= _workingSampleCount) continue;
+      final sourceFrame = frame + delta;
+      if (sourceFrame < 0 || sourceFrame >= info.totalSamples) continue;
       final weight = 1.0 - delta.abs() / (_filterLength + 1);
-      sum += _workingSample(sourceIndex) * weight;
+      sum += _resamplingSample(sourceFrame, channel) * weight;
       weightSum += weight;
     }
-    return weightSum > 0 ? sum / weightSum : _workingSample(index);
+    return weightSum > 0 ? sum / weightSum : _resamplingSample(frame, channel);
   }
 
   double _outputSample(int index) {
     if (!_resample) return _workingSample(index);
-    final position = index * info.sampleRate / outputSampleRate;
+    final channel = index % outputChannels;
+    final outputFrame = index ~/ outputChannels;
+    final position = outputFrame * info.sampleRate / outputSampleRate;
     final first = position.floor();
     final fraction = position - first;
-    final left = _filteredSample(first);
-    if (first + 1 >= _workingSampleCount) return left;
-    final right = _filteredSample(first + 1);
+    final left = _filteredSample(first, channel);
+    if (first + 1 >= info.totalSamples) return left;
+    final right = _filteredSample(first + 1, channel);
     return left * (1 - fraction) + right * fraction;
   }
 

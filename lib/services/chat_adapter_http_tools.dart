@@ -97,55 +97,59 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
     ChatAdapter._httpToolsRegistered = true;
 
     for (final def in HttpToolService.toolDefinitions) {
-      // Async handler that delegates to the HTTP tool service
-      Future<String> handler(Map<String, dynamic> args) async {
+      // Pass the executing ChatService's locale into the shared handler.
+      Future<String> handler(
+        Map<String, dynamic> args,
+        Locale? locale,
+      ) async {
         switch (def.name) {
           case 'brave_web_search':
-            return await HttpToolService.handleBraveSearch(args);
+            return HttpToolService.handleBraveSearch(args, locale: locale);
           case 'bocha_web_search':
-            return await HttpToolService.handleBochaSearch(args);
+            return HttpToolService.handleBochaSearch(args, locale: locale);
           case 'querit_search':
-            return await HttpToolService.handleQueritSearch(args);
+            return HttpToolService.handleQueritSearch(args, locale: locale);
           case 'searxng_search':
-            return await HttpToolService.handleSearxngSearch(args);
+            return HttpToolService.handleSearxngSearch(args, locale: locale);
           default:
-            return '错误: 未知的 HTTP 工具 "${def.name}"';
+            return appLocalizationsForLocale(locale)
+                .toolResultHttpUnknownTool(def.name);
         }
       }
 
-      ChatService.registerTool(def, handler);
+      ChatService.registerTool(def, null, localizedHandler: handler);
     }
     debugPrint(
         'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
 
     // Register Todo tool (todowrite — 读写一体)
     for (final def in TodoToolService.toolDefinitions) {
-      Future<String> handler(Map<String, dynamic> args) async {
+      Future<String> handler(Map<String, dynamic> args, Locale? locale) async {
         switch (def.name) {
           case 'todowrite':
-            return await TodoToolService.handleTodo(args);
+            return TodoToolService.handleTodo(args, locale: locale);
           default:
             return '错误: 未知的 Todo 工具 "${def.name}"';
         }
       }
 
-      ChatService.registerTool(def, handler);
+      ChatService.registerTool(def, null, localizedHandler: handler);
     }
     debugPrint(
         'Registered ${TodoToolService.toolDefinitions.length} Todo tools');
 
     // Register Web Search tool (web_search - Google/Bing/Baidu)
     for (final def in WebSearchService.toolDefinitions) {
-      Future<String> handler(Map<String, dynamic> args) async {
+      Future<String> handler(Map<String, dynamic> args, Locale? locale) async {
         switch (def.name) {
           case 'web_search':
-            return await WebSearchService.handleWebSearch(args);
+            return WebSearchService.handleWebSearch(args, locale: locale);
           default:
             return '错误: 未知的搜索工具 "${def.name}"';
         }
       }
 
-      ChatService.registerTool(def, handler);
+      ChatService.registerTool(def, null, localizedHandler: handler);
     }
     debugPrint(
         'Registered ${WebSearchService.toolDefinitions.length} Web Search tools');

@@ -1,6 +1,9 @@
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_editor_field.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Helper to run the formatter as if the user typed [insert] at [cursor]
 /// into [old].
@@ -274,4 +277,183 @@ void main() {
       expect(isValidParamName('provider. only'), isFalse);
     });
   });
+
+  Widget localizedApp(
+    Widget home, {
+    Locale locale = const Locale('de'),
+    ThemeData? theme,
+  }) =>
+      MaterialApp(
+        locale: locale,
+        theme: theme,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: home,
+      );
+
+  testWidgets('JSON editor title stays bounded beside dialog controls', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{"a":1}',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final title = AppLocalizations.of(tester.element(find.byType(Dialog)))!
+        .codeEditorTitle;
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == title,
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('JSON'), findsOneWidget);
+    expect(find.byIcon(Icons.format_align_left), findsOneWidget);
+    expect(find.byTooltip('Abbrechen'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(Container());
+    tester.view.physicalSize = const Size(700, 640);
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{"a":1}',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        locale: const Locale('en'),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final fittingTitle = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText &&
+          widget.data ==
+              AppLocalizations.of(tester.element(find.byType(Dialog)))!
+                  .codeEditorTitle,
+    );
+    final titleRect = tester.getRect(fittingTitle);
+    final badgeRect = tester.getRect(find.text('JSON'));
+    expect(badgeRect.left - titleRect.right, inInclusiveRange(8, 24));
+    await tester.pump(const Duration(seconds: 3));
+    expect(tester.getRect(fittingTitle).topLeft, titleRect.topLeft);
+
+    await tester.pumpWidget(Container());
+    tester.view.physicalSize = const Size(320, 640);
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{"a":1}',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('JSON'), findsOneWidget);
+    expect(find.byIcon(Icons.format_align_left), findsOneWidget);
+    expect(find.byTooltip('Abbrechen'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'JSON editor supports keyboard editing, formatting, save and close',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      String? saved;
+
+      await tester.pumpWidget(
+        localizedApp(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showJsonValueEditorDialog(
+                context,
+                initialValue: '{"a":1}',
+                hintText: '',
+                type: 'json',
+                onSave: (value) => saved = value,
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      final editor = find.byType(TextField);
+      await tester.tap(editor);
+      await tester.showKeyboard(editor);
+      await tester.enterText(editor, '{"b":2}');
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+      expect(find.byIcon(Icons.format_align_left), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.format_align_left));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(editor).controller!.text,
+        '{\n  "b": 2\n}',
+      );
+      await tester.tap(find.byIcon(Icons.check));
+      await tester.pumpAndSettle();
+      expect(saved, '{\n  "b": 2\n}');
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      final reopenedEditor = find.byType(TextField);
+      await tester.tap(reopenedEditor);
+      await tester.showKeyboard(reopenedEditor);
+      await tester.enterText(reopenedEditor, '{"c":3}');
+      await tester.pump();
+      await tester.tap(find.byTooltip('Abbrechen'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      expect(saved, '{\n  "b": 2\n}');
+    },
+  );
 }

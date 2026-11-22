@@ -1,0 +1,14 @@
+Capture route: http://127.0.0.1:8766/?locale=de&scale=1.6
+Browser: /usr/bin/chromium via Playwright, headless, viewport 500×300, deviceScaleFactor 1.
+
+Flutter console:
+Starting application from main method in: org-dartlang-app:///web_entrypoint.dart.
+A RenderFlex overflowed by 4.0 pixels on the bottom.
+Relevant widget: NavigationRail (lib/pages/home_page_navigation.dart:36:12).
+
+Temporary QA entrypoint RenderBox measurements:
+NAVQA component=NavigationRail rect=Offset(0.0, 0.0) size=Size(137.0, 300.0)
+NAVQA label=Startseite rect=Offset(24.8, 44.0) size=Size(87.5, 26.0) constraints=BoxConstraints(unconstrained) maxIntrinsic=87.46533203125 exceeded=false
+NAVQA label=Chat rect=Offset(47.6, 118.0) size=Size(41.8, 26.0) constraints=BoxConstraints(unconstrained) maxIntrinsic=41.7615966796875 exceeded=false
+NAVQA label=Dateien rect=Offset(34.3, 192.0) size=Size(68.4, 26.0) constraints=BoxConstraints(unconstrained) maxIntrinsic=68.36087036132812 exceeded=false
+NAVQA label=Einstellungen rect=Offset(8.0, 266.0) size=Size(121.0, 26.0) constraints=BoxConstraints(unconstrained) maxIntrinsic=120.96917724609375 exceeded=false
