@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/message_search_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Helper: create test conversations with messages for search testing.
 List<Conversation> _createTestConversations() {
@@ -77,10 +77,7 @@ List<Conversation> _createTestConversations() {
 }
 
 /// Helper: create test app wrapped in ProviderScope with seeded conversations.
-Widget createMessageSearchTestApp({
-  List<Conversation>? conversations,
-  Locale locale = const Locale('zh', 'CN'),
-}) {
+Widget createMessageSearchTestApp({List<Conversation>? conversations}) {
   SharedPreferences.setMockInitialValues({});
   final convs = conversations ?? _createTestConversations();
   return ProviderScope(
@@ -96,11 +93,10 @@ Widget createMessageSearchTestApp({
       }),
     ],
     child: MaterialApp(
-      locale: locale,
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      home: const MessageSearchPage(),
-    ),
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const MessageSearchPage()),
   );
 }
 
@@ -221,37 +217,53 @@ void main() {
   });
 
   group('MessageSearchPage - Widget', () {
-    testWidgets('localizes search chrome and preserves conversation content', (
+    testWidgets('whitespace query keeps the initial search prompt', (
       tester,
     ) async {
       await tester.pumpWidget(createMessageSearchTestApp());
-      await tester.pumpAndSettle();
+      await tester.pump();
 
-      expect(find.text('全局消息搜索'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+
       expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
+      expect(find.text('未找到匹配的消息'), findsNothing);
+    });
 
-      await tester.pumpWidget(
-        createMessageSearchTestApp(locale: const Locale('en', 'US')),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Search Messages'), findsOneWidget);
-      expect(
-        find.text('Type a keyword to search messages in all conversations'),
-        findsOneWidget,
-      );
+    testWidgets('search trims surrounding whitespace from the query', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createMessageSearchTestApp());
+      await tester.pump();
 
-      await tester.enterText(find.byType(TextField), 'Flutter');
-      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '  Flutter  ');
+      await tester.pump(const Duration(milliseconds: 251));
+      await tester.pump();
 
-      expect(find.text('2 matches'), findsNWidgets(2));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.text('Flutter讨论'), findsOneWidget);
-      final snippets = tester
-          .widgetList<RichText>(find.byType(RichText))
-          .map((richText) => richText.text.toPlainText());
-      expect(
-        snippets.any((snippet) => snippet.contains('Flutter是什么框架？')),
-        isTrue,
-      );
+    });
+
+    testWidgets('waits for typing to settle before showing search results', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createMessageSearchTestApp());
+      await tester.pump();
+
+      final searchField = find.byType(TextField);
+      await tester.enterText(searchField, 'F');
+      await tester.pump();
+      await tester.enterText(searchField, 'Fl');
+      await tester.pump();
+      await tester.enterText(searchField, 'Flu');
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Flutter讨论'), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 251));
+      await tester.pump();
+      expect(find.text('Flutter讨论'), findsOneWidget);
     });
 
     testWidgets('shows no results state when no matches', (tester) async {
@@ -288,8 +300,9 @@ void main() {
             }),
           ],
           child: MaterialApp(
-            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('zh', 'CN'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () async {

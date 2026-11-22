@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -11,8 +12,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
+import 'package:stroom/pages/chat/widgets/message_action_row.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/conversation_record_adapter.dart';
+import 'package:stroom/services/conversation_repository.dart';
+import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/services/attachment_storage.dart';
 
 void main() {
@@ -44,7 +49,9 @@ void main() {
               fileName: 'file.txt',
               mimeType: 'text/plain',
               fileType: 'file',
-              hash: 'file-hash',
+              hash: AttachmentStorage.computeHash(
+                Uint8List.fromList([1, 2, 3, 4]),
+              ),
               storagePath: 'attachments/file.txt',
               fileSize: 4,
             ),
@@ -52,19 +59,31 @@ void main() {
         ),
       ],
     );
+    final repository = MemoryConversationRepository();
+    await repository.initialize();
+    await repository.importConversation(
+      ConversationRecordAdapter.fromLegacyMap(conversation.toMap()),
+    );
+    AttachmentStorage.readFileOverrideForTesting =
+        (path) async => Uint8List.fromList([1, 2, 3, 4]);
     SharedPreferences.setMockInitialValues({
-      'conversations': jsonEncode([conversation.toMap()]),
+      'conversations': jsonEncode([]),
       'active_conversation_id': conversation.id,
     });
     final container = ProviderContainer(
       overrides: [
+        conversationRepositoryProvider.overrideWithValue(repository),
         activeConversationIdProvider.overrideWith((ref) => conversation.id),
         providerEntriesProvider.overrideWith(
           (ref) => ProviderEntriesNotifier(),
         ),
       ],
     );
-    addTearDown(container.dispose);
+    addTearDown(() async {
+      container.dispose();
+      await repository.close();
+    });
+    await container.read(conversationsProvider.notifier).ready;
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -81,27 +100,139 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    Map<String, dynamic>? persistedAtDelete;
-    AttachmentStorage.readFileOverrideForTesting =
-        (path) async => Uint8List.fromList([1, 2, 3, 4]);
+    bool? historyWasSavedBeforeDelete;
     AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('conversations');
-      if (json != null) {
-        final conversations = jsonDecode(json) as List<dynamic>;
-        persistedAtDelete = (conversations.single as Map<String, dynamic>);
-      }
+      final messages = await repository.getMessages(conversation.id);
+      historyWasSavedBeforeDelete = messages.isEmpty;
       return true;
     };
 
     await tester.tap(find.byIcon(Icons.delete_outline).first);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('删除').last);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
 
-    expect(persistedAtDelete, isNotNull);
-    expect(persistedAtDelete!['messages'], isEmpty);
+    expect(historyWasSavedBeforeDelete, isTrue);
   });
+
+  testWidgets(
+    'deleting an attachment keeps bytes referenced by older history',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'shared-attachment-history',
+      });
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      final attachment = Attachment(
+        id: 'shared-attachment',
+        fileName: 'file.txt',
+        mimeType: 'text/plain',
+        fileType: 'file',
+        hash: 'file-hash',
+        storagePath: 'attachments/shared-file.txt',
+        fileSize: 4,
+      );
+      await repository.importConversation(
+        ConversationRecordAdapter.fromLegacyMap({
+          'id': 'shared-attachment-history',
+          'title': 'Shared attachment history',
+          'messages': [
+            ChatMessage(
+              id: 'older-reference',
+              role: 'user',
+              content: 'Older reference',
+              attachments: [attachment],
+            ).toMap(),
+            for (var index = 1; index < 20; index++)
+              ChatMessage(
+                id: 'm$index',
+                role: 'user',
+                content: 'Message $index',
+                createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
+              ).toMap(),
+            ChatMessage(
+              id: 'latest-reference',
+              role: 'user',
+              content: 'Latest reference',
+              attachments: [attachment],
+              createdAt: DateTime(2025, 1, 1).add(const Duration(hours: 20)),
+            ).toMap(),
+          ],
+        }),
+      );
+      addTearDown(repository.close);
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+          activeConversationIdProvider.overrideWith(
+            (ref) => 'shared-attachment-history',
+          ),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: ChatPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        container
+            .read(conversationsProvider)
+            .single
+            .messages
+            .map((message) => message.id),
+        isNot(contains('older-reference')),
+        reason: 'the older attachment reference should remain outside the page',
+      );
+
+      var deleteCalls = 0;
+      AttachmentStorage.readFileOverrideForTesting =
+          (path) async => Uint8List.fromList([1, 2, 3, 4]);
+      AttachmentStorage.deleteFileOverrideForTesting = (path) async {
+        deleteCalls++;
+        return true;
+      };
+      final latestRow = find.byWidgetPredicate(
+        (widget) =>
+            widget is MessageActionRow &&
+            widget.messageText == 'Latest reference',
+      );
+      expect(latestRow, findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: latestRow,
+          matching: find.byIcon(Icons.delete_outline),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('删除').last);
+      await tester.pumpAndSettle();
+
+      expect(deleteCalls, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

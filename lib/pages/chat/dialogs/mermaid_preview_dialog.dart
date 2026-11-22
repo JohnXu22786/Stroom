@@ -378,6 +378,29 @@ class _MermaidPreviewDialogContentState
     }
   }
 
+  Future<void> _markZoomInputQueueReady(
+    InAppWebViewController controller,
+  ) async {
+    await controller.evaluateJavascript(
+      source: 'window.applyZoomOperationsAfterFit([])',
+    );
+  }
+
+  Future<void> _markZoomInputQueueReadyAndFlush(
+    InAppWebViewController controller,
+  ) async {
+    try {
+      await _markZoomInputQueueReady(controller);
+      if (!mounted || controller != _webViewController) return;
+      _canApplyZoomDeltasAfterFit = true;
+      await _flushPendingZoomDeltas(controller);
+    } catch (_) {
+      if (!mounted || controller != _webViewController) return;
+      _canApplyZoomDeltasAfterFit = false;
+      _scheduleZoomReadinessRetry();
+    }
+  }
+
   Future<void> _checkZoomReadiness() async {
     final controller = _webViewController;
     if (controller == null || _hasError) return;
@@ -404,6 +427,11 @@ class _MermaidPreviewDialogContentState
         return;
       }
 
+      // This dialog applies toolbar zoom directly instead of routing through
+      // MermaidRenderWidget's pending-operation flush. Mark the shared HTML
+      // template's input queue ready first, or applyZoomDeltasAfterFit keeps
+      // queueing every delta indefinitely.
+      await _markZoomInputQueueReady(controller);
       _canApplyZoomDeltasAfterFit = true;
       await _flushPendingZoomDeltas(controller);
     } catch (_) {
@@ -606,8 +634,8 @@ class _MermaidPreviewDialogContentState
                     _readyFallbackTimer?.cancel();
                     _zoomReadinessRetryTimer?.cancel();
                     _zoomReadinessRetryTimer = null;
-                    _canApplyZoomDeltasAfterFit = true;
-                    unawaited(_flushPendingZoomDeltas(ctrl));
+                    _canApplyZoomDeltasAfterFit = false;
+                    unawaited(_markZoomInputQueueReadyAndFlush(ctrl));
                     setState(() {
                       _isLoading = false;
                       if (kIsWeb &&

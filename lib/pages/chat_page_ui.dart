@@ -754,13 +754,13 @@ extension _ChatPageUiExt on _ChatPageState {
                   _isSearching ? Theme.of(context).colorScheme.primary : null,
             ),
             tooltip: AppLocalizations.of(context)!.chatSearchMessages,
-            onPressed: () => setState(() {
-              _isSearching = !_isSearching;
-              if (!_isSearching) {
-                _searchMode = SearchMode.current;
-                _liveMarkdownSearchPreviews.clear();
+            onPressed: () {
+              if (_isSearching) {
+                _closeSearch();
+              } else {
+                setState(() => _isSearching = true);
               }
-            }),
+            },
           ),
         ],
       ),

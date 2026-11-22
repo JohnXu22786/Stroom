@@ -1620,6 +1620,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatSearchAll => '모든 대화 검색...';
 
   @override
+  String get chatSearchCurrentMode => '현재 대화';
+
+  @override
+  String get chatSearchAllMode => '모든 대화';
+
+  @override
+  String get chatSearchRetry => '검색 다시 시도';
+
+  @override
+  String get chatSearchError => '검색 실패';
+
+  @override
   String get searchPrevious => '이전 일치 항목';
 
   @override
@@ -13394,6 +13406,18 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get chatSearchAll => '모든 대화 검색...';
+
+  @override
+  String get chatSearchCurrentMode => '현재 대화';
+
+  @override
+  String get chatSearchAllMode => '모든 대화';
+
+  @override
+  String get chatSearchRetry => '검색 다시 시도';
+
+  @override
+  String get chatSearchError => '검색 실패';
 
   @override
   String get searchPrevious => '이전 일치 항목';

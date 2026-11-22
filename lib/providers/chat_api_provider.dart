@@ -60,10 +60,69 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   @visibleForTesting
   String get endpointType => _endpointType;
 
+  @visibleForTesting
+  String get requestUrlForTesting => _requestUrl;
+
+  String get _requestUrl {
+    if (_endpointType != 'responses') return _baseUrl;
+    final uri = Uri.tryParse(_baseUrl);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return _baseUrl;
+    var path = uri.path.replaceFirst(RegExp(r'/+$'), '');
+    if (path.endsWith('/chat/completions')) {
+      path = '${path.substring(0, path.length - '/chat/completions'.length)}'
+          '/responses';
+    } else if (path.endsWith('/responses')) {
+      // Preserve a fully qualified Responses endpoint.
+    } else if (path.isEmpty || path == '/') {
+      path = '/v1/responses';
+    } else {
+      path = '$path/responses';
+    }
+    return uri.replace(path: path).toString();
+  }
+
   /// Parsed Responses output items from the latest non-streaming request.
   /// This preserves image and tool items that the legacy `Future<String>`
   /// method cannot return directly.
   List<AIStreamEvent>? get lastNonStreamingEvents => _lastNonStreamingEvents;
+
+  @visibleForTesting
+  List<AIStreamEvent> parseResponsesEventForTesting(
+    Map<String, dynamic> data,
+    Map<String, Map<String, dynamic>> calls,
+  ) {
+    final type = data['type'];
+    if (type == 'response.output_text.delta') {
+      final delta = data['delta'];
+      return delta is String && delta.isNotEmpty
+          ? [AIStreamEvent(delta)]
+          : const [];
+    }
+    if (type == 'response.output_item.added') {
+      final item = data['item'];
+      if (item is Map && item['type'] == 'function_call') {
+        final id = item['id'] ?? item['call_id'];
+        if (id is String) calls[id] = Map<String, dynamic>.from(item);
+      }
+      return const [];
+    }
+    if (type == 'response.function_call_arguments.delta') {
+      final id = data['item_id'];
+      final delta = data['delta'];
+      final call = id is String ? calls[id] : null;
+      if (call != null && delta is String) {
+        call['arguments'] = '${call['arguments'] ?? ''}$delta';
+      }
+      return const [];
+    }
+    if (type == 'response.completed') {
+      final response = data['response'];
+      final usage =
+          response is Map ? normalizeResponsesUsage(response['usage']) : null;
+      return usage == null ? const [] : [AIStreamEvent('', usage: usage)];
+    }
+    return const [];
+  }
 
   @override
   Future<List<AIStreamEvent>> chatWithEvents(
@@ -96,13 +155,16 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     required String apiKey,
     String name = 'OpenAI Compatible',
     String endpointType = 'openai',
+    String? apiProtocol,
     Locale? Function()? localeOverride,
     Dio? dio,
     @visibleForTesting OpenAICompatibleSseStream? sseStreamOverride,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
-        _endpointType = endpointType,
+        _endpointType = _legacyEndpointForApiProtocol(apiProtocol) ??
+            _legacyEndpointForApiProtocol(endpointType) ??
+            endpointType,
         _sseStreamOverride = sseStreamOverride,
         _localeOverride = localeOverride,
         _dio = dio ??
@@ -171,6 +233,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     if (outputD != null) result['outputTokens'] = outputD.toInt();
     if (costD != null) result['cost'] = costD;
     return result.isEmpty ? null : result;
+  }
+
+  static String? _legacyEndpointForApiProtocol(String? apiProtocol) {
+    return switch (apiProtocol) {
+      'openai.responses' => 'responses',
+      'anthropic.messages' => 'anthropic',
+      'openai.chat_completions' => 'openai',
+      _ => null,
+    };
   }
 
   /// 检查流式 chunk 是否携带 API 错误（choices 空 + error 字段）。
@@ -386,12 +457,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     );
 
     debugPrint(
-      'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}',
+      'OpenAICompatibleChatProvider: POST $_requestUrl - 消息数: ${messages.length}',
     );
 
     try {
       _lastRequestBody = body;
-      _lastRequestUrl = _baseUrl;
+      _lastRequestUrl = _requestUrl;
       _lastRequestHeaders = {
         'Content-Type': 'application/json',
         if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
@@ -403,7 +474,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastUsage = null;
       _lastNonStreamingEvents = null;
       final response = await _dio.post(
-        _baseUrl,
+        _requestUrl,
         cancelToken: cancelToken,
         data: body,
       );
@@ -500,7 +571,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     );
 
     _lastRequestBody = body;
-    _lastRequestUrl = _baseUrl;
+    _lastRequestUrl = _requestUrl;
     _lastRequestHeaders = {
       'Content-Type': 'application/json',
       if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
@@ -513,7 +584,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     _lastUsage = null;
 
     debugPrint(
-      'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}',
+      'OpenAICompatibleChatProvider: 流式 POST $_requestUrl - 消息数: ${messages.length}',
     );
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
@@ -529,7 +600,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       // Mark as successfully connected once we start receiving events
       _lastResponseStatusCode = 200;
       await for (final event in (_sseStreamOverride ?? sseStream)(
-        _baseUrl,
+        _requestUrl,
         {
           'Content-Type': 'application/json',
           if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
@@ -699,9 +770,16 @@ BaseChatProvider createChatProviderFromConfig({
   required String apiKey,
   String? model,
   String endpointType = 'openai',
+  String? apiProtocol,
   Locale? Function()? localeOverride,
 }) {
-  if (endpointType == 'anthropic') {
+  final effectiveEndpoint =
+      OpenAICompatibleChatProvider._legacyEndpointForApiProtocol(apiProtocol) ??
+          OpenAICompatibleChatProvider._legacyEndpointForApiProtocol(
+            endpointType,
+          ) ??
+          endpointType;
+  if (effectiveEndpoint == 'anthropic') {
     return AnthropicChatProvider(
       baseUrl: baseUrl,
       apiKey: apiKey,
@@ -714,7 +792,8 @@ BaseChatProvider createChatProviderFromConfig({
     baseUrl: baseUrl,
     apiKey: apiKey,
     name: providerName,
-    endpointType: endpointType,
+    endpointType: effectiveEndpoint,
+    apiProtocol: apiProtocol,
     localeOverride: localeOverride,
   );
 }

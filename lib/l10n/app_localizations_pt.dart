@@ -1686,6 +1686,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get chatSearchAll => 'Pesquisar em todas as conversas...';
 
   @override
+  String get chatSearchCurrentMode => 'Conversa atual';
+
+  @override
+  String get chatSearchAllMode => 'Todas as conversas';
+
+  @override
+  String get chatSearchRetry => 'Tentar pesquisar novamente';
+
+  @override
+  String get chatSearchError => 'Falha na pesquisa';
+
+  @override
   String get searchPrevious => 'Resultado anterior';
 
   @override
@@ -13952,6 +13964,18 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get chatSearchAll => 'Pesquisar em todas as conversas...';
+
+  @override
+  String get chatSearchCurrentMode => 'Conversa atual';
+
+  @override
+  String get chatSearchAllMode => 'Todas as conversas';
+
+  @override
+  String get chatSearchRetry => 'Tentar pesquisar novamente';
+
+  @override
+  String get chatSearchError => 'Falha na pesquisa';
 
   @override
   String get searchPrevious => 'Resultado anterior';

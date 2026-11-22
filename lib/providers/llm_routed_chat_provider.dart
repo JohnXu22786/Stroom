@@ -1,0 +1,2726 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
+
+import '../models/chat_message.dart';
+import '../models/ai_stream_event.dart';
+import '../ai_gateway/ai_gateway.dart';
+import '../services/attachment_storage.dart';
+import 'anthropic_chat_provider.dart';
+import '../services/api_protocol_config.dart';
+import 'chat_api_provider.dart';
+import '../services/conversation_media_storage.dart';
+import '../services/reasoning_replay_cache.dart';
+import '../services/bai_reasoning_content_echo.dart';
+import '../services/clova_studio_protocol.dart';
+
+Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
+    switch (endpointType) {
+      'clova.studio.chat' => const {'clova-studio'},
+      'amazon-q.chat' => const {'amazon-q'},
+      'oneminai.chat' => const {'oneminai'},
+      'cursor.agent_connect_rpc' => const {'cursor'},
+      'anthropic' || 'anthropic.messages' => const {
+          'openai-compatibility',
+          'claude',
+          'kimi',
+          'kimi-ai',
+          'kimi.ai',
+          'qwen-cloud',
+          'qwen-cloud-token-plan',
+          'command-code',
+          'zed-hosted',
+          'github',
+          'ghe-copilot',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
+        },
+      'openai.responses' => const {
+          'openai-compatibility',
+          'openai-api',
+          'codex',
+          'codex-app-server',
+          'xai',
+          'grok-cli',
+          'xai-oauth',
+          'meta',
+          'muse-code',
+          'kimi',
+          'kimi-ai',
+          'kimi.ai',
+          'qwen-cloud',
+          'qwen-cloud-token-plan',
+          'command-code',
+          'zed-hosted',
+          'github',
+          'ghe-copilot',
+          'openference',
+          'openference-api',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
+        },
+      'google.gemini.generate_content' => const {
+          'gemini',
+          'aistudio',
+          'vertex',
+          'zed-hosted',
+        },
+      'google.gemini.interactions' => const {'gemini-interactions'},
+      'devin.connect_rpc' => const {'devin'},
+      'devin.acp' => const {'devin-cli-agentic'},
+      'auggie.cli' => const {'auggie'},
+      'zcode.cli' => const {'zcode-cli'},
+      'ollama.chat' => const {'ollama'},
+      'openai' || 'openai.chat_completions' => const {
+          'openai-compatibility',
+          'openai-api',
+          'openference',
+          'openference-api',
+          'azure-ai',
+          'azure-openai',
+          'aihorde',
+          'uncloseai',
+          'bedrock',
+          'github',
+          'ghe-copilot',
+          'gitlab-duo',
+          'codebuddy-cn',
+          'codebuddy-intl',
+          'workbuddy',
+          'cline',
+          'clinepass',
+          'trae',
+          'cloudflare-ai',
+          'kilocode',
+          'vertex-partner',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
+          'kimi',
+          'kimi-ai',
+          'kimi.ai',
+          'moonshot',
+          'glm',
+          'glm-cn',
+          'deepseek',
+          'minimax',
+          'minimax-cn',
+          'qwen',
+          'qoder',
+          'qwen-cloud',
+          'qwen-cloud-token-plan',
+          'zcode-cli',
+          'command-code',
+          'zed-hosted',
+        },
+      _ => const {},
+    };
+
+Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
+  String? modelOverride,
+) {
+  if (modelOverride != null && modelOverride.isNotEmpty) {
+    return llmRoutedChatSupportedConnectorTypes(modelOverride);
+  }
+  return {
+    for (final protocol in const [
+      'openai.chat_completions',
+      'openai.responses',
+      'anthropic.messages',
+      'clova.studio.chat',
+      'google.gemini.generate_content',
+      'google.gemini.interactions',
+      'ollama.chat',
+      'devin.connect_rpc',
+      'devin.acp',
+      'auggie.cli',
+      'cursor.agent_connect_rpc',
+      'amazon-q.chat',
+      kAntigravityProtocolId,
+      'oneminai.chat',
+    ])
+      ...llmRoutedChatSupportedConnectorTypes(protocol),
+  };
+}
+
+/// Resolves the protocol used by a routed account/model pair.
+///
+/// Non-chat callers that use the same Gateway route can share the chat
+/// adapter's model and account protocol precedence without guessing from the
+/// connector type.
+String llmRoutedChatProtocolForAccountModel({
+  required AiGatewayAccount account,
+  required String upstreamModelId,
+  required String endpointType,
+  String? apiProtocol,
+  String? apiProtocolOverride,
+}) {
+  if (account.connectorType == 'antigravity') {
+    throw StateError('Antigravity has no supported public inference route.');
+  }
+  if (account.connectorType == 'clova-studio') {
+    return kClovaStudioProtocolId;
+  }
+  if (account.connectorType == 'auggie') {
+    if (account.authType != 'none') {
+      throw StateError('Auggie CLI accounts do not store Stroom credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'auggie.cli') {
+      throw StateError('Auggie CLI uses its built-in local route.');
+    }
+    return 'auggie.cli';
+  }
+  if (account.connectorType == 'codex-app-server') {
+    if (account.authType != 'none' || account.hasCredential) {
+      throw StateError('Codex App Server accounts do not store credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'openai.responses') {
+      throw StateError('Codex App Server supports only OpenAI Responses.');
+    }
+    return 'openai.responses';
+  }
+  if (account.connectorType == 'zcode-cli') {
+    if (account.authType != 'none' || account.hasCredential) {
+      throw StateError('ZCode CLI accounts do not store Stroom credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'openai.chat_completions') {
+      throw StateError('ZCode CLI uses native Chat Completions requests.');
+    }
+    return 'openai.chat_completions';
+  }
+  // Cursor's source-owned transport is selected by account ownership. The
+  // model's generic API protocol continues to govern other providers.
+  if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
+  if (account.connectorType == 'aihorde') return 'openai.chat_completions';
+  if (account.connectorType == 'amazon-q') return 'amazon-q.chat';
+  if (account.connectorType == 'oneminai') {
+    final model = account.models
+        .where((model) => model.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final modelProtocol =
+        model?.config['apiProtocolOverride'] ?? model?.config['endpointType'];
+    if (modelProtocol is String &&
+        modelProtocol.isNotEmpty &&
+        modelProtocol != 'oneminai.chat') {
+      throw StateError('1min.AI supports only its native chat protocol.');
+    }
+    final requestedProtocol = apiProtocolOverride ?? modelProtocol;
+    final accountProtocol = account.endpointConfig['apiProtocol'] ??
+        account.endpointConfig['chatProtocol'] ??
+        account.endpointConfig['endpointType'];
+    if (requestedProtocol is String &&
+        requestedProtocol.isNotEmpty &&
+        requestedProtocol != 'oneminai.chat') {
+      throw StateError('1min.AI supports only its native chat protocol.');
+    }
+    if (accountProtocol is String &&
+        accountProtocol.isNotEmpty &&
+        apiProtocolFromLegacyEndpointType(accountProtocol) != 'oneminai.chat') {
+      throw StateError('1min.AI supports only its native chat protocol.');
+    }
+    return 'oneminai.chat';
+  }
+  String protocol;
+  if (apiProtocolOverride?.isNotEmpty == true) {
+    protocol = apiProtocolOverride!;
+  } else {
+    final accountModel = account.models
+        .where((model) => model.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final modelConfig = accountModel?.config;
+    final modelOverride =
+        modelConfig?['apiProtocolOverride'] ?? modelConfig?['endpointType'];
+    if (modelOverride is String && modelOverride.isNotEmpty) {
+      protocol = apiProtocolFromLegacyEndpointType(modelOverride);
+    } else {
+      final accountProtocol = account.endpointConfig['apiProtocol'] ??
+          account.endpointConfig['chatProtocol'] ??
+          account.endpointConfig['endpointType'];
+      protocol = accountProtocol is String && accountProtocol.isNotEmpty
+          ? apiProtocolFromLegacyEndpointType(accountProtocol)
+          : apiProtocol ?? apiProtocolFromLegacyEndpointType(endpointType);
+    }
+  }
+  if (account.connectorType == 'qoder' &&
+      protocol != 'openai.chat_completions') {
+    throw StateError('Qoder supports only Chat Completions chat requests.');
+  }
+  if (account.connectorType == 'uncloseai' &&
+      protocol != 'openai.chat_completions') {
+    throw StateError('UncloseAI supports only Chat Completions requests.');
+  }
+  return protocol;
+}
+
+/// ChatAdapter provider that keeps the application's existing chat protocol
+/// while selecting an eligible account from the model's stable M1 group.
+class LlmRoutedChatProvider extends BaseChatProvider {
+  static final ReasoningReplayCache _processReasoningReplayCache =
+      ReasoningReplayCache();
+  static final Expando<String> _executorReplayScopeIds = Expando();
+  static int _nextExecutorReplayScopeId = 0;
+
+  final Future<AiGatewayFacade> _runtime;
+  final String groupId;
+  final String localModelId;
+  final String endpointType;
+  final String? apiProtocol;
+  final String? apiProtocolOverride;
+  final String? conversationId;
+  final ReasoningReplayCache _reasoningReplayCache;
+  String? selectedAccountId;
+  final ConversationMediaWriter? _saveMediaFile;
+  List<Attachment> _lastMediaAttachments = const [];
+  Map<String, dynamic>? _lastRequestBody;
+  Map<String, dynamic>? _lastResponseData;
+  Map<String, String>? _lastRequestHeaders;
+  String? _lastRequestUrl;
+  int? _lastResponseStatusCode;
+  Map<String, List<String>>? _lastResponseHeaders;
+  Map<String, dynamic>? _lastUsage;
+
+  LlmRoutedChatProvider({
+    required Future<AiGatewayFacade> runtime,
+    required this.groupId,
+    required this.localModelId,
+    required this.endpointType,
+    this.apiProtocol,
+    this.apiProtocolOverride,
+    this.conversationId,
+    this.selectedAccountId,
+    ReasoningReplayCache? reasoningReplayCache,
+    ConversationMediaWriter? saveMediaFile,
+  })  : _runtime = runtime,
+        _reasoningReplayCache =
+            reasoningReplayCache ?? _processReasoningReplayCache,
+        _saveMediaFile = saveMediaFile;
+
+  @override
+  String get name => 'Stroom account routing';
+
+  @override
+  List<String> get supportedModelIds => const [];
+
+  @override
+  Map<String, dynamic>? get lastRequestBody => _lastRequestBody;
+
+  @override
+  Map<String, dynamic>? get lastResponseData => _lastResponseData;
+
+  @override
+  Map<String, String>? get lastRequestHeaders => _lastRequestHeaders;
+
+  @override
+  String? get lastRequestUrl => _lastRequestUrl;
+
+  @override
+  int? get lastResponseStatusCode => _lastResponseStatusCode;
+
+  @override
+  Map<String, List<String>>? get lastResponseHeaders => _lastResponseHeaders;
+
+  @override
+  Map<String, dynamic>? get lastUsage => _lastUsage;
+
+  /// Media returned by the most recent non-streaming [chat] call.
+  @override
+  List<Attachment> get lastMediaAttachments =>
+      List.unmodifiable(_lastMediaAttachments);
+
+  bool get _isAnthropic =>
+      endpointType == 'anthropic' || endpointType == 'anthropic.messages';
+
+  @override
+  Map<String, dynamic> get defaultParams => _isAnthropic
+      ? const {'model': 'claude-sonnet-4', 'max_tokens': 4096}
+      : const {'model': 'gpt-4o', 'max_tokens': 4096, 'temperature': 0.7};
+
+  @override
+  Map<String, dynamic> get defaultHeaders => const {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      };
+
+  @override
+  Future<String> chat(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
+    String? system,
+  }) async {
+    _lastMediaAttachments = const [];
+    final selectedAccountId = this.selectedAccountId;
+    this.selectedAccountId = null;
+    final runtime = await _runtime;
+    final execution = await runtime.executeForGroupId<String>(
+      groupId: groupId,
+      localModelId: localModelId,
+      requiredCapabilities: {
+        ..._requiredCapabilities(messages, null, extraParams: extraParams),
+        'chat',
+      },
+      supportedConnectorTypes: _supportedConnectorTypes,
+      conversationId: conversationId,
+      selectedAccountId: selectedAccountId,
+      request: (candidate, progress) async {
+        if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
+        final protocolId = _protocolFor(
+          candidate.account,
+          candidate.upstreamModelId,
+        );
+        final replayMessages = _messagesWithReasoningReplay(
+          messages,
+          accountId: candidate.account.id,
+          providerId: candidate.account.connectorType,
+          providerPresetId: _stringValue(
+            candidate.account.endpointConfig['providerPresetId'],
+          ),
+          executorFamilyId: _executorReplayFamilyId(runtime.executor),
+          executorId: _executorReplayScopeId(runtime.executor),
+          modelId: candidate.upstreamModelId,
+          protocolId: protocolId,
+        );
+        final body = await _buildBody(
+          replayMessages,
+          protocolId: protocolId,
+          upstreamModelId: candidate.upstreamModelId,
+          maxTokens: maxTokens,
+          temperature: temperature,
+          system: system,
+          extraParams: extraParams,
+          accountId: candidate.account.id,
+        );
+        _captureRequest(candidate.account, body, stream: false);
+        try {
+          final response = await runtime.executor.request(
+            account: candidate.account,
+            modelId: candidate.upstreamModelId,
+            body: body,
+            conversationId: conversationId,
+            stream: protocolId == kClovaStudioProtocolId,
+            nativeFormat: _nativeFormatFor(protocolId),
+            cancelToken: cancelToken,
+            onRequestSent: progress.markRequestSent,
+          );
+          _lastResponseStatusCode = response.statusCode;
+          _lastResponseHeaders = response.headers;
+          final completionProtocol = protocolId == 'devin.acp' ||
+                  protocolId == 'cursor.agent_connect_rpc' ||
+                  protocolId == 'auggie.cli'
+              ? 'openai.chat_completions'
+              : protocolId;
+          final result = completionProtocol == kClovaStudioProtocolId
+              ? await _readClovaCompletion(response.body)
+              : _readCompletion(response.body, completionProtocol);
+          _lastResponseData = result.data;
+          _rememberReturnedReasoning(
+            messages,
+            _completionReasoning(result.data, completionProtocol),
+            accountId: candidate.account.id,
+            providerId: candidate.account.connectorType,
+            executorId: _executorReplayScopeId(runtime.executor),
+            executorFamilyId: _executorReplayFamilyId(runtime.executor),
+            modelId: candidate.upstreamModelId,
+            protocolId: protocolId,
+            returnedResponsesOutputItems: _completionResponsesOutputItems(
+              result.data,
+              completionProtocol,
+            ),
+            returnedAssistantTurn: _completionAssistantTurn(
+              result.data,
+              result.text,
+              completionProtocol,
+            ),
+            returnedToolSignatures: _completionReasoningSignatures(
+              result.data,
+              completionProtocol,
+            ),
+          );
+          _lastMediaAttachments = await _storeStreamMedia(
+            result.data,
+            completionProtocol,
+          );
+          _lastUsage = result.usage;
+          await _recordUsage(
+            progress,
+            result.usage,
+            response.observation,
+            runtime: runtime,
+            accountId: candidate.account.id,
+          );
+          return result.text;
+        } on AiGatewayExecutionException catch (error) {
+          if (error.kind != AiGatewayFailureKind.request) rethrow;
+          _captureResponseFailure(error);
+          rethrow;
+        }
+      },
+    );
+    return execution.value;
+  }
+
+  /// Counts Anthropic Messages input tokens through the connected account.
+  /// This uses the provider's distinct count_tokens contract and path; it does
+  /// not route through the generation endpoint.
+  Future<int> countTokens(
+    List<Map<String, dynamic>> messages, {
+    String? system,
+    List<Map<String, dynamic>>? tools,
+    CancelToken? cancelToken,
+  }) async {
+    final runtime = await _runtime;
+    final execution = await runtime.executeForGroupId<int>(
+      groupId: groupId,
+      localModelId: localModelId,
+      supportedConnectorTypes: const {'claude'},
+      conversationId: conversationId,
+      selectedAccountId: selectedAccountId,
+      request: (candidate, progress) async {
+        if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
+        final body = await _buildBody(
+          messages,
+          protocolId: 'anthropic.messages',
+          operation: 'count_tokens',
+          upstreamModelId: candidate.upstreamModelId,
+          tools: tools,
+          system: system,
+        );
+        final response = await runtime.executor.request(
+          account: candidate.account,
+          modelId: candidate.upstreamModelId,
+          body: body,
+          nativeFormat: 'count_tokens',
+          cancelToken: cancelToken,
+          onRequestSent: progress.markRequestSent,
+        );
+        final data = _jsonMap(response.body);
+        final count = data?['input_tokens'];
+        if (count is! num || count < 0) {
+          throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+        }
+        return count.toInt();
+      },
+    );
+    return execution.value;
+  }
+
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+    String? system,
+  }) {
+    final requestCancelToken = cancelToken ?? CancelToken();
+    late final StreamController<AIStreamEvent> controller;
+    controller = StreamController<AIStreamEvent>(
+      onCancel: () {
+        if (!requestCancelToken.isCancelled) {
+          requestCancelToken.cancel('Chat stream cancelled');
+        }
+      },
+    );
+    unawaited(() async {
+      final selectedAccountId = this.selectedAccountId;
+      this.selectedAccountId = null;
+      try {
+        final runtime = await _runtime;
+        final realtimeConnectorTypes = await _realtimeConnectorTypesForRequest(
+          runtime,
+        );
+        final realtimeProviderId = realtimeConnectorTypes == null
+            ? null
+            : realtimeConnectorTypes.contains('openai-api')
+                ? 'openai'
+                : 'xai';
+        if (realtimeProviderId != null) {
+          AiGatewayRealtimeProtocol.buildConversationEvents(
+            [
+              if (system != null && system.isNotEmpty)
+                {'role': 'system', 'content': system},
+              ...messages,
+            ],
+            providerId: realtimeProviderId,
+            tools: _effectiveTools(tools, extraParams),
+          );
+        }
+        await runtime.executeForGroupId<void>(
+          groupId: groupId,
+          localModelId: localModelId,
+          requiredCapabilities: {
+            ..._requiredCapabilities(messages, tools, extraParams: extraParams),
+            'chat',
+            'streaming',
+            if (realtimeConnectorTypes != null) 'audio',
+          },
+          supportedConnectorTypes:
+              realtimeConnectorTypes ?? _supportedConnectorTypes,
+          conversationId: conversationId,
+          selectedAccountId: selectedAccountId,
+          request: (candidate, progress) async {
+            if (requestCancelToken.isCancelled) {
+              throw requestCancelToken.cancelError!;
+            }
+            final realtimeProviderId =
+                AiGatewayRealtimeProtocol.providerForModel(
+              candidate.account.connectorType,
+              candidate.upstreamModelId,
+            );
+            if (realtimeProviderId != null) {
+              await _streamRealtimeConversation(
+                runtime: runtime,
+                account: candidate.account,
+                providerId: realtimeProviderId,
+                modelId: candidate.upstreamModelId,
+                system: system,
+                messages: messages,
+                tools: tools,
+                extraParams: extraParams,
+                cancelToken: requestCancelToken,
+                markRequestSent: progress.markRequestSent,
+                emit: (event) {
+                  if (!controller.isClosed) controller.add(event);
+                },
+              );
+              return;
+            }
+            final protocolId = _protocolFor(
+              candidate.account,
+              candidate.upstreamModelId,
+            );
+            final replayMessages = _messagesWithReasoningReplay(
+              messages,
+              accountId: candidate.account.id,
+              providerId: candidate.account.connectorType,
+              providerPresetId: _stringValue(
+                candidate.account.endpointConfig['providerPresetId'],
+              ),
+              executorFamilyId: _executorReplayFamilyId(runtime.executor),
+              executorId: _executorReplayScopeId(runtime.executor),
+              modelId: candidate.upstreamModelId,
+              protocolId: protocolId,
+            );
+            final body = await _buildBody(
+              replayMessages,
+              protocolId: protocolId,
+              upstreamModelId: candidate.upstreamModelId,
+              maxTokens: maxTokens,
+              temperature: temperature,
+              stream: true,
+              tools: tools,
+              system: system,
+              extraParams: extraParams,
+              accountId: candidate.account.id,
+            );
+            _captureRequest(candidate.account, body, stream: true);
+            try {
+              final response = await runtime.executor.request(
+                account: candidate.account,
+                modelId: candidate.upstreamModelId,
+                body: body,
+                conversationId: conversationId,
+                stream: true,
+                nativeFormat: _nativeFormatFor(protocolId),
+                cancelToken: requestCancelToken,
+                onRequestSent: progress.markRequestSent,
+              );
+              _lastResponseStatusCode = response.statusCode;
+              _lastResponseHeaders = response.headers;
+              final returnedResponsesOutputItems = <Map<String, dynamic>>[];
+              final eventStream = await _parseStream(
+                response,
+                progress,
+                runtime: runtime,
+                accountId: candidate.account.id,
+                protocolId: protocolId == 'devin.acp' ||
+                        protocolId == 'cursor.agent_connect_rpc' ||
+                        protocolId == 'auggie.cli'
+                    ? 'openai.chat_completions'
+                    : protocolId,
+                returnedResponsesOutputItems: returnedResponsesOutputItems,
+              );
+              final returnedReasoning = StringBuffer();
+              final returnedAssistantText = StringBuffer();
+              final returnedAssistantToolCalls = <Map<String, dynamic>>[];
+              final returnedToolSignatures = <String, String>{};
+              await for (final event in eventStream) {
+                if (controller.isClosed) return;
+                if (event.isReasoning && event.text.isNotEmpty) {
+                  returnedReasoning.write(event.text);
+                } else if (!event.isReasoning && event.text.isNotEmpty) {
+                  returnedAssistantText.write(event.text);
+                }
+                final thinkingSignature = event.thinkingSignature;
+                if (thinkingSignature != null && thinkingSignature.isNotEmpty) {
+                  returnedToolSignatures['__thinking__'] = thinkingSignature;
+                }
+                for (final call in event.toolCalls ?? const []) {
+                  returnedAssistantToolCalls.add(
+                    Map<String, dynamic>.from(call),
+                  );
+                  final id = _stringValue(call['id']);
+                  final signature = _stringValue(call['thoughtSignature']);
+                  if (id != null && signature != null && signature.isNotEmpty) {
+                    returnedToolSignatures[id] = signature;
+                  }
+                }
+                if (event.usage == null) {
+                  await progress.markOutputVisible();
+                }
+                controller.add(event);
+              }
+              _rememberReturnedReasoning(
+                messages,
+                returnedReasoning.toString(),
+                accountId: candidate.account.id,
+                providerId: candidate.account.connectorType,
+                executorId: _executorReplayScopeId(runtime.executor),
+                executorFamilyId: _executorReplayFamilyId(runtime.executor),
+                modelId: candidate.upstreamModelId,
+                protocolId: protocolId,
+                returnedToolSignatures: returnedToolSignatures,
+                returnedResponsesOutputItems: returnedResponsesOutputItems,
+                returnedAssistantTurn: {
+                  'role': 'assistant',
+                  'content': returnedAssistantText.toString(),
+                  'tool_calls': returnedAssistantToolCalls,
+                },
+              );
+            } on AiGatewayExecutionException catch (error) {
+              if (error.kind != AiGatewayFailureKind.request) rethrow;
+              _captureResponseFailure(error);
+              rethrow;
+            }
+          },
+        );
+        if (!controller.isClosed) await controller.close();
+      } catch (error, stack) {
+        if (!controller.isClosed) {
+          controller.addError(_safeError(error), stack);
+          await controller.close();
+        }
+      }
+    }());
+    return controller.stream;
+  }
+
+  Future<void> _streamRealtimeConversation({
+    required AiGatewayFacade runtime,
+    required AiGatewayAccount account,
+    required String providerId,
+    required String modelId,
+    required String? system,
+    required List<Map<String, dynamic>> messages,
+    required List<Map<String, dynamic>>? tools,
+    required Map<String, dynamic>? extraParams,
+    required CancelToken cancelToken,
+    required Future<void> Function() markRequestSent,
+    required void Function(AIStreamEvent event) emit,
+  }) async {
+    final requestTools = _effectiveTools(tools, extraParams);
+    final conversationMessages = [
+      if (system != null && system.isNotEmpty)
+        {'role': 'system', 'content': system},
+      ...messages,
+    ];
+    final events = AiGatewayRealtimeProtocol.buildConversationEvents(
+      conversationMessages,
+      providerId: providerId,
+      tools: requestTools,
+    );
+    final executor = runtime.executor;
+    if (executor is! AiGatewayRealtimeExecutor) {
+      throw StateError('Realtime transport is unavailable.');
+    }
+    final session =
+        await (executor as AiGatewayRealtimeExecutor).connectRealtime(
+      account: account,
+      modelId: modelId,
+      cancelToken: cancelToken,
+    );
+    final returnedEvents = <Map<String, dynamic>>[];
+    final audio = BytesBuilder(copy: false);
+    final functionCallsByItemId = <String, (String callId, String name)>{};
+    var sawTextDelta = false;
+    var completed = false;
+    var sessionClosed = false;
+    try {
+      cancelToken.whenCancel.then((_) {
+        if (sessionClosed) return;
+        try {
+          session.cancelResponse();
+        } catch (_) {
+          // A socket can close while the cancel token is being delivered.
+        }
+        sessionClosed = true;
+        unawaited(session.close());
+      });
+      for (final event in events) {
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        session.sendEvent(event);
+      }
+      await markRequestSent();
+      await for (final event in session.events.timeout(
+        const Duration(seconds: 60),
+        onTimeout: (sink) => sink.addError(
+          TimeoutException(
+            'Realtime response timed out.',
+            const Duration(seconds: 60),
+          ),
+        ),
+      )) {
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        returnedEvents.add(Map<String, dynamic>.from(event.raw));
+        if (event.type == 'response.output_item.added' ||
+            event.type == 'response.output_item.done') {
+          final item = event.raw['item'];
+          if (item is Map &&
+              item['type'] == 'function_call' &&
+              item['id'] is String &&
+              item['call_id'] is String &&
+              item['name'] is String) {
+            functionCallsByItemId[item['id'] as String] = (
+              item['call_id'] as String,
+              item['name'] as String,
+            );
+          }
+        }
+        if (event.kind == AiGatewayRealtimeEventKind.error) {
+          _lastResponseData = {
+            'events': returnedEvents,
+            'error': Map<String, dynamic>.from(event.raw),
+          };
+          final error = _realtimeProviderError(event.raw);
+          final code = error?['code'] ?? error?['type'];
+          throw AiGatewayExecutionException(
+            kind: AiGatewayFailureKind.request,
+            code: code is String ? code : null,
+          );
+        }
+        if (event.kind == AiGatewayRealtimeEventKind.inputTranscript &&
+            event.type.endsWith('.completed') &&
+            event.text?.isNotEmpty == true) {
+          emit(AIStreamEvent('', inputTranscript: event.text));
+        } else if (event.kind == AiGatewayRealtimeEventKind.textDelta &&
+            event.text?.isNotEmpty == true) {
+          sawTextDelta = true;
+          emit(AIStreamEvent(event.text!));
+        } else if (event.kind == AiGatewayRealtimeEventKind.reasoningDelta &&
+            event.text?.isNotEmpty == true) {
+          emit(AIStreamEvent(event.text!, isReasoning: true));
+        } else if (event.kind == AiGatewayRealtimeEventKind.audioDelta &&
+            event.audioBase64?.isNotEmpty == true) {
+          audio.add(base64Decode(event.audioBase64!));
+        } else if (event.kind == AiGatewayRealtimeEventKind.toolCall) {
+          final itemId = event.raw['item_id'];
+          final itemDetails =
+              itemId is String ? functionCallsByItemId[itemId] : null;
+          final callId = event.raw['call_id'] ?? itemDetails?.$1;
+          final name = event.raw['name'] ?? itemDetails?.$2;
+          final arguments = event.raw['arguments'];
+          if (callId is! String || name is! String || arguments is! String) {
+            throw const FormatException(
+              'Realtime function call event is incomplete.',
+            );
+          }
+          emit(
+            AIStreamEvent(
+              '',
+              toolCalls: [
+                {
+                  'id': callId,
+                  if (event.raw['item_id'] is String)
+                    'item_id': event.raw['item_id'],
+                  'type': 'function',
+                  'function': {'name': name, 'arguments': arguments},
+                },
+              ],
+            ),
+          );
+        } else if (event.kind == AiGatewayRealtimeEventKind.textComplete &&
+            !sawTextDelta &&
+            event.text?.isNotEmpty == true &&
+            !event.type.contains('transcription')) {
+          emit(AIStreamEvent(event.text!));
+        }
+        if (event.type == 'response.done') {
+          completed = true;
+          break;
+        }
+      }
+      if (!completed && !cancelToken.isCancelled) {
+        throw StateError('Realtime socket closed before response.done.');
+      }
+      _lastResponseData = {
+        'events': returnedEvents,
+        'inputTranscripts': [
+          for (final event in returnedEvents)
+            if (event['type'] ==
+                    'conversation.item.input_audio_transcription.completed' &&
+                event['transcript'] is String)
+              event['transcript'],
+        ],
+      };
+      if (audio.length > 0) {
+        final attachment = await _saveMediaAttachment(
+          'audio',
+          'audio/wav',
+          _pcm16Mono24KhzWave(audio.takeBytes()),
+          '$providerId.realtime',
+          {
+            'provider': providerId,
+            'model': modelId,
+            'eventIds': [
+              for (final event in returnedEvents)
+                if (event['event_id'] is String) event['event_id'],
+            ],
+          },
+        );
+        emit(AIStreamEvent('', mediaAttachments: [attachment]));
+      }
+    } finally {
+      sessionClosed = true;
+      await session.close();
+    }
+  }
+
+  Set<String> get _supportedConnectorTypes =>
+      llmRoutedChatSupportedConnectorTypesForModelOverride(apiProtocolOverride);
+
+  Future<Set<String>?> _realtimeConnectorTypesForRequest(
+    AiGatewayFacade runtime,
+  ) async {
+    final modelIds = <String>{localModelId};
+    try {
+      final groups = await runtime.accountManagement.listModelGroups();
+      for (final group in groups.where((group) => group.id == groupId)) {
+        for (final member in group.members) {
+          if (member.localModelId == localModelId ||
+              (member.localModelId == null && group.id == localModelId)) {
+            modelIds.add(member.upstreamModelId);
+          }
+        }
+      }
+    } catch (_) {
+      // The account router remains authoritative if group metadata is
+      // temporarily unavailable; direct model IDs still support detection.
+    }
+    final connectorTypes = <String>{};
+    for (final modelId in modelIds) {
+      connectorTypes.addAll(
+        AiGatewayRealtimeProtocol.supportedConnectorTypesForModel(modelId) ??
+            const <String>{},
+      );
+    }
+    return connectorTypes.isEmpty ? null : connectorTypes;
+  }
+
+  static String _executorReplayScopeId(AiGatewayExecutor executor) {
+    final existing = _executorReplayScopeIds[executor];
+    if (existing != null) return existing;
+    final id = 'executor-${_nextExecutorReplayScopeId++}';
+    _executorReplayScopeIds[executor] = id;
+    return id;
+  }
+
+  static String _executorReplayFamilyId(AiGatewayExecutor executor) =>
+      executor.runtimeType.toString();
+
+  List<Map<String, dynamic>> _messagesWithReasoningReplay(
+    List<Map<String, dynamic>> messages, {
+    required String accountId,
+    required String providerId,
+    String? providerPresetId,
+    required String executorFamilyId,
+    required String executorId,
+    required String modelId,
+    required String protocolId,
+  }) {
+    final restored = _reasoningReplayCache.restore(
+      accountId: accountId,
+      providerId: providerId,
+      executorFamilyId: executorFamilyId,
+      executorId: executorId,
+      modelId: modelId,
+      sessionId: conversationId ?? '',
+      protocolId: protocolId,
+      requestMessages: messages,
+    );
+    return prepareBaiDeepSeekReasoningContentEcho(
+      messages: restored,
+      originalMessages: messages,
+      providerId: providerId,
+      providerPresetId: providerPresetId,
+      protocolId: protocolId,
+      modelId: modelId,
+    );
+  }
+
+  void _rememberReturnedReasoning(
+    List<Map<String, dynamic>> messages,
+    String reasoning, {
+    required String accountId,
+    required String providerId,
+    required String executorFamilyId,
+    required String executorId,
+    required String modelId,
+    required String protocolId,
+    Map<String, String> returnedToolSignatures = const {},
+    List<Map<String, dynamic>> returnedResponsesOutputItems = const [],
+    required Map<String, dynamic> returnedAssistantTurn,
+  }) {
+    final session = conversationId;
+    if (session == null || session.isEmpty) return;
+    _reasoningReplayCache.remember(
+      accountId: accountId,
+      providerId: providerId,
+      executorFamilyId: executorFamilyId,
+      executorId: executorId,
+      modelId: modelId,
+      sessionId: session,
+      protocolId: protocolId,
+      requestMessages: messages,
+      returnedAssistantTurn: returnedAssistantTurn,
+      returnedReasoning: reasoning,
+      returnedToolSignatures: returnedToolSignatures,
+      returnedResponsesOutputItems: returnedResponsesOutputItems,
+    );
+  }
+
+  String _protocolFor(AiGatewayAccount account, String upstreamModelId) {
+    return llmRoutedChatProtocolForAccountModel(
+      account: account,
+      upstreamModelId: upstreamModelId,
+      endpointType: endpointType,
+      apiProtocol: apiProtocol,
+      apiProtocolOverride: apiProtocolOverride,
+    );
+  }
+
+  String? _nativeFormatFor(String protocolId) => switch (protocolId) {
+        'clova.studio.chat' => 'clova',
+        'oneminai.chat' => 'oneminai.chat',
+        'openai.responses' => 'responses',
+        'anthropic.messages' => 'anthropic',
+        _ => null,
+      };
+
+  static bool _isGeminiGenerateContentProtocol(String protocolId) =>
+      protocolId == 'google.gemini.generate_content' ||
+      protocolId == kAntigravityProtocolId;
+
+  static Set<String> _requiredCapabilities(
+    List<Map<String, dynamic>> messages,
+    List<Map<String, dynamic>>? tools, {
+    Map<String, dynamic>? extraParams,
+  }) {
+    final required = <String>{};
+    final outputModalities = _requestedOutputModalities(extraParams);
+    if (_effectiveTools(tools, extraParams).isNotEmpty) required.add('tools');
+    if (_containsContentType(messages, const {
+          'image',
+          'image_url',
+          'input_image',
+          'output_image',
+          'video_url',
+          'video_frame',
+          'input_video',
+          'file',
+          'input_file',
+          'document',
+        }) ||
+        outputModalities.any(const {'image', 'video'}.contains)) {
+      required.add('vision');
+    }
+    if (_containsContentType(messages, const {
+          'input_audio',
+          'output_audio',
+          'audio',
+          'audio_url',
+          'audio_transcription',
+          'text_audio',
+        }) ||
+        outputModalities.contains('audio')) {
+      required.add('audio');
+    }
+    return required;
+  }
+
+  static Set<String> _requestedOutputModalities(
+    Map<String, dynamic>? extraParams,
+  ) {
+    final modalities = <String>{};
+    void addFrom(Map? options) {
+      if (options == null) return;
+      for (final key in const {
+        'modalities',
+        'output_modalities',
+        'outputModalities',
+        'response_modalities',
+        'responseModalities',
+      }) {
+        final value = options[key];
+        final values = value is Iterable ? value : [value];
+        for (final item in values) {
+          if (item is String) modalities.add(item.toLowerCase());
+        }
+      }
+      if (options['audio'] is Map) modalities.add('audio');
+    }
+
+    addFrom(extraParams);
+    final generationConfig = extraParams?['generationConfig'];
+    if (generationConfig is Map) addFrom(generationConfig);
+    return modalities;
+  }
+
+  static List<Map<String, dynamic>> _effectiveTools(
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+  ) {
+    final configured = extraParams?['tools'];
+    if (configured is List) {
+      return configured
+          .whereType<Map>()
+          .map((tool) => Map<String, dynamic>.from(tool))
+          .toList(growable: false);
+    }
+    return tools ?? const <Map<String, dynamic>>[];
+  }
+
+  static bool _containsContentType(Object? value, Set<String> types) {
+    if (value is Map) {
+      if (types.contains(value['type'])) return true;
+      return value.values.any((child) => _containsContentType(child, types));
+    }
+    if (value is Iterable) {
+      return value.any((child) => _containsContentType(child, types));
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>> _buildBody(
+    List<Map<String, dynamic>> messages, {
+    required String protocolId,
+    String operation = 'generate',
+    required String upstreamModelId,
+    int? maxTokens,
+    double? temperature,
+    bool stream = false,
+    List<Map<String, dynamic>>? tools,
+    String? system,
+    Map<String, dynamic>? extraParams,
+    String? accountId,
+  }) async {
+    final requestProtocolId = protocolId == kClovaStudioProtocolId ||
+            protocolId == 'devin.connect_rpc' ||
+            protocolId == 'devin.acp' ||
+            protocolId == 'cursor.agent_connect_rpc' ||
+            protocolId == 'auggie.cli'
+        ? 'openai.chat_completions'
+        : protocolId == kAntigravityProtocolId
+            ? 'google.gemini.generate_content'
+            : protocolId;
+    final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);
+    if (bridge == null) {
+      throw StateError('No internal protocol bridge for $protocolId.');
+    }
+    final requestTools = _effectiveTools(tools, extraParams);
+    final previousInteractionValue = extraParams?['previous_interaction_id'];
+    final previousInteractionId = protocolId == 'google.gemini.interactions' &&
+            previousInteractionValue is String
+        ? previousInteractionValue
+        : null;
+    final requestOptions = Map<String, dynamic>.from(extraParams ?? const {});
+    if (previousInteractionId != null) {
+      requestOptions.remove('previous_interaction_id');
+    }
+    final extraTokenLimit =
+        extraParams?['max_tokens'] ?? extraParams?['max_output_tokens'];
+    final requestedMaxTokens =
+        maxTokens ?? (extraTokenLimit is num ? extraTokenLimit.toInt() : null);
+    final requestedSystem = extraParams?['system'] is String
+        ? extraParams!['system'] as String
+        : system;
+    final thinking = extraParams?['thinking'];
+    final thinkingType = thinking is Map ? thinking['type'] : null;
+    final extendedThinking = thinkingType is String &&
+        const {
+          'enabled',
+          'adaptive',
+          'on',
+        }.contains(thinkingType.toLowerCase());
+    if (protocolId == 'anthropic.messages' && extendedThinking) {
+      requestOptions.remove('temperature');
+    }
+    final resolvedMessages = await resolveConversationMediaReferences(messages);
+    final request = AiGatewayProtocolBridges.buildRequest(
+      requestProtocolId,
+      AiGatewayProtocolRequest(
+        modelId: upstreamModelId,
+        operation: operation,
+        messages: resolvedMessages
+            .map(AiGatewayProtocolBridges.openAiChatCompletions.toStroom)
+            .toList(growable: false),
+        system: requestedSystem,
+        tools: requestTools,
+        stream: stream,
+        maxOutputTokens: requestedMaxTokens,
+        previousInteractionId: previousInteractionId,
+        conversationId: conversationId,
+        accountId: accountId,
+        temperature: protocolId == 'anthropic.messages' && extendedThinking
+            ? null
+            : temperature,
+        options: requestOptions,
+      ),
+    );
+    if (request == null) {
+      throw StateError('No internal request builder for $protocolId.');
+    }
+    final body = request.body;
+    if (protocolId == kClovaStudioProtocolId) {
+      return ClovaStudioProtocol.buildRequest(
+        upstreamModelId,
+        Map<String, dynamic>.from(body as Map),
+      );
+    }
+    if (protocolId == 'devin.connect_rpc') {
+      return Map<String, dynamic>.from(body as Map)
+        ..['conversation_id'] = conversationId;
+    }
+    return body;
+  }
+
+  void _captureRequest(
+    AiGatewayAccount account,
+    Map<String, dynamic> body, {
+    required bool stream,
+  }) {
+    _lastRequestBody = body;
+    final baseUrl = account.endpointConfig['baseUrl'] ??
+        account.endpointConfig['host'] ??
+        account.endpointConfig['apiBase'];
+    _lastRequestUrl = baseUrl is String ? baseUrl : null;
+    _lastRequestHeaders = {
+      'Content-Type': 'application/json',
+      if (stream) 'Accept': 'text/event-stream',
+      if (_isAnthropic) 'anthropic-version': kAnthropicApiVersion,
+    };
+    _lastResponseData = null;
+    _lastResponseStatusCode = null;
+    _lastResponseHeaders = null;
+    _lastUsage = null;
+  }
+
+  void _captureResponseFailure(AiGatewayExecutionException error) {
+    _lastResponseStatusCode = error.statusCode;
+    _lastResponseHeaders = {
+      for (final entry in error.headers.entries) entry.key: [entry.value],
+    };
+  }
+
+  Future<Stream<AIStreamEvent>> _parseStream(
+    AiGatewayResponse response,
+    AiGatewayRouteProgress progress, {
+    required AiGatewayFacade runtime,
+    required String accountId,
+    required String protocolId,
+    required List<Map<String, dynamic>> returnedResponsesOutputItems,
+  }) async {
+    final body = response.body;
+    if (body is! Stream<List<int>>) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
+    final usage = <String, dynamic>{};
+    final toolsByIndex = <int, Map<String, dynamic>>{};
+    final mediaOutputs = <Object>[];
+    final seenResponseMediaIds = <String>{};
+    final responseAudioByItem = <String, _BufferedStreamAudio>{};
+    final chatCompletionAudio = <int, _BufferedStreamAudio>{};
+    final anthropicAccumulator = AnthropicStreamAccumulator();
+    final protocolStreamState = AiGatewayProtocolStreamState();
+    final parsedEvents = StreamController<AIStreamEvent>();
+    final emittedMediaAttachments = Set<Attachment>.identity();
+    var nextContentOrder = 0;
+
+    AIStreamEvent orderedEvent(AIStreamEvent event) {
+      if (event.text.isEmpty ||
+          event.isReasoning ||
+          event.contentOrder != null) {
+        return event;
+      }
+      return AIStreamEvent(
+        event.text,
+        isReasoning: event.isReasoning,
+        toolCalls: event.toolCalls,
+        thinkingSignature: event.thinkingSignature,
+        usage: event.usage,
+        mediaAttachments: event.mediaAttachments,
+        contentOrder: nextContentOrder++,
+      );
+    }
+
+    Attachment atContentOrder(Attachment attachment, int contentOrder) =>
+        attachment.copyWith(
+          extraFields: {
+            ...attachment.extraFields,
+            'stroom.contentOrder': contentOrder,
+          },
+        );
+
+    Future<void> flushAudio() async {
+      for (final output in mediaOutputs.whereType<_BufferedStreamAudio>()) {
+        if (output.attachment != null || output.bytes.length == 0) continue;
+        final attachment = await _saveMediaAttachment(
+          'audio',
+          output.mimeType,
+          output.bytes.toBytes(),
+          protocolId,
+          output.metadata,
+        );
+        output.attachment = atContentOrder(attachment, output.contentOrder);
+      }
+    }
+
+    void emitMedia() {
+      final attachments = <Attachment>[];
+      for (final output in mediaOutputs) {
+        if (output is Attachment) {
+          attachments.add(output);
+        } else if (output is _BufferedStreamAudio &&
+            output.attachment != null) {
+          attachments.add(output.attachment!);
+        }
+      }
+      final pending = attachments.where(emittedMediaAttachments.add).toList()
+        ..sort(
+          (left, right) =>
+              (left.extraFields['stroom.contentOrder'] as int? ?? 1 << 30)
+                  .compareTo(
+            right.extraFields['stroom.contentOrder'] as int? ?? 1 << 30,
+          ),
+        );
+      if (pending.isNotEmpty) {
+        parsedEvents.add(
+          AIStreamEvent(
+            '',
+            mediaAttachments: pending,
+            contentOrder: pending
+                .map(
+                  (attachment) =>
+                      attachment.extraFields['stroom.contentOrder'] as int?,
+                )
+                .whereType<int>()
+                .firstOrNull,
+          ),
+        );
+      }
+    }
+
+    void queueMedia(List<Attachment> media) {
+      for (final attachment in media) {
+        final source = _jsonMap(attachment.extraFields['stroom.mediaSource']);
+        final metadata = _jsonMap(source?['metadata']);
+        final mediaId = _stringValue(metadata?['id']);
+        if (mediaId != null) seenResponseMediaIds.add(mediaId);
+      }
+      mediaOutputs.addAll([
+        for (final attachment in media)
+          atContentOrder(attachment, nextContentOrder++),
+      ]);
+      emitMedia();
+    }
+
+    unawaited(() async {
+      try {
+        final payloads = protocolId == 'ollama.chat'
+            ? _ndjsonData(body)
+            : protocolId == kClovaStudioProtocolId
+                ? _clovaSseData(body)
+                : _sseData(body);
+        await for (final payload in payloads) {
+          final trimmedPayload = payload.trim();
+          if (trimmedPayload.isEmpty) continue;
+          if (trimmedPayload == '[DONE]') break;
+          try {
+            final decoded = jsonDecode(payload);
+            if (decoded is! Map) continue;
+            final data = Map<String, dynamic>.from(decoded);
+            _lastResponseData = data;
+            if (protocolId == kClovaStudioProtocolId) {
+              final status = _jsonMap(data['status']);
+              if (status?['code'] != null &&
+                  status!['code'].toString() != '20000') {
+                throw _streamRequestError({
+                  'code': status['code'].toString(),
+                  'message': status['message'],
+                });
+              }
+            }
+            if (protocolId == 'openai.responses' &&
+                data['type'] == 'response.output_item.done') {
+              final item = data['item'];
+              if (item is Map) {
+                final responseItem = Map<String, dynamic>.from(item);
+                returnedResponsesOutputItems.add(responseItem);
+              }
+            }
+            var geminiContentPartsHandled = false;
+            if (_isGeminiGenerateContentProtocol(protocolId) &&
+                data['candidates'] is List) {
+              for (final candidate
+                  in (data['candidates'] as List).whereType<Map>().take(1)) {
+                final content = _jsonMap(candidate['content']);
+                final parts = content?['parts'];
+                if (parts is! List) continue;
+                geminiContentPartsHandled = true;
+                for (final rawPart in parts.whereType<Map>()) {
+                  final part = Map<String, dynamic>.from(rawPart);
+                  if (part['text'] is String) {
+                    parsedEvents.add(
+                      AIStreamEvent(
+                        part['text'] as String,
+                        isReasoning: part['thought'] == true,
+                        thinkingSignature: _stringValue(
+                          part['thoughtSignature'],
+                        ),
+                        contentOrder:
+                            part['thought'] == true ? null : nextContentOrder++,
+                      ),
+                    );
+                  } else if (part['inlineData'] is Map) {
+                    final media = await _storeStreamMedia(
+                      part,
+                      protocolId,
+                      excludedImageGenerationIds: seenResponseMediaIds,
+                    );
+                    queueMedia(media);
+                  } else if (part['fileData'] is Map) {
+                    final fileData = _jsonMap(part['fileData'])!;
+                    final reference = _stringValue(fileData['fileUri']);
+                    if (reference != null && reference.isNotEmpty) {
+                      final mimeType = _stringValue(fileData['mimeType']) ??
+                          'application/octet-stream';
+                      final mediaType = _mediaTypeFromMime(mimeType);
+                      final uri = Uri.tryParse(reference);
+                      final pathSegments = uri?.pathSegments
+                              .where((segment) => segment.isNotEmpty)
+                              .toList(growable: false) ??
+                          const <String>[];
+                      queueMedia([
+                        Attachment(
+                          fileName: pathSegments.isNotEmpty
+                              ? pathSegments.last
+                              : _mediaFileName(mediaType, mimeType),
+                          mimeType: mimeType,
+                          fileType: mediaType,
+                          hash: '',
+                          storagePath: reference,
+                          fileSize: 0,
+                          extraFields: {
+                            'stroom.mediaReference': reference,
+                            'stroom.mediaSource': {
+                              'protocol': protocolId,
+                              'metadata': sanitizeConversationMediaJson(
+                                _mediaMetadata(part, const {'fileData'}),
+                              ),
+                            },
+                          },
+                        ),
+                      ]);
+                    }
+                  }
+                }
+              }
+            }
+            final eventType = _stringValue(data['type']);
+            final audioDelta = protocolId == 'openai.responses' &&
+                    const {
+                      'response.output_audio.delta',
+                      'response.audio.delta',
+                    }.contains(eventType)
+                ? _stringValue(data['delta'])
+                : null;
+            if (audioDelta != null) {
+              final itemId = _stringValue(data['item_id']);
+              final outputIndex = _stringValue(data['output_index']);
+              final contentIndex = _stringValue(data['content_index']) ?? '0';
+              final audioKey =
+                  '${itemId ?? outputIndex ?? 'default'}:$contentIndex';
+              final responseAudio = responseAudioByItem[audioKey];
+              final bytes = _decodeBase64Payload(audioDelta);
+              if (bytes != null) {
+                final output = responseAudioByItem.putIfAbsent(audioKey, () {
+                  final created = _BufferedStreamAudio(nextContentOrder++);
+                  mediaOutputs.add(created);
+                  return created;
+                });
+                output.bytes.add(bytes);
+              }
+              final format = _stringValue(data['format']);
+              final output = responseAudioByItem[audioKey] ?? responseAudio;
+              if (format != null && output != null) {
+                output.mimeType = _audioMimeFromFormat(format);
+              }
+              output?.metadata.addAll(_mediaMetadata(data, const {'delta'}));
+            }
+            if (protocolId == 'openai.chat_completions') {
+              for (final audio in _chatCompletionAudioDeltas(data)) {
+                final bytes = _decodeBase64Payload(audio.data);
+                if (bytes == null) continue;
+                final output = chatCompletionAudio.putIfAbsent(
+                  audio.choiceIndex,
+                  () {
+                    final output = _BufferedStreamAudio(nextContentOrder++);
+                    output.metadata['choiceIndex'] = audio.choiceIndex;
+                    mediaOutputs.add(output);
+                    return output;
+                  },
+                );
+                output.bytes.add(bytes);
+                if (audio.format != null) {
+                  output.mimeType = _audioMimeFromFormat(audio.format);
+                }
+                output.metadata.addAll(audio.metadata);
+              }
+            }
+            final media = audioDelta == null && !geminiContentPartsHandled
+                ? await _storeStreamMedia(
+                    data,
+                    protocolId,
+                    accumulateAudio: protocolId == 'openai.chat_completions',
+                    excludedImageGenerationIds: seenResponseMediaIds,
+                  )
+                : const <Attachment>[];
+            if (media.isNotEmpty) queueMedia(media);
+            if (protocolId == 'anthropic.messages') {
+              if (data['type'] == 'error') {
+                throw _streamRequestError(data['error']);
+              }
+              if (data['type'] == 'message_start') {
+                final rawUsage = (data['message'] as Map?)?['usage'];
+                if (rawUsage is Map) {
+                  AnthropicChatProvider.mergeAnthropicUsage(usage, rawUsage);
+                }
+              } else if (data['type'] == 'message_delta' &&
+                  data['usage'] is Map) {
+                AnthropicChatProvider.mergeAnthropicUsage(
+                  usage,
+                  data['usage'] as Map,
+                );
+              }
+              for (final event in processAnthropicStreamData(
+                data,
+                anthropicAccumulator,
+              )) {
+                parsedEvents.add(orderedEvent(event));
+              }
+            } else if (protocolId == 'openai.chat_completions') {
+              final apiError = data['error'];
+              if (apiError is Map) throw _streamRequestError(apiError);
+              OpenAICompatibleChatProvider.throwIfApiError(data);
+              final chunkUsage = OpenAICompatibleChatProvider.normalizeUsage(
+                data['usage'],
+              );
+              if (chunkUsage != null) usage.addAll(chunkUsage);
+              for (final event in OpenAICompatibleChatProvider.parseStreamEvent(
+                data,
+              )) {
+                parsedEvents.add(orderedEvent(event));
+              }
+              _accumulateOpenAIToolCalls(data, toolsByIndex);
+            } else {
+              if (data['error'] is Map) {
+                throw _streamRequestError(data['error']);
+              }
+              for (final event in AiGatewayProtocolStreamBridge.mapEvents(
+                protocolId,
+                data,
+                state: protocolStreamState,
+              )) {
+                switch (event.kind) {
+                  case AiGatewayProtocolStreamEventKind.textDelta:
+                    if (geminiContentPartsHandled) break;
+                    parsedEvents.add(
+                      AIStreamEvent(
+                        event.delta ?? '',
+                        contentOrder: (event.delta ?? '').isEmpty
+                            ? null
+                            : nextContentOrder++,
+                      ),
+                    );
+                  case AiGatewayProtocolStreamEventKind.reasoningDelta:
+                    if (geminiContentPartsHandled) break;
+                    parsedEvents.add(
+                      AIStreamEvent(
+                        event.delta ?? '',
+                        isReasoning: true,
+                        thinkingSignature: event.thoughtSignature,
+                      ),
+                    );
+                  case AiGatewayProtocolStreamEventKind.toolCallDelta:
+                    _accumulateProtocolToolCall(event, toolsByIndex);
+                  case AiGatewayProtocolStreamEventKind.usage:
+                    final normalized = _normalizeProtocolUsage(
+                      event.usage ?? const {},
+                      protocolId,
+                    );
+                    usage.addAll(normalized);
+                  case AiGatewayProtocolStreamEventKind.lifecycle:
+                  case AiGatewayProtocolStreamEventKind.providerEvent:
+                    break;
+                  case AiGatewayProtocolStreamEventKind.error:
+                    final failedResponse = _jsonMap(event.raw['response']);
+                    throw _streamRequestError(
+                      data['error'] ?? failedResponse?['error'],
+                    );
+                }
+              }
+            }
+          } catch (error) {
+            if (protocolId != 'anthropic.messages' &&
+                (error is FormatException || error is TypeError)) {
+              continue;
+            }
+            rethrow;
+          }
+        }
+        await flushAudio();
+        final connectorObservation = await response.completedObservation;
+        final usageObservation = connectorObservation == null
+            ? response.observation
+            : _mergeGatewayObservations(
+                response.observation,
+                connectorObservation,
+              );
+        await _recordUsage(
+          progress,
+          usage,
+          usageObservation,
+          runtime: runtime,
+          accountId: accountId,
+        );
+        if (usage.isNotEmpty) {
+          _lastUsage = Map<String, dynamic>.from(usage);
+          parsedEvents.add(AIStreamEvent('', usage: _lastUsage));
+        }
+        if (protocolId == 'anthropic.messages') {
+          final signature = anthropicAccumulator.thinkingSignatures.length == 1
+              ? anthropicAccumulator.thinkingSignatures.single
+              : '';
+          if (signature.isNotEmpty) {
+            parsedEvents.add(AIStreamEvent('', thinkingSignature: signature));
+          }
+          final toolEvent = buildToolCallEvent(anthropicAccumulator);
+          if (toolEvent != null) parsedEvents.add(toolEvent);
+        } else {
+          final toolEvent = _buildOpenAIToolCallEvent(toolsByIndex);
+          if (toolEvent != null) parsedEvents.add(toolEvent);
+        }
+        emitMedia();
+        await parsedEvents.close();
+      } catch (error, stack) {
+        try {
+          await flushAudio();
+        } catch (_) {
+          try {
+            await flushAudio();
+          } catch (_) {
+            // Keep the original stream error if persisting partial media fails.
+          }
+        }
+        emitMedia();
+        var observation = response.observation;
+        try {
+          final connectorObservation = await response.completedObservation;
+          if (connectorObservation != null) {
+            observation = _mergeGatewayObservations(
+              observation,
+              connectorObservation,
+            );
+          }
+        } catch (_) {
+          // Keep the response-header observation if stream telemetry failed.
+        }
+        try {
+          await _recordUsage(
+            progress,
+            usage,
+            observation,
+            runtime: runtime,
+            accountId: accountId,
+          );
+          if (usage.isNotEmpty) {
+            parsedEvents.add(AIStreamEvent('', usage: usage));
+          }
+        } catch (_) {
+          // Telemetry failures must not replace the original stream failure.
+        }
+        if (!parsedEvents.isClosed) {
+          parsedEvents.addError(_safeError(error), stack);
+        }
+        await parsedEvents.close();
+      }
+    }());
+    return parsedEvents.stream;
+  }
+
+  Future<_LlmCompletionResult> _readClovaCompletion(Object? raw) async {
+    final parser = ClovaStudioSseAccumulator();
+    ClovaStudioStreamEvent? terminal;
+    if (raw is Stream<List<int>>) {
+      var eventType = '';
+      final dataLines = <String>[];
+      Future<void> finishFrame() async {
+        if (dataLines.isEmpty) return;
+        final frame = [
+          if (eventType.isNotEmpty) 'event: $eventType',
+          for (final line in dataLines) 'data: $line',
+          '',
+        ].join('\n');
+        try {
+          final event = parser.addFrame(frame);
+          if (event.done) terminal = event;
+        } on ClovaStudioUpstreamException catch (error) {
+          throw AiGatewayExecutionException(
+            kind: AiGatewayFailureKind.request,
+            statusCode: error.code.startsWith('4') ? 400 : 502,
+            code: error.code,
+          );
+        }
+        dataLines.clear();
+        eventType = '';
+      }
+
+      await for (final line
+          in raw.transform(utf8.decoder).transform(const LineSplitter())) {
+        if (line.startsWith('event:')) {
+          eventType = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          var data = line.substring(5);
+          if (data.startsWith(' ')) data = data.substring(1);
+          dataLines.add(data);
+        } else if (line.isEmpty) {
+          await finishFrame();
+        }
+      }
+      await finishFrame();
+    } else {
+      final data = _jsonMap(raw);
+      if (data == null) {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+      }
+      try {
+        terminal = parser.addFrame(
+          'event: result\ndata: ${jsonEncode(data)}\n\n',
+        );
+      } on ClovaStudioUpstreamException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          statusCode: error.code.startsWith('4') ? 400 : 502,
+          code: error.code,
+        );
+      }
+    }
+    if (terminal?.done != true) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
+    final usage = Map<String, dynamic>.from(terminal!.usage ?? const {});
+    final data = <String, dynamic>{
+      'choices': [
+        {
+          'message': {
+            'role': 'assistant',
+            'content': parser.text,
+            'reasoning_content': parser.reasoning,
+          },
+          'finish_reason': terminal!.finishReason,
+        },
+      ],
+      if (usage.isNotEmpty) 'usage': usage,
+    };
+    return _LlmCompletionResult(data: data, text: parser.text, usage: usage);
+  }
+
+  _LlmCompletionResult _readCompletion(Object? raw, String protocolId) {
+    final data = _jsonMap(raw);
+    if (data == null) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
+    final apiError = data['error'];
+    if (apiError is Map) throw _streamRequestError(apiError);
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List || blocks.isEmpty) {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+      }
+      final text = blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'text')
+          .map((block) => block['text'])
+          .whereType<String>()
+          .join();
+      final hasToolUse = blocks.whereType<Map>().any(
+            (block) => block['type'] == 'tool_use',
+          );
+      if (text.trim().isEmpty && !hasToolUse) {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+      }
+      final usage = <String, dynamic>{};
+      final rawUsage = data['usage'];
+      if (rawUsage is Map) {
+        AnthropicChatProvider.mergeAnthropicUsage(usage, rawUsage);
+      }
+      return _LlmCompletionResult(data: data, text: text, usage: usage);
+    }
+    final text = switch (protocolId) {
+      'openai.responses' => _responsesText(data['output']),
+      'google.gemini.generate_content' ||
+      kAntigravityProtocolId =>
+        _geminiText(data['candidates']),
+      'google.gemini.interactions' => _interactionsText(data['outputs']),
+      'ollama.chat' => (data['message'] as Map?)?['content'] as String?,
+      _ => _openAiChatText(data['choices']),
+    };
+    if (text == null) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
+    return _LlmCompletionResult(
+      data: data,
+      text: text,
+      usage: _normalizeProtocolUsage(
+        _rawProtocolUsage(data, protocolId),
+        protocolId,
+      ),
+    );
+  }
+
+  static String _completionReasoning(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) {
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List) return '';
+      return blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'thinking')
+          .map((block) => _stringValue(block['thinking']) ?? '')
+          .join();
+    }
+    if (protocolId == 'openai.chat_completions' ||
+        protocolId == kClovaStudioProtocolId ||
+        protocolId == 'amazon-q.chat') {
+      final choices = data['choices'];
+      final message = choices is List && choices.isNotEmpty
+          ? _jsonMap((choices.first as Map?)?['message'])
+          : null;
+      return _stringValue(
+            message?['reasoning_content'] ?? message?['reasoning'],
+          ) ??
+          '';
+    }
+    if (protocolId == 'openai.responses') {
+      final output = data['output'];
+      if (output is! List) return '';
+      return output
+          .whereType<Map>()
+          .where((item) => item['type'] == 'reasoning')
+          .expand((item) {
+            final summary = item['summary'];
+            return summary is List ? summary.whereType<Map>() : const <Map>[];
+          })
+          .map((part) => _stringValue(part['text']) ?? '')
+          .join();
+    }
+    if (_isGeminiGenerateContentProtocol(protocolId)) {
+      final candidates = data['candidates'];
+      if (candidates is! List || candidates.isEmpty) return '';
+      final content = _jsonMap(candidates.first)?['content'];
+      final rawParts = content is Map ? content['parts'] : null;
+      if (rawParts is! List) return '';
+      return rawParts
+          .whereType<Map>()
+          .where((part) => part['thought'] == true)
+          .map((part) => _stringValue(part['text']) ?? '')
+          .join();
+    }
+    return '';
+  }
+
+  static List<Map<String, dynamic>> _completionResponsesOutputItems(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) {
+    if (protocolId != 'openai.responses' || data['output'] is! List) {
+      return const [];
+    }
+    return [
+      for (final item in (data['output'] as List).whereType<Map>())
+        Map<String, dynamic>.from(item),
+    ];
+  }
+
+  static Map<String, dynamic> _completionAssistantTurn(
+    Map<String, dynamic> data,
+    String text,
+    String protocolId,
+  ) {
+    if (protocolId == 'openai.chat_completions' ||
+        protocolId == 'amazon-q.chat') {
+      final choices = data['choices'];
+      final message = choices is List && choices.isNotEmpty
+          ? _jsonMap((choices.first as Map?)?['message'])
+          : null;
+      return {
+        'role': 'assistant',
+        'content': message?['content'] ?? '',
+        'tool_calls': message?['tool_calls'] ?? const [],
+      };
+    }
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (blocks is List)
+            for (final block in blocks.whereType<Map>())
+              if (block['type'] == 'tool_use')
+                {
+                  'type': 'function',
+                  'function': {
+                    'name': block['name'],
+                    'arguments': jsonEncode(block['input'] ?? const {}),
+                  },
+                },
+        ],
+      };
+    }
+    if (protocolId == 'openai.responses') {
+      final output = data['output'];
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (output is List)
+            for (final item in output.whereType<Map>())
+              if (item['type'] == 'function_call')
+                {
+                  'id': item['call_id'] ?? item['id'],
+                  'type': 'function',
+                  'function': {
+                    'name': item['name'],
+                    'arguments': item['arguments'] ?? '{}',
+                  },
+                },
+        ],
+      };
+    }
+    if (_isGeminiGenerateContentProtocol(protocolId)) {
+      final candidates = data['candidates'];
+      final candidate = candidates is List && candidates.isNotEmpty
+          ? _jsonMap(candidates.first)
+          : null;
+      final content = candidate?['content'];
+      final rawParts = content is Map ? content['parts'] : null;
+      return {
+        'role': 'assistant',
+        'content': text,
+        'tool_calls': [
+          if (rawParts is List)
+            for (final part in rawParts.whereType<Map>())
+              if (part['functionCall'] is Map)
+                {
+                  'type': 'function',
+                  'function': {
+                    'name': (part['functionCall'] as Map)['name'],
+                    'arguments': jsonEncode(
+                      (part['functionCall'] as Map)['args'] ?? const {},
+                    ),
+                  },
+                },
+        ],
+      };
+    }
+    return {'role': 'assistant', 'content': text, 'tool_calls': const []};
+  }
+
+  static Map<String, String> _completionReasoningSignatures(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) {
+    if (protocolId == 'amazon-q.chat') {
+      final choices = data['choices'];
+      final message = choices is List && choices.isNotEmpty
+          ? _jsonMap((choices.first as Map?)?['message'])
+          : null;
+      final signature = _stringValue(message?['stroom.reasoningSignature']);
+      return signature == null ? const {} : {'__thinking__': signature};
+    }
+    if (protocolId == 'anthropic.messages') {
+      final blocks = data['content'];
+      if (blocks is! List) return const {};
+      final thinkingBlocks = blocks
+          .whereType<Map>()
+          .where((block) => block['type'] == 'thinking')
+          .toList();
+      if (thinkingBlocks.length != 1) return const {};
+      final signature = _stringValue(thinkingBlocks.single['signature']);
+      return signature == null ? const {} : {'__thinking__': signature};
+    }
+    if (_isGeminiGenerateContentProtocol(protocolId)) {
+      final candidates = data['candidates'];
+      if (candidates is! List || candidates.isEmpty) return const {};
+      final content = _jsonMap(candidates.first)?['content'];
+      final rawParts = content is Map ? content['parts'] : null;
+      if (rawParts is! List) return const {};
+      final signatures = <String, String>{};
+      for (final part in rawParts.whereType<Map>()) {
+        final signature = _stringValue(part['thoughtSignature']);
+        if (signature == null || signature.isEmpty) continue;
+        if (part['thought'] == true) {
+          signatures['__thinking__'] = signature;
+        }
+        final functionCall = _jsonMap(part['functionCall']);
+        final name = _stringValue(functionCall?['name']);
+        if (name != null && functionCall != null) {
+          signatures[ReasoningReplayCache.functionCallSignatureKey(
+            name: name,
+            arguments: functionCall['args'],
+          )] = signature;
+        }
+      }
+      return signatures;
+    }
+    return const {};
+  }
+
+  Future<List<Attachment>> _storeStreamMedia(
+    Map<String, dynamic> frame,
+    String protocolId, {
+    bool accumulateAudio = false,
+    Set<String> excludedImageGenerationIds = const {},
+  }) async {
+    final payloads = <_StreamMediaPayload>[];
+    final imageGenerationIds = <String>{};
+    final seen = Set<Object>.identity();
+    void visit(Object? value, {String? hint}) {
+      if (value is Map) {
+        if (!seen.add(value)) return;
+        final map = Map<String, dynamic>.from(value);
+        final type = _stringValue(map['type']) ?? hint;
+        final inline = map['inlineData'] ?? map['inline_data'];
+        if (inline is Map && inline['data'] is String) {
+          payloads.add(
+            _StreamMediaPayload(
+              _mediaTypeFromMime(_stringValue(inline['mimeType']) ?? ''),
+              _stringValue(inline['mimeType']) ?? 'application/octet-stream',
+              inline['data'] as String,
+              _mediaMetadata(map, const {'inlineData', 'inline_data'}),
+            ),
+          );
+          return;
+        }
+        if (map['type'] == 'image_generation_call' && map['result'] is String) {
+          final id = _stringValue(map['id']);
+          if (id != null &&
+              (excludedImageGenerationIds.contains(id) ||
+                  !imageGenerationIds.add(id))) {
+            return;
+          }
+          payloads.add(
+            _StreamMediaPayload(
+              'image',
+              _stringValue(map['mime_type']) ?? 'image/png',
+              map['result'] as String,
+              _mediaMetadata(map, const {'result'}),
+            ),
+          );
+          return;
+        }
+        if (map['type'] == 'response.image_generation_call.partial_image' &&
+            map['partial_image_b64'] is String) {
+          payloads.add(
+            _StreamMediaPayload(
+              'image',
+              _stringValue(map['mime_type']) ?? 'image/png',
+              map['partial_image_b64'] as String,
+              _mediaMetadata(map, const {'partial_image_b64'}),
+            ),
+          );
+          return;
+        }
+        if (const {'audio', 'input_audio', 'output_audio'}.contains(type) &&
+            map['data'] is String) {
+          if (accumulateAudio) return;
+          final mimeType = _stringValue(map['mime_type'] ?? map['mimeType']) ??
+              _audioMimeFromFormat(_stringValue(map['format']));
+          payloads.add(
+            _StreamMediaPayload(
+              'audio',
+              mimeType,
+              map['data'] as String,
+              _mediaMetadata(map, const {'data'}),
+            ),
+          );
+          return;
+        }
+        final imageUrl = map['image_url'];
+        final imageReference = imageUrl is Map ? imageUrl['url'] : imageUrl;
+        if (imageReference is String && imageReference.startsWith('data:')) {
+          final parsed = _decodeMediaDataUri(imageReference);
+          if (parsed != null) {
+            payloads.add(
+              _StreamMediaPayload(
+                'image',
+                parsed.$1,
+                base64Encode(parsed.$2),
+                _mediaMetadata(map, const {'image_url'}),
+              ),
+            );
+            return;
+          }
+        }
+        final images = map['images'];
+        if (images is List) {
+          for (final image in images.whereType<String>()) {
+            payloads.add(
+              _StreamMediaPayload('image', 'image/png', image, const {}),
+            );
+          }
+        }
+        for (final entry in map.entries) {
+          if (const {
+            'data',
+            'result',
+            'images',
+            'inlineData',
+            'inline_data',
+            'image_url',
+          }.contains(entry.key)) {
+            continue;
+          }
+          visit(entry.value, hint: entry.key);
+        }
+      } else if (value is List) {
+        for (final item in value) {
+          visit(item, hint: hint);
+        }
+      }
+    }
+
+    visit(frame);
+    final attachments = <Attachment>[];
+    for (final payload in payloads) {
+      final decodedUri = _decodeMediaDataUri(payload.data);
+      final bytes = decodedUri == null
+          ? _decodeBase64Payload(payload.data)
+          : decodedUri.$2;
+      if (bytes == null || bytes.isEmpty) continue;
+      final mimeType = decodedUri?.$1 ?? payload.mimeType;
+      attachments.add(
+        await _saveMediaAttachment(
+          payload.type,
+          mimeType,
+          bytes,
+          protocolId,
+          payload.metadata,
+        ),
+      );
+    }
+    return attachments;
+  }
+
+  List<_StreamAudioDelta> _chatCompletionAudioDeltas(
+    Map<String, dynamic> frame,
+  ) {
+    final deltas = <_StreamAudioDelta>[];
+    final choices = frame['choices'];
+    if (choices is! List) return deltas;
+    for (final (choiceIndex, choice) in choices.indexed) {
+      if (choice is! Map) continue;
+      final delta = choice['delta'];
+      final audio = delta is Map ? delta['audio'] : null;
+      if (audio is! Map || audio['data'] is! String) continue;
+      deltas.add(
+        _StreamAudioDelta(
+          choiceIndex:
+              choice['index'] is int ? choice['index'] as int : choiceIndex,
+          data: audio['data'] as String,
+          format: _stringValue(audio['format']),
+          metadata: _mediaMetadata(Map<String, dynamic>.from(audio), const {
+            'data',
+          }),
+        ),
+      );
+    }
+    return deltas;
+  }
+
+  Future<Attachment> _saveMediaAttachment(
+    String type,
+    String mimeType,
+    Uint8List bytes,
+    String protocolId,
+    Map<String, dynamic> metadata,
+  ) async {
+    final fileName = _mediaFileName(type, mimeType);
+    final path = await (_saveMediaFile ?? AttachmentStorage.saveFile)(
+      fileName,
+      bytes,
+      stableId: const Uuid().v4(),
+    );
+    return Attachment(
+      fileName: fileName,
+      mimeType: mimeType,
+      fileType: type,
+      hash: AttachmentStorage.computeHash(bytes),
+      storagePath: path,
+      fileSize: bytes.length,
+      extraFields: {
+        'stroom.mediaSource': {
+          'protocol': protocolId,
+          'metadata': sanitizeConversationMediaJson(metadata),
+        },
+      },
+    );
+  }
+
+  static Map<String, dynamic> _mediaMetadata(
+    Map<String, dynamic> source,
+    Set<String> removed,
+  ) =>
+      {
+        for (final entry in source.entries)
+          if (!removed.contains(entry.key) &&
+              !const {
+                'data',
+                'result',
+                'inlineData',
+                'inline_data',
+              }.contains(entry.key))
+            entry.key: entry.value,
+      };
+
+  static String _mediaTypeFromMime(String mimeType) =>
+      mimeType.startsWith('audio/')
+          ? 'audio'
+          : mimeType.startsWith('video/')
+              ? 'video'
+              : mimeType.startsWith('image/')
+                  ? 'image'
+                  : 'file';
+
+  static String _audioMimeFromFormat(String? format) => switch (format) {
+        'mp3' => 'audio/mpeg',
+        'wav' => 'audio/wav',
+        'ogg' => 'audio/ogg',
+        'pcm16' || 'pcm' => 'audio/pcm',
+        _ => 'audio/octet-stream',
+      };
+
+  static Uint8List _pcm16Mono24KhzWave(Uint8List pcm) {
+    final header = ByteData(44);
+    void writeAscii(int offset, String value) {
+      for (var index = 0; index < value.length; index++) {
+        header.setUint8(offset + index, value.codeUnitAt(index));
+      }
+    }
+
+    writeAscii(0, 'RIFF');
+    header.setUint32(4, 36 + pcm.length, Endian.little);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    header.setUint32(16, 16, Endian.little);
+    header.setUint16(20, 1, Endian.little);
+    header.setUint16(22, 1, Endian.little);
+    header.setUint32(24, 24000, Endian.little);
+    header.setUint32(28, 48000, Endian.little);
+    header.setUint16(32, 2, Endian.little);
+    header.setUint16(34, 16, Endian.little);
+    writeAscii(36, 'data');
+    header.setUint32(40, pcm.length, Endian.little);
+    return Uint8List.fromList([...header.buffer.asUint8List(), ...pcm]);
+  }
+
+  static String _mediaFileName(String type, String mimeType) {
+    final extension = switch (mimeType) {
+      'image/jpeg' => 'jpg',
+      'image/png' => 'png',
+      'audio/mpeg' => 'mp3',
+      'audio/wav' => 'wav',
+      'audio/ogg' => 'ogg',
+      'audio/pcm' => 'pcm',
+      'video/mp4' => 'mp4',
+      'application/pdf' => 'pdf',
+      _ => 'bin',
+    };
+    return '$type.$extension';
+  }
+
+  static Uint8List? _decodeBase64Payload(String value) {
+    try {
+      return Uint8List.fromList(base64Decode(value));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static (String, Uint8List)? _decodeMediaDataUri(String value) {
+    final match = RegExp(
+      r'^data:([^;,]+)(?:;[^,]+)*;base64,(.*)$',
+      dotAll: true,
+    ).firstMatch(value);
+    if (match == null) return null;
+    final bytes = _decodeBase64Payload(match.group(2)!);
+    return bytes == null ? null : (match.group(1)!, bytes);
+  }
+
+  static String? _openAiChatText(Object? rawChoices) {
+    if (rawChoices is! List || rawChoices.isEmpty) return null;
+    final first = rawChoices.first;
+    final message = first is Map ? first['message'] : null;
+    return message is Map && message['content'] is String
+        ? message['content'] as String
+        : '';
+  }
+
+  static String? _responsesText(Object? rawOutput) {
+    if (rawOutput is! List) return null;
+    return rawOutput.whereType<Map>().expand((item) {
+      final content = item['content'];
+      if (content is List) {
+        return content.whereType<Map>().expand((part) {
+          if (part['type'] == 'output_text') {
+            final text = part['text'];
+            return text is String ? [text] : const <String>[];
+          }
+          if (part['type'] == 'refusal') {
+            final refusal = part['refusal'] ?? part['text'];
+            return refusal is String ? [refusal] : const <String>[];
+          }
+          return const <String>[];
+        });
+      }
+      return const <String>[];
+    }).join();
+  }
+
+  static String? _geminiText(Object? rawCandidates) {
+    if (rawCandidates is! List) return null;
+    return rawCandidates.whereType<Map>().expand((candidate) {
+      final content = candidate['content'];
+      final parts = content is Map ? content['parts'] : null;
+      return parts is List
+          ? parts
+              .whereType<Map>()
+              .where((part) => part['thought'] != true)
+              .map((part) => part['text'])
+              .whereType<String>()
+          : const <String>[];
+    }).join();
+  }
+
+  static String? _interactionsText(Object? rawOutputs) {
+    if (rawOutputs is! List) return null;
+    return rawOutputs.whereType<Map>().expand((output) {
+      if (output['type'] == 'text') {
+        final text = output['text'];
+        return text is String ? [text] : const <String>[];
+      }
+      if (output['type'] != 'model_output') return const <String>[];
+      final content = output['content'];
+      if (content is! List) return const <String>[];
+      return content
+          .whereType<Map>()
+          .where((part) => const {'text', 'output_text'}.contains(part['type']))
+          .map((part) => part['text'])
+          .whereType<String>();
+    }).join();
+  }
+
+  static Map<String, dynamic> _rawProtocolUsage(
+    Map<String, dynamic> data,
+    String protocolId,
+  ) =>
+      switch (protocolId) {
+        'google.gemini.generate_content' ||
+        kAntigravityProtocolId =>
+          _jsonMap(data['usageMetadata']) ?? const {},
+        'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
+        'ollama.chat' => {
+            if (data['prompt_eval_count'] is num)
+              'prompt_eval_count': data['prompt_eval_count'],
+            if (data['eval_count'] is num) 'eval_count': data['eval_count'],
+          },
+        'openai.responses' => _jsonMap(data['usage']) ?? const {},
+        _ => _jsonMap(data['usage']) ?? const {},
+      };
+
+  static Map<String, dynamic> _normalizeProtocolUsage(
+    Map<String, dynamic> raw,
+    String protocolId,
+  ) {
+    if (protocolId == 'anthropic.messages') {
+      final normalized = <String, dynamic>{};
+      AnthropicChatProvider.mergeAnthropicUsage(normalized, raw);
+      return normalized;
+    }
+    if (protocolId == 'openai.chat_completions' ||
+        protocolId == 'amazon-q.chat') {
+      return OpenAICompatibleChatProvider.normalizeUsage(raw) ?? const {};
+    }
+    final input = raw['input_tokens'] ??
+        raw['promptTokenCount'] ??
+        raw['prompt_eval_count'];
+    final output = raw['output_tokens'] ??
+        raw['candidatesTokenCount'] ??
+        raw['eval_count'];
+    return {
+      if (input is num) 'inputTokens': input,
+      if (output is num) 'outputTokens': output,
+    };
+  }
+
+  static void _accumulateProtocolToolCall(
+    AiGatewayProtocolStreamEvent event,
+    Map<int, Map<String, dynamic>> accumulators,
+  ) {
+    final index = event.toolCallIndex ??
+        (event.toolCallId == null
+            ? accumulators.length
+            : accumulators.keys.firstWhere(
+                (key) => accumulators[key]?['id'] == event.toolCallId,
+                orElse: () => accumulators.length,
+              ));
+    final entry = accumulators.putIfAbsent(index, () => {});
+    if (event.toolCallId != null) entry['id'] = event.toolCallId;
+    final function = entry.putIfAbsent('function', () => <String, dynamic>{})
+        as Map<String, dynamic>;
+    if (event.toolName != null) function['name'] = event.toolName;
+    if (event.thoughtSignature != null) {
+      entry['thoughtSignature'] = event.thoughtSignature;
+    }
+    if (event.delta != null) {
+      function['arguments'] = '${function['arguments'] ?? ''}${event.delta}';
+    }
+  }
+
+  Future<void> _recordUsage(
+    AiGatewayRouteProgress progress,
+    Map<String, dynamic> usage,
+    AiGatewayConnectorObservation observation, {
+    required AiGatewayFacade runtime,
+    required String accountId,
+  }) async {
+    final requestUsage = observation.requestUsage;
+    await _recordMetric(progress, requestUsage);
+    final observedUnit = requestUsage.isKnown && requestUsage.value != null
+        ? requestUsage.unit
+        : null;
+    final input = _number(usage['inputTokens']);
+    final output = _number(usage['outputTokens']);
+    final tokens = (input ?? 0) + (output ?? 0);
+    if ((input != null || output != null) && observedUnit != 'tokens') {
+      await progress.recordUsage(
+        unit: 'tokens',
+        value: tokens,
+        source: 'provider',
+      );
+    }
+    final cost = _number(usage['cost']);
+    if (cost != null && observedUnit != 'usd') {
+      await progress.recordUsage(unit: 'usd', value: cost, source: 'provider');
+    }
+    if (observation.remainingQuota.isKnown ||
+        observation.quotaSignals.values.any((metric) => metric.isKnown)) {
+      try {
+        await runtime.accountManagement.recordQuotaObservation(
+          accountId: accountId,
+          remainingQuota: observation.remainingQuota,
+          quotaSignals: observation.quotaSignals,
+        );
+      } catch (_) {
+        // Connector quota is observational and cannot fail a completed chat.
+      }
+    }
+  }
+
+  Future<void> _recordMetric(
+    AiGatewayRouteProgress progress,
+    AiGatewayMetricObservation metric,
+  ) async {
+    final unit = metric.unit;
+    final value = metric.value;
+    if (unit == null || value == null || unit == 'requests') return;
+    await progress.recordUsage(unit: unit, value: value, source: 'provider');
+  }
+
+  static double? _number(Object? value) =>
+      value is num && value.isFinite && value >= 0 ? value.toDouble() : null;
+
+  static Map<String, dynamic>? _jsonMap(Object? value) {
+    Object? decoded = value;
+    if (value is List<int>) {
+      try {
+        decoded = jsonDecode(utf8.decode(value));
+      } catch (_) {
+        return null;
+      }
+    } else if (value is String) {
+      try {
+        decoded = jsonDecode(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+  }
+
+  static Stream<String> _sseData(Stream<List<int>> bytes) async* {
+    final dataLines = <String>[];
+    await for (final line
+        in bytes.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (line.isEmpty) {
+        if (dataLines.isNotEmpty) {
+          yield dataLines.join('\n');
+          dataLines.clear();
+        }
+      } else if (line.startsWith('data:')) {
+        var data = line.substring(5);
+        if (data.startsWith(' ')) data = data.substring(1);
+        dataLines.add(data);
+      }
+    }
+    if (dataLines.isNotEmpty) yield dataLines.join('\n');
+  }
+
+  static Stream<String> _clovaSseData(Stream<List<int>> bytes) async* {
+    var eventType = '';
+    final dataLines = <String>[];
+    Map<String, dynamic>? decode() {
+      if (dataLines.isEmpty) return null;
+      final decoded = jsonDecode(dataLines.join('\n'));
+      dataLines.clear();
+      if (decoded is! Map) return null;
+      return <String, dynamic>{
+        ...Map<String, dynamic>.from(decoded),
+        '_eventType': eventType,
+      };
+    }
+
+    await for (final line
+        in bytes.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (line.startsWith('event:')) {
+        eventType = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        var data = line.substring(5);
+        if (data.startsWith(' ')) data = data.substring(1);
+        dataLines.add(data);
+      } else if (line.isEmpty) {
+        final frame = decode();
+        if (frame != null) yield jsonEncode(frame);
+        eventType = '';
+      }
+    }
+    final frame = decode();
+    if (frame != null) yield jsonEncode(frame);
+  }
+
+  static Stream<String> _ndjsonData(Stream<List<int>> bytes) async* {
+    await for (final line
+        in bytes.transform(utf8.decoder).transform(const LineSplitter())) {
+      final payload = line.trim();
+      if (payload.isNotEmpty) yield payload;
+    }
+  }
+
+  static void _accumulateOpenAIToolCalls(
+    Map<String, dynamic> data,
+    Map<int, Map<String, dynamic>> accumulators,
+  ) {
+    final choices = data['choices'];
+    final choice = choices is List && choices.isNotEmpty ? choices.first : null;
+    final delta = choice is Map ? choice['delta'] : null;
+    final calls = delta is Map ? delta['tool_calls'] : null;
+    if (calls is! List) return;
+    for (final call in calls.whereType<Map>()) {
+      final index = call['index'] is int ? call['index'] as int : 0;
+      final entry = accumulators.putIfAbsent(index, () => {});
+      if (call['id'] is String) entry['id'] = call['id'];
+      if (call['type'] is String) entry['type'] = call['type'];
+      final function = call['function'];
+      if (function is! Map) continue;
+      final target = entry.putIfAbsent('function', () => <String, dynamic>{})
+          as Map<String, dynamic>;
+      if (function['name'] is String) target['name'] = function['name'];
+      if (function['arguments'] is String) {
+        target['arguments'] =
+            '${target['arguments'] ?? ''}${function['arguments']}';
+      }
+    }
+  }
+
+  static AIStreamEvent? _buildOpenAIToolCallEvent(
+    Map<int, Map<String, dynamic>> accumulators,
+  ) {
+    if (accumulators.isEmpty) return null;
+    final calls = accumulators.entries
+        .map(
+          (entry) => {
+            'id': entry.value['id'] ?? 'call_${entry.key}',
+            'type': entry.value['type'] ?? 'function',
+            if (entry.value['thoughtSignature'] != null)
+              'thoughtSignature': entry.value['thoughtSignature'],
+            'function': entry.value['function'] ?? <String, dynamic>{},
+          },
+        )
+        .toList(growable: false);
+    return AIStreamEvent('', toolCalls: calls);
+  }
+
+  static Object _safeError(Object error) {
+    if (error is UnsupportedError) {
+      return AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.request,
+        code: 'unsupported_capability',
+      );
+    }
+    if (error is AiGatewayRoutingException ||
+        error is AiGatewayExecutionException) {
+      return error;
+    }
+    return AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+  }
+
+  static Map<String, dynamic>? _realtimeProviderError(
+    Map<String, dynamic> event,
+  ) {
+    final directError = event['error'];
+    if (directError is Map) return Map<String, dynamic>.from(directError);
+    final response = event['response'];
+    if (response is! Map) return null;
+    final responseError = response['error'];
+    if (responseError is Map) return Map<String, dynamic>.from(responseError);
+    final statusDetails = response['status_details'];
+    if (statusDetails is Map && statusDetails['error'] is Map) {
+      return Map<String, dynamic>.from(statusDetails['error'] as Map);
+    }
+    return null;
+  }
+
+  static AiGatewayExecutionException _streamRequestError(Object? apiError) {
+    final rawCode =
+        apiError is Map ? apiError['code'] ?? apiError['type'] : null;
+    return AiGatewayExecutionException(
+      kind: AiGatewayFailureKind.request,
+      code: rawCode is String ? rawCode : null,
+    );
+  }
+}
+
+AiGatewayConnectorObservation _mergeGatewayObservations(
+  AiGatewayConnectorObservation first,
+  AiGatewayConnectorObservation second,
+) =>
+    AiGatewayConnectorObservation(
+      requestUsage: second.requestUsage.isKnown
+          ? second.requestUsage
+          : first.requestUsage,
+      remainingQuota: second.remainingQuota.isKnown
+          ? second.remainingQuota
+          : first.remainingQuota,
+      quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
+    );
+
+class _LlmCompletionResult {
+  final Map<String, dynamic> data;
+  final String text;
+  final Map<String, dynamic> usage;
+
+  const _LlmCompletionResult({
+    required this.data,
+    required this.text,
+    required this.usage,
+  });
+}
+
+String? _stringValue(Object? value) => value is String ? value : null;
+
+class _StreamMediaPayload {
+  final String type;
+  final String mimeType;
+  final String data;
+  final Map<String, dynamic> metadata;
+
+  const _StreamMediaPayload(this.type, this.mimeType, this.data, this.metadata);
+}
+
+class _StreamAudioDelta {
+  final int choiceIndex;
+  final String data;
+  final String? format;
+  final Map<String, dynamic> metadata;
+
+  const _StreamAudioDelta({
+    required this.choiceIndex,
+    required this.data,
+    required this.format,
+    required this.metadata,
+  });
+}
+
+class _BufferedStreamAudio {
+  final int contentOrder;
+  final BytesBuilder bytes = BytesBuilder(copy: false);
+  final Map<String, dynamic> metadata = {};
+  String mimeType = 'audio/pcm';
+  Attachment? attachment;
+
+  _BufferedStreamAudio(this.contentOrder);
+}

@@ -25,8 +25,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/l10n/app_localizations.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,6 +34,8 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/conversation_repository_memory.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Test messages alternating user/assistant roles.
 List<ChatMessage> _testMessages(int count) {
@@ -71,7 +71,7 @@ Widget _wrapTabVisibility(Widget app, {required bool visible}) {
 /// environment where no soft keyboard exists). When [visible] is false the
 /// page is kept alive but hidden, as it would be while another main page
 /// is selected (IndexedStack keep-alive).
-Future<void> pumpChat(
+Future<ProviderContainer> pumpChat(
   WidgetTester tester, {
   int messageCount = 60,
   TargetPlatform? platform,
@@ -91,29 +91,25 @@ Future<void> pumpChat(
       }
     ]),
   });
+  final container = ProviderContainer(
+    overrides: [
+      conversationRepositoryProvider.overrideWithValue(
+        MemoryConversationRepository(),
+      ),
+      activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+      providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
+    ],
+  );
+  addTearDown(container.dispose);
+  await container.read(conversationsProvider.notifier).ready;
   await tester.pumpWidget(
     _wrapTabVisibility(
-      ProviderScope(
-        overrides: [
-          // NOTE: conversationsProvider is intentionally NOT overridden —
-          // the real provider triggers the async _load() that reads the
-          // mock SharedPreferences; overriding it with a raw notifier
-          // would leave the conversation unloaded and the list empty.
-          activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
-          providerEntriesProvider.overrideWith((ref) {
-            return ProviderEntriesNotifier();
-          }),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: MaterialApp(
           locale: const Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-
           theme: platform == null
               ? null
               : ThemeData(platform: platform, useMaterial3: true),
@@ -148,6 +144,7 @@ Future<void> pumpChat(
     VisibilityDetectorController.instance.updateInterval = oldUpdateInterval;
   });
   addTearDown(tester.view.reset);
+  return container;
 }
 
 /// The chat list's scrollable (inside the ChatAnimatedList).
@@ -814,7 +811,7 @@ void main() {
         'keyboard dismissed while the chat tab is hidden: the list is not '
         'moved (no dismiss restore)', (tester) async {
       // Session starts while the chat tab is visible.
-      await pumpChat(tester);
+      final container = await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
       final savedPos = _scrollPosition(tester).pixels;
@@ -834,23 +831,12 @@ void main() {
       // all State).
       await tester.pumpWidget(
         _wrapTabVisibility(
-          ProviderScope(
-            overrides: [
-              activeConversationIdProvider
-                  .overrideWith((ref) => 'test-conv-id'),
-              providerEntriesProvider.overrideWith((ref) {
-                return ProviderEntriesNotifier();
-              }),
-            ],
+          UncontrolledProviderScope(
+            container: container,
             child: const MaterialApp(
                 locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
                 supportedLocales: AppLocalizations.supportedLocales,
-                localizationsDelegates: const [
-                  AppLocalizations.delegate,
-                  GlobalMaterialLocalizations.delegate,
-                  GlobalWidgetsLocalizations.delegate,
-                  GlobalCupertinoLocalizations.delegate,
-                ],
                 home: Scaffold(body: ChatPage())),
           ),
           visible: false,
@@ -869,23 +855,12 @@ void main() {
       // dismiss restore, no motion).
       await tester.pumpWidget(
         _wrapTabVisibility(
-          ProviderScope(
-            overrides: [
-              activeConversationIdProvider
-                  .overrideWith((ref) => 'test-conv-id'),
-              providerEntriesProvider.overrideWith((ref) {
-                return ProviderEntriesNotifier();
-              }),
-            ],
+          UncontrolledProviderScope(
+            container: container,
             child: const MaterialApp(
                 locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
                 supportedLocales: AppLocalizations.supportedLocales,
-                localizationsDelegates: const [
-                  AppLocalizations.delegate,
-                  GlobalMaterialLocalizations.delegate,
-                  GlobalWidgetsLocalizations.delegate,
-                  GlobalCupertinoLocalizations.delegate,
-                ],
                 home: Scaffold(body: ChatPage())),
           ),
           visible: true,

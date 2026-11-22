@@ -35,6 +35,8 @@ Create the working branch from the actual pull request base. Before submitting, 
 
 Create version development and maintenance branches only when needed; do not create branches for version series that have not started. Contributors should not create or choose these long-lived branches themselves. An issue or maintainer should specify the target branch.
 
+For the owner-approved v0.6 account, API, and subscription feature series, `v0.6` is the explicitly selected integration branch. This is a scoped exception to the normal target-base guidance above. Each implementation unit must use its own short-lived branch based on the current `v0.6` branch and a reviewed pull request targeting `v0.6`. Do not commit directly to the long-lived `v0.6` branch. Do not merge `v0.6` into `main` until a separate version handoff is approved.
+
 Record each version line's goals, scope, and acceptance criteria in `docs/roadmap/v<MAJOR>.<MINOR>.md`. Use issues or pull requests to track individual work items. A GitHub milestone is optional; maintainers may use one to group related issues and pull requests and track progress, with a link to the version plan in its description.
 
 ## 3. Development and Cross-Version Fixes

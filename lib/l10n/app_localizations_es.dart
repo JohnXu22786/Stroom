@@ -1696,6 +1696,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatSearchAll => 'Buscar todas las conversaciones...';
 
   @override
+  String get chatSearchCurrentMode => 'Conversación actual';
+
+  @override
+  String get chatSearchAllMode => 'Todas las conversaciones';
+
+  @override
+  String get chatSearchRetry => 'Reintentar búsqueda';
+
+  @override
+  String get chatSearchError => 'Error en la búsqueda';
+
+  @override
   String get searchPrevious => 'Partido anterior';
 
   @override
@@ -13996,6 +14008,18 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get chatSearchAll => 'Buscar todas las conversaciones...';
+
+  @override
+  String get chatSearchCurrentMode => 'Conversación actual';
+
+  @override
+  String get chatSearchAllMode => 'Todas las conversaciones';
+
+  @override
+  String get chatSearchRetry => 'Reintentar búsqueda';
+
+  @override
+  String get chatSearchError => 'Error en la búsqueda';
 
   @override
   String get searchPrevious => 'Partido anterior';

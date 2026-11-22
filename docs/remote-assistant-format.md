@@ -28,8 +28,8 @@ The `settings` keys match the assistant editor UI and persisted model:
 | `enableTopP` | Boolean |
 | `maxTokens` | Integer from 256 to 32768 |
 | `enableMaxTokens` | Boolean |
-| `maxToolCalls` | Positive integer; runtime execution is capped at 100 rounds |
-| `enableMaxToolCalls` | Boolean; false means unlimited |
+| `maxToolCalls` | Positive integer; runtime uses values from 1 to 100, otherwise it falls back to the default of 20 |
+| `enableMaxToolCalls` | Boolean; false disables the configured limit, with a hard safety limit of 1,000 rounds |
 | `maxToolOutputChars` | Integer from 100 to 100000 characters |
 | `enableMaxToolOutputChars` | Boolean |
 | `streamOutput` | Boolean |
