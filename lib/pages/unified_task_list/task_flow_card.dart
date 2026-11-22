@@ -843,39 +843,51 @@ class _ExpandedContent extends ConsumerWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: cs.outlineVariant, width: 0.5),
         ),
-        child: Row(
-          children: [
-            _statusIcon(subTask.outcome, cs),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    subTask.blockLabel,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurface,
-                    ),
-                  ),
-                  if (isInitializing)
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              _statusIcon(subTask.outcome, cs),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      strings.taskFlowCardWaiting,
+                      subTask.blockLabel,
                       style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: cs.onSurface,
                       ),
                     ),
-                ],
+                    if (isInitializing)
+                      Text(
+                        strings.taskFlowCardWaiting,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            if (!isInitializing)
-              Text(
-                _stepLabel(subTask.outcome, strings),
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-              ),
-          ],
+              if (!isInitializing)
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth * 0.4,
+                  ),
+                  child: ConstrainedText(
+                    _stepLabel(subTask.outcome, strings),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
