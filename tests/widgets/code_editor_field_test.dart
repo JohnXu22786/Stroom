@@ -397,6 +397,48 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('invalid JSON status wraps beside actions in a narrow layout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{ invalid',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        locale: const Locale('fr'),
+        theme: ThemeData(useMaterial3: true),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Dialog)))!
+          .codeEditorInvalidJson),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '{ invalid');
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(find.byTooltip('Annuler'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'JSON editor supports keyboard editing, formatting, save and close',
     (tester) async {

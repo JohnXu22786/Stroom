@@ -658,14 +658,19 @@ Future<void> showJsonValueEditorDialog(
                 Row(
                   children: [
                     if (liveError != null)
-                      Text(
-                        AppLocalizations.of(ctx)!.codeEditorInvalidJson,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(ctx).colorScheme.error,
+                      Flexible(
+                        child: Text(
+                          AppLocalizations.of(ctx)!.codeEditorInvalidJson,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(ctx).colorScheme.error,
+                          ),
                         ),
                       ),
-                    const Spacer(),
+                    if (liveError != null)
+                      const SizedBox(width: 8)
+                    else
+                      const Spacer(),
                     TextButton(
                       onPressed: () {
                         Navigator.pop(ctx);
