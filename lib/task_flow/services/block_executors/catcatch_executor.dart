@@ -250,6 +250,10 @@ Future<String> executeCatCatchBlock({
         task.detectedMedia,
         desiredType: desiredType,
       );
+      final safeCandidates = catCatchSafeResourceCandidates(
+        task.detectedMedia,
+        desiredType: desiredType,
+      );
       if (promptCandidates.isEmpty) {
         catcatchNotifier.removeTask(taskId);
         execNotifier.updateSubTaskStatus(
@@ -263,7 +267,8 @@ Future<String> executeCatCatchBlock({
           blockTitle: def.label,
         );
       }
-      if (!manualPickerOpen) {
+      if ((promptCandidates.length > 1 || safeCandidates.length != 1) &&
+          !manualPickerOpen) {
         onManualWaitWithCandidates?.call(taskId, promptCandidates);
         onManualWait?.call(taskId);
         manualPickerOpen = true;
@@ -408,7 +413,9 @@ Future<String> executeCatCatchBlock({
       TaskStatus.running,
     );
 
-    if (automatic && !autoSelected && awaitingSelection) {
+    if ((automatic || filteredManualFollow) &&
+        !autoSelected &&
+        awaitingSelection) {
       final us = task.steps.where(
         (s) => s.type == catcatch.StepType.userSelecting,
       );
@@ -419,11 +426,22 @@ Future<String> executeCatCatchBlock({
               task.detectedMedia,
               desiredType: desiredType,
             );
-            if (automaticWithPrompt && (promptOpen || candidates.length != 1)) {
+            final manualFollowPromptCandidates = filteredManualFollow
+                ? catCatchPromptResourceCandidates(
+                    task.detectedMedia,
+                    desiredType: desiredType,
+                  )
+                : candidates;
+            if ((automaticWithPrompt || filteredManualFollow) &&
+                (promptOpen ||
+                    candidates.length != 1 ||
+                    (filteredManualFollow &&
+                        (manualPickerOpen ||
+                            manualFollowPromptCandidates.length != 1)))) {
               // Keep the existing resource picker active until the user picks.
               continue;
             }
-            final selected = automaticWithPrompt
+            final selected = automaticWithPrompt || filteredManualFollow
                 ? candidates.firstOrNull
                 : selectAutomaticCatCatchResource(
                     task.detectedMedia,
