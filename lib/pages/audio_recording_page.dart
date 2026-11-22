@@ -16,6 +16,24 @@ import '../utils/storage_file_publication.dart';
 
 import '../widgets/constrained_text.dart';
 
+/// Keeps paired recording controls together when they fit, and stacks them
+/// when a narrow viewport cannot accommodate both buttons.
+class RecordingActionGroup extends StatelessWidget {
+  const RecordingActionGroup({required this.children, super.key});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 24,
+      runSpacing: 16,
+      children: children,
+    );
+  }
+}
+
 /// 录音页面 - 使用 audio_waveforms 重构，带波形图与暂停/恢复功能
 class AudioRecordingPage extends ConsumerStatefulWidget {
   const AudioRecordingPage({super.key});
@@ -562,8 +580,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
             ),
           ] else if (_isRecording) ...[
             // 录制中：暂停 + 停止
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            RecordingActionGroup(
               children: [
                 _buildActionButton(
                   onPressed: _pauseRecording,
@@ -571,7 +588,6 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                   label: _l10n.audioRecordingPause,
                   color: Colors.orange,
                 ),
-                const SizedBox(width: 24),
                 _buildActionButton(
                   onPressed: _stopRecording,
                   icon: Icons.stop,
@@ -585,8 +601,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
             ),
           ] else if (_isPaused) ...[
             // 已暂停：恢复 + 停止
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            RecordingActionGroup(
               children: [
                 _buildActionButton(
                   onPressed: _resumeRecording,
@@ -594,7 +609,6 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                   label: _l10n.audioRecordingResume,
                   color: Colors.green,
                 ),
-                const SizedBox(width: 24),
                 _buildActionButton(
                   onPressed: _stopRecording,
                   icon: Icons.stop,
@@ -608,8 +622,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
             ),
           ] else if (_recordedFilePath != null) ...[
             // 录音完成：保存 + 重录
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            RecordingActionGroup(
               children: [
                 _buildActionButton(
                   onPressed: _isSaving ? null : _saveRecording,
@@ -620,7 +633,6 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                   color: theme.colorScheme.primary,
                   isLoading: _isSaving,
                 ),
-                const SizedBox(width: 24),
                 _buildActionButton(
                   onPressed: _isSaving ? null : _resetForReRecord,
                   icon: Icons.refresh,
