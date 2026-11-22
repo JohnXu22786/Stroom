@@ -5,25 +5,160 @@ extension _HomePageMediaDialogExt on _HomePageState {
   void _showMediaSelectionDialog(
     BuildContext context,
     catcatch_task.CatCatchTask task,
+  ) => _showCatCatchSelectionDialog(context, task);
+
+  void _showFlowMediaSelectionDialog(
+    BuildContext context,
+    catcatch_task.CatCatchTask task,
   ) {
+    final encoded =
+        task.metadata[catcatch_task.CatCatchTask.flowSelectionCandidatesKey];
+    if (encoded == null) {
+      _openMediaSelectionDialogs.remove(task.id);
+      return;
+    }
+    final candidates = (jsonDecode(encoded) as List).cast<String>().toSet();
+    final identityVersioned = task.metadata.containsKey(
+      catcatch_task.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+    );
+    final selectableMedia = task.detectedMedia
+        .where(
+          (media) => catcatch_task.CatCatchTask.flowSelectionCandidateAllowed(
+            candidates: candidates,
+            identity: media.selectionIdentity,
+            url: media.url,
+            hasByteRange: media.hasByteRange,
+            identityVersioned: identityVersioned,
+          ),
+        )
+        .toList();
+    if (selectableMedia.isEmpty) {
+      _openMediaSelectionDialogs.remove(task.id);
+      return;
+    }
+    final selectableIdentities =
+        selectableMedia.map((media) => media.selectionIdentity).toSet();
+    final pairedAudio = task.detectedMedia.where(
+      (media) =>
+          media.isAudio &&
+          media.isLikelySplitTrack &&
+          !selectableIdentities.contains(media.selectionIdentity) &&
+          selectableMedia.any(
+            (candidate) =>
+                candidate.isVideo &&
+                candidate.isLikelySplitTrack &&
+                candidate.groupId == media.groupId,
+          ),
+    );
+    final pickerMedia = [...selectableMedia, ...pairedAudio];
+    _showCatCatchSelectionDialog(
+      context,
+      task,
+      selectableMedia: pickerMedia,
+      confirmableIdentities:
+          selectableMedia.map((media) => media.selectionIdentity).toSet(),
+      singleSelection: true,
+      onConfirm: (selectedMedia) async {
+        final video = selectedMedia.firstWhere(
+          (media) => !media.isAudio,
+          orElse: () => selectedMedia.first,
+        );
+        final audio = selectedMedia
+            .where((media) => media.isAudio && media.groupId == video.groupId)
+            .firstOrNull;
+        try {
+          final started = await ref
+              .read(taskFlowExecutionServiceProvider)
+              .performManualCatCatchAction(
+                task.id,
+                true,
+                (notifier) => notifier.selectMedia(
+                  task.id,
+                  video,
+                  mergeAudioUrl: audio?.url,
+                ),
+                selectedMediaUrl: video.url,
+                selectedMediaIdentity: video.selectionIdentity,
+                selectedMediaHasByteRange: video.hasByteRange,
+              );
+          if (started) return true;
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)!.catcatchFlowActionNotStarted,
+                ),
+              ),
+            );
+          }
+          return ref
+                  .read(catcatchTasksProvider)
+                  .where((current) => current.id == task.id)
+                  .firstOrNull
+                  ?.status !=
+              catcatch_task.TaskStatus.running;
+        } catch (error) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)!
+                      .catcatchFlowActionFailed(error.toString()),
+                ),
+              ),
+            );
+          }
+          return false;
+        }
+      },
+    );
+  }
+
+  void _showCatCatchSelectionDialog(
+    BuildContext context,
+    catcatch_task.CatCatchTask task, {
+    List<MediaResource>? selectableMedia,
+    Set<String>? confirmableIdentities,
+    bool singleSelection = false,
+    Future<bool> Function(List<MediaResource> selectedMedia)? onConfirm,
+  }) {
     final selectedIdentities = <String>{};
     var segmentsExpanded = false;
-    showDialog(
+    var confirmed = false;
+    final mediaList = selectableMedia ?? task.detectedMedia;
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) {
-          final mediaList = task.detectedMedia;
           final segments = mediaList.where((media) => media.isPlaylistSegment);
           final segmentCount = segments.length;
           final visibleResources = segmentCount == 0 || segmentsExpanded
               ? mediaList
               : mediaList.where((media) => !media.isPlaylistSegment).toList();
+          final hasConfirmableSelection = selectedIdentities.any(
+            (identity) =>
+                confirmableIdentities == null ||
+                confirmableIdentities.contains(identity),
+          );
+          final implicitSingleIdentity = confirmableIdentities?.length == 1
+              ? confirmableIdentities!.single
+              : null;
+          final canImplicitlyConfirmSingle =
+              selectedIdentities.isEmpty && implicitSingleIdentity != null
+              ? visibleResources.any(
+                  (media) => media.selectionIdentity == implicitSingleIdentity,
+                )
+              : selectedIdentities.isEmpty &&
+                  confirmableIdentities == null &&
+                  mediaList.length == 1 &&
+                  visibleResources.length == 1;
           // Keep the resource scroller to two-thirds of this dialog's content
           // viewport. The title, segment toggle, and dialog actions stay fixed.
           final contentViewportHeight = MediaQuery.sizeOf(ctx).height * 0.5;
           final resourceViewportHeight = contentViewportHeight * (2 / 3);
           return AlertDialog(
+            key: const Key('catcatch_media_selection_dialog'),
             title: ConstrainedText(
               selectedIdentities.isNotEmpty
                   ? AppLocalizations.of(ctx)!.mediaSelectionCount(
@@ -81,6 +216,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
                           final isSel = selectedIdentities.contains(identity);
                           final isAudio = isAudioPreviewResource(media);
                           return Card(
+                            key: ValueKey('media_selection_$identity'),
                             elevation: 0,
                             margin: const EdgeInsets.only(bottom: 6),
                             shape: RoundedRectangleBorder(
@@ -99,6 +235,27 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                   if (isSel) {
                                     selectedIdentities.remove(identity);
                                   } else {
+                                    if (singleSelection) {
+                                      final selectedMedia = mediaList
+                                          .where(
+                                            (candidate) =>
+                                                selectedIdentities.contains(
+                                              candidate.selectionIdentity,
+                                            ),
+                                          )
+                                          .toList();
+                                      final completesPair =
+                                          media.isLikelySplitTrack &&
+                                              selectedMedia.length == 1 &&
+                                              selectedMedia.single
+                                                      .groupId ==
+                                                  media.groupId &&
+                                              selectedMedia.single.isAudio !=
+                                                  media.isAudio;
+                                      if (!completesPair) {
+                                        selectedIdentities.clear();
+                                      }
+                                    }
                                     selectedIdentities.add(identity);
                                   }
                                 });
@@ -302,22 +459,39 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 ),
               ),
               FilledButton(
-                onPressed: selectedIdentities.isNotEmpty ||
-                        (mediaList.length == 1 && visibleResources.length == 1)
-                    ? () {
-                        final selectedMediaList = mediaList.length == 1
+                onPressed: hasConfirmableSelection || canImplicitlyConfirmSingle
+                        ? () async {
+                        final selectedMediaList = selectedIdentities.isEmpty &&
+                                implicitSingleIdentity != null
                             ? mediaList
-                            : mediaList
                                 .where(
-                                  (m) => selectedIdentities.contains(
-                                    m.selectionIdentity,
-                                  ),
+                                  (media) =>
+                                      media.selectionIdentity ==
+                                      implicitSingleIdentity,
                                 )
-                                .toList();
-                        Navigator.pop(ctx);
-                        ref
-                            .read(catcatchTasksProvider.notifier)
-                            .batchSelectMedia(task.id, selectedMediaList);
+                                .toList()
+                            : mediaList.length == 1 &&
+                                    visibleResources.length == 1
+                                ? mediaList
+                                : mediaList
+                                    .where(
+                                      (media) => selectedIdentities.contains(
+                                        media.selectionIdentity,
+                                      ),
+                                    )
+                                    .toList();
+                        if (onConfirm != null) {
+                          if (!await onConfirm(selectedMediaList)) return;
+                          if (!ctx.mounted) return;
+                          confirmed = true;
+                          Navigator.pop(ctx);
+                        } else {
+                          confirmed = true;
+                          Navigator.pop(ctx);
+                          ref
+                              .read(catcatchTasksProvider.notifier)
+                              .batchSelectMedia(task.id, selectedMediaList);
+                        }
                       }
                     : null,
                 child: ConstrainedText(
@@ -333,6 +507,11 @@ extension _HomePageMediaDialogExt on _HomePageState {
           );
         },
       ),
-    );
+    ).whenComplete(() {
+      if (!confirmed) {
+        _dismissedMediaSelectionDialogs.add(task.id);
+        _openMediaSelectionDialogs.remove(task.id);
+      }
+    });
   }
 }
