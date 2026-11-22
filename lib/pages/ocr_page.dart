@@ -806,6 +806,68 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _lastRawResponse = null;
   }
 
+  Widget _buildOcrSelectorLayout({
+    required Widget leading,
+    required String label,
+    required TextStyle labelStyle,
+    required Widget control,
+    Widget? trailingAction,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidth = TextPainter(
+          text: TextSpan(text: label, style: labelStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.localeOf(context),
+        )..layout();
+        const leadingWidth = 38.0; // 28dp icon plus 10dp gap
+        const labelGap = 8.0;
+        const minimumControlWidth = 120.0;
+        const trailingActionWidth = 40.0;
+        final requiredWidth = leadingWidth +
+            labelWidth.width +
+            labelGap +
+            minimumControlWidth +
+            (trailingAction == null ? 0 : trailingActionWidth);
+        final stack = constraints.maxWidth < requiredWidth;
+
+        if (stack) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  leading,
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(label, style: labelStyle)),
+                  if (trailingAction != null) trailingAction,
+                ],
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: leadingWidth),
+                child: control,
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            leading,
+            const SizedBox(width: 10),
+            Text(label, style: labelStyle),
+            const SizedBox(width: labelGap),
+            Expanded(child: control),
+            if (trailingAction != null) trailingAction,
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildModelSelector(ColorScheme cs) {
     final modelOptions = _getOcrModelOptions(ref);
 
@@ -885,102 +947,94 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         // Keep the 34dp model row the same outer height as the 40dp
         // instruction row and its settings tap target.
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              // 机器人图标，与对话页面输入框的模型标识一致
-              child: Icon(
-                Icons.smart_toy_outlined,
-                size: 16,
-                color: cs.primary,
+        child: _buildOcrSelectorLayout(
+          leading: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: cs.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            // 机器人图标，与对话页面输入框的模型标识一致
+            child: Icon(
+              Icons.smart_toy_outlined,
+              size: 16,
+              color: cs.primary,
+            ),
+          ),
+          label: AppLocalizations.of(context)!.ocrModelLabel,
+          labelStyle: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: cs.onSurfaceVariant,
+          ),
+          control: Container(
+            height: 34,
+            decoration: BoxDecoration(
+              color: cs.surface.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
               ),
             ),
-            const SizedBox(width: 10),
-            Text(
-              AppLocalizations.of(context)!.ocrModelLabel,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                height: 34,
-                decoration: BoxDecoration(
-                  color: cs.surface.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.3),
-                  ),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
+                value: selectedIndex,
+                hint: selectedIndex == null
+                    ? ConstrainedText(
+                        _modelSelectionMessage(selectedIndex) ??
+                            AppLocalizations.of(context)!.ocrSelectModel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                isDense: true,
+                isExpanded: true,
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: cs.primary,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    dropdownColor: StroomMenuStyle.surface(context),
-                    borderRadius: StroomMenuStyle.borderRadius,
-                    value: selectedIndex,
-                    hint: selectedIndex == null
-                        ? ConstrainedText(
-                            _modelSelectionMessage(selectedIndex) ??
-                                AppLocalizations.of(context)!.ocrSelectModel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : null,
-                    isDense: true,
-                    isExpanded: true,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: cs.primary,
-                    ),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
-                    onChanged:
-                        _ocrStarting || _isProcessing || _hasReusablePageResults
-                            ? null
-                            : (idx) {
-                                if (idx == null || idx >= modelOptions.length)
-                                  return;
-                                setState(() {
-                                  _selectModelOption(modelOptions[idx], idx);
-                                  _errorMessage = null;
-                                  _clearOcrErrorDetails();
-                                });
-                              },
-                    items: List.generate(modelOptions.length, (i) {
-                      final opt = modelOptions[i];
-                      final modelName = opt.model.name.isNotEmpty
-                          ? opt.model.name
-                          : opt.model.modelId;
-                      final displayText = opt.providerName.isNotEmpty
-                          ? '$modelName | ${opt.providerName}'
-                          : modelName;
-                      return DropdownMenuItem<int>(
-                        value: i,
-                        child: ConstrainedText(
-                          displayText,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
                 ),
+                onChanged: _ocrStarting ||
+                        _isProcessing ||
+                        _hasReusablePageResults
+                    ? null
+                    : (idx) {
+                        if (idx == null || idx >= modelOptions.length) return;
+                        setState(() {
+                          _selectModelOption(modelOptions[idx], idx);
+                          _errorMessage = null;
+                          _clearOcrErrorDetails();
+                        });
+                      },
+                items: List.generate(modelOptions.length, (i) {
+                  final opt = modelOptions[i];
+                  final modelName = opt.model.name.isNotEmpty
+                      ? opt.model.name
+                      : opt.model.modelId;
+                  final displayText = opt.providerName.isNotEmpty
+                      ? '$modelName | ${opt.providerName}'
+                      : modelName;
+                  return DropdownMenuItem<int>(
+                    value: i,
+                    child: ConstrainedText(
+                      displayText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1044,58 +1098,51 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.edit_note, size: 16, color: cs.primary),
+        child: _buildOcrSelectorLayout(
+          leading: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: cs.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 10),
-            Text(
-              AppLocalizations.of(context)!.ocrInstructionLabel,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
+            child: Icon(Icons.edit_note, size: 16, color: cs.primary),
+          ),
+          label: AppLocalizations.of(context)!.ocrInstructionLabel,
+          labelStyle: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: cs.onSurfaceVariant,
+          ),
+          control: Container(
+            height: 34,
+            decoration: BoxDecoration(
+              color: cs.surface.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                height: 34,
-                decoration: BoxDecoration(
-                  color: cs.surface.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.3),
-                  ),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
+                value: clamped,
+                isDense: true,
+                isExpanded: true,
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: cs.primary,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    dropdownColor: StroomMenuStyle.surface(context),
-                    borderRadius: StroomMenuStyle.borderRadius,
-                    value: clamped,
-                    isDense: true,
-                    isExpanded: true,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: cs.primary,
-                    ),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
-                    onChanged: _ocrStarting ||
-                            _isProcessing ||
-                            _hasReusablePageResults
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+                onChanged:
+                    _ocrStarting || _isProcessing || _hasReusablePageResults
                         ? null
                         : (idx) {
                             if (idx == null) return;
@@ -1109,111 +1156,108 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                               _pendingRetryInstructionIndex = null;
                             });
                           },
-                    items: [
-                      DropdownMenuItem<int>(
-                        value: -1,
-                        child: ConstrainedText(
-                          AppLocalizations.of(context)!.ocrDefaultImagesOnly,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (_retryInstructionSnapshot != null)
-                        DropdownMenuItem<int>(
-                          value: -2,
-                          child: ConstrainedText(
-                            AppLocalizations.of(context)!
-                                .ocrSavedInstructionSnapshot,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ...localizedOcrOutputTemplates(
-                        AppLocalizations.of(context)!,
-                      ).map((template) {
-                        return DropdownMenuItem<int>(
-                          value: template.selectionValue,
-                          child: ConstrainedText(
-                            template.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }),
-                      ...List.generate(instructions.length, (i) {
-                        return DropdownMenuItem<int>(
-                          value: i,
-                          child: ConstrainedText(
-                            ocrInstructionLabel(instructions[i]),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }),
-                    ],
+                items: [
+                  DropdownMenuItem<int>(
+                    value: -1,
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.ocrDefaultImagesOnly,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
+                  if (_retryInstructionSnapshot != null)
+                    DropdownMenuItem<int>(
+                      value: -2,
+                      child: ConstrainedText(
+                        AppLocalizations.of(context)!
+                            .ocrSavedInstructionSnapshot,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ...localizedOcrOutputTemplates(
+                    AppLocalizations.of(context)!,
+                  ).map((template) {
+                    return DropdownMenuItem<int>(
+                      value: template.selectionValue,
+                      child: ConstrainedText(
+                        template.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }),
+                  ...List.generate(instructions.length, (i) {
+                    return DropdownMenuItem<int>(
+                      value: i,
+                      child: ConstrainedText(
+                        ocrInstructionLabel(instructions[i]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
-            // 在 OCR 页面管理通用识别指令
-            Transform.translate(
-              // Balance the icon's visible inset against the leading icon
-              // while keeping the 40px touch target inside the card edge.
-              offset: const Offset(6, 0),
-              child: IconButton(
-                key: const Key('ocr_instruction_manage_btn'),
-                icon: Icon(
-                  Icons.settings_outlined,
-                  size: 18,
-                  color: cs.onSurfaceVariant,
-                ),
-                tooltip: AppLocalizations.of(context)!.ocrManageInstructions,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                onPressed: _ocrStarting ||
-                        _isProcessing ||
-                        _hasReusablePageResults
-                    ? null
-                    : () {
-                        showDialog<void>(
-                          context: context,
-                          builder: (_) => OcrInstructionManageDialog(
-                            onInstructionDeleted: (deletedIndex) {
-                              if (!mounted) return;
-                              final selected = _selectedInstruction;
-                              if (selected != null) {
-                                final currentInstructions = ref.read(
-                                  ocrInstructionsProvider,
-                                );
-                                final selectedIndex = _instructionIdentityIndex(
-                                  currentInstructions,
-                                  selected,
-                                );
-                                if (selectedIndex < 0) {
-                                  setState(() {
-                                    _selectedInstruction = null;
-                                    _selectedInstructionIndex = -1;
-                                  });
-                                } else {
-                                  setState(() {
-                                    _selectedInstructionIndex = selectedIndex;
-                                  });
-                                }
-                                return;
-                              }
-                              if (deletedIndex == _selectedInstructionIndex) {
-                                setState(() => _selectedInstructionIndex = -1);
-                              } else if (deletedIndex <
-                                  _selectedInstructionIndex) {
-                                setState(() => _selectedInstructionIndex--);
-                              }
-                            },
-                          ),
-                        );
-                      },
+          ),
+          trailingAction: Transform.translate(
+            // Balance the icon's visible inset against the leading icon
+            // while keeping the 40px touch target inside the card edge.
+            offset: const Offset(6, 0),
+            child: IconButton(
+              key: const Key('ocr_instruction_manage_btn'),
+              icon: Icon(
+                Icons.settings_outlined,
+                size: 18,
+                color: cs.onSurfaceVariant,
               ),
+              tooltip: AppLocalizations.of(context)!.ocrManageInstructions,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              onPressed: _ocrStarting ||
+                      _isProcessing ||
+                      _hasReusablePageResults
+                  ? null
+                  : () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => OcrInstructionManageDialog(
+                          onInstructionDeleted: (deletedIndex) {
+                            if (!mounted) return;
+                            final selected = _selectedInstruction;
+                            if (selected != null) {
+                              final currentInstructions = ref.read(
+                                ocrInstructionsProvider,
+                              );
+                              final selectedIndex = _instructionIdentityIndex(
+                                currentInstructions,
+                                selected,
+                              );
+                              if (selectedIndex < 0) {
+                                setState(() {
+                                  _selectedInstruction = null;
+                                  _selectedInstructionIndex = -1;
+                                });
+                              } else {
+                                setState(() {
+                                  _selectedInstructionIndex = selectedIndex;
+                                });
+                              }
+                              return;
+                            }
+                            if (deletedIndex == _selectedInstructionIndex) {
+                              setState(() => _selectedInstructionIndex = -1);
+                            } else if (deletedIndex <
+                                _selectedInstructionIndex) {
+                              setState(() => _selectedInstructionIndex--);
+                            }
+                          },
+                        ),
+                      );
+                    },
             ),
-          ],
+          ),
         ),
       ),
     );
