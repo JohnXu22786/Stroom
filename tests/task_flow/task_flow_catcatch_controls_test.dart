@@ -366,7 +366,7 @@ void main() {
   });
 
   testWidgets(
-      'media action stays reachable while the resource list scrolls within its cap',
+      'resource list shares task detail scrolling while action stays reachable',
       (tester) async {
     final media = List.generate(
       60,
@@ -376,25 +376,27 @@ void main() {
         ext: 'mp4',
       ),
     );
-    final task = _task(media).copyWith(steps: [
-      StepStatus.done(
-        StepType.fetching,
-        detail: List.filled(80, 'expanded task detail').join(' '),
-      ),
-      StepStatus.running(StepType.userSelecting),
-    ]);
+    final task = _task(media);
     await _pump(tester, task);
-    await tester.tap(find.text(StepType.fetching.label));
-    await tester.pump();
 
     final action = find.text('请选择要下载的资源');
     final actionRect = tester.getRect(action);
-    final listRect =
-        tester.getRect(find.byKey(const Key('catcatch_resource_list')));
+    final listFinder = find.byKey(const Key('catcatch_resource_list'));
+    final listRect = tester.getRect(listFinder);
     final screenHeight =
         tester.view.physicalSize.height / tester.view.devicePixelRatio;
     expect(actionRect.bottom, lessThanOrEqualTo(screenHeight));
-    expect(listRect.height, lessThanOrEqualTo(screenHeight * 2 / 3));
+    expect(listRect.height, greaterThan(screenHeight * 2 / 3));
+    expect(
+      tester.widget<ListView>(listFinder).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
+    expect(find.text('resource-0.mp4').hitTestable(), findsOneWidget);
+    await tester.drag(find.text('resource-0.mp4'), const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('resource-0.mp4').hitTestable(), findsNothing);
+    expect(find.text('resource-8.mp4').hitTestable(), findsOneWidget);
+    expect(action.hitTestable(), findsOneWidget);
   });
 
   testWidgets(
