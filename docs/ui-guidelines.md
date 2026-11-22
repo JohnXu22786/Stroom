@@ -153,6 +153,7 @@ These contact sheets show selected real screens from the current Flutter Web bui
 | Settings overview, light and dark appearance, and a new OCR provider editor. The editor is unsaved; no provider request was made. | ![Settings and unsaved provider editor examples](images/ui-guidelines/settings-providers.png) |
 | Local sample text list, its actual file popup menu, blank new-text editor, and first-party Markdown preview. | ![Text files and first-party Markdown preview examples](images/ui-guidelines/files-markdown.png) |
 | Message Search at 320 × 640 logical pixels, zh_CN, light theme, and 1× text scale; includes a clipped highlighted snippet and a fitting highlighted snippet. | ![Message Search clipped and fitting highlighted snippet results](images/ui-guidelines/search-highlight-reveal/search-highlight-reveal-320x640.png) [Play the vertical reveal preview](images/ui-guidelines/search-highlight-reveal/search-highlight-reveal-motion.webm) |
+| Chat composer edit capsule at 320 × 640 logical pixels, fr-FR, light theme, and 1× text scale. This is a safe local fixture with no focused input, software keyboard, account data, or network request. The motion preview uses 2× text scale to show the clipped label reveal. | ![Chat composer edit capsule in a narrow French locale layout](images/ui-guidelines/edit-mode-capsule/capsule-320x640.png) [Play the clipped-label motion preview](images/ui-guidelines/edit-mode-capsule/capsule-motion-preview.webm) |
 
 ## 8. Accessibility, localization, and platform behavior
 
