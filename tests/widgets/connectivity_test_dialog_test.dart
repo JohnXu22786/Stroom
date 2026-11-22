@@ -480,4 +480,64 @@ void main() {
       expect(find.text('Provider returned HTTP 200'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'long diagnostic details remain reachable in a narrow result dialog',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+
+      const lastLine = 'END OF COMPLETE CONNECTIVITY DIAGNOSTIC';
+      final details =
+          '${List.generate(800, (i) => 'diagnostic line $i').join('\n')}\n$lastLine';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => ConnectivityTestDialog(
+                    title: 'Proxy',
+                    initialContent: '{}',
+                    note: 'Read-only check.',
+                    onSave: (_) async {},
+                    onRun: (_) async => ConnectivityTestResult(
+                      succeeded: false,
+                      summary: 'Request failed',
+                      details: details,
+                      elapsed: Duration.zero,
+                    ),
+                  ),
+                ),
+                child: const Text('Open dialog'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open dialog'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Run Test'));
+      await tester.pumpAndSettle();
+
+      final fullDetails = find.byWidgetPredicate(
+        (widget) => widget is SelectableText && widget.data == details,
+      );
+      expect(fullDetails, findsOneWidget);
+      final scrollable =
+          tester.state<ScrollableState>(find.byType(Scrollable).first);
+      expect(scrollable.position.maxScrollExtent, greaterThan(0));
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(fullDetails).dy, lessThan(640));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

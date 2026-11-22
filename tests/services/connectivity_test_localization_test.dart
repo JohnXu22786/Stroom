@@ -124,16 +124,16 @@ void main() {
           (index) => {'content': 'item-$index ${List.filled(300, 'x').join()}'},
         ),
       }, locale: expected.locale);
-      final truncated = await ConnectivityTestService.runBuiltinTest(
+      final longResult = await ConnectivityTestService.runBuiltinTest(
         toolName: 'todowrite',
         testContent: '{}',
         localizations: strings,
         locale: expected.locale,
       );
-      expect(
-        truncated.details,
-        endsWith(strings.connectivityTestResultTruncated),
-      );
+      expect(longResult.details.length, greaterThan(4000));
+      expect(longResult.details, contains('item-29'));
+      expect(longResult.details,
+          isNot(contains(strings.connectivityTestResultTruncated)));
       // ignore: invalid_use_of_visible_for_testing_member
       TodoToolService.reset();
 

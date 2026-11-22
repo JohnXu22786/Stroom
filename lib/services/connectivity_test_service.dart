@@ -304,14 +304,10 @@ class ConnectivityTestService {
     AppLocalizations localizations,
   ) {
     stopwatch.stop();
-    const maxDetailsLength = 4000;
-    final visibleDetails = details.length <= maxDetailsLength
-        ? details
-        : '${details.substring(0, maxDetailsLength)}\n${localizations.connectivityTestResultTruncated}';
     return ConnectivityTestResult(
       succeeded: succeeded,
       summary: summary,
-      details: visibleDetails,
+      details: details,
       elapsed: stopwatch.elapsed,
     );
   }
