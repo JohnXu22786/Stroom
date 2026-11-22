@@ -479,28 +479,35 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
     if (_loadError case final error?) {
       final l10n = AppLocalizations.of(context)!;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                l10n.appMediaLoadError(error),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: cs.error),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: _loadData,
-                icon: const Icon(Icons.refresh),
-                label: ConstrainedText(
-                  l10n.actionRetry,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.appMediaLoadError(error),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: cs.error),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _loadData,
+                      icon: const Icon(Icons.refresh),
+                      label: ConstrainedText(
+                        l10n.actionRetry,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       );

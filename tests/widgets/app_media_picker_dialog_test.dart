@@ -184,6 +184,49 @@ void main() {
       expect(find.textContaining('records unavailable'), findsNothing);
     });
 
+    testWidgets(
+        'long load errors scroll so the full detail and retry stay reachable',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final errorDetail = List.filled(400, 'diagnostic detail ').join();
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(
+            context,
+            MediaPickerConfig<_TestRecord>(
+              title: '测试选择器',
+              emptyIcon: Icons.folder_outlined,
+              emptyText: '暂无文件',
+              fileIcon: Icons.insert_drive_file,
+              loadRecords: () async => throw StateError(errorDetail),
+              loadFolders: () async => <String>{},
+              displayName: (record) => record.name,
+              subtitleBuilder: (record) => const Text(''),
+            ),
+          ),
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      final errorText = find.textContaining(errorDetail);
+      expect(errorText, findsOneWidget);
+      final retry = find.text('重试');
+      expect(retry, findsOneWidget);
+      await tester.ensureVisible(retry);
+      await tester.pump();
+      expect(tester.getRect(retry).bottom, lessThanOrEqualTo(640));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows and retries folder loading failures', (tester) async {
       var loadFoldersCalls = 0;
       const record = _TestRecord(id: '1', name: '文件');
