@@ -179,8 +179,7 @@ void main() {
       expect(readResult, isNot(contains('Partial replacement')));
     });
 
-    test(
-        'replaces the previous list after validating a valid replacement',
+    test('replaces the previous list after validating a valid replacement',
         () async {
       await TodoToolService.handleTodoWrite({
         'todos': [
