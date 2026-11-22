@@ -80,6 +80,69 @@ void main() {
     });
   });
 
+  testWidgets('edge tick labels stay inside the graph canvas', (tester) async {
+    final boundaryKey = GlobalKey();
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RepaintBoundary(
+            key: boundaryKey,
+            child: SizedBox.expand(
+              child: CustomPaint(
+                painter: GraphPainter(
+                  xMin: -10,
+                  yMin: -10,
+                  xMax: 10,
+                  yMax: 10,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // This narrow production-size canvas includes ticks at both horizontal
+    // bounds; the golden catches any future regression that clips their labels.
+    await expectLater(
+      find.byKey(boundaryKey),
+      matchesGoldenFile('goldens/math_canvas_edge_ticks.png'),
+    );
+  });
+
+  testWidgets('vertical tick labels stay inside when the axis is near an edge',
+      (tester) async {
+    final boundaryKey = GlobalKey();
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RepaintBoundary(
+            key: boundaryKey,
+            child: SizedBox.expand(
+              child: CustomPaint(
+                painter: GraphPainter(
+                  xMin: -1,
+                  yMin: -20,
+                  xMax: 19,
+                  yMax: 20,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await expectLater(
+      find.byKey(boundaryKey),
+      matchesGoldenFile('goldens/math_canvas_vertical_ticks_near_edge.png'),
+    );
+  });
+
   group('MathCanvas - initial state', () {
     testWidgets('canvas is ready callback fires', (tester) async {
       bool ready = false;
