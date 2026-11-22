@@ -8,7 +8,8 @@ import 'package:idb_shim/idb_shim.dart'
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
 
 import 'web_file_store_blob_stub.dart'
-    if (dart.library.js_interop) 'web_file_store_blob_web.dart' as blob_store;
+    if (dart.library.js_interop) 'web_file_store_blob_web.dart'
+    as blob_store;
 
 class WebFileStoreReadLimitExceededException implements Exception {
   const WebFileStoreReadLimitExceededException(this.maxBytes);
@@ -56,8 +57,7 @@ class WebFileStore {
   static Future<Object?> waitForRequestAndTransactionCompletionForTesting(
     Future<Object?> request,
     Future<void> completed,
-  ) =>
-      _waitForRequestAndTransactionCompletion(request, completed);
+  ) => _waitForRequestAndTransactionCompletion(request, completed);
 
   static Future<Object?> _waitForRequestAndTransactionCompletion(
     Future<Object?> request,
@@ -141,6 +141,53 @@ class WebFileStore {
     try {
       await txn.objectStore('files').put(_storedValue(key, data), key);
       beforeCommit();
+      await completed;
+    } catch (_) {
+      try {
+        txn.abort();
+      } catch (_) {}
+      try {
+        await completed;
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  /// Atomically writes and removes a set of records in the IndexedDB file
+  /// store. Conversation metadata and message rows use this to commit one
+  /// repository operation as a unit.
+  static Future<void> writeBatch(
+    Map<String, Uint8List> writes, {
+    Iterable<String> deletes = const [],
+    void Function()? beforeCommit,
+  }) async {
+    if (_testMode) {
+      beforeCommit?.call();
+      final next = Map<String, Uint8List>.from(_inMemoryStore);
+      for (final key in deletes) {
+        next.remove(key);
+      }
+      for (final entry in writes.entries) {
+        next[entry.key] = Uint8List.fromList(entry.value);
+      }
+      _inMemoryStore
+        ..clear()
+        ..addAll(next);
+      return;
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final completed = txn.completed;
+    try {
+      final store = txn.objectStore('files');
+      for (final key in deletes) {
+        await store.delete(key);
+      }
+      for (final entry in writes.entries) {
+        await store.put(entry.value, entry.key);
+      }
+      beforeCommit?.call();
       await completed;
     } catch (_) {
       try {
@@ -315,8 +362,8 @@ class WebFileStore {
     final completed = transaction.completed;
     final request = _isAttachmentKey(key)
         ? blob_store
-            .migrateStoredValueToBlob(transaction.objectStore('files'), key)
-            .then<Object?>((result) => result.value)
+              .migrateStoredValueToBlob(transaction.objectStore('files'), key)
+              .then<Object?>((result) => result.value)
         : transaction.objectStore('files').getObject(key);
     unawaited(
       cancelToken.whenCancel.then<void>((_) {
@@ -359,8 +406,9 @@ class WebFileStore {
     if (_testMode) return false;
     final db = await _database;
     final checkTxn = db.transaction('files', idbModeReadOnly);
-    final marker =
-        await checkTxn.objectStore('files').getObject(_formatMarkerKey);
+    final marker = await checkTxn
+        .objectStore('files')
+        .getObject(_formatMarkerKey);
     await checkTxn.completed;
     if (marker == _currentFormatVersion) return false;
 

@@ -261,6 +261,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/background_optimization_page_test.dart",
         "pages/platform_tutorial_page_test.dart",
         "pages/home_page_short_screen_test.dart",
+        "pages/home_page_navigation_labels_test.dart",
         "pages/home_status_counts_test.dart",
         "pages/log_viewer_page_test.dart",
         "pages/navigation_main_pages_test.dart",

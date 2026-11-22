@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -73,8 +74,9 @@ extension _ChatPageEditingExt on _ChatPageState {
   /// id-based (the message must be looked up at removal time — the loop
   /// mutates the controller list, so positions shift).
   Future<void> _removeMessageFromController(String messageId) async {
-    final ctrlMsg =
-        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
+    final ctrlMsg = _controller?.messages
+        .where((m) => m.id == messageId)
+        .firstOrNull;
     if (ctrlMsg != null) {
       await _controller?.removeMessage(ctrlMsg);
     }
@@ -84,24 +86,33 @@ extension _ChatPageEditingExt on _ChatPageState {
     _finalizedMessages.remove(messageId);
     _isReasoningCompletedForMsg.remove(messageId);
     _messageKeys.remove(messageId);
-    _streamingMarkdownCache
-        .removeWhere((key, _) => key.startsWith('$messageId:'));
-    _streamingFenceInfoCaches
-        .removeWhere((key, _) => key.startsWith('$messageId:'));
-    _streamingSearchOccurrenceCache
-        .removeWhere((key, _) => key.startsWith('$messageId:'));
-    _liveMarkdownSearchPreviews
-        .removeWhere((key, _) => key.startsWith('$messageId:'));
-    _liveMarkdownAppendCounts
-        .removeWhere((key, _) => key.startsWith('$messageId:'));
-    _livePlainTextFragments
-        .removeWhere((key, _) => key.startsWith('$messageId:'));
-    _legacyFullReplySnapshots
-        .removeWhere((key, _) => key.endsWith(':$messageId'));
-    _legacyFullReplySequences
-        .removeWhere((key, _) => key.endsWith(':$messageId'));
-    _legacyFullReplyGenerations
-        .removeWhere((key, _) => key.endsWith(':$messageId'));
+    _streamingMarkdownCache.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _streamingFenceInfoCaches.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _streamingSearchOccurrenceCache.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _liveMarkdownSearchPreviews.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _liveMarkdownAppendCounts.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _livePlainTextFragments.removeWhere(
+      (key, _) => key.startsWith('$messageId:'),
+    );
+    _legacyFullReplySnapshots.removeWhere(
+      (key, _) => key.endsWith(':$messageId'),
+    );
+    _legacyFullReplySequences.removeWhere(
+      (key, _) => key.endsWith(':$messageId'),
+    );
+    _legacyFullReplyGenerations.removeWhere(
+      (key, _) => key.endsWith(':$messageId'),
+    );
   }
 
   /// Removes every controller message that is NOT part of [_history].
@@ -217,6 +228,21 @@ extension _ChatPageEditingExt on _ChatPageState {
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index >= _history.length) return;
+      final conversationId = ref.read(activeConversationIdProvider);
+      final completeHistory = conversationId == null
+          ? List<ChatMessage>.from(_history)
+          : await ref
+                .read(conversationsProvider.notifier)
+                .loadFullMessagesForContext(conversationId);
+      if (!mounted ||
+          ref.read(activeConversationIdProvider) != conversationId ||
+          _loadedConversationId != conversationId) {
+        return;
+      }
+      final completeIndex = completeHistory.indexWhere(
+        (message) => message.id == messageId,
+      );
+      if (completeIndex < 0) return;
       final originalController = _controller;
       final originalConversationId = ref.read(activeConversationIdProvider);
       final detachedSuffix = await _detachVisibleSuffix(
@@ -238,7 +264,7 @@ extension _ChatPageEditingExt on _ChatPageState {
         result = await _onMessageSend(
           newText,
           newAttachments,
-          historyForRequestPrefix: List<ChatMessage>.from(_history.take(index)),
+          historyForRequestPrefix: completeHistory.take(completeIndex).toList(),
           onUserMessageCreated: (id) => replacementUserMessageId = id,
           allowDuringHistoryModification: true,
         );
@@ -285,11 +311,15 @@ extension _ChatPageEditingExt on _ChatPageState {
     var countdownResolved = false;
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
-      if (index == -1 || index == 0 || index >= _history.length) return;
+      if (index == -1 || index >= _history.length) return;
       if (retryConversationId != null &&
-          ref.read(conversationsProvider).any((conversation) =>
-              conversation.id == retryConversationId &&
-              conversation.isTemporary)) {
+          ref
+              .read(conversationsProvider)
+              .any(
+                (conversation) =>
+                    conversation.id == retryConversationId &&
+                    conversation.isTemporary,
+              )) {
         countdownPaused = true;
         await conversationsNotifier.pauseTemporaryCountdown(
           retryConversationId,
@@ -300,8 +330,26 @@ extension _ChatPageEditingExt on _ChatPageState {
           return;
         }
       }
-      final historyBeforeAttempt = List<ChatMessage>.from(_history);
-      final historyForSuccess = historyBeforeAttempt.sublist(0, index);
+      final historyBeforeAttempt = retryConversationId == null
+          ? List<ChatMessage>.from(_history)
+          : await conversationsNotifier.loadFullMessagesForContext(
+              retryConversationId,
+            );
+      if (!mounted ||
+          !identical(_controller, originalController) ||
+          ref.read(activeConversationIdProvider) != originalConversationId) {
+        return;
+      }
+      final persistedMessageIndex = historyBeforeAttempt.indexWhere(
+        (message) => message.id == messageId,
+      );
+      if (persistedMessageIndex <= 0) return;
+      final userIndex = historyBeforeAttempt.lastIndexWhere(
+        (message) => message.role == 'user',
+        persistedMessageIndex,
+      );
+      if (userIndex < 0) return;
+      final historyForSuccess = historyBeforeAttempt.sublist(0, userIndex + 1);
       final detachedSuffix = await _detachVisibleSuffix(
         messageId,
         controller: originalController,
@@ -311,7 +359,7 @@ extension _ChatPageEditingExt on _ChatPageState {
           ref.read(activeConversationIdProvider) != originalConversationId) {
         return;
       }
-      final userMsg = _history[index - 1];
+      final userMsg = historyBeforeAttempt[userIndex];
       StreamResult? result;
       try {
         result = await _startStreaming(
@@ -335,7 +383,8 @@ extension _ChatPageEditingExt on _ChatPageState {
         countdownResolved = true;
         await conversationsNotifier.finishTemporaryCountdown(
           retryConversationId!,
-          successful: result != null &&
+          successful:
+              result != null &&
               !result.cancelled &&
               !result.failed &&
               result.assistantMessage?.isError != true,
@@ -412,14 +461,15 @@ extension _ChatPageEditingExt on _ChatPageState {
     Future<void> restoreHistory() async {
       var persisted = false;
       try {
-        persisted = activeId != null &&
+        persisted =
+            activeId != null &&
             await ref
                 .read(conversationsProvider.notifier)
                 .restoreMessagesChecked(
-              activeId,
-              historyBeforeDelete,
-              restoredIds: [messageId],
-            );
+                  activeId,
+                  historyBeforeDelete,
+                  restoredIds: [messageId],
+                );
       } finally {
         if (mounted &&
             ref.read(activeConversationIdProvider) == activeId &&
@@ -456,12 +506,12 @@ extension _ChatPageEditingExt on _ChatPageState {
     final attachmentsToDelete = <Attachment>[];
     for (final att in msg.attachments) {
       final isReferencedElsewhere = _history.asMap().entries.any(
-            (entry) =>
-                entry.key != index &&
-                entry.value.attachments.any(
-                  (a) => a.storagePath == att.storagePath,
-                ),
-          );
+        (entry) =>
+            entry.key != index &&
+            entry.value.attachments.any(
+              (a) => a.storagePath == att.storagePath,
+            ),
+      );
       if (!isReferencedElsewhere) {
         attachmentsToDelete.add(att);
       }
