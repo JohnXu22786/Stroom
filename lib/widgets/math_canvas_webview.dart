@@ -103,13 +103,19 @@ class MathCanvasWebView extends StatefulWidget {
       font-size: 13px;
       z-index: 100;
       display: none;
+      max-height: 50%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
   </style>
 </head>
 <body>
   <div id="board-container">
     <div id="$boardId" style="width:100%;height:100%;"></div>
-    <div class="error-message" id="error-message"></div>
+    <div class="error-message" id="error-message" role="alert" tabindex="0"></div>
   </div>
 
   <script>
