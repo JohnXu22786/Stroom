@@ -220,6 +220,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/settings/simple_model_config_constrained_text_test.dart",
         "pages/settings/ocr_model_config_constrained_text_test.dart",
         "pages/settings/ocr_model_config_page_test.dart",
+        "pages/model_config_shared_trim_badge_test.dart",
         "pages/settings/tts_create_page_test.dart",
         "pages/voice_batch_add_page_test.dart",
         "pages/voice_editor_shared_test.dart",

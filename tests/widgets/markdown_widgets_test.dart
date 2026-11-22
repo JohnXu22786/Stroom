@@ -181,8 +181,46 @@ void main() {
 
       expect(find.byIcon(Icons.broken_image), findsOneWidget);
     });
+
+    testWidgets('keeps the default rendering when a direct error is null',
+        (WidgetTester tester) async {
+      var callbackCalled = false;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, alt, error) {
+          callbackCalled = true;
+          return const Text('custom image error');
+        }),
+      ]);
+      final node = ImageNode({}, config, WidgetVisitor(config: config));
+
+      await tester.pumpWidget(MaterialApp(
+        home: node.buildErrorImage('image.png', 'image alt', null),
+      ));
+
+      expect(callbackCalled, isFalse);
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+    });
   });
 
+  group('HTML block source ranges', () {
+    test(
+      'unterminated block ends at EOF while terminated block is consumed',
+      () {
+        final unterminated = m.Document().parseLineListWithRanges([
+          m.Line('<!-- unterminated'),
+        ]);
+        expect(unterminated.blocks, hasLength(1));
+        expect(unterminated.blocks.single.startLine, 0);
+        expect(unterminated.blocks.single.endLine, 1);
+
+        final terminated = m.Document().parseLineListWithRanges([
+          m.Line('<!-- terminated -->'),
+        ]);
+        expect(terminated.blocks, hasLength(1));
+        expect(terminated.blocks.single.endLine, 1);
+      },
+    );
+  });
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
