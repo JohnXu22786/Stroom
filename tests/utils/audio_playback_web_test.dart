@@ -12,7 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_playback_web.dart';
 
 void main() {
-  test('natural playback completion resets state and emits final position', () async {
+  test('natural playback completion resets state and emits final position',
+      () async {
     html.AudioElement? audio;
     final player = AudioPlayerAdapter(
       createAudio: () => audio = html.AudioElement(),
@@ -38,8 +39,8 @@ void main() {
         JSObject.fromInteropObject(html.window)['Promise']! as JSObject;
     final resolvePromise = promiseConstructor['resolve'] as JSFunction;
     audioJs['play'] = (() => resolvePromise.callAsFunction(
-      promiseConstructor,
-    )).toJS;
+          promiseConstructor,
+        )).toJS;
     await player.play();
     expect(player.playing, isTrue);
 

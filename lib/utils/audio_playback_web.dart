@@ -26,7 +26,7 @@ class _PendingAudioLoad {
 /// Web 实现：使用 HTML5 AudioElement
 class AudioPlayerAdapter {
   AudioPlayerAdapter({html.AudioElement Function()? createAudio})
-    : _createAudio = createAudio ?? html.AudioElement.new;
+      : _createAudio = createAudio ?? html.AudioElement.new;
 
   final html.AudioElement Function() _createAudio;
   html.AudioElement? _audio;
@@ -80,9 +80,8 @@ class AudioPlayerAdapter {
       if (_disposed || !identical(_audio, audio)) return;
 
       _playing = false;
-      final seconds = audio.duration.isFinite
-          ? audio.duration
-          : audio.currentTime;
+      final seconds =
+          audio.duration.isFinite ? audio.duration : audio.currentTime;
       _positionCtrl.add(Duration(milliseconds: (seconds * 1000).toInt()));
       _stateCtrl.add(null);
     });
