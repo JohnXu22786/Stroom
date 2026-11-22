@@ -314,6 +314,33 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       _TabData(strings.unifiedTaskListTabFailed, Icons.error_outline),
       _TabData(strings.unifiedTaskListTabStopped, Icons.stop_circle_outlined),
     ];
+    final theme = Theme.of(context);
+    final tabBarTheme = TabBarTheme.of(context);
+    final defaultTabStyle = theme.useMaterial3
+        ? theme.textTheme.titleSmall
+        : theme.primaryTextTheme.bodyLarge;
+    final labelStyles = [
+      tabBarTheme.labelStyle ?? defaultTabStyle,
+      tabBarTheme.unselectedLabelStyle ?? defaultTabStyle,
+    ];
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
+    final tabHeight = taskTabData.fold<double>(46, (height, tab) {
+      final labelHeight = labelStyles
+          .map(
+        (style) => TextPainter(
+          text: TextSpan(text: tab.label, style: style),
+          textDirection: textDirection,
+          textScaler: textScaler,
+        )..layout(),
+      )
+          .fold<double>(0, (maxHeight, painter) {
+        return painter.height > maxHeight ? painter.height : maxHeight;
+      });
+      final contentHeight = 18 + 2 + labelHeight;
+      return contentHeight > height ? contentHeight : height;
+    });
+    final tabBarHeight = tabHeight + 2;
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
@@ -378,12 +405,14 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         ),
         centerTitle: true,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: Size.fromHeight(tabBarHeight),
           child: TabBar(
             controller: _tabController,
             tabs: [
               for (final tab in taskTabData)
                 Tab(
+                  height: tabHeight,
+                  iconMargin: const EdgeInsets.only(bottom: 2),
                   child: ConstrainedText(
                     tab.label,
                     maxLines: 1,
