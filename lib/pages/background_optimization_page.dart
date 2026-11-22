@@ -46,7 +46,7 @@ class _BackgroundOptimizationPageState
   bool _isCheckingExactAlarms = true;
 
   // ── Keep-alive strategy toggles ─────────────────────────────────────
-  bool _watchdogEnabled = true;
+  bool _watchdogEnabled = false;
   bool _coldStartRestoreEnabled = true;
   bool _batteryReminderEnabled = true;
   Locale? _lastLocale;

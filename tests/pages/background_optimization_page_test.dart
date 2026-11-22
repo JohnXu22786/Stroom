@@ -994,6 +994,9 @@ void main() {
     ) async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': true,
+      });
 
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -1551,6 +1554,9 @@ void main() {
       'toggling watchdog off persists the pref and disables the alarm',
       (tester) async {
         registerMockPlatform();
+        SharedPreferences.setMockInitialValues({
+          'background_service_watchdog': true,
+        });
         // Record keep-alive channel calls.
         final keepAliveCalls = <String>[];
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

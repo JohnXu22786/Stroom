@@ -144,7 +144,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 isStillActive = {
                     prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
                         prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
-                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
                 },
                 retryLater = { retry ->
                     if (!Handler(Looper.getMainLooper()).postDelayed(retry, SCHEDULE_RETRY_DELAY_MS)) {
@@ -168,7 +168,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 isStillActive = {
                     prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
                         prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
-                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
                 },
                 retryLater = { retry ->
                     if (!Handler(Looper.getMainLooper()).postDelayed(retry, SCHEDULE_RETRY_DELAY_MS)) {
@@ -186,7 +186,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
         fun scheduleFailedStopRecoveryAlarm(context: Context, intervalMs: Long): Boolean {
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             return scheduleFailedStopRecovery(
-                watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true),
+                watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, false),
                 persistEnabledIntent = {
                     prefs.edit().putBoolean(KEY_SERVICE_ENABLED, true).commit()
                 },
@@ -416,7 +416,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
             return synchronized(ALARM_GENERATION_LOCK) {
                 val keepAliveActive = prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
                     prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
-                    prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                    prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
                 val currentGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
                 val scheduledGeneration = if (intent.hasExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION)) {
                     intent.getLongExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION, currentGeneration)
@@ -497,7 +497,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
                 // 看门狗开关同样必须检查：用户关闭开关后若取消调用
                 // 未送达（进程被杀/超时），这里兜底取消闹钟。
-                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
                 if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
                     serviceEnabled && watchdogEnabled
                 ) {
@@ -523,7 +523,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 // 看门狗开关同样是禁用条件：关闭开关后若取消调用未送达
                 // （进程被杀/超时），残留闹钟触发时必须在此兜底取消，
                 // 否则看门狗会永久运行且每次触发都自我续期。
-                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
                 if (!keepAliveActive || !serviceEnabled || !watchdogEnabled) {
                     // 用户已明确停止后台服务/关闭看门狗：取消闹钟，绝不复活服务。
                     Log.i(TAG, "Keep-alive alarm fired but service/watchdog disabled — cancelling watchdog")
@@ -559,7 +559,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 // succeeds; its generation token is updated during scheduling.
                 if (!prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) ||
                     !prefs.getBoolean(KEY_SERVICE_ENABLED, false) ||
-                    !prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                    !prefs.getBoolean(KEY_WATCHDOG_ENABLED, false)
                 ) {
                     cancelAlarm(context)
                     return
@@ -642,7 +642,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
         val isStillActive = {
             prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
                 prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
-                prefs.getBoolean(KEY_WATCHDOG_ENABLED, true) &&
+                prefs.getBoolean(KEY_WATCHDOG_ENABLED, false) &&
                 (generationToReuse == null ||
                     prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L) == generationToReuse)
         }

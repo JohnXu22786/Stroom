@@ -22,11 +22,13 @@ const _failedStopIntentRestorePendingKey =
     'background_service_failed_stop_restore_pending';
 
 /// SharedPreferences keys for individual keep-alive strategy toggles.
-/// All default to true (maximum protection). Users can disable
-/// individual strategies from the BackgroundOptimizationPage.
+/// The AlarmManager watchdog is opt-in; cold-start restore and the battery
+/// reminder remain enabled by default.
 const _watchdogEnabledKey = 'background_service_watchdog';
 const _coldStartRestoreEnabledKey = 'background_service_cold_start_restore';
 const _batteryReminderEnabledKey = 'background_service_battery_reminder';
+const _watchdogDefaultEnabled = false;
+const _coldStartRestoreDefaultEnabled = true;
 
 /// SharedPreferences key for the desktop "minimize on close" behavior.
 /// Defaults to true so that closing the window keeps the app running in
@@ -634,12 +636,13 @@ Future<bool> stopBackgroundServiceIfNotUserEnabled() =>
 // ── Individual keep-alive strategy toggles ──────────────────────────────
 
 /// Returns whether the AlarmManager watchdog is enabled.
-/// Defaults to `true`.
+/// Defaults to `false` until the user explicitly enables it.
 Future<bool> isWatchdogEnabled() async {
   try {
-    return (await StartupPreferences.getBool(_watchdogEnabledKey)) ?? true;
+    return (await StartupPreferences.getBool(_watchdogEnabledKey)) ??
+        _watchdogDefaultEnabled;
   } catch (_) {
-    return true;
+    return _watchdogDefaultEnabled;
   }
 }
 
@@ -669,7 +672,10 @@ Future<bool> _setRecoveryOptionEnabled(String key, bool enabled) async {
   try {
     if (previousWrite != null) await previousWrite;
     final prefs = await SharedPreferences.getInstance();
-    final previousValue = prefs.getBool(key) ?? true;
+    final defaultValue = key == _watchdogEnabledKey
+        ? _watchdogDefaultEnabled
+        : _coldStartRestoreDefaultEnabled;
+    final previousValue = prefs.getBool(key) ?? defaultValue;
     var saved = false;
     try {
       saved = await prefs.setBool(key, enabled);
