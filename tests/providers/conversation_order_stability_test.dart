@@ -251,7 +251,9 @@ void main() {
       final newId = notifier.createConversation();
 
       // 让 _load 完成并合并。
-      await notifier.ready;
+      for (var i = 0; i < 100 && notifier.state.length < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
 
       // 无论竞态先后（_load 先完成或 createConversation 先执行），
       // 最终顺序一致：置顶块 + 新对话在非置顶块顶部。
