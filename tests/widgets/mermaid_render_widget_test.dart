@@ -1313,6 +1313,7 @@ void main() {
         webView.controller,
       );
       final fakeController = webView.controller;
+      fakeController.supportsJavaScriptHandlers = !kIsWeb;
 
       // The control is visible while loading, but its WebView controller has
       // not reported creation yet.
@@ -1332,6 +1333,13 @@ void main() {
       webView.params.onWebViewCreated!(controller);
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
+      expect(
+        fakeController.attemptedJavaScriptHandlers,
+        kIsWeb ? isEmpty : ['onMermaidError', 'onTransformChanged'],
+        reason: kIsWeb
+            ? 'web does not implement JavaScript handler registration'
+            : 'native platforms must keep both JavaScript bridges',
+      );
 
       // Web sets its overlay-ready state on controller creation, before the
       // page has necessarily loaded the zoom helper.
@@ -5741,6 +5749,7 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
+  final attemptedJavaScriptHandlers = <String>[];
   Completer<void>? evaluateJavascriptGate;
   Object? loadUrlError;
   final List<({double delta, double? centerX, double? centerY})>
@@ -5917,6 +5926,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     required String handlerName,
     required JavaScriptHandlerCallback callback,
   }) {
+    attemptedJavaScriptHandlers.add(handlerName);
     if (!supportsJavaScriptHandlers) {
       throw UnimplementedError('JavaScript handlers are unavailable on web');
     }
