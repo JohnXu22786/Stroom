@@ -28,8 +28,9 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   void initState() {
     super.initState();
     _voices = widget.initialVoices.map((v) => v.copy()).toList();
-    _nameCtrls =
-        _voices.map((v) => TextEditingController(text: v.name)).toList();
+    _nameCtrls = _voices
+        .map((v) => TextEditingController(text: v.name))
+        .toList();
     _idCtrls = _voices.map((v) => TextEditingController(text: v.id)).toList();
     _idFocusNodes = _voices.map((_) => FocusNode()).toList();
     for (var i = 0; i < _idFocusNodes.length; i++) {
@@ -263,9 +264,9 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
           // 顶部操作栏
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                OutlinedButton.icon(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final addRowButton = OutlinedButton.icon(
                   onPressed: _addRow,
                   icon: const Icon(Icons.add, size: 18),
                   label: ConstrainedText(
@@ -273,9 +274,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
+                );
+                final batchAddButton = OutlinedButton.icon(
                   onPressed: _batchAdd,
                   icon: const Text('📋', style: TextStyle(fontSize: 16)),
                   label: ConstrainedText(
@@ -283,8 +283,28 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                );
+                final stackActions =
+                    constraints.maxWidth < 480 ||
+                    MediaQuery.textScalerOf(context).scale(14) > 18;
+                if (stackActions) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      addRowButton,
+                      const SizedBox(height: 8),
+                      batchAddButton,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    addRowButton,
+                    const SizedBox(width: 8),
+                    batchAddButton,
+                  ],
+                );
+              },
             ),
           ),
           // 列表
