@@ -417,10 +417,7 @@ void main() {
       });
       final prefs = await SharedPreferences.getInstance();
 
-      await expectLater(
-        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
-        throwsA(isA<Exception>()),
-      );
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
       expect(prefs.getString('provider_entries'), existing);
       expect(prefs.getString('chat_configs'), legacy);
@@ -464,10 +461,7 @@ void main() {
       });
       final prefs = await SharedPreferences.getInstance();
 
-      await expectLater(
-        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
-        throwsA(isA<Exception>()),
-      );
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
       expect(prefs.getString('provider_entries'), existing);
       expect(prefs.getString('chat_configs'), legacy);
@@ -496,10 +490,7 @@ void main() {
       SharedPreferences.setMockInitialValues({'chat_configs': legacy});
       final prefs = await SharedPreferences.getInstance();
 
-      await expectLater(
-        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
-        throwsA(isA<Exception>()),
-      );
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
       expect(prefs.getString('provider_entries'), isNull);
       expect(prefs.getString('chat_configs'), legacy);
@@ -640,15 +631,13 @@ void main() {
           {'provider_entries': existing, 'chat_configs': legacy});
       final prefs = await SharedPreferences.getInstance();
 
-      await expectLater(DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
-          throwsA(isA<Exception>()));
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
       expect(prefs.getString('provider_entries'), existing);
       expect(prefs.getString('chat_configs'), legacy);
     });
 
-    test(
-        'preserves top-level LLM config when chat configs cannot be merged safely',
+    test('normalizes top-level LLM config before merging legacy chat configs',
         () async {
       final existing = jsonEncode([
         {
@@ -679,13 +668,19 @@ void main() {
       });
       final prefs = await SharedPreferences.getInstance();
 
-      await expectLater(
-        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
-        throwsA(isA<Exception>()),
-      );
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
-      expect(prefs.getString('provider_entries'), existing);
-      expect(prefs.getString('chat_configs'), legacy);
+      final migrated =
+          jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
+      final configs =
+          (migrated.single as Map<String, dynamic>)['configs'] as List<dynamic>;
+      expect(configs, hasLength(2));
+      expect(
+        configs
+            .map((config) => (config as Map<String, dynamic>)['providerName']),
+        containsAll(['Existing top-level provider', 'Incoming provider']),
+      );
+      expect(prefs.getString('chat_configs'), isNull);
     });
   });
 }

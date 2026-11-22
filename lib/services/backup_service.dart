@@ -229,8 +229,8 @@ class BackupSelection {
 // ====================================================================
 
 class BackupService {
-  static Future<void> _testRestoreQueue = Future<void>.value();
   static int? _lastBackupFileTimestampSeconds;
+  static Future<void>? _testRestoreQueue;
   @visibleForTesting
   static bool? restorePathsCaseInsensitiveForTesting;
   @visibleForTesting
@@ -7455,7 +7455,7 @@ class BackupService {
     final previous = _testRestoreQueue;
     final completed = Completer<void>();
     _testRestoreQueue = completed.future;
-    await previous;
+    if (previous != null) await previous;
     try {
       await _restoreFromBytes(
         bytes,
@@ -7467,6 +7467,9 @@ class BackupService {
         afterCredentialStagingForTest: afterCredentialStagingForTest,
       );
     } finally {
+      if (identical(_testRestoreQueue, completed.future)) {
+        _testRestoreQueue = null;
+      }
       completed.complete();
     }
   }
