@@ -37,6 +37,7 @@ class _Downloads extends CatCatchNotifier {
   final selected = <MediaResource>[];
   final batches = <List<MediaResource>>[];
   String? mergeAudio;
+  String? batchMergeAudio;
   int confirmations = 0;
   int rawSaves = 0;
   _Downloads(super.ref);
@@ -49,8 +50,10 @@ class _Downloads extends CatCatchNotifier {
 
   @override
   void batchSelectMedia(String id, List<MediaResource> media,
-          {String? mergeAudioUrl}) =>
-      batches.add(media);
+          {String? mergeAudioUrl}) {
+    batches.add(media);
+    batchMergeAudio = mergeAudioUrl;
+  }
 
   @override
   void confirmAndContinue(String id) => confirmations++;
@@ -228,6 +231,67 @@ void main() {
     expect(downloads.batches, [
       [first, duplicate]
     ]);
+  });
+
+  testWidgets('non-flow merge submits video first when audio is detected first',
+      (tester) async {
+    const audio = MediaResource(
+      url: 'https://x/audio.m4a',
+      name: 'audio',
+      ext: 'm4a',
+      groupId: 'split',
+      isLikelySplitTrack: true,
+    );
+    const video = MediaResource(
+      url: 'https://x/video.mp4',
+      name: 'video',
+      ext: 'mp4',
+      groupId: 'split',
+      isLikelySplitTrack: true,
+    );
+    final downloads = await _pump(
+      tester,
+      _task([audio, video]),
+      flowManaged: false,
+    );
+
+    await tester.drag(
+      find.byKey(const Key('catcatch_resource_scroll_view')),
+      const Offset(0, -300),
+    );
+    await tester.pump();
+    final merge = find.text('合并音视频');
+    await tester.tap(merge);
+    await tester.pump();
+    final submit = find.textContaining('下载选中的');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(downloads.batches.single, [video, audio]);
+    expect(downloads.batchMergeAudio, audio.url);
+
+    await tester.drag(
+      find.byKey(const Key('catcatch_resource_scroll_view')),
+      const Offset(0, 300),
+    );
+    await tester.pump();
+    await tester.tap(find.text('video.mp4'));
+    await tester.pump();
+    await tester.drag(
+      find.byKey(const Key('catcatch_resource_scroll_view')),
+      const Offset(0, -300),
+    );
+    await tester.pump();
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+
+    expect(downloads.batches, [
+      [video, audio],
+      [audio],
+    ]);
+    expect(downloads.batchMergeAudio, isNull);
   });
 
   testWidgets('flow candidate filtering and handoff distinguish byte ranges',
