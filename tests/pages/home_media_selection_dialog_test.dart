@@ -15,6 +15,8 @@ import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 
 class _TaskFlowServiceMock extends Mock implements TaskFlowExecutionService {}
 
+class _CatCatchNotifierMock extends Mock implements CatCatchNotifier {}
+
 catcatch.CatCatchTask _flowTask(List<MediaResource> media) =>
     catcatch.CatCatchTask(
       id: 'flow-task',
@@ -41,24 +43,26 @@ catcatch.CatCatchTask _flowTask(List<MediaResource> media) =>
 catcatch.CatCatchTask _flowTaskWithCandidates(
   List<MediaResource> media,
   List<MediaResource> candidates,
-) => catcatch.CatCatchTask(
-  id: 'flow-task',
-  url: 'https://example.com/watch',
-  expectedDurationSec: 0,
-  createdAt: DateTime(2026),
-  detectedMedia: media,
-  metadata: {
-    catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
-    catcatch.CatCatchTask.flowSelectionCandidatesKey: jsonEncode(
-      candidates.map((item) => item.selectionIdentity).toList(),
-    ),
-    catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey:
-        catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersion,
-  },
-  steps: const [
-    catcatch.StepStatus(type: catcatch.StepType.userSelecting, running: true),
-  ],
-);
+) =>
+    catcatch.CatCatchTask(
+      id: 'flow-task',
+      url: 'https://example.com/watch',
+      expectedDurationSec: 0,
+      createdAt: DateTime(2026),
+      detectedMedia: media,
+      metadata: {
+        catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
+        catcatch.CatCatchTask.flowSelectionCandidatesKey: jsonEncode(
+          candidates.map((item) => item.selectionIdentity).toList(),
+        ),
+        catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey:
+            catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersion,
+      },
+      steps: const [
+        catcatch.StepStatus(
+            type: catcatch.StepType.userSelecting, running: true),
+      ],
+    );
 
 Future<void> _pumpFlowSelection(
   WidgetTester tester,
@@ -289,6 +293,49 @@ void main() {
         selectedMediaIdentity: media.selectionIdentity,
         selectedMediaHasByteRange: false,
       ),
+    ).called(1);
+  });
+
+  testWidgets('an audio-only candidate is selected without merge audio', (
+    tester,
+  ) async {
+    const audio = MediaResource(
+      url: 'https://example.com/only.m4a',
+      name: 'only',
+      ext: 'm4a',
+      groupId: 'audio-only-group',
+      isLikelySplitTrack: true,
+    );
+    final service = _TaskFlowServiceMock();
+    final notifier = _CatCatchNotifierMock();
+    when(
+      () => service.performManualCatCatchAction(
+        any(),
+        any(),
+        any(),
+        selectedMediaUrl: any(named: 'selectedMediaUrl'),
+        selectedMediaIdentity: any(named: 'selectedMediaIdentity'),
+        selectedMediaHasByteRange: any(named: 'selectedMediaHasByteRange'),
+      ),
+    ).thenAnswer((invocation) async {
+      final action =
+          invocation.positionalArguments[2] as void Function(CatCatchNotifier);
+      action(notifier);
+      return true;
+    });
+    await _pumpFlowSelection(tester, [audio], service: service);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('catcatch_media_selection_dialog')),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    verify(
+      () => notifier.selectMedia('flow-task', audio, mergeAudioUrl: null),
     ).called(1);
   });
 }

@@ -118,15 +118,17 @@ class _HomePageState extends ConsumerState<HomePage> {
         final awaitingSelection = task.steps.any(
           (step) => step.type.name == 'userSelecting' && step.running,
         );
-        if (task.selectedMedia != null || !awaitingSelection || task.status.name != 'running') {
+        if (task.selectedMedia != null ||
+            !awaitingSelection ||
+            task.status.name != 'running') {
           _openMediaSelectionDialogs.remove(task.id);
           _dismissedMediaSelectionDialogs.remove(task.id);
         }
         final flowManaged =
             task.metadata[catcatch_task.CatCatchTask.flowManagedSelectionKey] ==
                 'true';
-        final flowCandidates = task.metadata[
-            catcatch_task.CatCatchTask.flowSelectionCandidatesKey];
+        final flowCandidates = task
+            .metadata[catcatch_task.CatCatchTask.flowSelectionCandidatesKey];
         if (task.status.name == 'running' &&
             (!flowManaged || flowCandidates != null) &&
             awaitingSelection &&

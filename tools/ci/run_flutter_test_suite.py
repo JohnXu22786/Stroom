@@ -214,6 +214,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     ),
     "tasks-workflow": (
         "task_flow/**",
+        "pages/home_media_selection_dialog_test.dart",
         "pages/task_list_shared_test.dart",
         "pages/unified_task_list/file_opener_media_test.dart",
         "pages/unified_task_list/**",

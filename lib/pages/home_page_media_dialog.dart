@@ -5,7 +5,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
   void _showMediaSelectionDialog(
     BuildContext context,
     catcatch_task.CatCatchTask task,
-  ) => _showCatCatchSelectionDialog(context, task);
+  ) =>
+      _showCatCatchSelectionDialog(context, task);
 
   void _showFlowMediaSelectionDialog(
     BuildContext context,
@@ -59,13 +60,18 @@ extension _HomePageMediaDialogExt on _HomePageState {
           selectableMedia.map((media) => media.selectionIdentity).toSet(),
       singleSelection: true,
       onConfirm: (selectedMedia) async {
-        final video = selectedMedia.firstWhere(
-          (media) => !media.isAudio,
-          orElse: () => selectedMedia.first,
-        );
-        final audio = selectedMedia
-            .where((media) => media.isAudio && media.groupId == video.groupId)
+        final pairedVideo = selectedMedia
+            .where((media) => media.isLikelySplitTrack && media.isVideo)
             .firstOrNull;
+        final selected = pairedVideo ?? selectedMedia.first;
+        final pairedAudio = pairedVideo == null
+            ? null
+            : selectedMedia
+                .where(
+                  (media) =>
+                      media.isAudio && media.groupId == pairedVideo.groupId,
+                )
+                .firstOrNull;
         try {
           final started = await ref
               .read(taskFlowExecutionServiceProvider)
@@ -74,12 +80,12 @@ extension _HomePageMediaDialogExt on _HomePageState {
                 true,
                 (notifier) => notifier.selectMedia(
                   task.id,
-                  video,
-                  mergeAudioUrl: audio?.url,
+                  selected,
+                  mergeAudioUrl: pairedAudio?.url,
                 ),
-                selectedMediaUrl: video.url,
-                selectedMediaIdentity: video.selectionIdentity,
-                selectedMediaHasByteRange: video.hasByteRange,
+                selectedMediaUrl: selected.url,
+                selectedMediaIdentity: selected.selectionIdentity,
+                selectedMediaHasByteRange: selected.hasByteRange,
               );
           if (started) return true;
           if (context.mounted) {
@@ -144,8 +150,8 @@ extension _HomePageMediaDialogExt on _HomePageState {
           final implicitSingleIdentity = confirmableIdentities?.length == 1
               ? confirmableIdentities!.single
               : null;
-          final canImplicitlyConfirmSingle =
-              selectedIdentities.isEmpty && implicitSingleIdentity != null
+          final canImplicitlyConfirmSingle = selectedIdentities.isEmpty &&
+                  implicitSingleIdentity != null
               ? visibleResources.any(
                   (media) => media.selectionIdentity == implicitSingleIdentity,
                 )
@@ -247,8 +253,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                       final completesPair =
                                           media.isLikelySplitTrack &&
                                               selectedMedia.length == 1 &&
-                                              selectedMedia.single
-                                                      .groupId ==
+                                              selectedMedia.single.groupId ==
                                                   media.groupId &&
                                               selectedMedia.single.isAudio !=
                                                   media.isAudio;
@@ -460,7 +465,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
               ),
               FilledButton(
                 onPressed: hasConfirmableSelection || canImplicitlyConfirmSingle
-                        ? () async {
+                    ? () async {
                         final selectedMediaList = selectedIdentities.isEmpty &&
                                 implicitSingleIdentity != null
                             ? mediaList
