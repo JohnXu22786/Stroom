@@ -259,6 +259,57 @@ void main() {
     expect(folderValue, findsOneWidget);
   });
 
+  testWidgets('long run-mode parameter keys wrap without hiding their values',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const parameterKey =
+        'experimental_provider_configuration_override_for_desktop';
+    const parameterValue = 'Readable local value';
+    final flows = _Flows();
+    final flow = TaskFlowDefinition(
+      name: 'Parameter details',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {parameterKey: parameterValue},
+        ),
+      ],
+    );
+    await flows.saveFlow(flow);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [taskFlowListProvider.overrideWith((_) => flows)],
+      child: MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TaskFlowBuilderPage(flowId: flow.id, startInRunMode: true),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FlowBlockCard));
+    await tester.pumpAndSettle();
+
+    final dialog = find.byType(AlertDialog);
+    final parameterLabel = find.text('$parameterKey: ');
+    final displayedValue = find.text(parameterValue);
+    expect(dialog, findsOneWidget);
+    expect(parameterLabel, findsOneWidget);
+    expect(displayedValue, findsOneWidget);
+    expect(tester.getRect(parameterLabel).right,
+        lessThanOrEqualTo(tester.getRect(dialog).right));
+    expect(tester.getRect(displayedValue).right,
+        lessThanOrEqualTo(tester.getRect(dialog).right));
+    expect(tester.getSize(parameterLabel).height,
+        greaterThan(tester.getSize(displayedValue).height));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an initial template stays an independent unsaved draft',
       (tester) async {
     final flows = _Flows();

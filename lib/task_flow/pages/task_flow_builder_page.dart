@@ -1519,12 +1519,14 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: cs.primary),
+                        Flexible(
+                          child: Text(
+                            '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: cs.primary),
+                          ),
                         ),
                         Expanded(
                           // Friendly display — raw ids (assistant uuids,
