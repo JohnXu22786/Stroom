@@ -123,7 +123,20 @@ class _TocWidgetState extends State<TocWidget> {
   @override
   void initState() {
     super.initState();
-    tocController._onListChanged = (list) {
+    _attachController(tocController);
+  }
+
+  @override
+  void didUpdateWidget(covariant TocWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _detachController(oldWidget.controller);
+      _attachController(widget.controller);
+    }
+  }
+
+  void _attachController(TocController controller) {
+    controller._onListChanged = (list) {
       if (list.length < _tocList.length && currentIndex >= list.length) {
         currentIndex = list.length - 1;
       }
@@ -133,15 +146,20 @@ class _TocWidgetState extends State<TocWidget> {
         refresh();
       });
     };
-    tocController._onIndexChangedCallback = (index) {
-      final selfIndex = tocController._index2toc[index]?.selfIndex;
+    controller._onIndexChangedCallback = (index) {
+      final selfIndex = controller._index2toc[index]?.selfIndex;
       if (selfIndex != null && _tocList.length > selfIndex) {
         refreshIndex(selfIndex);
-        controller.scrollToIndex(currentIndex,
+        this.controller.scrollToIndex(currentIndex,
             preferPosition: AutoScrollPosition.begin);
       }
     };
-    _refreshList(tocController.tocList);
+    _refreshList(controller.tocList);
+  }
+
+  void _detachController(TocController controller) {
+    controller._onIndexChangedCallback = null;
+    controller._onListChanged = null;
   }
 
   void _refreshList(List<Toc> list) {
@@ -151,11 +169,10 @@ class _TocWidgetState extends State<TocWidget> {
 
   @override
   void dispose() {
-    super.dispose();
+    _detachController(tocController);
     controller.dispose();
     _tocList.clear();
-    tocController._onIndexChangedCallback = null;
-    tocController._onListChanged = null;
+    super.dispose();
   }
 
   @override
