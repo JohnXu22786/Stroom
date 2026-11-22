@@ -14,9 +14,8 @@ void main() {
     _ => const Locale('fr', 'FR'),
   };
   final scale = double.tryParse(query['scale'] ?? '') ?? 2;
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
 
   SharedPreferences.setMockInitialValues({});
   runApp(
