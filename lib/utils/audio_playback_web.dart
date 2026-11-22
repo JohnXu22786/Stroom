@@ -25,11 +25,16 @@ class _PendingAudioLoad {
 
 /// Web 实现：使用 HTML5 AudioElement
 class AudioPlayerAdapter {
+  AudioPlayerAdapter({html.AudioElement Function()? createAudio})
+      : _createAudio = createAudio ?? html.AudioElement.new;
+
+  final html.AudioElement Function() _createAudio;
   html.AudioElement? _audio;
   _PendingAudioLoad? _pendingLoad;
   int _loadGeneration = 0;
   bool _disposed = false;
   Timer? _positionTimer;
+  StreamSubscription<html.Event>? _endedSub;
   bool _playing = false;
 
   final StreamController<Duration> _positionCtrl =
@@ -66,9 +71,20 @@ class AudioPlayerAdapter {
     final generation = ++_loadGeneration;
     _pendingLoad?.cancel();
     _pendingLoad = null;
+    unawaited(_endedSub?.cancel());
+    _endedSub = null;
     _audio?.pause();
-    final audio = html.AudioElement();
+    final audio = _createAudio();
     _audio = audio;
+    _endedSub = audio.onEnded.listen((_) {
+      if (_disposed || !identical(_audio, audio)) return;
+
+      _playing = false;
+      final seconds =
+          audio.duration.isFinite ? audio.duration : audio.currentTime;
+      _positionCtrl.add(Duration(milliseconds: (seconds * 1000).toInt()));
+      _stateCtrl.add(null);
+    });
     audio.src = url;
     audio.preload = 'auto';
 
@@ -200,6 +216,8 @@ class AudioPlayerAdapter {
     _loadGeneration++;
     _pendingLoad?.cancel();
     _pendingLoad = null;
+    unawaited(_endedSub?.cancel());
+    _endedSub = null;
     _audio?.pause();
     _positionTimer?.cancel();
     _audio = null;
