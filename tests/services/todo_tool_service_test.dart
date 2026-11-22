@@ -153,6 +153,57 @@ void main() {
     });
 
     test(
+        'preserves the previous list when replacement contains an invalid field',
+        () async {
+      await TodoToolService.handleTodoWrite({
+        'todos': [
+          {'content': 'Existing task', 'status': 'pending', 'priority': 'high'},
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      await expectLater(
+        TodoToolService.handleTodoWrite({
+          'todos': [
+            {'content': 'Partial replacement'},
+            {'content': 'Invalid task', 'status': 42},
+          ],
+        }, locale: const Locale('en', 'US')),
+        throwsA(isA<TypeError>()),
+      );
+
+      final readResult = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
+      expect(readResult, contains('Existing task'));
+      expect(readResult, isNot(contains('Partial replacement')));
+    });
+
+    test(
+        'replaces the previous list after validating a valid replacement',
+        () async {
+      await TodoToolService.handleTodoWrite({
+        'todos': [
+          {'content': 'Existing task'},
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      final result = await TodoToolService.handleTodoWrite({
+        'todos': [
+          {'content': 'Replacement task', 'status': 'in_progress'},
+        ],
+      }, locale: const Locale('en', 'US'));
+
+      expect(result, contains('Active todo items: 1'));
+      final readResult = await TodoToolService.handleTodoRead(
+        {},
+        locale: const Locale('en', 'US'),
+      );
+      expect(readResult, contains('Replacement task'));
+      expect(readResult, isNot(contains('Existing task')));
+    });
+
+    test(
         'returns formatted response with active count excluding completed and cancelled',
         () async {
       final result = await TodoToolService.handleTodoWrite({
