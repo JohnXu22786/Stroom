@@ -11,6 +11,7 @@ import 'model_config_page.dart';
 import 'ocr_model_config_page.dart';
 import 'simple_model_config_page.dart';
 import 'provider_settings_panel.dart';
+import '../widgets/constrained_text.dart';
 
 class ProviderConfigDetailPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -842,10 +843,9 @@ class _ProviderConfigDetailPageState
                         ),
                       ),
                       if (_hostController.text.isNotEmpty)
-                        Text(
+                        ConstrainedText(
                           _hostController.text,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,
