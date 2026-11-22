@@ -63,7 +63,7 @@ DioException createSseClientWebFailure({
   Locale? locale,
 }) {
   final requestOptions = RequestOptions(path: url);
-  if (statusCode != null && statusCode >= 400) {
+  if (statusCode != null && statusCode > 0) {
     return DioException(
       requestOptions: requestOptions,
       response: Response(

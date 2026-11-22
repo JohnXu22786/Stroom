@@ -35,6 +35,19 @@ void main() {
       expect(error.response?.statusCode, 503);
     });
 
+    test('HTTP 304 remains a response error', () {
+      final error = createSseClientWebFailure(
+        url: 'https://example.test/chat',
+        statusCode: 304,
+        statusText: 'Not Modified',
+        responseBody: 'cached response',
+      );
+
+      expect(error.type, DioExceptionType.badResponse);
+      expect(error.response?.statusCode, 304);
+      expect(error.response?.data, 'cached response');
+    });
+
     test('XHR without an HTTP response is a connection error', () {
       final error = createSseClientWebFailure(
         url: 'https://example.test/chat',
