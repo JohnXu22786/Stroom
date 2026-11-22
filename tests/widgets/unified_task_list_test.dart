@@ -465,7 +465,8 @@ void main() {
 
       await pumpPageWithBackground(tester, tasks);
       final targetTitle = find.text('Expanded background target');
-      final targetCard = find.byKey(const ValueKey('expanded-background-target'));
+      final targetCard =
+          find.byKey(const ValueKey('expanded-background-target'));
       final expandIndicator = find.descendant(
         of: targetCard,
         matching: find.byType(AnimatedRotation),
@@ -520,7 +521,8 @@ void main() {
 
       await pumpPageWithSynthesis(tester, tasks);
       final targetTitle = find.text('Expanded synthesis target');
-      final targetCard = find.byKey(const ValueKey('expanded-synthesis-target'));
+      final targetCard =
+          find.byKey(const ValueKey('expanded-synthesis-target'));
       final expandIndicator = find.descendant(
         of: targetCard,
         matching: find.byType(AnimatedRotation),

@@ -310,8 +310,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     });
     ref.listen(backgroundTasksProvider, (previous, tasks) {
       final previousStatuses = {
-        for (final task in previous ?? <BackgroundTask>[])
-          task.id: task.status,
+        for (final task in previous ?? <BackgroundTask>[]) task.id: task.status,
       };
       for (final task in tasks) {
         if (task.status == TaskStatus.running &&
@@ -324,8 +323,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     });
     ref.listen(taskListProvider, (previous, tasks) {
       final previousStatuses = {
-        for (final task in previous ?? <SynthesisTask>[])
-          task.id: task.status,
+        for (final task in previous ?? <SynthesisTask>[]) task.id: task.status,
       };
       for (final task in tasks) {
         if ((task.status == TaskStatus.running ||
