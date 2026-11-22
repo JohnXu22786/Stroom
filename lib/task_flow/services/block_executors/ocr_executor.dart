@@ -275,18 +275,14 @@ Future<String> executeOcrBlock({
     providerValue: config.typeConfig['requestSizeBudgetBytes'],
   );
   final selectedGroupId = llmModelGroupIdForConfig(config);
-  final isLegacyOcrConfig = selectedGroupId == null;
   final ocrConfig = OcrConfig(
     host: config.host,
     apiKey: config.key,
     model: model.modelId,
     systemPrompt: strings.ocrDefaultSystemPrompt,
     requestSizeBudgetBytes: requestSizeBudgetBytes,
-    routingGroupId:
-        selectedGroupId ?? llmOcrModelGroupIdForConfig(config.id, model.id),
-    routingLocalModelId: model.id,
-    routingAccountId:
-        isLegacyOcrConfig ? llmOcrAccountIdForConfig(config.id) : null,
+    routingGroupId: selectedGroupId,
+    routingLocalModelId: selectedGroupId == null ? null : model.id,
     routingDisplayName: '${config.providerName} · ${model.name}',
     typeConfig: model.typeConfig,
     customParams: model.customParams,
