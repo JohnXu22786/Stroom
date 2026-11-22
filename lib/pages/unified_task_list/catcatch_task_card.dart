@@ -602,14 +602,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ],
                         if (step.failed && step.error != null) ...[
                           const SizedBox(height: 4),
-                          ConstrainedText(
+                          SelectableText(
                             step.error!,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.red.shade400,
                             ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
                           if (!widget.isFlowManaged)
