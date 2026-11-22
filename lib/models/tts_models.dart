@@ -665,6 +665,10 @@ class ProviderConfigItem {
   List<CustomParam> customParams;
   List<ReasoningParam> reasoningParams;
 
+  /// Whether this MCP service is available to assistants. Group and master
+  /// switches act as parents and never change this preference.
+  bool enabled;
+
   /// 端点类型（'openai' | 'anthropic'），该供应商下所有对话统一走此协议。
   /// 旧配置缺省 'openai'（v3 原位演进，无需迁移步骤）。
   String endpointType;
@@ -680,6 +684,7 @@ class ProviderConfigItem {
     List<CustomParam>? customParams,
     List<ReasoningParam>? reasoningParams,
     this.endpointType = 'openai',
+    this.enabled = true,
   })  : id = id ?? 'config_${const Uuid().v4()}',
         models = models ?? [],
         customParams = customParams ?? [],
@@ -696,6 +701,7 @@ class ProviderConfigItem {
         'customParams': customParams.map((p) => p.toMap()).toList(),
         'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
         'endpointType': endpointType,
+        'enabled': enabled,
       };
 
   factory ProviderConfigItem.fromMap(Map<String, dynamic> map) =>
@@ -722,6 +728,7 @@ class ProviderConfigItem {
                 .toList() ??
             [],
         endpointType: map['endpointType'] as String? ?? 'openai',
+        enabled: map['enabled'] as bool? ?? true,
       );
 
   ProviderConfigItem copy() => ProviderConfigItem(
@@ -735,6 +742,7 @@ class ProviderConfigItem {
         customParams: customParams.map((p) => p.copy()).toList(),
         reasoningParams: reasoningParams.map((p) => p.copy()).toList(),
         endpointType: endpointType,
+        enabled: enabled,
       );
 }
 

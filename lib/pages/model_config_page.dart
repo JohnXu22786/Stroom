@@ -980,6 +980,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       customParams: base.customParams,
       reasoningParams: base.reasoningParams,
       endpointType: base.endpointType,
+      enabled: base.enabled,
     );
 
     final updated = ProviderEntry(

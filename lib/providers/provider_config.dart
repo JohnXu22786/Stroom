@@ -53,6 +53,7 @@ bool isMcpProviderConfigEnabled(
   ProviderConfigItem config,
   List<McpProviderGroup> groups,
 ) {
+  if (!config.enabled) return false;
   final groupId = config.groupId ?? defaultMcpGroupIdForConfig(config);
   return groups.where((group) => group.id == groupId).firstOrNull?.enabled ??
       true;

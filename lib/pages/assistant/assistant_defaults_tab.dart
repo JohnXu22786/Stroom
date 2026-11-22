@@ -170,8 +170,38 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           ];
     final seen = <String>{};
     final tools = <ToolDefinition>[];
+    final mcpEntry =
+        entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+    final namesByConfigId = mcpPlaceholderToolNamesByConfigId(
+      mcpEntry?.configs ?? const <ProviderConfigItem>[],
+    );
+    final configuredMcp = <ToolDefinition>[];
+    if (isMcpMasterSwitchEnabled(entriesState)) {
+      for (final config in mcpEntry?.configs ?? const <ProviderConfigItem>[]) {
+        if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) {
+          continue;
+        }
+        final name = mcpProviderConfigToolName(
+          config,
+          placeholderNamesByConfigId: namesByConfigId,
+        );
+        if (name == null) continue;
+        configuredMcp.add(ToolDefinition(
+          name: name,
+          description: config.models.isNotEmpty
+              ? (config.models[0].typeConfig['description'] as String? ?? '')
+              : '',
+          parameters: const {
+            'type': 'object',
+            'properties': <String, dynamic>{},
+            'required': <String>[],
+          },
+        ));
+      }
+    }
     for (final t in filterMcpSearchToolDefinitions([
       ...builtins,
+      ...configuredMcp,
       ...adapter.mcpToolDefinitions,
     ], mcpEnabled: isMcpMasterSwitchEnabled(entriesState))) {
       if (!disabledNames.contains(t.name) && seen.add(t.name)) tools.add(t);

@@ -477,15 +477,26 @@ class _McpServerConfigDialogState
             widget.configIndex < configs.length
         ? configs[widget.configIndex]
         : null;
+    final targetGroupId = existingConfig?.groupId ??
+        widget.groupId ??
+        defaultMcpGroupIdForProvider(name);
+    final parentGroupEnabled = ref
+            .read(providerEntriesProvider)
+            .mcpGroups
+            .where((group) => group.id == targetGroupId)
+            .firstOrNull
+            ?.enabled ??
+        true;
     final newConfig = ProviderConfigItem(
       id: existingConfig?.id,
       providerName: name,
-      groupId: existingConfig == null ? widget.groupId : existingConfig.groupId,
+      groupId: targetGroupId,
       host: _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '',
       key: '',
       models: [modelConfig],
+      enabled: existingConfig?.enabled ?? (entry.enabled && parentGroupEnabled),
     );
 
     if (existingConfig != null) {
