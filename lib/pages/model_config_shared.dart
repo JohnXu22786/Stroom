@@ -115,12 +115,12 @@ class TrimSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final customPresets = ref.watch(customTrimPresetsProvider);
 
-    Widget buildTrimPresetLabel(String? presetId) {
+    String buildTrimPresetLabel(String? presetId) {
       if (presetId == null) {
         final nonePreset = getBuiltinTrimPresets().firstWhere(
           (p) => p['id'] == BuiltinTrimPresetIds.none,
         );
-        return Text(nonePreset['name'] as String);
+        return nonePreset['name'] as String;
       }
       final all = getAllTrimPresets(customPresets);
       for (final p in all) {
@@ -131,10 +131,10 @@ class TrimSection extends ConsumerWidget {
               : AppLocalizations.of(context)!.batchRuleEnd;
           final name = p['name'] as String;
           final duration = p['durationSeconds'] as double;
-          return Text('$name（$dirLabel，${duration.toStringAsFixed(3)}s）');
+          return '$name（$dirLabel，${duration.toStringAsFixed(3)}s）';
         }
       }
-      return Text(AppLocalizations.of(context)!.modelNoTrim);
+      return AppLocalizations.of(context)!.modelNoTrim;
     }
 
     return Card(
@@ -144,6 +144,7 @@ class TrimSection extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Icon(Icons.content_cut, size: 20),
                 const SizedBox(width: 8),
@@ -158,21 +159,32 @@ class TrimSection extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
                 if (selectedPresetId != null &&
                     selectedPresetId != BuiltinTrimPresetIds.none)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DefaultTextStyle(
-                      style: TextStyle(fontSize: 11, color: Colors.orange[800]),
-                      child: buildTrimPresetLabel(selectedPresetId),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DefaultTextStyle(
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange[800],
+                          ),
+                          child: ConstrainedText(
+                            buildTrimPresetLabel(selectedPresetId),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],
