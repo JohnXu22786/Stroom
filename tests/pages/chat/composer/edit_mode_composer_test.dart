@@ -10,6 +10,7 @@ import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
@@ -444,6 +445,43 @@ void main() {
           of: find.byType(ChatComposerWidget),
           matching: find.byType(TextField),
         );
+
+    testWidgets(
+      'localized editor heading stays within a narrow dialog at increased text scale',
+      (tester) async {
+        await openFullscreenEditor(
+          tester,
+          editingMessageText: 'message being edited',
+          locale: const Locale('fr', 'FR'),
+        );
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 1100));
+
+        final title = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText &&
+                widget.data == 'Modifier le message',
+          ),
+        );
+        expect(title, findsOneWidget);
+        expect(tester.getRect(title).right, lessThanOrEqualTo(320));
+        expect(
+          find.descendant(
+            of: find.byType(Dialog),
+            matching: find.byIcon(Icons.close),
+          ),
+          findsOneWidget,
+        );
+        expect(dialogTextField(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+        await tester.binding.setSurfaceSize(null);
+      },
+    );
 
     String mainInputText(WidgetTester tester) =>
         tester.widget<TextField>(mainInputField()).controller?.text ?? '';
