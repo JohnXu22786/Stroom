@@ -14,9 +14,8 @@ void main() {
     localeParts.first,
     localeParts.length > 1 ? localeParts[1] : null,
   );
-  final brightness = query['theme'] == 'dark'
-      ? Brightness.dark
-      : Brightness.light;
+  final brightness =
+      query['theme'] == 'dark' ? Brightness.dark : Brightness.light;
   const syntheticUrl =
       'https://media.example.test/recordings/recording-session-2026-11-22-interview-take-two-final-transcript.wav';
   final task = BackgroundTask(
