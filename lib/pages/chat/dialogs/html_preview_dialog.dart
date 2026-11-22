@@ -225,36 +225,37 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
               right: 0,
               child: Row(
                 children: [
-                  const Spacer(),
-                  // Title label
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.sizeOf(context).width * 0.75,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withValues(
-                          alpha: 0.85,
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.sizeOf(context).width * 0.75,
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: ConstrainedText(
-                        AppLocalizations.of(context)!.chatHtmlPreview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: cs.onSurface,
-                          fontWeight: FontWeight.w500,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest.withValues(
+                              alpha: 0.85,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ConstrainedText(
+                            AppLocalizations.of(context)!.chatHtmlPreview,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  const Spacer(),
                   if (widget.showEditSourceAction)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
