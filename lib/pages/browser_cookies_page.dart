@@ -379,6 +379,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                 child: Row(
                   children: [
                     Expanded(
+                      flex: 3,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -407,15 +408,20 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                       ),
                     ),
                     if (cookie['path'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Text(
-                          cookie['path'] as String? ?? '',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colorScheme.onSurfaceVariant.withValues(
-                              alpha: 0.6,
+                      Flexible(
+                        flex: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ConstrainedText(
+                            cookie['path'] as String? ?? '',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
