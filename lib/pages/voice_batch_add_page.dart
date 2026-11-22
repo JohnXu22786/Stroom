@@ -408,12 +408,21 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             // 名称/ID 顺序
             Text(l10n.voiceBatchFieldOrder),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                _buildOrderChip(true, l10n.voiceBatchNameThenId),
-                const SizedBox(width: 8),
-                _buildOrderChip(false, l10n.voiceBatchIdThenName),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: _buildOrderChip(true, l10n.voiceBatchNameThenId),
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: _buildOrderChip(false, l10n.voiceBatchIdThenName),
+                  ),
+                ],
+              ),
             ),
             // 多列选择器
             if (_detectedColumns > 2) ...[
