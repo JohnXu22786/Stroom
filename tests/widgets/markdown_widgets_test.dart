@@ -929,13 +929,13 @@ $$
 
       expect(
         render(copied),
-        contains(isA<Text>().having((widget) => widget.data, 'data',
-            'original code builder')),
+        contains(isA<Text>()
+            .having((widget) => widget.data, 'data', 'original code builder')),
       );
       expect(
         render(replaced),
-        contains(isA<Text>().having((widget) => widget.data, 'data',
-            'replacement code builder')),
+        contains(isA<Text>().having(
+            (widget) => widget.data, 'data', 'replacement code builder')),
       );
 
       final wrapped = original.copy(wrapper: (child, _, _) => child);
