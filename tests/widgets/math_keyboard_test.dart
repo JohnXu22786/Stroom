@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/math_keyboard.dart';
 
 Future<void> _selectCategory(WidgetTester tester, String category) async {
@@ -32,6 +33,52 @@ Future<void> _pumpKeyboard(WidgetTester tester, List<String> commands,
 }
 
 void main() {
+  testWidgets('active labels use the shared single-line reveal widget', (
+    tester,
+  ) async {
+    const activeLabel = '公式 12345678901234567890';
+    const location = '结构位置 1234567890';
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MathKeyboard(
+          activeLabel: activeLabel,
+          location: location,
+          onDismiss: () {},
+          onPlot: () {},
+          onCommand: (_, _) async {},
+        ),
+      ),
+    ));
+
+    final formulaLabel = find.byType(ConstrainedText).first;
+    expect(
+      tester.widget<ConstrainedText>(formulaLabel).data,
+      '$activeLabel · $location',
+    );
+    expect(tester.widget<ConstrainedText>(formulaLabel).maxLines, 1);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MathNumericKeyboard(
+          activeLabel: activeLabel,
+          onInsert: (_, {cursorFromEnd}) {},
+          onBackspace: () {},
+          onMoveCaret: (_) {},
+          onDismiss: () {},
+        ),
+      ),
+    ));
+
+    final numericLabel = find.byType(ConstrainedText);
+    expect(numericLabel, findsOneWidget);
+    expect(
+      tester.widget<ConstrainedText>(numericLabel).data,
+      '$activeLabel · 数学键盘（仅数值）',
+    );
+    expect(tester.widget<ConstrainedText>(numericLabel).maxLines, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [320.0, 390.0]) {
     testWidgets(
         'Latin QWERTY shows all letters at $width with persistent Shift and pinned navigation',

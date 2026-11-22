@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../models/math_input_catalog.dart';
+import 'constrained_text.dart';
 
 /// All editing is structural: templates use MathLive's selection/placeholder
 /// arguments, and navigation operates on the rendered document, not text.
@@ -143,7 +144,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
                     Expanded(
                       child: Tooltip(
                         message: '点击公式定位，长按选择；左右逐项移动，上下切换结构层',
-                        child: Text(
+                        child: ConstrainedText(
                           widget.enabled
                               ? '${widget.activeLabel} · ${widget.location}'
                               : '${widget.activeLabel} · 正在准备数学输入…',
@@ -642,7 +643,7 @@ class MathNumericKeyboard extends StatelessWidget {
                   children: [
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
+                      child: ConstrainedText(
                         '$activeLabel · 数学键盘（仅数值）',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
