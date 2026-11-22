@@ -43,6 +43,7 @@ class TaskFlowCard extends ConsumerStatefulWidget {
 
 class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   bool _expanded = false;
+  final Map<String, CatCatchTaskCardViewState> _catCatchCardViewStates = {};
 
   @override
   void initState() {
@@ -215,6 +216,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
               executionId: execution.id,
               executionStatus: execution.status,
               taskListViewportHeight: widget.taskListViewportHeight,
+              catCatchCardViewStates: _catCatchCardViewStates,
             ),
             if (execution.error != null)
               Padding(
@@ -303,12 +305,14 @@ class _ExpandedContent extends ConsumerWidget {
   final String executionId;
   final FlowExecutionStatus executionStatus;
   final double? taskListViewportHeight;
+  final Map<String, CatCatchTaskCardViewState> catCatchCardViewStates;
 
   const _ExpandedContent({
     required this.subTasks,
     required this.executionId,
     required this.executionStatus,
     required this.taskListViewportHeight,
+    required this.catCatchCardViewStates,
   });
 
   @override
@@ -761,6 +765,10 @@ class _ExpandedContent extends ConsumerWidget {
         isUnread: false,
         isFlowManaged: true,
         taskListViewportHeight: taskListViewportHeight,
+        viewState: catCatchCardViewStates.putIfAbsent(
+          task.id,
+          CatCatchTaskCardViewState.new,
+        ),
       );
     }
     return _buildFallbackCard(subTask, cs, strings);
