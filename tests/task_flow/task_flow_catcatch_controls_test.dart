@@ -50,7 +50,7 @@ class _Downloads extends CatCatchNotifier {
 
   @override
   void batchSelectMedia(String id, List<MediaResource> media,
-          {String? mergeAudioUrl}) {
+      {String? mergeAudioUrl}) {
     batches.add(media);
     batchMergeAudio = mergeAudioUrl;
   }
