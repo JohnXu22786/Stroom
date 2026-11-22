@@ -269,9 +269,8 @@ void main() {
             brightness: Brightness.dark,
             useMaterial3: true,
           ),
-          themeMode: brightness == Brightness.dark
-              ? ThemeMode.dark
-              : ThemeMode.light,
+          themeMode:
+              brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context)
                 .copyWith(textScaler: const TextScaler.linear(1.8)),
@@ -302,7 +301,8 @@ void main() {
         greaterThanOrEqualTo(tester.getRect(date).bottom),
       );
       final exception = tester.takeException();
-      expect(exception, isNull, reason: '$brightness: ${exception?.toString()}');
+      expect(exception, isNull,
+          reason: '$brightness: ${exception?.toString()}');
     }
   });
 
