@@ -5259,8 +5259,8 @@ void main() {
       await tester.ensureVisible(systemDescription);
       expect(
         tester.getRect(systemDescription).overlaps(
-          const Rect.fromLTWH(0, 0, 320, 640),
-        ),
+              const Rect.fromLTWH(0, 0, 320, 640),
+            ),
         isTrue,
       );
     });
