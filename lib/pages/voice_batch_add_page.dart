@@ -354,16 +354,16 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 分隔符选择行
-            Row(
-              children: [
-                Text(l10n.voiceBatchSeparator),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
+            // 分隔符选择：窄屏上下排列，宽屏维持原有同行布局。
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 420;
+                final dropdown = DropdownButton<String>(
                   dropdownColor: StroomMenuStyle.surface(context),
                   borderRadius: StroomMenuStyle.borderRadius,
                   value: _selectedSeparator,
                   isDense: true,
+                  isExpanded: isNarrow,
                   items: _separatorOptions
                       .map(
                         (opt) => DropdownMenuItem(
@@ -382,8 +382,28 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                       _parseInput();
                     }
                   },
-                ),
-              ],
+                );
+                final label = Text(l10n.voiceBatchSeparator);
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      label,
+                      const SizedBox(height: 4),
+                      SizedBox(width: double.infinity, child: dropdown),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    label,
+                    const SizedBox(width: 8),
+                    dropdown,
+                  ],
+                );
+              },
             ),
             // 自定义分隔符输入
             if (_selectedSeparator == '自定义...') ...[
