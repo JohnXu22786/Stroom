@@ -2267,7 +2267,7 @@
   "backgroundOptimizationIgnoreBattery": "バッテリーの最適化を無効にする",
   "backgroundOptimizationExactAlarm": "正確なアラームを許可する (より信頼性の高いバックグラウンド アクティビティ)",
   "backgroundOptimizationWatchdogTitle": "アラームマネージャーのウォッチドッグ",
-  "backgroundOptimizationWatchdogDetail": "有効にすると、Android はネイティブ アラームを使用して 5 分ごとにバックグラウンド サービスをチェックします。システムがプロセスを強制終了すると、アラームによってプロセスが再起動されます。\n\nデバイスが Doze モードにある間もアラームは機能し、再起動後に再スケジュールされます。\n\nバックグラウンド タスクに大きく依存するユーザーに推奨されます。\nバッテリーへの影響: 非常に低い。デバイスはチェックごとに短時間スリープ状態を解除します。",
+  "backgroundOptimizationWatchdogDetail": "有効にすると、Android はネイティブ アラームを使用して 30 分ごとにバックグラウンド サービスをチェックします。システムがプロセスを強制終了すると、アラームによってプロセスが再起動されます。\n\nデバイスが Doze モードにある間もアラームは機能し、再起動後に再スケジュールされます。\n\nバックグラウンド タスクに大きく依存するユーザーに推奨されます。\nバッテリーへの影響: 非常に低い。デバイスはチェックごとに短時間スリープ状態を解除します。",
   "backgroundOptimizationSaveWatchdogFailed": "ウォッチドッグ設定を保存できませんでした。変わってなかった",
   "backgroundOptimizationWatchdogActivationFailed": "ウォッチドッグをアクティブにできませんでした。バックグラウンドサービスのステータスは未確認です",
   "backgroundOptimizationColdStartTitle": "アプリ起動時にサービスを復元する",

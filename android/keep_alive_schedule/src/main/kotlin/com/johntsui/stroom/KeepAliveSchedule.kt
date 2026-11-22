@@ -1,7 +1,7 @@
 package com.johntsui.stroom
 
 internal object KeepAliveScheduleIntervals {
-    const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L
+    const val KEEP_ALIVE_INTERVAL_MS = 30 * 60 * 1000L
     const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
 }
 

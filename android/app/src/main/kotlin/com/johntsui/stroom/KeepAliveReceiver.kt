@@ -47,8 +47,7 @@ import id.flutter.flutter_background_service.BackgroundService
  *
  * Failure backoff: Android 15+ caps dataSync foreground services at 6h per
  * 24h; once exhausted every start throws. After 3 consecutive failures the
- * watchdog backs off to a 30-minute interval instead of waking the device
- * every 5 minutes forever. A successful start resets the counter; only the
+ * watchdog remains on a 30-minute interval. A successful start resets the counter; only the
  * explicit startKeepAlive from Dart (user start) resets it — cold-start
  * restore / app resume use rearmKeepAlive, which re-arms WITHOUT resetting
  * (so persistent-failure devices stay in backoff).
@@ -84,7 +83,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
         // 连续启动失败后的退避间隔（见类注释）。
         // MainActivity 的 rearmKeepAlive 需要读取，用于退避状态下
-        // 沿用 30 分钟间隔（而不是用 5 分钟间隔替换退避闹钟）。
+        // 正常间隔与退避间隔均为 30 分钟，保留各自的调度状态。
         const val MAX_CONSECUTIVE_FAILURES = 3
         const val FAILURE_BACKOFF_INTERVAL_MS = KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS
 
@@ -311,7 +310,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                                         triggerAt,
                                         // 退避间隔同样作用于重复周期：API < 23 上
                                         // 只有首触发间隔会被尊重，重复周期必须显式
-                                        // 传 intervalMs，否则退避设备仍每 5 分钟
+                                        // 传 intervalMs，否则退避设备仍每 30 分钟
                                         // 被唤醒一次。
                                         intervalMs,
                                         inexactPendingIntent,
@@ -502,9 +501,8 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     serviceEnabled && watchdogEnabled
                 ) {
                     // 与 MainActivity.rearmKeepAlive 一致：已处于退避状态
-                    // 时沿用 30 分钟间隔，而不是用 5 分钟间隔替换掉
-                    // 退避闹钟（否则持久失败设备每次开机/更新都会被
-                    // 额外唤醒一次并失败一次）。
+                    // 时沿用对应的 30 分钟调度间隔，重启/更新后保留
+                    // 调度状态，避免持久失败设备额外唤醒并重试。
                     val failures = prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0)
                     val interval = if (failures >= MAX_CONSECUTIVE_FAILURES) {
                         FAILURE_BACKOFF_INTERVAL_MS

@@ -8146,7 +8146,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'When enabled, Android checks the background service every 5 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.';
+      'When enabled, Android checks the background service every 30 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
@@ -20214,7 +20214,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'When enabled, Android checks the background service every 5 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.';
+      'When enabled, Android checks the background service every 30 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>

@@ -241,7 +241,7 @@ class MainActivity : FlutterActivity() {
                     Log.i(TAG, "Keep-alive: start requested from Dart")
                     val scheduled = KeepAliveReceiver.scheduleExplicitStartAlarm(this)
                     // 用户显式启动看门狗：清零连续失败计数，
-                    // 恢复正常的 5 分钟调度间隔。
+                    // 恢复正常的 30 分钟调度间隔。
                     KeepAliveReceiver.resetFailureCount(this)
                     result.success(scheduled)
                 }
@@ -250,8 +250,8 @@ class MainActivity : FlutterActivity() {
                     // 不清零失败计数 —— 否则持久失败环境（Android 15
                     // dataSync 上限、无电池豁免等）下每次打开应用都会
                     // 把退避计数器清零，看门狗永远无法进入退避保护。
-                    // 调度间隔同样尊重失败计数：已处于退避状态时沿用
-                    // 30 分钟间隔，而不是用 5 分钟间隔替换掉退避闹钟。
+                    // 调度间隔同样尊重失败计数：当前正常间隔和失败退避
+                    // 均为 30 分钟，恢复后保留对应的调度状态。
                     Log.i(TAG, "Keep-alive: re-arm requested from Dart")
                     val failures = getSharedPreferences(
                         "FlutterSharedPreferences", Context.MODE_PRIVATE

@@ -8,6 +8,12 @@ import org.junit.Test
 
 class KeepAliveScheduleTest {
     @Test
+    fun routineKeepAliveWatchdogUsesThirtyMinuteInterval() {
+        assertEquals(30 * 60 * 1000L, KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS)
+        assertEquals(30 * 60 * 1000L, KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS)
+    }
+
+    @Test
     fun exactAndInexactWatchdogsAndRevocationBackupUseDistinctPendingIntentIdentity() {
         assertNotEquals(KEEP_ALIVE_ALARM_ACTION, KEEP_ALIVE_REVOCATION_BACKUP_ACTION)
         assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)

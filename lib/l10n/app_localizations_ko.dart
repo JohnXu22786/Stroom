@@ -7926,7 +7926,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      '활성화하면 Android가 기본 알람을 사용해 5분마다 백그라운드 서비스를 확인합니다. 시스템이 프로세스를 종료하면 알람이 서비스를 다시 시작합니다.\n\n기기가 Doze 모드인 동안에도 알람이 작동하며, 재부팅 후 다시 예약됩니다.\n\n백그라운드 작업을 자주 사용하는 사용자에게 권장합니다.\n배터리 영향: 매우 낮음. 확인할 때마다 기기가 잠시 깨어납니다.';
+      '활성화하면 Android가 기본 알람을 사용해 30분마다 백그라운드 서비스를 확인합니다. 시스템이 프로세스를 종료하면 알람이 서비스를 다시 시작합니다.\n\n기기가 Doze 모드인 동안에도 알람이 작동하며, 재부팅 후 다시 예약됩니다.\n\n백그라운드 작업을 자주 사용하는 사용자에게 권장합니다.\n배터리 영향: 매우 낮음. 확인할 때마다 기기가 잠시 깨어납니다.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
@@ -19670,7 +19670,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      '활성화하면 Android가 기본 알람을 사용해 5분마다 백그라운드 서비스를 확인합니다. 시스템이 프로세스를 종료하면 알람이 서비스를 다시 시작합니다.\n\n기기가 Doze 모드인 동안에도 알람이 작동하며, 재부팅 후 다시 예약됩니다.\n\n백그라운드 작업을 자주 사용하는 사용자에게 권장합니다.\n배터리 영향: 매우 낮음. 확인할 때마다 기기가 잠시 깨어납니다.';
+      '활성화하면 Android가 기본 알람을 사용해 30분마다 백그라운드 서비스를 확인합니다. 시스템이 프로세스를 종료하면 알람이 서비스를 다시 시작합니다.\n\n기기가 Doze 모드인 동안에도 알람이 작동하며, 재부팅 후 다시 예약됩니다.\n\n백그라운드 작업을 자주 사용하는 사용자에게 권장합니다.\n배터리 영향: 매우 낮음. 확인할 때마다 기기가 잠시 깨어납니다.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>

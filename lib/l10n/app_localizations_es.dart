@@ -8269,7 +8269,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Cuando está habilitado, Android verifica el servicio en segundo plano cada 5 minutos usando una alarma nativa. Si el sistema finaliza el proceso, la alarma lo reinicia.\n\nLa alarma sigue funcionando mientras el dispositivo está en modo Doze y se reprograma después de reiniciar.\n\nRecomendado para usuarios que dependen en gran medida de tareas en segundo plano.\nImpacto de la batería: muy bajo; el dispositivo se activa brevemente para cada comprobación.';
+      'Cuando está habilitado, Android verifica el servicio en segundo plano cada 30 minutos usando una alarma nativa. Si el sistema finaliza el proceso, la alarma lo reinicia.\n\nLa alarma sigue funcionando mientras el dispositivo está en modo Doze y se reprograma después de reiniciar.\n\nRecomendado para usuarios que dependen en gran medida de tareas en segundo plano.\nImpacto de la batería: muy bajo; el dispositivo se activa brevemente para cada comprobación.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
@@ -20537,7 +20537,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Cuando está habilitado, Android verifica el servicio en segundo plano cada 5 minutos usando una alarma nativa. Si el sistema finaliza el proceso, la alarma lo reinicia.\n\nLa alarma sigue funcionando mientras el dispositivo está en modo Doze y se reprograma después de reiniciar.\n\nRecomendado para usuarios que dependen en gran medida de tareas en segundo plano.\nImpacto de la batería: muy bajo; el dispositivo se activa brevemente para cada comprobación.';
+      'Cuando está habilitado, Android verifica el servicio en segundo plano cada 30 minutos usando una alarma nativa. Si el sistema finaliza el proceso, la alarma lo reinicia.\n\nLa alarma sigue funcionando mientras el dispositivo está en modo Doze y se reprograma después de reiniciar.\n\nRecomendado para usuarios que dependen en gran medida de tareas en segundo plano.\nImpacto de la batería: muy bajo; el dispositivo se activa brevemente para cada comprobación.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>

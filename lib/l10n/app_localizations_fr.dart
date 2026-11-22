@@ -8290,7 +8290,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Lorsque cette option est activée, Android vérifie le service en arrière-plan toutes les 5 minutes au moyen d’une alarme native. Si le système arrête le processus, l’alarme le redémarre.\n\nL’alarme fonctionne même lorsque l’appareil est en mode Doze et est reprogrammée après un redémarrage.\n\nRecommandé aux personnes qui dépendent fortement des tâches en arrière-plan.\nImpact sur la batterie : très faible ; l’appareil se réveille brièvement à chaque vérification.';
+      'Lorsque cette option est activée, Android vérifie le service en arrière-plan toutes les 30 minutes au moyen d’une alarme native. Si le système arrête le processus, l’alarme le redémarre.\n\nL’alarme fonctionne même lorsque l’appareil est en mode Doze et est reprogrammée après un redémarrage.\n\nRecommandé aux personnes qui dépendent fortement des tâches en arrière-plan.\nImpact sur la batterie : très faible ; l’appareil se réveille brièvement à chaque vérification.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
@@ -20588,7 +20588,7 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Lorsque cette option est activée, Android vérifie le service en arrière-plan toutes les 5 minutes au moyen d’une alarme native. Si le système arrête le processus, l’alarme le redémarre.\n\nL’alarme fonctionne même lorsque l’appareil est en mode Doze et est reprogrammée après un redémarrage.\n\nRecommandé aux personnes qui dépendent fortement des tâches en arrière-plan.\nImpact sur la batterie : très faible ; l’appareil se réveille brièvement à chaque vérification.';
+      'Lorsque cette option est activée, Android vérifie le service en arrière-plan toutes les 30 minutes au moyen d’une alarme native. Si le système arrête le processus, l’alarme le redémarre.\n\nL’alarme fonctionne même lorsque l’appareil est en mode Doze et est reprogrammée après un redémarrage.\n\nRecommandé aux personnes qui dépendent fortement des tâches en arrière-plan.\nImpact sur la batterie : très faible ; l’appareil se réveille brièvement à chaque vérification.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>

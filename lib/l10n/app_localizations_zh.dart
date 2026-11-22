@@ -7748,7 +7748,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。';
+      '启用后，Android 系统会每 30 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed => '保存失败，看门狗设置未更改';
@@ -19177,7 +19177,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。';
+      '启用后，Android 系统会每 30 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed => '保存失败，看门狗设置未更改';

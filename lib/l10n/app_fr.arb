@@ -4472,7 +4472,7 @@
   "backgroundOptimizationIgnoreBattery": "Désactiver l’optimisation de la batterie",
   "backgroundOptimizationExactAlarm": "Autoriser les alarmes exactes (activité en arrière-plan plus fiable)",
   "backgroundOptimizationWatchdogTitle": "Surveillance AlarmManager",
-  "backgroundOptimizationWatchdogDetail": "Lorsque cette option est activée, Android vérifie le service en arrière-plan toutes les 5 minutes au moyen d’une alarme native. Si le système arrête le processus, l’alarme le redémarre.\n\nL’alarme fonctionne même lorsque l’appareil est en mode Doze et est reprogrammée après un redémarrage.\n\nRecommandé aux personnes qui dépendent fortement des tâches en arrière-plan.\nImpact sur la batterie : très faible ; l’appareil se réveille brièvement à chaque vérification.",
+  "backgroundOptimizationWatchdogDetail": "Lorsque cette option est activée, Android vérifie le service en arrière-plan toutes les 30 minutes au moyen d’une alarme native. Si le système arrête le processus, l’alarme le redémarre.\n\nL’alarme fonctionne même lorsque l’appareil est en mode Doze et est reprogrammée après un redémarrage.\n\nRecommandé aux personnes qui dépendent fortement des tâches en arrière-plan.\nImpact sur la batterie : très faible ; l’appareil se réveille brièvement à chaque vérification.",
   "backgroundOptimizationSaveWatchdogFailed": "Impossible d’enregistrer le paramètre de surveillance ; il n’a pas été modifié",
   "backgroundOptimizationWatchdogActivationFailed": "Impossible d’activer la surveillance ; l’état du service en arrière-plan n’est pas confirmé",
   "backgroundOptimizationColdStartTitle": "Rétablir le service au lancement de l’application",

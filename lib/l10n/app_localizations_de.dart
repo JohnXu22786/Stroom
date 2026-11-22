@@ -1461,8 +1461,7 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -8261,7 +8260,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Wenn aktiviert, überprüft Android den Hintergrunddienst alle 5 Minuten mithilfe eines nativen Alarms. Beendet das System den Prozess, startet der Alarm ihn neu.\n\nDer Alarm funktioniert auch im Doze-Modus und wird nach einem Neustart des Geräts erneut eingerichtet.\n\nEmpfohlen für Nutzer, die stark auf Hintergrundaufgaben angewiesen sind.\nAuswirkung auf den Akku: sehr gering; das Gerät wird bei jeder Prüfung kurz aktiviert.';
+      'Wenn aktiviert, überprüft Android den Hintergrunddienst alle 30 Minuten mithilfe eines nativen Alarms. Beendet das System den Prozess, startet der Alarm ihn neu.\n\nDer Alarm funktioniert auch im Doze-Modus und wird nach einem Neustart des Geräts erneut eingerichtet.\n\nEmpfohlen für Nutzer, die stark auf Hintergrundaufgaben angewiesen sind.\nAuswirkung auf den Akku: sehr gering; das Gerät wird bei jeder Prüfung kurz aktiviert.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
@@ -13699,8 +13698,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -20499,7 +20497,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Wenn aktiviert, überprüft Android den Hintergrunddienst alle 5 Minuten mithilfe eines nativen Alarms. Beendet das System den Prozess, startet der Alarm ihn neu.\n\nDer Alarm funktioniert auch im Doze-Modus und wird nach einem Neustart des Geräts erneut eingerichtet.\n\nEmpfohlen für Nutzer, die stark auf Hintergrundaufgaben angewiesen sind.\nAuswirkung auf den Akku: sehr gering; das Gerät wird bei jeder Prüfung kurz aktiviert.';
+      'Wenn aktiviert, überprüft Android den Hintergrunddienst alle 30 Minuten mithilfe eines nativen Alarms. Beendet das System den Prozess, startet der Alarm ihn neu.\n\nDer Alarm funktioniert auch im Doze-Modus und wird nach einem Neustart des Geräts erneut eingerichtet.\n\nEmpfohlen für Nutzer, die stark auf Hintergrundaufgaben angewiesen sind.\nAuswirkung auf den Akku: sehr gering; das Gerät wird bei jeder Prüfung kurz aktiviert.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>

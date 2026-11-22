@@ -4472,7 +4472,7 @@
   "backgroundOptimizationIgnoreBattery": "تعطيل تحسين البطارية",
   "backgroundOptimizationExactAlarm": "السماح بالتنبيهات الدقيقة (لنشاط خلفية أكثر موثوقية)",
   "backgroundOptimizationWatchdogTitle": "مراقب AlarmManager",
-  "backgroundOptimizationWatchdogDetail": "عند التفعيل، يتحقق Android من خدمة الخلفية كل 5 دقائق باستخدام تنبيه أصلي. إذا أوقف النظام العملية، يعيد التنبيه تشغيلها.\n\nيستمر التنبيه في وضع Doze ويُعاد جدولته بعد إعادة التشغيل.\n\nموصى به للمستخدمين الذين يعتمدون كثيرًا على مهام الخلفية.\nتأثير البطارية: منخفض جدًا؛ إذ يستيقظ الجهاز لفترة وجيزة عند كل تحقق.",
+  "backgroundOptimizationWatchdogDetail": "عند التفعيل، يتحقق Android من خدمة الخلفية كل 30 دقيقة باستخدام تنبيه أصلي. إذا أوقف النظام العملية، يعيد التنبيه تشغيلها.\n\nيستمر التنبيه في وضع Doze ويُعاد جدولته بعد إعادة التشغيل.\n\nموصى به للمستخدمين الذين يعتمدون كثيرًا على مهام الخلفية.\nتأثير البطارية: منخفض جدًا؛ إذ يستيقظ الجهاز لفترة وجيزة عند كل تحقق.",
   "backgroundOptimizationSaveWatchdogFailed": "تعذّر حفظ إعداد المراقب؛ ولم يتغير.",
   "backgroundOptimizationWatchdogActivationFailed": "تعذّر تفعيل المراقب؛ حالة خدمة الخلفية غير مؤكدة",
   "backgroundOptimizationColdStartTitle": "استعادة الخدمة عند فتح التطبيق",

@@ -8240,7 +8240,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Quando ativado, o Android verifica o serviço em segundo plano a cada 5 minutos usando um alarme nativo. Se o sistema encerrar o processo, o alarme o reinicia.\n\nO alarme continua funcionando no modo Doze e é programado novamente após a reinicialização do dispositivo.\n\nRecomendado para quem depende muito de tarefas em segundo plano.\nImpacto na bateria: muito baixo; o dispositivo é ativado brevemente a cada verificação.';
+      'Quando ativado, o Android verifica o serviço em segundo plano a cada 30 minutos usando um alarme nativo. Se o sistema encerrar o processo, o alarme o reinicia.\n\nO alarme continua funcionando no modo Doze e é programado novamente após a reinicialização do dispositivo.\n\nRecomendado para quem depende muito de tarefas em segundo plano.\nImpacto na bateria: muito baixo; o dispositivo é ativado brevemente a cada verificação.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
@@ -20473,7 +20473,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get backgroundOptimizationWatchdogDetail =>
-      'Quando ativado, o Android verifica o serviço em segundo plano a cada 5 minutos usando um alarme nativo. Se o sistema encerrar o processo, o alarme o reinicia.\n\nO alarme continua funcionando no modo Doze e é programado novamente após a reinicialização do dispositivo.\n\nRecomendado para quem depende muito de tarefas em segundo plano.\nImpacto na bateria: muito baixo; o dispositivo é ativado brevemente a cada verificação.';
+      'Quando ativado, o Android verifica o serviço em segundo plano a cada 30 minutos usando um alarme nativo. Se o sistema encerrar o processo, o alarme o reinicia.\n\nO alarme continua funcionando no modo Doze e é programado novamente após a reinicialização do dispositivo.\n\nRecomendado para quem depende muito de tarefas em segundo plano.\nImpacto na bateria: muito baixo; o dispositivo é ativado brevemente a cada verificação.';
 
   @override
   String get backgroundOptimizationSaveWatchdogFailed =>
