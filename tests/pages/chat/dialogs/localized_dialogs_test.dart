@@ -14,7 +14,15 @@ import 'package:stroom/pages/chat/dialogs/video_preview_dialog.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
-  Widget localizedApp(Widget home) => MaterialApp(
+  Widget localizedApp(
+    Widget home, {
+    TextScaler textScaler = TextScaler.noScaling,
+  }) =>
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+          child: child!,
+        ),
         locale: const Locale('zh', 'CN'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
@@ -274,6 +282,11 @@ void main() {
 
   testWidgets('HTML preview dialog shows localized title and close tooltip',
       (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final previousPlatform = InAppWebViewPlatform.instance;
     InAppWebViewPlatform.instance = _NeverCreatedWebViewPlatform();
     addTearDown(() {
@@ -283,21 +296,27 @@ void main() {
           previousPlatform ?? _NeverCreatedWebViewPlatform();
     });
 
-    await tester.pumpWidget(localizedApp(Builder(
-      builder: (context) => TextButton(
-        onPressed: () => showHtmlPreviewDialog(
-          context: context,
-          htmlCode: '<p>preview</p>',
+    await tester.pumpWidget(localizedApp(
+      Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showHtmlPreviewDialog(
+            context: context,
+            htmlCode: '<p>preview</p>',
+            showEditSourceAction: true,
+          ),
+          child: const Text('open'),
         ),
-        child: const Text('open'),
       ),
-    )));
+      textScaler: TextScaler.linear(3),
+    ));
 
     await tester.tap(find.text('open'));
     await tester.pump();
 
     expect(find.text('HTML 预览'), findsOneWidget);
     expect(find.byTooltip('关闭预览'), findsOneWidget);
+    expect(find.byTooltip('编辑'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 
