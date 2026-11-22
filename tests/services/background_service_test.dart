@@ -1,13 +1,19 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/startup_preferences.dart';
+
+class _MockAndroidServiceInstance extends Mock
+    implements AndroidServiceInstance {}
 
 /// A mock implementation of FlutterBackgroundServicePlatform for testing
 /// persistence behavior. Extends the real platform interface to control
@@ -385,6 +391,36 @@ void main() {
         return keepAliveSchedulingResult;
       },
     );
+  });
+
+  group('BackgroundService - foreground notification', () {
+    test(
+        'sets the Android foreground notification once and does not refresh it',
+        () {
+      final service = _MockAndroidServiceInstance();
+      when(() => service.on('stopService'))
+          .thenAnswer((_) => const Stream.empty());
+      when(() => service.setForegroundNotificationInfo(
+            title: any(named: 'title'),
+            content: any(named: 'content'),
+          )).thenAnswer((_) async {});
+
+      fakeAsync((async) {
+        onStart(service);
+        verify(() => service.setForegroundNotificationInfo(
+              title: 'Stroom',
+              content: '后台任务运行中…',
+            )).called(1);
+
+        clearInteractions(service);
+        async.elapse(const Duration(seconds: 5));
+
+        verifyNever(() => service.setForegroundNotificationInfo(
+              title: 'Stroom',
+              content: '后台任务运行中…',
+            ));
+      });
+    });
   });
 
   group('BackgroundService - basic', () {
