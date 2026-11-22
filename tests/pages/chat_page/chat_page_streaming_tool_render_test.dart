@@ -39,7 +39,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 /// textStream-phase rendering (the exact phase where the bug occurred).
 class _HangingStreamManager extends ChatStreamManager {
   final pending = <Completer<StreamResult>>[];
-  final receivedHistories = <List<ChatMessage>>[];
 
   _HangingStreamManager() : super(null);
 
@@ -55,13 +54,11 @@ class _HangingStreamManager extends ChatStreamManager {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
-    String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
     Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) {
-    receivedHistories.add(List<ChatMessage>.from(history));
     final completer = Completer<StreamResult>();
     pending.add(completer);
     return completer.future;
@@ -198,15 +195,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.edit_outlined).first);
       await tester.pump();
       await _sendMessage(tester, 'Edited question');
-
-      expect(manager.receivedHistories, hasLength(1));
-      final replacementHistory = manager.receivedHistories.single;
-      expect(replacementHistory, hasLength(history.length + 1));
-      expect(
-        replacementHistory.map((message) => message.id).toSet(),
-        hasLength(replacementHistory.length),
-        reason: 'the edited user message must appear only once in stream state',
-      );
 
       expect(find.text('Old answer'), findsNothing);
       expect(find.text('Later question'), findsNothing);

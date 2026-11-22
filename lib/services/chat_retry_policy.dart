@@ -139,24 +139,9 @@ Future<void> waitForRetryOrCancellation(
 Future<bool> _isRateLimit(Object error) async {
   if (error is! DioException || error.response?.statusCode != 429) return false;
   final responseData = error.response?.data;
-  final bufferedResponseBody =
-      error.requestOptions.extra['stroom.chat.bufferedStreamErrorBody'];
-  final responseBody = bufferedResponseBody != null
-      ? _flattenErrorDetails(bufferedResponseBody)
-      : responseData is ResponseBody
-          ? await _readResponseBody(responseData)
-          : _flattenErrorDetails(responseData);
-  // Preserve a buffered stream body for the downstream provider error handler;
-  // classification must not consume the only copy of the API diagnostics.
-  if (responseData is ResponseBody && error.response != null) {
-    error.requestOptions.extra['stroom.chat.bufferedStreamErrorBody'] =
-        responseBody;
-    try {
-      error.response!.data = responseBody;
-    } on TypeError {
-      // Keep the request-options copy when a typed Response rejects String.
-    }
-  }
+  final responseBody = responseData is ResponseBody
+      ? await _readResponseBody(responseData)
+      : _flattenErrorDetails(responseData);
   final details = [
     responseBody,
     error.response?.statusMessage ?? '',
@@ -195,8 +180,7 @@ Future<bool> _isRateLimit(Object error) async {
     'too many requests',
     'throttl',
   ];
-  return throttleMarkers.any(details.contains) ||
-      _retryAfter(error, maximum: const Duration(minutes: 15)) != null;
+  return throttleMarkers.any(details.contains);
 }
 
 Future<String> _readResponseBody(ResponseBody body) async {
@@ -205,7 +189,7 @@ Future<String> _readResponseBody(ResponseBody body) async {
       <int>[],
       (buffer, chunk) => buffer..addAll(chunk),
     );
-    return utf8.decode(bytes, allowMalformed: true);
+    return utf8.decode(bytes, allowMalformed: true).toLowerCase();
   } catch (_) {
     return '';
   }

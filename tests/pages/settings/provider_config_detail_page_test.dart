@@ -69,22 +69,6 @@ class _PersistingProviderEntriesNotifier extends ProviderEntriesNotifier {
   _PersistingProviderEntriesNotifier(ProviderEntry entry) {
     state = ProviderEntriesState(entries: [entry]);
   }
-
-  @override
-  Future<void> update(
-    String id,
-    ProviderEntry updated, {
-    bool requirePersistence = false,
-  }) async {
-    final entries =
-        state.entries.map((entry) => entry.id == id ? updated : entry).toList();
-    state = ProviderEntriesState(entries: entries);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      'provider_entries',
-      jsonEncode(entries.map((entry) => entry.toMap()).toList()),
-    );
-  }
 }
 
 /// Extension to present the page for testing
@@ -272,7 +256,7 @@ void main() {
           'params': {'cursor': 'saved-cursor', 'limit': 7},
           'metadata': [
             'first',
-            {'enabled': true},
+            {'enabled': true}
           ],
         };
         final entry = _createTestEntry(
@@ -300,7 +284,10 @@ void main() {
               locale: const Locale('zh', 'CN'),
               supportedLocales: AppLocalizations.supportedLocales,
               localizationsDelegates: AppLocalizations.localizationsDelegates,
-              home: ProviderConfigDetailPage(entryId: entry.id, configIndex: 0),
+              home: ProviderConfigDetailPage(
+                entryId: entry.id,
+                configIndex: 0,
+              ),
             ),
           ),
         );
@@ -309,7 +296,10 @@ void main() {
         await tester.tap(find.text('Original model'));
         await tester.pumpAndSettle();
         expect(find.byType(LlmModelConfigPage), findsOneWidget);
-        await tester.enterText(find.byType(TextField).at(1), 'edited-model-id');
+        await tester.enterText(
+          find.byType(TextField).at(1),
+          'edited-model-id',
+        );
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
         expect(find.byType(LlmModelConfigPage), findsNothing);
@@ -341,8 +331,7 @@ void main() {
 
       final compressionDropdown = tester
           .widgetList<DropdownButton<String>>(
-            find.byType(DropdownButton<String>),
-          )
+              find.byType(DropdownButton<String>))
           .where((dropdown) => dropdown.value == 'flac');
       expect(
         compressionDropdown,
@@ -352,8 +341,7 @@ void main() {
 
       final fallbackDropdown = tester
           .widgetList<DropdownButton<String>>(
-            find.byType(DropdownButton<String>),
-          )
+              find.byType(DropdownButton<String>))
           .where((dropdown) => dropdown.value == 'all');
       expect(
         fallbackDropdown,

@@ -1138,19 +1138,6 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
   Future<void> _load() async {
     _unparsedConversationRecords = [];
-    try {
-      await _loadFromConversationRepository();
-      return;
-    } catch (error) {
-      _repositoryReady = false;
-      debugPrint(
-        'Conversation repository unavailable; reading legacy data: $error',
-      );
-      await AppLogService.warning(
-        'ConversationsNotifier',
-        '新对话仓库未通过校验，继续读取 SharedPreferences 旧记录',
-      );
-    }
     // 启动窗口内用户创建了新对话（合并进内存）时，_load 完成后
     // 需要把合并结果落盘（见 finally）：否则"下次持久化前退出"
     // 会丢失新对话。
@@ -1855,9 +1842,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         // Keep a copy across the asynchronous delete. A newer snapshot may
         // acquire this exact path while deleteFile is in flight.
         final originalFiles = <String, Uint8List>{};
-        for (final identity in AttachmentStorage.deletionIdentities(
-          storagePath,
-        )) {
+        for (final identity
+            in AttachmentStorage.deletionIdentities(storagePath)) {
           final bytes = await AttachmentStorage.readFile(identity);
           if (bytes != null) originalFiles[identity] = bytes;
         }
@@ -1869,9 +1855,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         if (mounted) stillProtected.addAll(_attachmentPathsInSnapshot(state));
         final stillProtectedIdentities = <String>{};
         for (final path in stillProtected) {
-          stillProtectedIdentities.addAll(
-            AttachmentStorage.deletionIdentities(path),
-          );
+          stillProtectedIdentities
+              .addAll(AttachmentStorage.deletionIdentities(path));
         }
         if (AttachmentStorage.deletionIdentities(storagePath)
             .any(stillProtectedIdentities.contains)) {
@@ -1890,9 +1875,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         }
         final reintroducedIdentities = <String>{};
         for (final path in reintroducedPaths) {
-          reintroducedIdentities.addAll(
-            AttachmentStorage.deletionIdentities(path),
-          );
+          reintroducedIdentities
+              .addAll(AttachmentStorage.deletionIdentities(path));
         }
         if (AttachmentStorage.deletionIdentities(storagePath)
             .any(reintroducedIdentities.contains)) {
@@ -1946,9 +1930,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         );
         // Preserve a newer request queued while this delete was in flight.
         if (identical(
-          _pendingDraftAttachmentCacheDeletes[cache],
-          cleanupRequest,
-        )) {
+            _pendingDraftAttachmentCacheDeletes[cache], cleanupRequest)) {
           _pendingDraftAttachmentCacheDeletes.remove(cache);
         }
       } catch (error) {
@@ -2001,14 +1983,6 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         );
         return false;
       }
-    }
-
-    if (_repositoryReady &&
-        !await _persistRepositorySnapshot(
-          snapshot,
-          Map<String, int>.from(_completeMessageSnapshotGenerations),
-        )) {
-      return false;
     }
 
     // Tier 1: full save
@@ -2089,8 +2063,6 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               temporaryPausedRemainingMilliseconds:
                   c.temporaryPausedRemainingMilliseconds,
               temporaryExpiryVersion: c.temporaryExpiryVersion,
-              schemaVersion: c.schemaVersion,
-              legacyFields: c.legacyFields,
             ),
           )
           .toList();

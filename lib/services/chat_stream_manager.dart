@@ -19,7 +19,6 @@ import '../providers/system_assistant_provider.dart';
 import '../providers/locale_provider.dart'
     show appLocalizationsForLocale, localeProvider;
 import '../providers/provider_config.dart';
-import '../ai_gateway/ai_gateway.dart' show AiGateway;
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
@@ -109,35 +108,17 @@ class ChatStreamManager {
     String? fullReply,
     required List<String> reasoningSections,
     required bool hasAccumulatedToolCalls,
-    bool hasMediaAttachments = false,
   }) {
     return (textSections?.any((section) => section.isNotEmpty) ??
             (fullReply?.isNotEmpty ?? false)) ||
         reasoningSections.any((s) => s.isNotEmpty) ||
-        hasAccumulatedToolCalls ||
-        hasMediaAttachments;
-  }
-
-  @visibleForTesting
-  static void upsertPartialAssistantMessage(
-    List<ChatMessage> history,
-    ChatMessage partial,
-  ) {
-    final index = history.indexWhere((message) => message.id == partial.id);
-    if (index < 0) {
-      history.add(partial);
-    } else {
-      history[index] = partial;
-    }
+        hasAccumulatedToolCalls;
   }
 
   ChatStreamManager([this._ref])
       : _transportRetryPolicy = const TransportRetryPolicy(),
         _retryDelay = null {
-    _adapter = ChatAdapter(
-      routingRuntime: _ref == null ? null : AiGateway.sharedPlatform(),
-      localeOverride: () => _ref?.read(localeProvider),
-    );
+    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
   }
 
   @visibleForTesting
@@ -148,10 +129,7 @@ class ChatStreamManager {
   })  : _ref = ref,
         _transportRetryPolicy = transportRetryPolicy,
         _retryDelay = retryDelay {
-    _adapter = ChatAdapter(
-      routingRuntime: _ref == null ? null : AiGateway.sharedPlatform(),
-      localeOverride: () => _ref?.read(localeProvider),
-    );
+    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
   }
 
   // ── 公开 getter ──
@@ -371,7 +349,6 @@ class ChatStreamManager {
     String? streamingMsgId,
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
-    String? selectedAccountId,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -475,7 +452,6 @@ class ChatStreamManager {
       convId,
       assistant: assistant,
       entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
-      selectedAccountId: selectedAccountId,
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
@@ -600,7 +576,6 @@ class ChatStreamManager {
                 assistant: assistant,
                 entriesState:
                     entriesStateOverride ?? _ref?.read(providerEntriesProvider),
-                selectedAccountId: selectedAccountId,
                 onToolCallIntent: () => state.toolCallStarted = true,
                 onTextDelta: state.appendText,
                 onRequestBody: (body) => state.requestBodySnapshot = body,
@@ -640,8 +615,7 @@ class ChatStreamManager {
           break;
         } catch (e) {
           final fullReplySnapshot = state.fullReply;
-          final hasPartialOutput =
-              fullReplySnapshot.isNotEmpty || state.mediaAttachments.isNotEmpty;
+          final hasPartialOutput = fullReplySnapshot.isNotEmpty;
           final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
               state.reasoningSections.any((section) => section.isNotEmpty);
           final canContinuePartial = shouldAutoContinueStream(
@@ -673,11 +647,6 @@ class ChatStreamManager {
             cancellation: state.cancellationSignal.future,
           );
           if (state.cancelledByUser) rethrow;
-
-          // A retry is a new provider request whose contentOrder starts at
-          // zero. Keep its text/media after everything already received in
-          // this assistant reply, including outputs buffered before an error.
-          state.contentOrderOffset = state.nextContentOrder;
 
           if (hasPartialOutput) {
             final continuation = ChatMessage(
@@ -923,26 +892,5 @@ class ChatStreamManager {
       }
     }
     return 0;
-  }
-
-  @visibleForTesting
-  static ({List<ChatMessage> head, List<ChatMessage> tail})
-      splitCompactionHistory(
-    List<ChatMessage> requestHistory, {
-    String? tailStartId,
-  }) {
-    final tailStart = _findTailStart(requestHistory);
-    var headStart = 0;
-    if (tailStartId != null) {
-      final idx = requestHistory.indexWhere((m) => m.id == tailStartId);
-      if (idx >= 0) headStart = idx;
-    }
-    if (headStart >= tailStart) {
-      return (head: const [], tail: const []);
-    }
-    return (
-      head: requestHistory.sublist(headStart, tailStart),
-      tail: requestHistory.sublist(tailStart),
-    );
   }
 }

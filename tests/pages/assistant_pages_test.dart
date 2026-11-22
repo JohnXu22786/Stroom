@@ -12,7 +12,6 @@ import 'package:stroom/pages/assistant/assistant_shared.dart'
     as assistant_shared;
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
-import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/utils/emojis.dart'
     show EmojiCategories, EmojiCategoryType;
 import 'package:stroom/widgets/constrained_text.dart';
@@ -63,23 +62,6 @@ Widget _localizedAssistantSelectionApp() => MaterialApp(
       supportedLocales: AppLocalizations.supportedLocales,
       home: const AssistantSelectionPage(),
     );
-
-class _LoadedProviderEntriesNotifier extends ProviderEntriesNotifier {
-  _LoadedProviderEntriesNotifier(ProviderEntriesState initialState) {
-    state = initialState;
-  }
-}
-
-Future<_LoadedProviderEntriesNotifier> _loadProviderEntriesFixture() async {
-  final prefs = await SharedPreferences.getInstance();
-  final rawEntries = jsonDecode(prefs.getString('provider_entries')!) as List;
-  final entries = rawEntries
-      .map(
-        (raw) => ProviderEntry.fromMap(Map<String, dynamic>.from(raw as Map)),
-      )
-      .toList();
-  return _LoadedProviderEntriesNotifier(ProviderEntriesState(entries: entries));
-}
 
 BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
   final context = tester.element(find.byType(AssistantSelectionPage));
@@ -892,44 +874,45 @@ void main() {
       expect(find.text('浏览可直接使用的内置助手，点击条目可预览后再添加。'), findsOneWidget);
     });
 
-    testWidgets('import instructions wrap naturally instead of being clipped', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      'import instructions wrap naturally instead of being clipped',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.storefront));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('导入助手'));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          createTestApp(
+            assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.storefront));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('导入助手'));
+        await tester.pumpAndSettle();
 
-      final hint = AppLocalizations.of(
-        tester.element(find.byType(AssistantSelectionPage)),
-      )!
-          .assistantImportHint;
-      final hintText = tester.widget<Text>(
-        find.byWidgetPredicate(
-          (widget) => widget is Text && widget.data == hint,
-        ),
-      );
-      expect(hintText.maxLines, isNull);
-      expect(hintText.overflow, isNull);
-      expect(find.byType(SingleChildScrollView), findsWidgets);
-      final importAction = find.text('连接目录或导入文件');
-      expect(importAction, findsOneWidget);
-      await tester.ensureVisible(importAction);
-      await tester.pumpAndSettle();
-      expect(tester.getTopLeft(importAction).dy, greaterThanOrEqualTo(0));
-      expect(tester.takeException(), isNull);
-    });
+        final hint = AppLocalizations.of(
+          tester.element(find.byType(AssistantSelectionPage)),
+        )!
+            .assistantImportHint;
+        final hintText = tester.widget<Text>(
+          find.byWidgetPredicate(
+            (widget) => widget is Text && widget.data == hint,
+          ),
+        );
+        expect(hintText.maxLines, isNull);
+        expect(hintText.overflow, isNull);
+        expect(find.byType(SingleChildScrollView), findsWidgets);
+        final importAction = find.text('连接目录或导入文件');
+        expect(importAction, findsOneWidget);
+        await tester.ensureVisible(importAction);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(importAction).dy, greaterThanOrEqualTo(0));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('market cards have no text editing fields', (tester) async {
       await tester.pumpWidget(
@@ -1242,8 +1225,7 @@ void main() {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         tester.view.platformDispatcher.textScaleFactorTestValue = 1.8;
         addTearDown(
-          tester.view.platformDispatcher.clearTextScaleFactorTestValue,
-        );
+            tester.view.platformDispatcher.clearTextScaleFactorTestValue);
         const parameterName = 'very_long_parameter_name_for_layout';
         await tester.pumpWidget(
           createTestApp(
@@ -1282,8 +1264,12 @@ void main() {
         await tester.tap(find.text('Parameter'));
         await tester.pumpAndSettle();
         final heading = find.text('Benutzerdefinierte Parameter');
-        final headingRow =
-            find.ancestor(of: heading, matching: find.byType(Row)).first;
+        final headingRow = find
+            .ancestor(
+              of: heading,
+              matching: find.byType(Row),
+            )
+            .first;
         expect(
           tester.getSize(heading).width,
           greaterThan(tester.getSize(headingRow).width * 0.6),
@@ -1382,7 +1368,9 @@ void main() {
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(disableAnimations: false),
+                data: MediaQuery.of(context).copyWith(
+                  disableAnimations: false,
+                ),
                 child: child!,
               ),
               home: Scaffold(
@@ -1462,9 +1450,9 @@ void main() {
         final helperPainter = TextPainter(
           text: TextSpan(
             text: l10n.assistantCharactersNotTokens,
-            style: DefaultTextStyle.of(helperContext)
-                .style
-                .merge(helperWidget.style),
+            style: DefaultTextStyle.of(helperContext).style.merge(
+                  helperWidget.style,
+                ),
           ),
           textDirection: Directionality.of(helperContext),
           textScaler: MediaQuery.textScalerOf(helperContext),
@@ -1550,9 +1538,9 @@ void main() {
             find.byIcon(Icons.visibility_outlined),
           );
           final headingContext = tester.element(heading);
-          final headingStyle = DefaultTextStyle.of(headingContext)
-              .style
-              .merge(tester.widget<ConstrainedText>(heading).style);
+          final headingStyle = DefaultTextStyle.of(
+            headingContext,
+          ).style.merge(tester.widget<ConstrainedText>(heading).style);
           final headingMeasure = TextPainter(
             text: TextSpan(text: title, style: headingStyle),
             textDirection: Directionality.of(headingContext),
@@ -1997,13 +1985,9 @@ void main() {
           },
         ]),
       });
-      final providerEntriesNotifier = await _loadProviderEntriesFixture();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            providerEntriesProvider.overrideWith(
-              (ref) => providerEntriesNotifier,
-            ),
             assistantProvider.overrideWith((ref) {
               final notifier = AssistantsNotifier();
               notifier.createAssistant(name: '助手编辑', prompt: 'P1');
@@ -2109,13 +2093,9 @@ void main() {
           },
         ]),
       });
-      final providerEntriesNotifier = await _loadProviderEntriesFixture();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            providerEntriesProvider.overrideWith(
-              (ref) => providerEntriesNotifier,
-            ),
             assistantProvider.overrideWith((ref) {
               final notifier = AssistantsNotifier();
               notifier.createAssistant(name: '助手编辑', prompt: 'P1');
@@ -2193,13 +2173,9 @@ void main() {
         // 且只覆盖其中两个模型）。
         'model_order': ['claude-3.5-sonnet | OpenAI', 'gpt-4o | OpenAI'],
       });
-      final providerEntriesNotifier = await _loadProviderEntriesFixture();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            providerEntriesProvider.overrideWith(
-              (ref) => providerEntriesNotifier,
-            ),
             assistantProvider.overrideWith((ref) {
               final notifier = AssistantsNotifier();
               notifier.createAssistant(name: '助手编辑', prompt: 'P1');

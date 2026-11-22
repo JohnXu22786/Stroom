@@ -66,16 +66,13 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
       // 关闭截断时 0 = 不截断，与协议层渲染一致。
       toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
-        _adapter.assistantSettings,
-      ),
+          _adapter.assistantSettings),
     );
     final currentTokens = actualInput == null
         ? estimated
         : (actualInput > estimated ? actualInput : estimated);
-    debugPrint(
-      '[CTX-MGR] convId=$convId current=$currentTokens'
-      ' (actual=$actualInput estimated=$estimated) threshold=$threshold',
-    );
+    debugPrint('[CTX-MGR] convId=$convId current=$currentTokens'
+        ' (actual=$actualInput estimated=$estimated) threshold=$threshold');
     if (currentTokens < threshold) return false;
 
     // 2. 解析压缩任务：提示词（自定义优先，默认内置）+ 模型
@@ -91,19 +88,20 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
 
     // 3. 划分头部（可压缩）与尾部（保留原文）。
     //    head 起点：有摘要时从 compactionTailStartId 之后开始
-    //    （快照之前 = 已压缩内容，不再转写；对齐 opencode hidden）。
-    // Keep the summary within the same prefix sent for this request. During
-    // retries, state.history can still contain later turns that are excluded
-    // from requestHistory and must not leak into a persisted summary.
-    final parts = ChatStreamManager.splitCompactionHistory(
-      requestHistory,
-      tailStartId: conv?.compactionTailStartId,
-    );
-    if (parts.head.isEmpty) return false; // 无新增可压缩内容
+    //    （快照之前 = 已压缩内容，不再转写）。
+    final tailStart = ChatStreamManager._findTailStart(state.history);
+    var headStart = 0;
+    final tailStartId = conv?.compactionTailStartId;
+    if (tailStartId != null) {
+      final idx = state.history.indexWhere((m) => m.id == tailStartId);
+      if (idx >= 0) headStart = idx;
+    }
+    if (headStart >= tailStart) return false; // 无新增可压缩内容
     // The summary prompt below reads only text/tool results; keep originals
     // so attachment-bearing messages do not retain copied full text.
-    final head = parts.head;
-    final tail = parts.tail;
+    final head = state.history.sublist(headStart, tailStart);
+    final tail = state.history.sublist(tailStart);
+    if (head.isEmpty) return false;
 
     // 4. 组装压缩请求：前次摘要（如有）+ 头部转写 + 模板指令
     final previousSummary = conv?.contextSummary;
@@ -138,7 +136,9 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
           final result = rebuildToolResultText(tc);
           final trimmed =
               result.length > 200 ? '${result.substring(0, 200)}…' : result;
-          sb.writeln(strings.contextCompactionToolCall(trimmed, role, tc.name));
+          sb.writeln(
+            strings.contextCompactionToolCall(trimmed, role, tc.name),
+          );
         }
       }
     }
@@ -165,12 +165,8 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     contentCache.retainOnly(tail);
     requestSvc.onUsageEvent =
         (usage, {required bool recordInput, double? costIncrement}) {
-      _commitUsage(
-        convId,
-        usage,
-        recordInput: recordInput,
-        costIncrementOverride: costIncrement,
-      );
+      _commitUsage(convId, usage,
+          recordInput: recordInput, costIncrementOverride: costIncrement);
     };
     String summary;
     try {
@@ -206,10 +202,9 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
         );
     _adapter.getOrCreateService(convId)?.setContextSummary(summary);
     await AppLogService.info(
-      'ChatStreamManager',
-      '[CTX-MGR] 上下文已压缩, convId=$convId, '
-          'head=${head.length} 条消息 → 摘要 ${summary.length} 字符',
-    );
+        'ChatStreamManager',
+        '[CTX-MGR] 上下文已压缩, convId=$convId, '
+            'head=${head.length} 条消息 → 摘要 ${summary.length} 字符');
     return true;
   }
 }

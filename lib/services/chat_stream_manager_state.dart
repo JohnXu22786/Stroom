@@ -37,9 +37,6 @@ class StreamResult {
   /// Tool calls accumulated during the stream.
   final List<ToolCallData> toolCalls;
 
-  /// Media attachments accumulated during the stream.
-  final List<Attachment> attachments;
-
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Used by [buildAgentChainSegments] to group consecutive tool calls
   /// that belong to the same assistant step. Each round is sealed by a
@@ -62,7 +59,6 @@ class StreamResult {
     this.reasoningSections = const [],
     this.textSections = const [],
     this.toolCalls = const [],
-    this.attachments = const [],
     this.toolCallRoundStarts = const [],
     this.blocks = const [],
     this.cancelled = false,
@@ -71,9 +67,8 @@ class StreamResult {
 
   /// Whether the stream produced any content, without joining text sections.
   bool get hasContent =>
-      (_fullReply?.isNotEmpty ?? false) ||
-      textSections.any((section) => section.isNotEmpty) ||
-      attachments.isNotEmpty;
+      _fullReply?.isNotEmpty ??
+      textSections.any((section) => section.isNotEmpty);
 }
 
 // ============================================================================
@@ -870,10 +865,6 @@ class _ConversationStreamState {
 
   /// Accumulator for tool calls across streaming rounds (used for history).
   final List<ToolCallData> accumulatedToolCalls = [];
-  final List<Attachment> mediaAttachments = [];
-  final List<Map<String, dynamic>> orderedContentParts = [];
-  int nextContentOrder = 0;
-  int contentOrderOffset = 0;
 
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Used by buildAgentChainSegments to correctly group consecutive
@@ -908,30 +899,4 @@ class _ConversationStreamState {
   Completer<StreamResult>? resultCompleter;
 
   _ConversationStreamState({required this.convId});
-}
-
-List<Map<String, dynamic>> _orderedAssistantContentParts(
-  _ConversationStreamState state,
-) {
-  final ordered = state.orderedContentParts
-      .map((part) => Map<String, dynamic>.from(part))
-      .toList()
-    ..sort(
-      (left, right) =>
-          (left['contentOrder'] as int).compareTo(right['contentOrder'] as int),
-    );
-  final result = <Map<String, dynamic>>[];
-  for (final part in ordered) {
-    part.remove('contentOrder');
-    if (part['type'] == 'text' &&
-        part['text'] is String &&
-        result.isNotEmpty &&
-        result.last['type'] == 'text') {
-      result.last['text'] =
-          '${result.last['text'] as String}${part['text'] as String}';
-    } else {
-      result.add(part);
-    }
-  }
-  return result;
 }

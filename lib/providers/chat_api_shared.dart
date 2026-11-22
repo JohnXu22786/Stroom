@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../models/ai_stream_event.dart';
-import '../models/chat_message.dart';
 
 // ============================================================================
 // OpenRouter-format app identification headers
@@ -38,15 +37,7 @@ Map<String, String> get openRouterAppHeaders => {
 /// map, or `null` if the data is not a [ResponseBody].
 ///
 /// Extracted as a top-level function for testability.
-const _bufferedStreamErrorBodyExtraKey = 'stroom.chat.bufferedStreamErrorBody';
-
 Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
-  final bufferedBody = e.requestOptions.extra[_bufferedStreamErrorBodyExtraKey];
-  if (bufferedBody is Map) {
-    return Map<String, dynamic>.from(bufferedBody);
-  }
-  if (bufferedBody is String) return {'raw': bufferedBody};
-
   if (e.response?.data is ResponseBody) {
     try {
       final responseBody = e.response!.data as ResponseBody;
@@ -55,18 +46,7 @@ Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
       for (final chunk in bytes) {
         allBytes.addAll(chunk);
       }
-      final parsedBody = <String, dynamic>{'raw': utf8.decode(allBytes)};
-      // Retry classification and downstream diagnostics both need the same
-      // response after the one-shot stream has been read.
-      e.requestOptions.extra[_bufferedStreamErrorBodyExtraKey] = parsedBody;
-      try {
-        e.response!.data = parsedBody;
-      } on TypeError {
-        // A Response<T> can reject this Map at runtime even though Dio exposes
-        // it as Response<dynamic>. The request-options copy remains available
-        // to retry classification in that case.
-      }
-      return parsedBody;
+      return <String, dynamic>{'raw': utf8.decode(allBytes)};
     } catch (_) {
       return null;
     }
@@ -115,7 +95,6 @@ abstract class BaseChatProvider {
   Map<String, List<String>>? get lastResponseHeaders => null;
   String? get lastRequestUrl => null;
   int? get lastResponseStatusCode => null;
-  List<Attachment> get lastMediaAttachments => const [];
 
   /// 最近一次请求的实际 token 计量（来自 API 返回的 usage 字段）。
   ///

@@ -1,12 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
-    show
-        debugPrint,
-        defaultTargetPlatform,
-        TargetPlatform,
-        kIsWeb,
-        visibleForTesting;
+    show debugPrint, defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,10 +19,7 @@ import '../widgets/clear_selected_data_confirmation_dialog.dart';
 import '../widgets/constrained_text.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
-  const BackupRestorePage({super.key, this.clearDataForTest});
-
-  @visibleForTesting
-  final Future<bool> Function(BackupSelection selection)? clearDataForTest;
+  const BackupRestorePage({super.key});
 
   @override
   ConsumerState<BackupRestorePage> createState() => _BackupRestorePageState();
@@ -434,8 +426,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
-      final browserWebsiteDataCleared = await (widget.clearDataForTest ??
-          BackupService.clearSelectedData)(selection);
+      final browserWebsiteDataCleared = await BackupService.clearSelectedData(
+        selection,
+      );
       // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
       if (mounted && progressShown) {
         Navigator.of(context, rootNavigator: true).pop();

@@ -5,8 +5,6 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/providers/chat_api_shared.dart'
-    show parseStreamErrorBody;
 import 'package:stroom/services/chat_retry_policy.dart';
 
 void main() {
@@ -136,9 +134,6 @@ void main() {
         response: Response(
           requestOptions: RequestOptions(path: '/chat'),
           statusCode: 429,
-          headers: Headers.fromMap({
-            'retry-after': ['5'],
-          }),
           data: {
             'error': {
               'type': 'server_error',
@@ -185,97 +180,6 @@ void main() {
           .toList();
 
       expect(calls, 2);
-    });
-
-    test('retries after diagnostics have buffered a streaming error body',
-        () async {
-      var calls = 0;
-      final failure = DioException(
-        requestOptions: RequestOptions(path: '/chat'),
-        response: Response(
-          requestOptions: RequestOptions(path: '/chat'),
-          statusCode: 429,
-          data: ResponseBody(
-            Stream.value(
-              Uint8List.fromList(
-                utf8.encode('{"error":{"type":"rate_limit_error"}}'),
-              ),
-            ),
-            429,
-          ),
-        ),
-        type: DioExceptionType.badResponse,
-      );
-
-      final diagnostics = await parseStreamErrorBody(failure);
-      expect(diagnostics?['raw'], contains('rate_limit_error'));
-
-      await retryRateLimitedStream<String>(() {
-        calls++;
-        if (calls == 1) return Stream.error(failure);
-        return Stream.value('ok');
-      }, policy: const RateLimitRetryPolicy(jitter: false), delay: (_) async {})
-          .toList();
-
-      expect(calls, 2);
-    });
-
-    test('preserves non-throttle streaming response body for diagnostics',
-        () async {
-      final failure = DioException(
-        requestOptions: RequestOptions(path: '/chat'),
-        response: Response(
-          requestOptions: RequestOptions(path: '/chat'),
-          statusCode: 429,
-          data: ResponseBody(
-            Stream.value(Uint8List.fromList(
-              utf8.encode('{"error":{"type":"insufficient_quota"}}'),
-            )),
-            429,
-          ),
-        ),
-        type: DioExceptionType.badResponse,
-      );
-
-      await expectLater(
-        retryRateLimitedStream<String>(
-          () => Stream.error(failure),
-          delay: (_) async {},
-        ),
-        emitsError(same(failure)),
-      );
-
-      expect(failure.response!.data, contains('insufficient_quota'));
-    });
-
-    test('keeps buffered diagnostics when typed response rejects replacement',
-        () async {
-      const responseText = '{"error":{"type":"insufficient_quota"}}';
-      final requestOptions = RequestOptions(path: '/chat');
-      final failure = DioException(
-        requestOptions: requestOptions,
-        response: Response<ResponseBody>(
-          requestOptions: requestOptions,
-          statusCode: 429,
-          data: ResponseBody(
-            Stream.value(Uint8List.fromList(utf8.encode(responseText))),
-            429,
-          ),
-        ),
-        type: DioExceptionType.badResponse,
-      );
-
-      await expectLater(
-        retryRateLimitedStream<String>(
-          () => Stream.error(failure),
-          delay: (_) async {},
-        ),
-        emitsError(same(failure)),
-      );
-
-      expect(failure.response!.data, isA<ResponseBody>());
-      final diagnostics = await parseStreamErrorBody(failure);
-      expect(diagnostics?['raw'], responseText);
     });
 
     test('cancellation interrupts a pending retry delay', () async {
@@ -357,37 +261,6 @@ void main() {
         emitsError(isA<DioException>()),
       );
       expect(calls, 3);
-    });
-
-    test('uses Retry-After as evidence for an opaque throttled 429', () async {
-      var calls = 0;
-      final delays = <Duration>[];
-      final failure = DioException(
-        requestOptions: RequestOptions(path: '/chat'),
-        response: Response(
-          requestOptions: RequestOptions(path: '/chat'),
-          statusCode: 429,
-          statusMessage: 'request rejected',
-          headers: Headers.fromMap({
-            'retry-after': ['5'],
-          }),
-          data: {'message': 'provider rejected request'},
-        ),
-        type: DioExceptionType.badResponse,
-      );
-
-      final events = await retryRateLimitedStream<String>(
-        () {
-          calls++;
-          return calls == 1 ? Stream.error(failure) : Stream.value('ok');
-        },
-        policy: const RateLimitRetryPolicy(jitter: false),
-        delay: (duration) async => delays.add(duration),
-      ).toList();
-
-      expect(events, ['ok']);
-      expect(calls, 2);
-      expect(delays, [const Duration(seconds: 5)]);
     });
 
     test('honors an HTTP-date Retry-After header', () async {

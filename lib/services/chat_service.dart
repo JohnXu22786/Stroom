@@ -13,7 +13,6 @@ import '../models/mcp.dart' show McpServerConfig;
 import '../models/tool_call.dart';
 import '../providers/locale_provider.dart' show appLocalizationsForLocale;
 import '../providers/chat_api_provider.dart';
-import '../providers/llm_routed_chat_provider.dart';
 import '../providers/provider_config.dart';
 import 'chat_protocol.dart';
 import 'context_manager.dart'
@@ -188,12 +187,10 @@ class ChatService {
   UsageEventCallback? onUsageEvent;
 
   Map<String, dynamic>? _lastResponseData;
-  String? _lastInputTranscript;
   Map<String, String>? _lastRequestHeaders;
   Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
-  List<Attachment> _lastMediaAttachments = const [];
 
   /// Construct an instance backed by a real provider and model config.
   /// Optionally accepts [providerConfig] for provider-level params to merge.
@@ -231,14 +228,6 @@ class ChatService {
   @visibleForTesting
   BaseChatProvider? get provider => _provider;
 
-  /// Applies a one-request account override to the routed chat adapter.
-  void selectRoutedAccountForNextRequest(String? accountId) {
-    final provider = _provider;
-    if (provider is LlmRoutedChatProvider) {
-      provider.selectedAccountId = accountId;
-    }
-  }
-
   /// The provider config used by this service instance (for test use only).
   @visibleForTesting
   ProviderConfigItem? get providerConfig => _providerConfig;
@@ -256,7 +245,6 @@ class ChatService {
 
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
-  String? get lastInputTranscript => _lastInputTranscript;
   Map<String, String>? get lastRequestHeaders =>
       _lastRequestHeaders ?? _provider?.lastRequestHeaders;
   String? get lastRequestUrl => _lastRequestUrl ?? _provider?.lastRequestUrl;
@@ -264,19 +252,6 @@ class ChatService {
       _lastResponseStatusCode ?? _provider?.lastResponseStatusCode;
   Map<String, List<String>>? get lastResponseHeaders =>
       _lastResponseHeaders ?? _provider?.lastResponseHeaders;
-  List<Attachment> get lastMediaAttachments => _lastMediaAttachments.isNotEmpty
-      ? List.unmodifiable(_lastMediaAttachments)
-      : _provider?.lastMediaAttachments ?? const [];
-
-  void _captureMediaAttachments(List<Attachment> attachments) {
-    final byId = {
-      for (final attachment in _lastMediaAttachments) attachment.id: attachment,
-    };
-    for (final attachment in attachments) {
-      byId[attachment.id] = attachment;
-    }
-    _lastMediaAttachments = List.unmodifiable(byId.values);
-  }
 
   /// 发送一次性系统提示词请求（标题生成 / 上下文压缩等内部任务用）。
   ///
@@ -466,8 +441,7 @@ class ChatService {
 
   /// @visibleForTesting
   static Map<String, dynamic> stripOmittedForTest(
-    Map<String, dynamic> params,
-  ) =>
+          Map<String, dynamic> params) =>
       _stripOmitted(params);
 
   /// @visibleForTesting — type marker for the omitted sentinel (for `isA`).
@@ -550,7 +524,11 @@ class ChatService {
     String source = 'model',
   }) {
     try {
-      setNestedParam(result, rp.paramName, parseReasoningValue(value, rp.type));
+      setNestedParam(
+        result,
+        rp.paramName,
+        parseReasoningValue(value, rp.type),
+      );
     } on FormatException catch (e) {
       debugPrint(
         '[ChatService] Skipping $source reasoning param "${rp.paramName}" '

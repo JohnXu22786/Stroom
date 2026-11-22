@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'startup_preferences_android_options_stub.dart'
     if (dart.library.io) 'startup_preferences_android_options_io.dart'
     as android_preferences;
@@ -33,6 +34,7 @@ class StartupPreferences {
   // SharedPreferences' legacy API stores keys with this prefix. Async reads
   // address the platform store directly, so they must include it themselves.
   static const _legacyKeyPrefix = 'flutter.';
+
   static bool get _usesJsonFileBackend =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.linux ||

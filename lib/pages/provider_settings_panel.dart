@@ -133,7 +133,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late final TextEditingController _hostController;
   late final TextEditingController _keyController;
   bool _obscureKey = true;
-  late String _apiProtocol;
+  late String _endpointType;
 
   // Provider-level params (same structure as model params)
   late double _temperature;
@@ -185,8 +185,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _nameController = TextEditingController(text: c.providerName);
     _hostController = TextEditingController(text: c.host);
     _keyController = TextEditingController(text: c.key);
-    _apiProtocol =
-        c.apiProtocol ?? apiProtocolFromLegacyEndpointType(c.endpointType);
+    _endpointType = c.endpointType;
 
     _temperature = (c.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
     _topP = (c.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;

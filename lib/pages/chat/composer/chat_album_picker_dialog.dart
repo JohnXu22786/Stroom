@@ -262,10 +262,6 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   void _clearSelection() {
     _cleanupTempFiles();
     setState(() {
-      // A failed read cancels confirmation once the remaining reads settle.
-      // If another read is still pending, preserve the existing behavior that
-      // clearing the selection completes that confirmation with an empty list.
-      if (!_confirmationFailedRead) _confirmingSelection = false;
       _selectedItems.clear();
       _editAttempts.clear();
       _selectionOrder.clear();
@@ -287,9 +283,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         Future.wait<void>(List<Future<void>>.of(_pendingReads.values)),
         _pendingSelectionChanged.future,
       ]);
-      if (!mounted || _isClosing || !_confirmingSelection) return;
+      if (!mounted || _isClosing) return;
     }
-    if (!mounted || _isClosing || !_confirmingSelection) return;
+    if (!mounted || _isClosing) return;
     if (_confirmationFailedRead) {
       setState(() {
         _confirmingSelection = false;
