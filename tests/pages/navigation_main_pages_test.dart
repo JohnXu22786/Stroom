@@ -75,15 +75,18 @@ Future<void> _pumpPageAnimations(WidgetTester tester) async {
   }
 }
 
-/// Find a bottom NavigationBar destination by its label. Scoped to the
-/// NavigationBar so page content carrying the same text (e.g. the chat
+/// Find a bottom navigation destination by its label. Scoped to the
+/// bottom navigation so page content carrying the same text (e.g. the chat
 /// page's "设置" API-config button) cannot make taps ambiguous.
 Finder _navTab(String label) {
   return find.descendant(
-    of: find.byType(NavigationBar),
+    of: find.byKey(const ValueKey('home-bottom-navigation')),
     matching: find.text(label),
   );
 }
+
+Finder get _bottomNavigationBar =>
+    find.byKey(const ValueKey('home-bottom-navigation'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -583,7 +586,7 @@ void main() {
       await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(_bottomNavigationBar, findsNothing);
 
       // All four destinations are reachable from the rail
       expect(find.text('主页'), findsOneWidget);
@@ -600,7 +603,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(800, 1200)));
       await _pumpPageAnimations(tester);
 
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(_bottomNavigationBar, findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
     });
 
@@ -613,7 +616,7 @@ void main() {
       await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(_bottomNavigationBar, findsNothing);
     });
 
     testWidgets('square screen shows the side NavigationRail (not taller)',
@@ -622,7 +625,7 @@ void main() {
       await _pumpPageAnimations(tester);
 
       expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(_bottomNavigationBar, findsNothing);
     });
 
     testWidgets('side rail taps switch pages on wide screens', (tester) async {
@@ -662,7 +665,7 @@ void main() {
 
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await _pumpPageAnimations(tester);
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(_bottomNavigationBar, findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
       // Still on the Files page after the resize
       expect(find.byKey(const Key('files_page')), findsOneWidget);
@@ -671,7 +674,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
       await _pumpPageAnimations(tester);
       expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(_bottomNavigationBar, findsNothing);
       expect(find.byKey(const Key('files_page')), findsOneWidget);
     });
   });
