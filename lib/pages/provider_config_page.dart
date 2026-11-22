@@ -47,6 +47,8 @@ class ProviderConfigPage extends ConsumerStatefulWidget {
 }
 
 class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
+  final Map<String, bool> _expandedMcpGroups = {};
+  bool _builtinToolsExpanded = true;
   ProviderEntry? get _entry {
     if (widget.entryId == kBuiltinWebSearchEntryId) {
       return createBuiltinWebSearchEntry();
@@ -396,6 +398,28 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _setMcpConfigEnabled(
+    ProviderEntry entry,
+    ProviderConfigItem config,
+    bool value,
+  ) async {
+    final configs = entry.configs.map((item) => item.copy()).toList();
+    final index = configs.indexWhere((item) => item.id == config.id);
+    if (index < 0) return;
+    configs[index].enabled = value;
+    await ref.read(providerEntriesProvider.notifier).update(
+          entry.id,
+          ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            configs: configs,
+            enabled: entry.enabled,
+          ),
+        );
+    if (mounted) setState(() {});
+  }
+
   Future<String?> _showGroupNameDialog({String? initialName}) async {
     final controller = TextEditingController(text: initialName ?? '');
     final result = await showDialog<String>(
@@ -674,6 +698,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       onDelete: isVendor ? null : () => _deleteConfig(fullIndex),
       onTest: () => _testProviderConnectivity(fullIndex),
       onMove: isVendor ? null : () => _moveMcpConfig(config),
+      enabled: config.enabled,
+      onEnabledChanged: (value) => _setMcpConfigEnabled(entry, config, value),
       onTap: () => _editConfig(fullIndex),
     );
   }
@@ -764,17 +790,23 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   onEdit: group.isBuiltin ? null : () => _editMcpGroup(group),
                   onDelete:
                       group.isBuiltin ? null : () => _deleteMcpGroup(group),
+                  isExpanded: _expandedMcpGroups[group.id] ?? true,
+                  onExpandedChanged: (expanded) => setState(
+                    () => _expandedMcpGroups[group.id] = expanded,
+                  ),
                 ),
               ),
             ),
-            if (group.id == builtinSearchMcpGroupId)
+            if ((_expandedMcpGroups[group.id] ?? true) &&
+                group.id == builtinSearchMcpGroupId)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverToBoxAdapter(
                   child: _buildBuiltinToolCard(webSearchDefinition),
                 ),
               ),
-            if (configsByGroup[group.id]?.isEmpty ?? true)
+            if ((_expandedMcpGroups[group.id] ?? true) &&
+                (configsByGroup[group.id]?.isEmpty ?? true))
               if (group.id != builtinSearchMcpGroupId)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -788,7 +820,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     ),
                   ),
                 ),
-            if (configsByGroup[group.id]?.isNotEmpty ?? false)
+            if ((_expandedMcpGroups[group.id] ?? true) &&
+                (configsByGroup[group.id]?.isNotEmpty ?? false))
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverReorderableList(
@@ -816,25 +849,39 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             sliver: SliverToBoxAdapter(
-              child: _McpSectionHeader(
-                title: AppLocalizations.of(context)!.providerBuiltinTools,
-                description: AppLocalizations.of(context)!
-                    .providerBuiltinToolsDescription,
-                count: _builtinToolDefinitions.length - 1,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _McpSectionHeader(
+                      title: AppLocalizations.of(context)!.providerBuiltinTools,
+                      description: AppLocalizations.of(context)!
+                          .providerBuiltinToolsDescription,
+                      count: _builtinToolDefinitions.length - 1,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(
+                        () => _builtinToolsExpanded = !_builtinToolsExpanded),
+                    icon: Icon(_builtinToolsExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more),
+                  ),
+                ],
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final definition = _builtinToolDefinitions
-                    .where((definition) => definition.name != 'web_search')
-                    .elementAt(index);
-                return _buildBuiltinToolCard(definition);
-              }, childCount: _builtinToolDefinitions.length - 1),
+          if (_builtinToolsExpanded)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final definition = _builtinToolDefinitions
+                      .where((definition) => definition.name != 'web_search')
+                      .elementAt(index);
+                  return _buildBuiltinToolCard(definition);
+                }, childCount: _builtinToolDefinitions.length - 1),
+              ),
             ),
-          ),
           const SliverPadding(padding: EdgeInsets.all(20)),
         ],
       ),
@@ -859,6 +906,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       onSettings: () => _showBuiltinToolDetails(definition),
       onDelete: null,
       onTest: () => _testBuiltinTool(definition),
+      enabled: true,
       onTap: () => _showBuiltinToolDetails(definition),
     );
   }
@@ -1173,6 +1221,8 @@ class _McpConfigCard extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onTest;
   final VoidCallback? onMove;
+  final bool? enabled;
+  final ValueChanged<bool>? onEnabledChanged;
   final VoidCallback onTap;
 
   const _McpConfigCard({
@@ -1193,6 +1243,8 @@ class _McpConfigCard extends StatelessWidget {
     required this.onDelete,
     this.onTest,
     this.onMove,
+    this.enabled,
+    this.onEnabledChanged,
     required this.onTap,
   });
 
@@ -1226,12 +1278,10 @@ class _McpConfigCard extends StatelessWidget {
                 children: [
                   dragHandle,
                   const SizedBox(width: 8),
-                  Icon(
-                    leadIcon,
-                    color: isMcp ? cs.primary : iconColor,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 14),
+                  if (!isMcp) ...[
+                    Icon(leadIcon, color: iconColor, size: 22),
+                    const SizedBox(width: 14),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1324,6 +1374,11 @@ class _McpConfigCard extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
+                  if (enabled != null && onEnabledChanged != null)
+                    Switch.adaptive(
+                      value: enabled!,
+                      onChanged: onEnabledChanged,
+                    ),
                   if (onTest != null)
                     IconButton(
                       icon: const Icon(Icons.network_check, size: 20),
@@ -1382,6 +1437,8 @@ class _McpGroupHeaderCard extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final bool isExpanded;
+  final ValueChanged<bool> onExpandedChanged;
 
   const _McpGroupHeaderCard({
     required this.group,
@@ -1390,6 +1447,8 @@ class _McpGroupHeaderCard extends StatelessWidget {
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
+    required this.isExpanded,
+    required this.onExpandedChanged,
   });
 
   @override
@@ -1483,6 +1542,11 @@ class _McpGroupHeaderCard extends StatelessWidget {
                     ),
                 ],
               ),
+            IconButton(
+              onPressed: () => onExpandedChanged(!isExpanded),
+              tooltip: isExpanded ? 'Collapse' : 'Expand',
+              icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+            ),
             IconButton(
               onPressed: onAdd,
               tooltip: AppLocalizations.of(context)!.providerAddItem,

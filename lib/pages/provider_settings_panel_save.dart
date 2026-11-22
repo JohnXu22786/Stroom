@@ -309,6 +309,7 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
           .toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: _endpointType,
+      enabled: widget.config.enabled,
     );
   }
 }

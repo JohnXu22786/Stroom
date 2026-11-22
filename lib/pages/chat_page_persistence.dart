@@ -71,6 +71,21 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     final convs = ref.read(conversationsProvider);
     final conv = convs.where((c) => c.id == convId).firstOrNull;
     if (conv == null) return;
+    // Keep preferences for tools temporarily hidden by an MCP ancestor. They
+    // reappear with the same selection when that ancestor is enabled again.
+    final entriesState = ref.read(providerEntriesProvider);
+    final mcpEntry =
+        entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+    final configuredMcpNames = mcpPlaceholderToolNamesByConfigId(
+      mcpEntry?.configs ?? const <ProviderConfigItem>[],
+    ).values.toSet();
+    final currentTools = _adapter.getAllToolDefinitions();
+    final hiddenSavedNames = conv.enabledMcpToolNames.where((name) =>
+        !enabledTools.contains(name) &&
+        !currentTools.any((tool) => tool.name == name) &&
+        (configuredMcpNames.contains(name) ||
+            kMcpSearchToolNames.contains(name)));
+    final savedEnabledTools = {...enabledTools, ...hiddenSavedNames};
     // 从未配置过偏好的对话：运行时集与当前自动启用基线一致（用户没有
     // 手动偏离过）时不写入——保持"未配置"状态，MCP 总开关重新开启后
     // 下次解析会自动重新启用 MCP 工具；用户手动开关过（集合偏离基线，
@@ -84,15 +99,15 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       return;
     }
     // Only persist if the set actually changed to avoid unnecessary writes
-    if (conv.enabledMcpToolNames.length != enabledTools.length ||
-        !conv.enabledMcpToolNames.containsAll(enabledTools)) {
+    if (conv.enabledMcpToolNames.length != savedEnabledTools.length ||
+        !conv.enabledMcpToolNames.containsAll(savedEnabledTools)) {
       // We need to update the conversation's enabledMcpToolNames.
       // Since Conversation is mutable, we update it in-place and let
       // the existing _persist mechanism handle the save.
       // Access the notifier to trigger persistence.
       ref
           .read(conversationsProvider.notifier)
-          .updateEnabledTools(convId, enabledTools);
+          .updateEnabledTools(convId, savedEnabledTools);
     }
   }
 

@@ -217,6 +217,7 @@ class _ProviderConfigDetailPageState
             host: result.host,
             key: result.key,
             endpointType: result.endpointType,
+            enabled: result.enabled,
             models: result.models.isNotEmpty
                 ? result.models
                 : _pendingModels.map((m) => m.copy()).toList(),
@@ -357,6 +358,7 @@ class _ProviderConfigDetailPageState
         customParams: base.customParams,
         reasoningParams: base.reasoningParams,
         endpointType: base.endpointType,
+        enabled: base.enabled,
       );
       final updated = ProviderEntry(
         id: currentEntry.id,
@@ -614,6 +616,7 @@ class _ProviderConfigDetailPageState
         customParams: base.customParams,
         reasoningParams: base.reasoningParams,
         endpointType: base.endpointType,
+        enabled: base.enabled,
       );
       final updated = ProviderEntry(
         id: currentEntry.id,
@@ -744,6 +747,7 @@ class _ProviderConfigDetailPageState
       customParams: config.customParams,
       reasoningParams: config.reasoningParams,
       endpointType: config.endpointType,
+      enabled: config.enabled,
     );
 
     final updated = ProviderEntry(

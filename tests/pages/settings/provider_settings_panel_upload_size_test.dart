@@ -9,6 +9,7 @@ Future<ProviderConfigItem?> _openAndSave(
   String? editedValue,
   double initialSize = 25.0,
   bool switchToUrl = false,
+  bool enabled = true,
 }) async {
   ProviderConfigItem? saved;
   tester.view.physicalSize = const Size(1600, 2400);
@@ -38,6 +39,7 @@ Future<ProviderConfigItem?> _openAndSave(
                     providerName: 'ASR provider',
                     host: 'https://api.example.com',
                     key: 'test-key',
+                    enabled: enabled,
                     typeConfig: {'maxFileSizeMb': initialSize},
                   ),
                   providerType: 'asr',
@@ -74,6 +76,15 @@ Future<ProviderConfigItem?> _openAndSave(
 }
 
 void main() {
+  testWidgets('provider settings preserve the MCP item enabled preference', (
+    tester,
+  ) async {
+    final saved = await _openAndSave(tester, enabled: false);
+
+    expect(saved, isNotNull);
+    expect(saved!.enabled, isFalse);
+  });
+
   testWidgets('invalid maximum upload sizes are shown and cannot be saved', (
     tester,
   ) async {
