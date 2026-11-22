@@ -256,6 +256,15 @@ String _githubReleases(List<(String, bool, String, String)> releases) {
 }
 
 void main() {
+  group('UpdateState', () {
+    test('copyWith preserves an omitted error and explicitly clears it', () {
+      const state = UpdateState(error: 'previous check failed');
+
+      expect(state.copyWith().error, 'previous check failed');
+      expect(state.copyWith(clearError: true).error, isNull);
+    });
+  });
+
   group('ZIP self-update extraction', () {
     test('selects a named app executable from a valid package layout',
         () async {
@@ -737,6 +746,7 @@ void main() {
         },
       ));
       final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(error: 'previous failure');
 
       final future = notifier.checkForUpdate();
       expect(notifier.state.isChecking, true);
@@ -943,6 +953,7 @@ void main() {
           },
         ));
         final notifier = UpdateNotifier(dio: dio);
+        notifier.state = notifier.state.copyWith(error: 'previous failure');
 
         await notifier.checkForUpdate(silent: false);
 
