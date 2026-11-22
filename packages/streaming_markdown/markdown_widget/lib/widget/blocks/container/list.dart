@@ -38,14 +38,16 @@ class UlOrOLNode extends ElementNode {
         padding: EdgeInsets.only(top: parent == null ? 0 : config.marginBottom),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: List.generate(
-            children.length,
-            (index) {
-              final childNode = children[index];
-              return ProxyRichText(childNode.build(),
-                  richTextBuilder: visitor.richTextBuilder);
-            },
-          ),
+          children: List.generate(children.length, (index) {
+            final childNode = children[index];
+            final span = childNode.build();
+            return span is WidgetSpan
+                ? span.child
+                : ProxyRichText(
+                    span,
+                    richTextBuilder: visitor.richTextBuilder,
+                  );
+          }),
         ),
       ),
     );
@@ -92,15 +94,24 @@ class ListNode extends ElementNode {
         (parentStyle?.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
             (parentStyle?.height ?? config.p.textStyle.height ?? 1.2);
     Widget marker;
+    var usesDefaultOrderedMarker = false;
     if (isCheckbox) {
       marker = ProxyRichText(
         children.removeAt(0).build(),
         richTextBuilder: visitor.richTextBuilder,
       );
     } else {
-      marker = config.li.marker?.call(isOrdered, depth, index) ??
-          getDefaultMarker(isOrdered, depth, parentStyle?.color, index,
-              parentStyleHeight / 2, config);
+      final configuredMarker = config.li.marker?.call(isOrdered, depth, index);
+      usesDefaultOrderedMarker = isOrdered && configuredMarker == null;
+      marker = configuredMarker ??
+          getDefaultMarker(
+            isOrdered,
+            depth,
+            parentStyle?.color,
+            index,
+            parentStyleHeight / 2,
+            config,
+          );
     }
     return WidgetSpan(
       child: Padding(
@@ -109,18 +120,24 @@ class ListNode extends ElementNode {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: space,
-              child: marker,
-            ),
+            if (usesDefaultOrderedMarker)
+              IntrinsicWidth(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: space),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: marker,
+                  ),
+                ),
+              )
+            else
+              SizedBox(width: space, child: marker),
             Flexible(
               child: ProxyRichText(
                 TextSpan(
                   children: [
                     if (children.isNotEmpty) children.first.build(),
                     for (final child in children.skip(1)) ...[
-                      // Introducing a new line before the next list item.
-                      // Otherwise, it might be rendered on the same line, disrupting the layout.
                       if (child is UlOrOLNode) const TextSpan(text: '\n'),
                       child.build(),
                     ],
@@ -181,20 +198,13 @@ class _UlMarker extends StatelessWidget {
     final c = color ?? theme.textTheme.titleLarge?.color ?? Colors.black;
     return Align(
       alignment: Alignment.center,
-      child: Container(
-        width: 6,
-        height: 6,
-        decoration: get(depth % 3, c),
-      ),
+      child: Container(width: 6, height: 6, decoration: get(depth % 3, c)),
     );
   }
 
   BoxDecoration get(int depth, Color color) {
     if (depth == 0) {
-      return BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-      );
+      return BoxDecoration(shape: BoxShape.circle, color: color);
     } else if (depth == 1) {
       return BoxDecoration(
         border: Border.all(color: color),
@@ -212,36 +222,51 @@ class _OlMarker extends StatelessWidget {
   final Color? color;
   final PConfig config;
 
-  const _OlMarker(
-      {Key? key,
-      this.depth = 0,
-      this.color,
-      this.index = 1,
-      required this.config})
-      : super(key: key);
+  const _OlMarker({
+    Key? key,
+    this.depth = 0,
+    this.color,
+    this.index = 1,
+    required this.config,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return SelectionContainer.disabled(
-        child: Text('${index + 1}.',
-            style: config.textStyle.copyWith(color: color)));
+      child: Text(
+        '${index + 1}.',
+        style: config.textStyle.copyWith(color: color),
+      ),
+    );
   }
 }
 
 ///get default marker for list
-Widget getDefaultMarker(bool isOrdered, int depth, Color? color, int index,
-    double paddingTop, MarkdownConfig config) {
+Widget getDefaultMarker(
+  bool isOrdered,
+  int depth,
+  Color? color,
+  int index,
+  double paddingTop,
+  MarkdownConfig config,
+) {
   Widget marker;
   if (isOrdered) {
     marker = Container(
-        alignment: Alignment.topRight,
-        padding: EdgeInsets.only(right: 1),
-        child: _OlMarker(
-            depth: depth, index: index, color: color, config: config.p));
+      alignment: Alignment.topRight,
+      padding: EdgeInsets.only(right: 1),
+      child: _OlMarker(
+        depth: depth,
+        index: index,
+        color: color,
+        config: config.p,
+      ),
+    );
   } else {
     marker = Padding(
-        padding: EdgeInsets.only(top: paddingTop - 1.5),
-        child: _UlMarker(depth: depth, color: color));
+      padding: EdgeInsets.only(top: paddingTop - 1.5),
+      child: _UlMarker(depth: depth, color: color),
+    );
   }
   return marker;
 }
