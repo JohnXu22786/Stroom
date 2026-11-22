@@ -310,7 +310,8 @@ class _DelayedRejectedWatchdogWriteStore
 
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
     SharedPreferences preferences,
-    {bool initiallyEnabled = false, bool? initiallyWatchdogEnabled}) async {
+    {bool initiallyEnabled = false,
+    bool? initiallyWatchdogEnabled}) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
   SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
     'flutter.background_service_enabled': initiallyEnabled,
