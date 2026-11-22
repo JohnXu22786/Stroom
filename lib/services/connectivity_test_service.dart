@@ -207,10 +207,7 @@ class ConnectivityTestService {
                   : Map<String, dynamic>.from(rawParams as Map),
             )
             .timeout(const Duration(seconds: 35));
-        final names = tools.map((tool) => tool.name).take(12).join(', ');
-        final suffix = tools.length > 12
-            ? localizations.connectivityTestRemainingToolsOmitted
-            : '';
+        final names = tools.map((tool) => tool.name).join(', ');
         return _finish(
           stopwatch,
           true,
@@ -218,7 +215,7 @@ class ConnectivityTestService {
           localizations.connectivityTestMcpSuccessDetails(
             tools.length,
             names.isEmpty ? '' : localizations.connectivityTestToolNames(names),
-            suffix,
+            '',
           ),
           localizations,
         );

@@ -9,6 +9,9 @@ class ConnectivityTestDialog extends StatefulWidget {
   final String title;
   final String initialContent;
   final String note;
+
+  /// Optional result used by QA captures to render the completed dialog state.
+  final ConnectivityTestResult? initialResult;
   final Future<void> Function(Map<String, dynamic> content) onSave;
   final Future<ConnectivityTestResult> Function(String content) onRun;
 
@@ -17,6 +20,7 @@ class ConnectivityTestDialog extends StatefulWidget {
     required this.title,
     required this.initialContent,
     required this.note,
+    this.initialResult,
     required this.onSave,
     required this.onRun,
   });
@@ -37,6 +41,7 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
   void initState() {
     super.initState();
     _contentController = TextEditingController(text: widget.initialContent);
+    _result = widget.initialResult;
   }
 
   @override
