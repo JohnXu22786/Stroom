@@ -10,13 +10,17 @@ void main() {
   ) async {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
     addTearDown(() {
-      VisibilityDetectorController.instance.updateInterval =
-          const Duration(milliseconds: 500);
+      VisibilityDetectorController.instance.updateInterval = const Duration(
+        milliseconds: 500,
+      );
     });
     final firstController = TocController();
     final nextController = TocController();
 
-    Widget build(TocController tocController) => MaterialApp(
+    Widget build(
+      TocController tocController, {
+      String data = '# First heading\n\n## Second heading',
+    }) => MaterialApp(
       home: Scaffold(
         body: Column(
           children: [
@@ -29,10 +33,7 @@ void main() {
               ),
             ),
             Expanded(
-              child: MarkdownWidget(
-                data: '# First heading\n\n## Second heading',
-                tocController: tocController,
-              ),
+              child: MarkdownWidget(data: data, tocController: tocController),
             ),
           ],
         ),
@@ -42,18 +43,22 @@ void main() {
     await tester.pumpWidget(build(firstController));
     expect(firstController.tocList, hasLength(2));
 
-    await tester.pumpWidget(build(nextController));
+    firstController.onIndexChanged(1);
     await tester.pump();
-    expect(nextController.tocList, hasLength(2));
+    expect(find.text('item:1,current:1'), findsOneWidget);
+
+    await tester.pumpWidget(build(nextController, data: '# First heading'));
+    await tester.pump();
+    expect(nextController.tocList, hasLength(1));
     expect(find.text('item:0,current:0'), findsOneWidget);
 
-    nextController.onIndexChanged(1);
+    nextController.onIndexChanged(0);
     await tester.pump();
-    expect(find.text('item:1,current:1'), findsOneWidget);
+    expect(find.text('item:0,current:0'), findsOneWidget);
 
-    firstController.onIndexChanged(0);
+    firstController.onIndexChanged(1);
     await tester.pump();
-    expect(find.text('item:1,current:1'), findsOneWidget);
+    expect(find.text('item:0,current:0'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     nextController.onIndexChanged(0);

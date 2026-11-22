@@ -137,10 +137,7 @@ class _TocWidgetState extends State<TocWidget> {
 
   void _attachController(TocController controller) {
     controller._onListChanged = (list) {
-      if (list.length < _tocList.length && currentIndex >= list.length) {
-        currentIndex = list.length - 1;
-      }
-      _refreshList(list);
+      _updateTocList(list);
 
       WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
         refresh();
@@ -154,12 +151,19 @@ class _TocWidgetState extends State<TocWidget> {
             preferPosition: AutoScrollPosition.begin);
       }
     };
-    _refreshList(controller.tocList);
+    _updateTocList(controller.tocList);
   }
 
   void _detachController(TocController controller) {
     controller._onIndexChangedCallback = null;
     controller._onListChanged = null;
+  }
+
+  void _updateTocList(List<Toc> list) {
+    if (list.isNotEmpty && currentIndex >= list.length) {
+      currentIndex = list.length - 1;
+    }
+    _refreshList(list);
   }
 
   void _refreshList(List<Toc> list) {
