@@ -523,11 +523,17 @@ class _FullscreenComposerEditorDialogState
             children: [
               Row(
                 children: [
-                  Text(
-                    l10n.chatEditMessage,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: ConstrainedText(
+                      l10n.chatEditMessage,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: _closePreservingContent,
