@@ -139,7 +139,7 @@ class Card {
   int usn; // update sequence number (-1 = local change)
   CardType ctype; // 0=new, 1=learn, 2=review, 3=relearn (was: type)
   CardQueue queue;
-  int due; // new→position, learn→epoch ms, review→day ordinal
+  int due; // new→position, learn/review→epoch seconds, dayLearn→day ordinal
   int interval; // interval in days (was: ivl)
   int ease_factor; // ease factor in permille, 2500 = 250% (was: factor)
   int reps; // correct reviews
@@ -259,9 +259,12 @@ class Card {
   bool get isReview => queue == CardQueue.review;
   bool get isSuspended => queue.value < 0;
 
-  bool isDue(int nowSec) {
+  bool isDue(int nowSec, {int? dayOrdinal}) {
     if (isSuspended) return false;
     if (isNew) return true;
+    if (queue == CardQueue.dayLearn) {
+      return dayOrdinal != null && due <= dayOrdinal;
+    }
     return due <= nowSec;
   }
 
@@ -367,6 +370,10 @@ class Card {
         final base = _nextIvl(interval, ease_factor);
         interval = (base * 1.3).round().clamp(1, 36500);
         break;
+    }
+    if (queue == CardQueue.dayLearn) {
+      queue = CardQueue.review;
+      ctype = CardType.review;
     }
     due = nowSec + (interval * 86400);
   }

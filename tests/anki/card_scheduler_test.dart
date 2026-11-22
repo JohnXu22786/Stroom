@@ -62,6 +62,32 @@ void main() {
       expect(c.isDue(99), isFalse);
     });
 
+    test('day-learning due is compared with a day ordinal', () {
+      final c = Card.createNew(note_id: 1, deck_id: 1)
+        ..queue = CardQueue.dayLearn
+        ..due = 20000;
+
+      expect(c.isDue(2000000000, dayOrdinal: 19999), isFalse);
+      expect(c.isDue(2000000000, dayOrdinal: 20000), isTrue);
+      expect(c.isDue(2000000000, dayOrdinal: 20001), isTrue);
+    });
+
+    test(
+      'learning seconds and review seconds remain independent of day ordinal',
+      () {
+        final learning = Card.createNew(note_id: 1, deck_id: 1)
+          ..queue = CardQueue.learn
+          ..due = 20000;
+        final review = Card.createNew(note_id: 1, deck_id: 1)
+          ..queue = CardQueue.review
+          ..due = 2000000000;
+
+        expect(learning.isDue(2000000000), isTrue);
+        expect(review.isDue(1999999999), isFalse);
+        expect(review.isDue(2000000000), isTrue);
+      },
+    );
+
     test('startLearning transitions new→learning', () {
       final c = Card.createNew(note_id: 1, deck_id: 1);
       c.startLearning(0, steps: [1, 10]);
