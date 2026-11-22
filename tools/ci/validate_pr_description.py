@@ -50,6 +50,7 @@ REQUIRED_HEADINGS = (
     "### Type of change",
 )
 OPTIONAL_HEADING = "### Breaking changes (if any)"
+OPTIONAL_UI_HEADING = "## UI consistency (when UI is affected)"
 STANDARD_CHANGE_TYPES = frozenset(
     {
         "bug fix",
@@ -197,7 +198,10 @@ def validate_pr_body(body: str) -> list[str]:
         if heading is not None:
             heading_indices.setdefault(heading, []).append(index)
 
-    allowed_headings = set(REQUIRED_HEADINGS) | {OPTIONAL_HEADING}
+    allowed_headings = set(REQUIRED_HEADINGS) | {
+        OPTIONAL_HEADING,
+        OPTIONAL_UI_HEADING,
+    }
     for heading in heading_indices:
         if heading not in allowed_headings:
             errors.append(
@@ -223,9 +227,17 @@ def validate_pr_body(body: str) -> list[str]:
     optional_indices = heading_indices.get(OPTIONAL_HEADING, [])
     if len(optional_indices) > 1:
         errors.append(f'Use the heading only once: "{OPTIONAL_HEADING}".')
+    optional_ui_indices = heading_indices.get(OPTIONAL_UI_HEADING, [])
+    if len(optional_ui_indices) > 1:
+        errors.append(f'Use the heading only once: "{OPTIONAL_UI_HEADING}".')
 
-    ordered_indices = required_indices + optional_indices[:1]
-    if len(ordered_indices) == len(REQUIRED_HEADINGS) + min(1, len(optional_indices)):
+    ordered_indices = (
+        required_indices + optional_indices[:1] + optional_ui_indices[:1]
+    )
+    expected_ordered_count = len(REQUIRED_HEADINGS) + min(
+        1, len(optional_indices)
+    ) + min(1, len(optional_ui_indices))
+    if len(ordered_indices) == expected_ordered_count:
         if ordered_indices != sorted(ordered_indices):
             errors.append("Use the PR headings in the order shown by the template.")
 
