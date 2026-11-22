@@ -177,11 +177,6 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
     }
   }
 
-  String _shortUrl(String url, {int maxLen = 45}) {
-    if (url.length <= maxLen) return url;
-    return '${url.substring(0, maxLen ~/ 2)}...${url.substring(url.length - maxLen ~/ 4)}';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!widget.visible) return const SizedBox.shrink();
@@ -389,7 +384,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ConstrainedText(
-                        _shortUrl(url),
+                        url,
+                        semanticsLabel: url,
                         style: TextStyle(
                           fontSize: 11,
                           color: isSelected

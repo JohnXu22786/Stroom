@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 Widget _disableTestAnimations(BuildContext context, Widget? child) =>
     MediaQuery(
@@ -52,6 +53,56 @@ void main() {
       for (final url in urls) {
         expect(find.textContaining(url), findsOneWidget);
       }
+    });
+
+    testWidgets('keeps the complete long URL available as the label', (
+      tester,
+    ) async {
+      const url =
+          'https://cdn.example.com/media/2026/11/22/seasonal/episode-42/stream.m3u8?token=synthetic-local-value&quality=1080';
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: _disableTestAnimations,
+          home: Scaffold(
+            body: DraggableFloatingPanel(
+              detectedUrls: const [url],
+              onConfirmCapture: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Text && widget.data == url,
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ConstrainedText>(
+              find.byWidgetPredicate(
+                (widget) => widget is ConstrainedText && widget.data == url,
+              ),
+            )
+            .maxLines,
+        2,
+      );
+      expect(
+        tester
+            .widget<ConstrainedText>(
+              find.byWidgetPredicate(
+                (widget) => widget is ConstrainedText && widget.data == url,
+              ),
+            )
+            .semanticsLabel,
+        url,
+      );
     });
 
     testWidgets('calls onConfirmCapture when capture button tapped',
