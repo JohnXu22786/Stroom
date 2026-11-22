@@ -5227,6 +5227,43 @@ void main() {
 
       expect(find.text('选择图片来源'), findsOneWidget);
     });
+
+    testWidgets('choice descriptions wrap fully on a narrow screen', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          locale: const Locale('en', 'US'),
+          textScaler: const TextScaler.linear(1.5),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from album'));
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpAndSettle();
+
+      final appDescription = find.text(
+        'Choose images already saved in the app',
+      );
+      final systemDescription = find.text(
+        'Browse and choose images on this device',
+      );
+      expect(appDescription, findsOneWidget);
+      expect(systemDescription, findsOneWidget);
+      expect(tester.getSize(appDescription).height, greaterThan(16));
+      await tester.ensureVisible(systemDescription);
+      expect(
+        tester.getRect(systemDescription).overlaps(
+          const Rect.fromLTWH(0, 0, 320, 640),
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('OcrPage - image import quality', () {
