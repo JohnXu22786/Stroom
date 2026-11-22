@@ -681,21 +681,32 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         if (voiceOptions.isEmpty) {
           // No model has voices configured — the user can still type an
           // explicit voice id (some providers accept arbitrary ids).
-          return TextField(
-            controller: _controllers[param.key],
-            onChanged: (v) => _params[param.key] = v,
-            decoration: InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _controllers[param.key],
+                onChanged: (v) => _params[param.key] = v,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                ),
+                style: const TextStyle(fontSize: 13),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
+              const SizedBox(height: 8),
+              Text(
+                AppLocalizations.of(context)!.taskFlowUiTtsVoiceMissing,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
-              hintText: AppLocalizations.of(context)!.taskFlowUiTtsVoiceMissing,
-            ),
-            style: const TextStyle(fontSize: 13),
+            ],
           );
         }
         final selected = resolveProviderModel(
@@ -907,7 +918,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: TextField(
                 controller: hCtrl,
                 decoration: dec().copyWith(
-                  hintText: AppLocalizations.of(context)!.taskFlowUiHour,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiHour,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -920,7 +935,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: TextField(
                 controller: mCtrl,
                 decoration: dec().copyWith(
-                  hintText: AppLocalizations.of(context)!.taskFlowUiMinute,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiMinute,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -933,7 +952,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: TextField(
                 controller: sCtrl,
                 decoration: dec().copyWith(
-                  hintText: AppLocalizations.of(context)!.taskFlowUiSecond,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiSecond,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],

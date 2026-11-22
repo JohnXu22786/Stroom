@@ -1602,6 +1602,41 @@ class AppLocalizationsPt extends AppLocalizations {
       'Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.';
 
   @override
+  String get unifiedTaskListRetryCancelled =>
+      'Tentar novamente fluxos de tarefas cancelados';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Tentar novamente fluxos de tarefas com falha';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Limpar fluxos de tarefas cancelados';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Confirmar nova tentativa do fluxo';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Tentar novamente os $count fluxos cancelados? Os registros originais serão mantidos.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Tentar novamente os $count fluxos com falha? Os registros originais serão mantidos.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Limpar os $count fluxos cancelados e as tarefas geradas? Esta ação não pode ser desfeita.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Nova tentativa em lote concluída: $succeeded iniciados, $failed com falha.';
+  }
+
+  @override
   String get unifiedTaskListCancel => 'Cancelar';
 
   @override
@@ -13845,6 +13880,41 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.';
+
+  @override
+  String get unifiedTaskListRetryCancelled =>
+      'Tentar novamente fluxos de tarefas cancelados';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Tentar novamente fluxos de tarefas com falha';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Limpar fluxos de tarefas cancelados';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Confirmar nova tentativa do fluxo';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Tentar novamente os $count fluxos cancelados? Os registros originais serão mantidos.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Tentar novamente os $count fluxos com falha? Os registros originais serão mantidos.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Limpar os $count fluxos cancelados e as tarefas geradas? Esta ação não pode ser desfeita.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Nova tentativa em lote concluída: $succeeded iniciados, $failed com falha.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'Cancelar';

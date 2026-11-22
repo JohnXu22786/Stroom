@@ -322,6 +322,7 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: legacyEndpointTypeForApiProtocol(_apiProtocol),
       apiProtocol: _apiProtocol,
+      enabled: widget.config.enabled,
     );
   }
 }

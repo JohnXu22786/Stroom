@@ -759,7 +759,13 @@ class ProviderConfigItem {
   List<ReasoningParam> reasoningParams;
   final Map<String, dynamic> legacyFields;
 
+  /// Whether this MCP service is available to assistants. Group and master
+  /// switches act as parents and never change this preference.
+  bool enabled;
+
   /// Legacy endpoint selector retained for v0.5/v0.6 configuration reads.
+  /// 端点类型（'openai' | 'anthropic'），该供应商下所有对话统一走此协议。
+  /// 旧配置缺省 'openai'（v3 原位演进，无需迁移步骤）。
   String endpointType;
 
   /// Supplier default upstream API protocol. Null uses its declared default.
@@ -779,6 +785,7 @@ class ProviderConfigItem {
     this.endpointType = 'openai',
     this.apiProtocol,
     Map<String, dynamic>? legacyFields,
+    this.enabled = true,
   })  : id = id ?? 'config_${const Uuid().v4()}',
         models = models ?? [],
         customParams = customParams ?? [],
@@ -804,6 +811,7 @@ class ProviderConfigItem {
       'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
       'endpointType': endpointType,
       if (apiProtocol != null) 'apiProtocol': apiProtocol,
+      'enabled': enabled,
     };
     final sanitized = redactCredentialFields
         ? Map<String, dynamic>.from(
@@ -845,6 +853,7 @@ class ProviderConfigItem {
         'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
         'endpointType': endpointType,
         if (apiProtocol != null) 'apiProtocol': apiProtocol,
+        'enabled': enabled,
       };
 
   Map<String, dynamic> _legacyFieldsForCredentialMigration({
@@ -906,7 +915,9 @@ class ProviderConfigItem {
           'reasoningParams',
           'endpointType',
           'apiProtocol',
+          'enabled',
         }),
+        enabled: map['enabled'] as bool? ?? true,
       );
 
   ProviderConfigItem copy() => ProviderConfigItem(
@@ -923,6 +934,7 @@ class ProviderConfigItem {
         endpointType: endpointType,
         apiProtocol: apiProtocol,
         legacyFields: Map<String, dynamic>.from(legacyFields),
+        enabled: enabled,
       );
 }
 

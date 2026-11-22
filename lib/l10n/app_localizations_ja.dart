@@ -1526,6 +1526,38 @@ class AppLocalizationsJa extends AppLocalizations {
       'すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。';
 
   @override
+  String get unifiedTaskListRetryCancelled => 'キャンセル済みのタスクフローをすべて再試行';
+
+  @override
+  String get unifiedTaskListRetryFailed => '失敗したタスクフローをすべて再試行';
+
+  @override
+  String get unifiedTaskListClearCancelled => 'キャンセル済みのタスクフローをすべて削除';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'タスクフローの再試行を確認';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'キャンセル済みのタスクフロー $count 件を再試行しますか？元の記録は保持されます。';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '失敗したタスクフロー $count 件を再試行しますか？元の記録は保持されます。';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'キャンセル済みのタスクフロー $count 件と生成された子タスクを削除しますか？この操作は取り消せません。';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return '一括再試行完了：$succeeded 件を開始、$failed 件が失敗。';
+  }
+
+  @override
   String get unifiedTaskListCancel => 'キャンセル';
 
   @override
@@ -13289,6 +13321,38 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。';
+
+  @override
+  String get unifiedTaskListRetryCancelled => 'キャンセル済みのタスクフローをすべて再試行';
+
+  @override
+  String get unifiedTaskListRetryFailed => '失敗したタスクフローをすべて再試行';
+
+  @override
+  String get unifiedTaskListClearCancelled => 'キャンセル済みのタスクフローをすべて削除';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'タスクフローの再試行を確認';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'キャンセル済みのタスクフロー $count 件を再試行しますか？元の記録は保持されます。';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '失敗したタスクフロー $count 件を再試行しますか？元の記録は保持されます。';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'キャンセル済みのタスクフロー $count 件と生成された子タスクを削除しますか？この操作は取り消せません。';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return '一括再試行完了：$succeeded 件を開始、$failed 件が失敗。';
+  }
 
   @override
   String get unifiedTaskListCancel => 'キャンセル';

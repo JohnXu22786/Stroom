@@ -1487,6 +1487,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
 
   @override
+  String get unifiedTaskListRetryCancelled => '重试所有已取消的任务流';
+
+  @override
+  String get unifiedTaskListRetryFailed => '重试所有失败的任务流';
+
+  @override
+  String get unifiedTaskListClearCancelled => '清除所有已取消的任务流';
+
+  @override
+  String get unifiedTaskListConfirmRetry => '确认重试任务流';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return '确定要重试所有 $count 个已取消的任务流吗？原任务流记录会保留。';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '确定要重试所有 $count 个失败的任务流吗？原任务流记录会保留。';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return '确定要清除所有 $count 个已取消的任务流及其生成的子任务吗？此操作不可撤销。';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return '批量重试完成：已启动 $succeeded 个，失败 $failed 个。';
+  }
+
+  @override
   String get unifiedTaskListCancel => '取消';
 
   @override
@@ -12926,6 +12958,38 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
+
+  @override
+  String get unifiedTaskListRetryCancelled => '重试所有已取消的任务流';
+
+  @override
+  String get unifiedTaskListRetryFailed => '重试所有失败的任务流';
+
+  @override
+  String get unifiedTaskListClearCancelled => '清除所有已取消的任务流';
+
+  @override
+  String get unifiedTaskListConfirmRetry => '确认重试任务流';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return '确定要重试所有 $count 个已取消的任务流吗？原任务流记录会保留。';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '确定要重试所有 $count 个失败的任务流吗？原任务流记录会保留。';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return '确定要清除所有 $count 个已取消的任务流及其生成的子任务吗？此操作不可撤销。';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return '批量重试完成：已启动 $succeeded 个，失败 $failed 个。';
+  }
 
   @override
   String get unifiedTaskListCancel => '取消';

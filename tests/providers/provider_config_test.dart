@@ -673,6 +673,17 @@ void main() {
   // 7. ProviderConfigItem - provider-level params
   // =================================================================
   group('ProviderConfigItem - provider-level params', () {
+    test('MCP item enabled state survives serialization and defaults on', () {
+      final disabled = ProviderConfigItem(
+        providerName: 'Example MCP',
+        enabled: false,
+      );
+      final restored = ProviderConfigItem.fromMap(disabled.toMap());
+      expect(restored.enabled, isFalse);
+      expect(ProviderConfigItem.fromMap({'providerName': 'Legacy'}).enabled,
+          isTrue);
+    });
+
     test(
         'ordinary serialization redacts legacy keys but migration input keeps them',
         () {

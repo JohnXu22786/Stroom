@@ -446,6 +446,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "Are you sure you want to clear all failed tasks?",
   "unifiedTaskListConfirmClearCompletedMessage": "Are you sure you want to clear all completed tasks? This action cannot be undone.",
   "unifiedTaskListConfirmClearAllMessage": "Are you sure you want to clear all tasks? This action cannot be undone.",
+  "unifiedTaskListRetryCancelled": "Retry cancelled Task Flow runs",
+  "unifiedTaskListRetryFailed": "Retry failed Task Flow runs",
+  "unifiedTaskListClearCancelled": "Clear cancelled Task Flow runs",
+  "unifiedTaskListConfirmRetry": "Confirm Task Flow retry",
+  "unifiedTaskListConfirmRetryCancelledMessage": "Retry all {count} cancelled Task Flow runs? Original runs will be kept.",
+  "unifiedTaskListConfirmRetryFailedMessage": "Retry all {count} failed Task Flow runs? Original runs will be kept.",
+  "unifiedTaskListConfirmClearCancelledMessage": "Clear all {count} cancelled Task Flow runs and their generated tasks? This action cannot be undone.",
+  "unifiedTaskListBulkRetryResult": "Bulk retry finished: {succeeded} started, {failed} failed.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "Cancel",
   "unifiedTaskListConfirm": "Confirm",
   "unifiedTaskListClearCompleted": "Clear completed tasks",

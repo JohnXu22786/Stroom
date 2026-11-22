@@ -1585,6 +1585,38 @@ class AppLocalizationsEn extends AppLocalizations {
       'Are you sure you want to clear all tasks? This action cannot be undone.';
 
   @override
+  String get unifiedTaskListRetryCancelled => 'Retry cancelled Task Flow runs';
+
+  @override
+  String get unifiedTaskListRetryFailed => 'Retry failed Task Flow runs';
+
+  @override
+  String get unifiedTaskListClearCancelled => 'Clear cancelled Task Flow runs';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Confirm Task Flow retry';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Retry all $count cancelled Task Flow runs? Original runs will be kept.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Retry all $count failed Task Flow runs? Original runs will be kept.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Clear all $count cancelled Task Flow runs and their generated tasks? This action cannot be undone.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Bulk retry finished: $succeeded started, $failed failed.';
+  }
+
+  @override
   String get unifiedTaskListCancel => 'Cancel';
 
   @override
@@ -13663,6 +13695,38 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Are you sure you want to clear all tasks? This action cannot be undone.';
+
+  @override
+  String get unifiedTaskListRetryCancelled => 'Retry cancelled Task Flow runs';
+
+  @override
+  String get unifiedTaskListRetryFailed => 'Retry failed Task Flow runs';
+
+  @override
+  String get unifiedTaskListClearCancelled => 'Clear cancelled Task Flow runs';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Confirm Task Flow retry';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Retry all $count cancelled Task Flow runs? Original runs will be kept.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Retry all $count failed Task Flow runs? Original runs will be kept.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Clear all $count cancelled Task Flow runs and their generated tasks? This action cannot be undone.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Bulk retry finished: $succeeded started, $failed failed.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'Cancel';

@@ -446,6 +446,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "Tem certeza de que deseja limpar todas as tarefas com falha?",
   "unifiedTaskListConfirmClearCompletedMessage": "Tem certeza de que deseja limpar todas as tarefas concluídas? Esta ação não pode ser desfeita.",
   "unifiedTaskListConfirmClearAllMessage": "Tem certeza de que deseja limpar todas as tarefas? Esta ação não pode ser desfeita.",
+  "unifiedTaskListRetryCancelled": "Tentar novamente fluxos de tarefas cancelados",
+  "unifiedTaskListRetryFailed": "Tentar novamente fluxos de tarefas com falha",
+  "unifiedTaskListClearCancelled": "Limpar fluxos de tarefas cancelados",
+  "unifiedTaskListConfirmRetry": "Confirmar nova tentativa do fluxo",
+  "unifiedTaskListConfirmRetryCancelledMessage": "Tentar novamente os {count} fluxos cancelados? Os registros originais serão mantidos.",
+  "unifiedTaskListConfirmRetryFailedMessage": "Tentar novamente os {count} fluxos com falha? Os registros originais serão mantidos.",
+  "unifiedTaskListConfirmClearCancelledMessage": "Limpar os {count} fluxos cancelados e as tarefas geradas? Esta ação não pode ser desfeita.",
+  "unifiedTaskListBulkRetryResult": "Nova tentativa em lote concluída: {succeeded} iniciados, {failed} com falha.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "Cancelar",
   "unifiedTaskListConfirm": "Confirmar",
   "unifiedTaskListClearCompleted": "Limpar tarefas concluídas",

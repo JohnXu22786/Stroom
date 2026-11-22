@@ -449,6 +449,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "실패한 작업을 모두 지울까요?",
   "unifiedTaskListConfirmClearCompletedMessage": "완료된 작업을 모두 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.",
   "unifiedTaskListConfirmClearAllMessage": "작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.",
+  "unifiedTaskListRetryCancelled": "취소된 작업 흐름 모두 재시도",
+  "unifiedTaskListRetryFailed": "실패한 작업 흐름 모두 재시도",
+  "unifiedTaskListClearCancelled": "취소된 작업 흐름 모두 지우기",
+  "unifiedTaskListConfirmRetry": "작업 흐름 재시도 확인",
+  "unifiedTaskListConfirmRetryCancelledMessage": "취소된 작업 흐름 {count}개를 모두 재시도할까요? 원래 기록은 유지됩니다.",
+  "unifiedTaskListConfirmRetryFailedMessage": "실패한 작업 흐름 {count}개를 모두 재시도할까요? 원래 기록은 유지됩니다.",
+  "unifiedTaskListConfirmClearCancelledMessage": "취소된 작업 흐름 {count}개와 생성된 하위 작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.",
+  "unifiedTaskListBulkRetryResult": "일괄 재시도 완료: {succeeded}개 시작, {failed}개 실패.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "취소",
   "unifiedTaskListConfirm": "확인",
   "unifiedTaskListClearCompleted": "완료된 작업 지우기",

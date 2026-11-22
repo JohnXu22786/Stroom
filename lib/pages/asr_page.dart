@@ -1499,43 +1499,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           selectedRecords = List<AudioRecord>.of(records);
         },
         displayName: (record) => record.name,
-        subtitleBuilder: (record) => Row(
-          children: [
-            Text(
-              formatDisplayName(record.format),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 3,
-              height: 3,
-              decoration: BoxDecoration(
-                color: Colors.grey[400]!,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              _formatFileSize(record.size),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            if (record.duration > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                width: 3,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400]!,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                AppLocalizations.of(context)!.durationSeconds(record.duration),
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ],
+        subtitleBuilder: (record) => Text(
+          [
+            formatDisplayName(record.format),
+            _formatFileSize(record.size),
+            if (record.duration > 0)
+              AppLocalizations.of(context)!.durationSeconds(record.duration),
+          ].join(' · '),
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
       ),
     );

@@ -258,9 +258,42 @@ void main() {
     },
   );
 
+  testWidgets('disabled MCP items stay visible and can be re-enabled', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    state.entries.single.configs[2].enabled = false;
+    await pumpPage(tester, Brightness.light, state: state);
+    await scrollToCard(tester, 2, delta: 240);
+
+    final title = find.text('My Files').first;
+    expect(title, findsOneWidget);
+    final card =
+        find.ancestor(of: title, matching: find.byType(Container)).first;
+    final itemSwitch = find.descendant(of: card, matching: find.byType(Switch));
+    expect(tester.widget<Switch>(itemSwitch).value, isFalse);
+
+    await tester.tap(itemSwitch);
+    await tester.pumpAndSettle();
+    final updated = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider);
+    expect(updated.entries.single.configs[2].enabled, isTrue);
+  });
+
   testWidgets('built-in MCP group accepts newly added content', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await pumpPage(tester, Brightness.light);
+    final initial = mixedState();
+    final disabledGroupState = ProviderEntriesState(
+      entries: initial.entries,
+      mcpGroups: initial.mcpGroups
+          .map((group) => group.id == builtinMcpServicesGroupId
+              ? group.copyWith(enabled: false)
+              : group)
+          .toList(),
+    );
+    await pumpPage(tester, Brightness.light, state: disabledGroupState);
 
     // The group header is in a later sliver and is not built until its first
     // config enters the viewport.
@@ -290,6 +323,8 @@ void main() {
       (config) => config.providerName == 'Local Docs',
     );
     expect(added.groupId, builtinMcpServicesGroupId);
+    expect(added.enabled, isFalse,
+        reason: 'a new item inherits the disabled parent group default');
   });
 
   testWidgets('editing an MCP config preserves its group and saved test', (

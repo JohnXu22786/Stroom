@@ -239,6 +239,73 @@ void main() {
     );
   });
 
+  testWidgets('search result metadata fits a narrow enlarged-text row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final conversation = Conversation(
+      id: 'search-result',
+      title: 'Matching conversation',
+      updatedAt: DateTime(2026, 11, 22, 12, 34),
+      messages: [
+        ChatMessage(role: 'user', content: 'needle'),
+        ChatMessage(role: 'assistant', content: 'reply'),
+      ],
+    );
+    for (final brightness in Brightness.values) {
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(brightness),
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
+          darkTheme: ThemeData(
+            colorSchemeSeed: Colors.blue,
+            brightness: Brightness.dark,
+            useMaterial3: true,
+          ),
+          themeMode:
+              brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: SearchPanel(
+              conversations: [conversation],
+              onConversationSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'Matching');
+      await tester.pump();
+
+      expect(find.text('Matching conversation'), findsOneWidget);
+      expect(find.byIcon(Icons.message_outlined), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      final date = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText && widget.data == '2026-11-22 12:34',
+      );
+      expect(date, findsOneWidget);
+      expect(
+        tester.getRect(find.byIcon(Icons.message_outlined)).top,
+        greaterThanOrEqualTo(tester.getRect(date).bottom),
+      );
+      final exception = tester.takeException();
+      expect(exception, isNull,
+          reason: '$brightness: ${exception?.toString()}');
+    }
+  });
+
   testWidgets(
     'search panel bounds long German filters and result count at narrow width',
     (tester) async {

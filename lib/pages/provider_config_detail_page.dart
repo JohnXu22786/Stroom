@@ -652,6 +652,11 @@ class _ProviderConfigDetailPageState
       _showSaveFailure();
       return;
     }
+    final connectivityTest = models[modelIndex].typeConfig['connectivityTest'];
+    if (connectivityTest is Map) {
+      result.typeConfig = Map<String, dynamic>.from(result.typeConfig)
+        ..['connectivityTest'] = Map<String, dynamic>.from(connectivityTest);
+    }
     models[modelIndex] = result;
     final updated = _entryWithConfigs(currentEntry, configs);
     if (!await _saveModelUpdate(updated)) return;

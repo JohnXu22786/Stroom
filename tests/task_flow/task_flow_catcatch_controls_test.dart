@@ -90,7 +90,8 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
 }
 
 Future<void> _pumpInShortTaskListViewport(
-    WidgetTester tester, CatCatchTask task) async {
+    WidgetTester tester, CatCatchTask task,
+    {double height = 300}) async {
   await tester.pumpWidget(ProviderScope(
       key: UniqueKey(),
       overrides: [
@@ -107,7 +108,7 @@ Future<void> _pumpInShortTaskListViewport(
             alignment: Alignment.topCenter,
             child: SizedBox(
               key: const Key('task_list_main_viewport'),
-              height: 300,
+              height: height,
               child: LayoutBuilder(
                 builder: (context, constraints) => ListView(
                   children: [
@@ -321,14 +322,12 @@ void main() {
     await _pump(tester, task);
     await tester.tap(find.text(StepType.fetching.label));
     await tester.pump();
+    final scrollView = find.byKey(const Key('catcatch_resource_scroll_view'));
     await tester.ensureVisible(find.byKey(const Key('m3u8_segments_toggle')));
     await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
     await tester.pump();
 
-    final details = find.textContaining('expanded task detail');
-    await tester.ensureVisible(details);
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.drag(details, const Offset(0, -500));
+    await tester.drag(scrollView, const Offset(0, -500));
     await tester.pump(const Duration(milliseconds: 100));
 
     final toggle = find.byKey(const Key('m3u8_segments_toggle'));
@@ -342,7 +341,7 @@ void main() {
   });
 
   testWidgets(
-      'resource viewport is capped by a short task-list viewport, not the screen',
+      'one resource keeps the selection viewport compact and action reachable',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -353,6 +352,7 @@ void main() {
       tester,
       _task([one])
           .copyWith(steps: [StepStatus.running(StepType.userSelecting)]),
+      height: 640,
     );
 
     final taskListViewport =
@@ -361,12 +361,13 @@ void main() {
         .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
     expect(
       resourceViewport.height,
-      lessThanOrEqualTo(taskListViewport.height * 2 / 3),
+      lessThan(taskListViewport.height * 2 / 3 - 40),
     );
+    expect(find.text('请选择要下载的资源').hitTestable(), findsOneWidget);
   });
 
   testWidgets(
-      'media action stays reachable while the resource list scrolls within its cap',
+      'resource rows stay lazy on the selection scroll owner while action stays reachable',
       (tester) async {
     final media = List.generate(
       60,
@@ -376,25 +377,31 @@ void main() {
         ext: 'mp4',
       ),
     );
-    final task = _task(media).copyWith(steps: [
-      StepStatus.done(
-        StepType.fetching,
-        detail: List.filled(80, 'expanded task detail').join(' '),
-      ),
-      StepStatus.running(StepType.userSelecting),
-    ]);
+    final task = _task(media);
     await _pump(tester, task);
-    await tester.tap(find.text(StepType.fetching.label));
-    await tester.pump();
 
     final action = find.text('请选择要下载的资源');
     final actionRect = tester.getRect(action);
-    final listRect =
-        tester.getRect(find.byKey(const Key('catcatch_resource_list')));
+    final scrollViewFinder =
+        find.byKey(const Key('catcatch_resource_scroll_view'));
+    final scrollViewRect = tester.getRect(scrollViewFinder);
+    final resourceViewport = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
     final screenHeight =
         tester.view.physicalSize.height / tester.view.devicePixelRatio;
     expect(actionRect.bottom, lessThanOrEqualTo(screenHeight));
-    expect(listRect.height, lessThanOrEqualTo(screenHeight * 2 / 3));
+    expect(resourceViewport.height, lessThanOrEqualTo(screenHeight * 2 / 3));
+    expect(scrollViewRect.height, lessThanOrEqualTo(screenHeight * 2 / 3));
+    expect(
+        tester.widget<CustomScrollView>(scrollViewFinder).shrinkWrap, isTrue);
+    expect(find.text('resource-0.mp4').hitTestable(), findsOneWidget);
+    expect(find.text('resource-59.mp4'), findsNothing);
+    await tester.drag(scrollViewFinder, const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('resource-0.mp4').hitTestable(), findsNothing);
+    expect(find.text('resource-8.mp4').hitTestable(), findsOneWidget);
+    expect(find.text('resource-59.mp4'), findsNothing);
+    expect(action.hitTestable(), findsOneWidget);
   });
 
   testWidgets(
@@ -471,7 +478,9 @@ void main() {
         groupId: 'group',
         isLikelySplitTrack: true);
     final downloads = await _pump(tester, _task([video, audio]));
-    await tester.ensureVisible(find.text('合并音视频'));
+    final scrollView = find.byKey(const Key('catcatch_resource_scroll_view'));
+    await tester.drag(scrollView, const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text('合并音视频'));
     await tester.pump();
     final submit = find.textContaining('下载选中的');

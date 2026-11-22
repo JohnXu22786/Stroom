@@ -111,6 +111,43 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('duration fields keep localized units while editing',
+      (tester) async {
+    TaskFlowBlock? saved;
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.catcatch),
+      locale: const Locale('es'),
+      onSaved: (block) => saved = block,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.text('Duración esperada'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+
+    final unitLabels = tester
+        .widgetList<TextField>(find.byType(TextField))
+        .map((field) => field.decoration?.label)
+        .whereType<ConstrainedText>()
+        .map((label) => label.data)
+        .toList();
+    expect(find.byType(TextField), findsNWidgets(3));
+    expect(unitLabels, containsAll(['hora', 'mín.', 'segundo']));
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), '1');
+    await tester.enterText(fields.at(1), '2');
+    await tester.enterText(fields.at(2), '3');
+    await tester.ensureVisible(find.text('Confirmar'));
+    await tester.tap(find.text('Confirmar'));
+    await tester.pumpAndSettle();
+
+    expect(saved?.params['durationSec'], 3723);
+  });
+
   testWidgets('CatCatch output policy PopupMenuButton edits the selected type',
       (tester) async {
     TaskFlowBlock? saved;
@@ -995,6 +1032,47 @@ void main() {
             'survive confirm');
   });
 
+  testWidgets('manual voice guidance wraps in a narrow dialog', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'tts-1',
+          type: 'tts',
+          name: 'TTS',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'CustomTTS',
+              host: 'https://example.com',
+              key: 'k',
+              models: [ModelConfig(name: 'custom', modelId: 'custom')],
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.tts),
+      entries: entries,
+      locale: const Locale('en', 'US'),
+    );
+
+    const guidance =
+        'No TTS models have configured voices. You can enter an ID manually.';
+    final helperFinder = find.text(guidance);
+    expect(helperFinder, findsOneWidget);
+    final helper = tester.widget<Text>(helperFinder);
+    expect(helper.maxLines, isNull);
+    expect(helper.overflow, isNull);
+    expect(tester.getSize(helperFinder).height, greaterThan(16));
+    expect(find.byType(TextField), findsWidgets);
+  });
+
   testWidgets('manual voice fallback keeps typed input across rebuilds',
       (tester) async {
     // A TTS config whose model has NO voices → the panel shows the manual
@@ -1063,6 +1141,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Confirm — the typed id must survive (no unrelated rebuild wipes it).
+    await tester.ensureVisible(find.text('确认'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(result, isNotNull);
