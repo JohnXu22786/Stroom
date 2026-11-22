@@ -383,13 +383,11 @@ class AnkiDroidPage extends ConsumerWidget {
                   maxLines: 3,
                   autofocus: true,
                   decoration: InputDecoration(
-                    label: isCloze
-                        ? Text(hintText)
-                        : ConstrainedText(
-                            hintText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    label: ConstrainedText(
+                      hintText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     border: const OutlineInputBorder(),
                   ),
                 ),

@@ -9,6 +9,7 @@ import 'package:stroom/anki/providers/anki_actions.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/anki_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _StubAnkiActions extends AnkiActions {
   _StubAnkiActions(super.ref, this.calls);
@@ -124,6 +125,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(
       find.text('Text (Löschungen mit {{c1::答案}} markieren)'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(
+        ConstrainedText,
+        'Text (Löschungen mit {{c1::答案}} markieren)',
+      ),
       findsOneWidget,
     );
 
