@@ -1554,11 +1554,71 @@ void main() {
   });
 
   group('BackgroundService - keep-alive strategy toggles', () {
+    test('watchdog defaults to disabled and can be explicitly enabled',
+        () async {
+      registerMockPlatform();
+      expect(await isWatchdogEnabled(), isFalse);
+
+      await withAndroidPlatform(() async {
+        await startBackgroundService();
+      });
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+        reason: 'starting only the service must not arm an unset watchdog',
+      );
+
+      await setWatchdogEnabled(true);
+      expect(await isWatchdogEnabled(), isTrue);
+      await withAndroidPlatform(() async {
+        await startBackgroundService();
+      });
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isTrue,
+        reason: 'an explicitly enabled watchdog must still be scheduled',
+      );
+
+      await setWatchdogEnabled(false);
+      expect(await isWatchdogEnabled(), isFalse);
+      keepAliveCalls.clear();
+      await withAndroidPlatform(() async {
+        await startBackgroundService();
+      });
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+        reason: 'an explicitly disabled watchdog must remain off',
+      );
+    });
+
     test('watchdog toggle persists its value', () async {
       await setWatchdogEnabled(false);
       expect(await isWatchdogEnabled(), isFalse);
       await setWatchdogEnabled(true);
       expect(await isWatchdogEnabled(), isTrue);
+    });
+
+    test('failed preference writes restore each recovery option default',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingRecoveryPreferenceStore(
+        {},
+        failedKeys: {
+          'flutter.background_service_watchdog',
+          'flutter.background_service_cold_start_restore',
+        },
+      );
+      await prefs.reload();
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      expect(await setWatchdogEnabled(true), isFalse);
+      expect(await setColdStartRestoreEnabled(false), isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isTrue);
     });
 
     test('cold-start restore toggle defaults to enabled and persists',

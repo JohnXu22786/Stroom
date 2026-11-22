@@ -994,6 +994,9 @@ void main() {
     ) async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': true,
+      });
 
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
