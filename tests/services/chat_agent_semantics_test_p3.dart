@@ -176,8 +176,7 @@ void chatAgentSemanticsGroup3() {
           .cast<Map>()
           .where((m) => m['role'] == 'tool')
           .single;
-      expect(toolMsg['content'], 'y' * 8000,
-          reason: '关闭截断时完整发送');
+      expect(toolMsg['content'], 'y' * 8000, reason: '关闭截断时完整发送');
     });
 
     test('默认上限 5000 字符，CJK 按字符计（非字节）', () async {

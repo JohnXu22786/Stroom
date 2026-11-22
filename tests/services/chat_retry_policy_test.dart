@@ -50,8 +50,7 @@ void main() {
       );
     });
 
-    test('retries a throttled 429 five times with jittered backoff',
-        () async {
+    test('retries a throttled 429 five times with jittered backoff', () async {
       var calls = 0;
       final delays = <Duration>[];
       final events = await retryRateLimitedStream<String>(
