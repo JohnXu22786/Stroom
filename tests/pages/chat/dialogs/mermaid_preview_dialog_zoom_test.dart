@@ -18,6 +18,94 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
+    'bounds and reveals the localized web title between preview controls',
+    (tester) async {
+      if (!kIsWeb) return;
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final preview = await _openPreviewWithEarlyControls(
+        tester,
+        locale: const Locale('pt', 'BR'),
+      );
+      preview.webView.params.onWebViewCreated!(preview.controller);
+      await tester.pump();
+      preview.webView.params.onLoadStop!(preview.controller, null);
+      await tester.pump();
+      previewDom.constrainControlsViewportForTest(320);
+
+      for (
+        var attempt = 0;
+        attempt < 20 && previewDom.controlTitle() == null;
+        attempt++
+      ) {
+        await tester.pump(const Duration(milliseconds: 25));
+      }
+
+      expect(previewDom.controlTitle(), 'Pré-visualização do Mermaid');
+      expect(previewDom.titleStaysBetweenControls(), isTrue);
+      expect(previewDom.titleMotionState(), 'waiting');
+      final initialTransform = previewDom.titleTransform();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1250)),
+      );
+      await tester.pump();
+      expect(previewDom.titleMotionState(), anyOf('moving', 'paused'));
+      expect(previewDom.titleTransform(), isNot(initialTransform));
+      expect(previewDom.controlLabels(), [
+        'Diminuir zoom',
+        'Aumentar zoom',
+        'Fechar pré-visualização',
+      ], reason: previewDom.controlsSnapshot());
+      previewDom.constrainControlsViewportForTest(700);
+      expect(previewDom.titleMotionState(), 'stationary');
+      expect(previewDom.titleTransform(), 'translateX(0px)');
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'reveals the RTL web title from its start inside the control bounds',
+    (tester) async {
+      if (!kIsWeb) return;
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final preview = await _openPreviewWithEarlyControls(
+        tester,
+        locale: const Locale('ar'),
+      );
+      preview.webView.params.onWebViewCreated!(preview.controller);
+      await tester.pump();
+      preview.webView.params.onLoadStop!(preview.controller, null);
+      await tester.pump();
+      previewDom.constrainControlsViewportForTest(200);
+
+      expect(previewDom.controlTitle(), 'معاينة Mermaid');
+      expect(previewDom.titleStaysBetweenControls(), isTrue);
+      expect(previewDom.titleMotionState(), 'waiting');
+      expect(previewDom.titleLeadingCharacterIsVisible(), isTrue);
+      final initialLeadingCharacterX =
+          previewDom.titleLeadingCharacterCenterX()!;
+
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1250)),
+      );
+      await tester.pump();
+      expect(previewDom.titleMotionState(), anyOf('moving', 'paused'));
+      expect(
+        previewDom.titleLeadingCharacterCenterX(),
+        greaterThan(initialLeadingCharacterX),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'renders clickable HTML controls above the fullscreen web preview',
     (tester) async {
       if (!kIsWeb) return;
@@ -579,8 +667,9 @@ void main() {
 }
 
 Future<_WebPreviewHarness> _openPreviewWithEarlyControls(
-  WidgetTester tester,
-) async {
+  WidgetTester tester, {
+  Locale locale = const Locale('zh', 'CN'),
+}) async {
   final previousPlatform = InAppWebViewPlatform.instance;
   final platform = _ZoomTrackingWebViewPlatform();
   InAppWebViewPlatform.instance = platform;
@@ -589,7 +678,7 @@ Future<_WebPreviewHarness> _openPreviewWithEarlyControls(
 
   await tester.pumpWidget(
     MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,

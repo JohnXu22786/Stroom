@@ -52,6 +52,17 @@ class _MermaidPreviewWebControlsState
     extends State<_MermaidPreviewWebControls> {
   html.DivElement? _element;
   final List<StreamSubscription<html.MouseEvent>> _clickSubscriptions = [];
+  final List<StreamSubscription<html.Event>> _motionSubscriptions = [];
+  html.DivElement? _title;
+  html.SpanElement? _titleText;
+  html.MediaQueryList? _reducedMotion;
+  int? _animationFrame;
+  int _phase = 0;
+  double _phaseStartedAt = 0;
+  double _travel = 0;
+  bool _motionPaused = false;
+  bool _isRtl = false;
+  double? _pausedAt;
 
   @override
   void initState() {
@@ -70,6 +81,7 @@ class _MermaidPreviewWebControlsState
   }
 
   void _renderControls(html.DivElement root) {
+    _stopTitleMotion();
     for (final subscription in _clickSubscriptions) {
       unawaited(subscription.cancel());
     }
@@ -121,15 +133,31 @@ class _MermaidPreviewWebControlsState
       circular: false,
     ));
 
+    final titleSlot = html.DivElement()
+      ..setAttribute('data-mermaid-preview-controls-title-slot', 'true');
+    titleSlot.style
+      ..flex = '1 1 0'
+      ..minWidth = '0'
+      ..height = '100%'
+      ..display = 'flex'
+      ..alignItems = 'center'
+      ..justifyContent = 'center'
+      ..margin = '0 4px'
+      ..setProperty('pointer-events', 'none');
+
     final title = html.DivElement()
       ..setAttribute('data-mermaid-preview-controls-title', 'true')
       ..setAttribute('role', 'heading')
       ..setAttribute('aria-level', '2')
+      ..setAttribute('data-motion-state', 'stationary');
+    final titleText = html.SpanElement()
+      ..setAttribute('data-mermaid-preview-controls-title-text', 'true')
       ..text = AppLocalizations.of(context)!.chatMermaidPreview;
     title.style
-      ..position = 'absolute'
-      ..left = '50%'
-      ..transform = 'translateX(-50%)'
+      ..display = 'inline-block'
+      ..boxSizing = 'border-box'
+      ..maxWidth = '100%'
+      ..overflow = 'hidden'
       ..padding = '6px 12px'
       ..borderRadius = '16px'
       ..backgroundColor = _rgba(widget.backgroundColor, 0.85)
@@ -137,6 +165,18 @@ class _MermaidPreviewWebControlsState
       ..fontSize = '13px'
       ..whiteSpace = 'nowrap'
       ..setProperty('pointer-events', 'none');
+    titleText.style
+      ..display = 'block'
+      ..width = 'max-content'
+      ..maxWidth = 'none'
+      ..whiteSpace = 'nowrap'
+      ..fontWeight = '500'
+      ..textAlign = 'start'
+      ..setProperty('will-change', 'transform');
+    title.append(titleText);
+    titleSlot.append(title);
+    _title = title;
+    _titleText = titleText;
 
     final close = _button(
       label: AppLocalizations.of(context)!.chatPreviewClose,
@@ -153,9 +193,123 @@ class _MermaidPreviewWebControlsState
     closeSlot.append(close);
 
     bar.append(zoomGroup);
-    bar.append(title);
+    bar.append(titleSlot);
     bar.append(closeSlot);
     root.append(bar);
+    _startTitleMotion();
+  }
+
+  void _startTitleMotion() {
+    final title = _title;
+    final titleText = _titleText;
+    if (title == null || titleText == null) return;
+
+    _isRtl = Directionality.of(context) == TextDirection.rtl;
+    titleText.style.direction = _isRtl ? 'rtl' : 'ltr';
+    _reducedMotion = html.window.matchMedia('(prefers-reduced-motion: reduce)');
+    _motionPaused = html.document.visibilityState == 'hidden';
+    _motionSubscriptions
+      ..add(_reducedMotion!.onChange.listen((_) => _measureTitle()))
+      ..add(
+        html.document.onVisibilityChange.listen((_) {
+          final now = html.window.performance.now();
+          if (html.document.visibilityState == 'hidden') {
+            _motionPaused = true;
+            _pausedAt = now;
+            _cancelAnimationFrame();
+          } else {
+            final pausedAt = _pausedAt;
+            if (pausedAt != null) _phaseStartedAt += now - pausedAt;
+            _pausedAt = null;
+            _motionPaused = false;
+            _scheduleMotionFrame();
+          }
+        }),
+      )
+      ..add(html.window.onResize.listen((_) => _measureTitle()));
+    _measureTitle();
+  }
+
+  void _measureTitle() {
+    final title = _title;
+    final titleText = _titleText;
+    if (title == null || titleText == null) return;
+    _cancelAnimationFrame();
+    _travel = (titleText.scrollWidth - title.clientWidth + 24).toDouble();
+    final startOffset = _isRtl ? -_travel : 0.0;
+    titleText.style.transform = 'translateX(${startOffset}px)';
+    if (_travel <= 0 || (_reducedMotion?.matches ?? false)) {
+      title.setAttribute('data-motion-state', 'stationary');
+      if (_travel <= 0) titleText.style.transform = 'translateX(0px)';
+      return;
+    }
+    _phase = -1;
+    _phaseStartedAt = 0;
+    title.setAttribute('data-motion-state', 'waiting');
+    if (!_motionPaused) _scheduleMotionFrame();
+  }
+
+  void _scheduleMotionFrame() {
+    if (_animationFrame != null || _motionPaused) return;
+    _animationFrame = html.window.requestAnimationFrame(_tickTitleMotion);
+  }
+
+  void _tickTitleMotion(num timestamp) {
+    _animationFrame = null;
+    final title = _title;
+    final titleText = _titleText;
+    if (title == null || titleText == null || _motionPaused) return;
+    if (_phaseStartedAt == 0) _phaseStartedAt = timestamp.toDouble();
+
+    final moveDuration = _travel / 24 * 1000;
+    final phaseDuration = switch (_phase) {
+      -1 => 1000.0,
+      0 || 2 => moveDuration,
+      _ => 2000.0,
+    };
+    final elapsed = timestamp - _phaseStartedAt;
+    final progress = (elapsed / phaseDuration).clamp(0.0, 1.0).toDouble();
+    final startOffset = _isRtl ? -_travel : 0.0;
+    final endOffset = _isRtl ? 0.0 : -_travel;
+    final offset = switch (_phase) {
+      0 => startOffset + (endOffset - startOffset) * progress,
+      1 => endOffset,
+      2 => endOffset + (startOffset - endOffset) * progress,
+      _ => startOffset,
+    };
+    titleText.style.transform = 'translateX(${offset}px)';
+    title.setAttribute(
+      'data-motion-state',
+      _phase == -1
+          ? 'waiting'
+          : (_phase == 0 || _phase == 2)
+          ? 'moving'
+          : 'paused',
+    );
+    if (progress >= 1) {
+      _phase = _phase == -1 ? 0 : (_phase + 1) % 4;
+      _phaseStartedAt = timestamp.toDouble();
+    }
+    _scheduleMotionFrame();
+  }
+
+  void _cancelAnimationFrame() {
+    final frame = _animationFrame;
+    if (frame != null) html.window.cancelAnimationFrame(frame);
+    _animationFrame = null;
+  }
+
+  void _stopTitleMotion() {
+    _cancelAnimationFrame();
+    for (final subscription in _motionSubscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _motionSubscriptions.clear();
+    _reducedMotion = null;
+    _title = null;
+    _titleText = null;
+    _pausedAt = null;
+    _phaseStartedAt = 0;
   }
 
   html.ButtonElement _button({
@@ -209,6 +363,7 @@ class _MermaidPreviewWebControlsState
 
   @override
   void dispose() {
+    _stopTitleMotion();
     for (final subscription in _clickSubscriptions) {
       unawaited(subscription.cancel());
     }
