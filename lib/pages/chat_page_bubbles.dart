@@ -760,12 +760,16 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 color: isDark ? Colors.red[300] : Colors.red[700],
               ),
               const SizedBox(width: 4),
-              Text(
-                AppLocalizations.of(context)!.chatSendFailed,
-                style: TextStyle(
-                  color: isDark ? Colors.red[300] : Colors.red[700],
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                child: ConstrainedText(
+                  AppLocalizations.of(context)!.chatSendFailed,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isDark ? Colors.red[300] : Colors.red[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
