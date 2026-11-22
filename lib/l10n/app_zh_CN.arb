@@ -2545,7 +2545,7 @@
       }
     }
   },
-  "assistantSendFullResult": "完整发送（仍受 50 KB 存储上限约束）",
+  "assistantSendFullResult": "完整发送（模型输入不截断）",
   "assistantMaxCharacters": "最大字符数",
   "assistantCharactersNotTokens": "单位：字符（不是 token）",
   "assistantDefaultCharacterCount": "默认值：{count}",

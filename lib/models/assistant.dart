@@ -46,7 +46,7 @@ class AssistantSettings {
 
   /// 工具结果发送给模型前的渲染截断上限（**字符数**，非 token/字节）。
   /// 默认 5000 字符；关闭开关（[enableMaxToolOutputChars] = false）时
-  /// 完整发送存储的工具结果（存储仍有 50KB 上限）。
+  /// 完整发送存储的工具结果。
   final int maxToolOutputChars;
   final bool enableMaxToolOutputChars;
   final double frequencyPenalty;

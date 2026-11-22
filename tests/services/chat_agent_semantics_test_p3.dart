@@ -76,7 +76,7 @@ void chatAgentSemanticsGroup3() {
   });
 
   group('工具结果截断', () {
-    test('存储完整（50KB 内不截断），发送给模型时按设置渲染截断', () async {
+    test('完整存储工具结果，发送给模型时按设置渲染截断', () async {
       final provider = _RecordingProvider([
         [
           AIStreamEvent('', toolCalls: [
@@ -104,7 +104,7 @@ void chatAgentSemanticsGroup3() {
           description: 'big',
           parameters: {'type': 'object'},
         ),
-        // 5000 字符 < 50KB 存储上限：完整保留（opencode MAX_BYTES 语义）
+        // 工具结果完整保留；模型输入按助手配置截断。
         (args) => 'x' * 5000,
       );
 
@@ -176,8 +176,7 @@ void chatAgentSemanticsGroup3() {
           .cast<Map>()
           .where((m) => m['role'] == 'tool')
           .single;
-      expect(toolMsg['content'], 'y' * 8000,
-          reason: '关闭截断时完整发送（仍受 50KB 存储上限约束）');
+      expect(toolMsg['content'], 'y' * 8000, reason: '关闭截断时完整发送');
     });
 
     test('默认上限 5000 字符，CJK 按字符计（非字节）', () async {
@@ -198,7 +197,7 @@ void chatAgentSemanticsGroup3() {
       ]);
       // 无助手设置（默认路径）：截断上限 = 5000 字符。
       final service = _makeService(provider);
-      // 4000 个中文字符 = 12000 UTF-8 字节：若按旧版 2K 字节截断会
+      // 4000 个中文字符 = 12000 UTF-8 字节：按配置的字符上限而不是字节上限
       // 被砍，按字符计（4000 < 5000）则完整保留。
       ChatService.registerTool(
         const ToolDefinition(
@@ -227,7 +226,7 @@ void chatAgentSemanticsGroup3() {
           reason: '截断单位是字符：4000 个 CJK 字符（12000 字节）在 5000 字符上限内不截断');
     });
 
-    test('超过 50KB 存储上限才截断（对齐 opencode MAX_BYTES）', () async {
+    test('远超旧存储阈值的工具结果仍完整保留', () async {
       final provider = _RecordingProvider([
         [
           AIStreamEvent('', toolCalls: [
@@ -250,7 +249,7 @@ void chatAgentSemanticsGroup3() {
           description: 'huge',
           parameters: {'type': 'object'},
         ),
-        (args) => 'x' * 60000, // > 50KB
+        (args) => 'x' * 60000,
       );
 
       final events = <ChatEvent>[];
@@ -264,9 +263,7 @@ void chatAgentSemanticsGroup3() {
           .asFuture();
 
       final complete = events.whereType<ToolCallCompleteEvent>().single;
-      expect(complete.result.length, lessThan(60000));
-      expect(complete.result, startsWith('x' * (50 * 1024)));
-      expect(complete.result, contains('[已截断]'));
+      expect(complete.result, 'x' * 60000);
     });
   });
 

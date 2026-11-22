@@ -178,7 +178,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     ),
                     child: Text(
                       // 软删除语义：compacted 后渲染占位符（数据仍保留，
-                      // 对齐 opencode TUI 的 [Old tool result content cleared]）
+                      // 旧工具结果清除提示）
                       data.compactedAt != null
                           ? kCompactedToolResultPlaceholder
                           : data.result!,

@@ -452,7 +452,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
 
           // ── 工具结果截断 ──
           // 与默认模型/默认工具不同：这是**发送时**的渲染行为（存储仍
-          // 完整保留 50KB 内），应用于该助手的全部话题（含已存在的），
+          // 完整保留），应用于该助手的全部话题（含已存在的），
           // 不是"新建话题才生效"的默认值——subtitle 里已说明。
           _SectionCard(
             icon: Icons.content_cut_outlined,

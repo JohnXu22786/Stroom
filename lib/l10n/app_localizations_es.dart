@@ -5492,7 +5492,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get assistantSendFullResult =>
-      'Enviar resultado completo (sujeto al límite de almacenamiento de 50 KB)';
+      'Enviar resultado completo (sin truncar la entrada del modelo)';
 
   @override
   String get assistantMaxCharacters => 'Caracteres máximos';
@@ -17759,7 +17759,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get assistantSendFullResult =>
-      'Enviar resultado completo (sujeto al límite de almacenamiento de 50 KB)';
+      'Enviar resultado completo (sin truncar la entrada del modelo)';
 
   @override
   String get assistantMaxCharacters => 'Caracteres máximos';

@@ -19,8 +19,7 @@ import 'context_manager.dart'
     show
         kInterruptedToolResultPlaceholder,
         kToolOutputMaxChars,
-        kToolOutputTruncatedSuffix,
-        truncateUtf8;
+        kToolOutputTruncatedSuffix;
 import 'chat_service_shared.dart' show setNestedParam;
 import 'chat_retry_policy.dart' show retryRateLimitedStream;
 import 'mcp_client.dart';
@@ -61,12 +60,6 @@ class ChatService {
   final ModelConfig? _modelConfig;
   final Locale? Function()? _localeOverride;
 
-  /// 工具结果存储上限（对齐 opencode tool-output-store MAX_BYTES = 50KB）。
-  /// 50KB 内**完整保留**（UI 可展开查看、历史重建可发送），
-  /// 发送给模型时另有渲染截断（上限由助手设置决定，
-  /// 默认 [kToolOutputMaxChars] 字符）。
-  static const int maxToolResultBytes = 50 * 1024;
-
   /// 工具循环上限常量：
   /// 单条用户消息内模型 API 请求（步骤）的最大次数，范围 1-100，默认 20。
   /// 每次 API 响应内的多个并行工具调用属于同一"步骤"，只计 1 次；
@@ -78,8 +71,7 @@ class ChatService {
   /// 工具结果渲染截断上限（字符数）的可接受范围：
   /// 低于 [kToolOutputMaxCharsMin] 或高于 [kToolOutputMaxCharsMax]
   /// 的配置值（含持久化损坏数据）回退默认 [kToolOutputMaxChars]。
-  /// 上限取 100K 字符：超过存储上限（50KB 字节）的截断值没有意义，
-  /// 但也不至于在 UI 输入 100 万时把请求体直接撑爆。
+  /// 上限取 100K 字符，避免极大配置把请求体意外撑爆。
   static const int kToolOutputMaxCharsMin = 100;
   static const int kToolOutputMaxCharsMax = 100000;
 
@@ -88,7 +80,7 @@ class ChatService {
   /// - 无助手（settings 为 null）：使用默认上限 [kToolOutputMaxChars]
   ///   （保持"始终有兜底截断"的旧行为）；
   /// - 开关关闭（[AssistantSettings.enableMaxToolOutputChars] = false）：
-  ///   返回 0 = **不截断**，完整发送存储的工具结果（存储仍有 50KB 上限）；
+  ///   返回 0 = **不截断**，完整发送存储的工具结果；
   /// - 开关开启：使用配置值，仅接受 [kToolOutputMaxCharsMin,
   ///   kToolOutputMaxCharsMax] 范围内的值，越界/损坏回退默认值。
   static int getEffectiveToolOutputMaxChars(AssistantSettings? settings) {

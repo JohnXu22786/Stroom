@@ -1503,7 +1503,7 @@
   "assistantTruncateToolOutputHelp": "モデルに送信される前の各ツールの結果の最大文字数。このアシスタントの下でのすべての会話に適用されます。",
   "assistantEnableTruncation": "切り捨てを有効にする",
   "assistantTruncatedTo": "長い結果は {count} 文字に切り詰められます",
-  "assistantSendFullResult": "完全な結果を送信します (50 KB のストレージ制限の対象となります)",
+  "assistantSendFullResult": "完全な結果を送信します (モデル入力を切り捨てずに)",
   "assistantMaxCharacters": "最大文字数",
   "assistantCharactersNotTokens": "単位: 文字 (トークンではありません)",
   "assistantDefaultCharacterCount": "デフォルト: {count}",

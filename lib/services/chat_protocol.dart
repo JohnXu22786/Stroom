@@ -601,8 +601,7 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
 
 /// 渲染截断工具结果（发送给模型用）。
 ///
-/// 存储保留完整结果（50KB 字节内），只在**发送给模型时**截断——
-/// 与 opencode toModelMessages 的 toolOutputMaxChars 语义一致。
+/// 工具结果保留完整，只在**发送给模型时**按设置截断。
 ///
 /// [maxChars] 为**字符数**上限（用户配置的单位是字符，非 token/字节；
 /// 对齐 [AssistantSettings.maxToolOutputChars] 的语义）。
@@ -622,7 +621,7 @@ String truncateToolOutput(String text, {int? maxChars}) {
 
 /// 解析历史中单个工具结果的重建文本。
 ///
-/// - 已压缩（compactedAt）：占位符（opencode compacted 渲染语义，
+/// - 已压缩（compactedAt）：占位符（压缩结果占位语义，
 ///   数据仍保留，仅发送时替换）
 /// - 完成且有结果：原文（渲染截断，[maxChars] 语义同 [truncateToolOutput]）
 /// - 未完成/失败/结果缺失：中断占位（OpenAI/Anthropic 都要求

@@ -2550,7 +2550,7 @@
       }
     }
   },
-  "assistantSendFullResult": "전체 결과 전송(저장 한도 50KB 적용)",
+  "assistantSendFullResult": "전체 결과 전송(모델 입력 잘라내기 없음)",
   "assistantMaxCharacters": "최대 문자 수",
   "assistantCharactersNotTokens": "단위: 문자(토큰 아님)",
   "assistantDefaultCharacterCount": "기본값: {count}",

@@ -4,7 +4,7 @@
 
 import '../l10n/app_localizations.dart';
 //
-// 参照 opencode 的"隐藏系统 agent"设计（title agent / compaction agent）：
+// 隐藏系统助手（标题助手 / 压缩助手）：
 // - 内置助手是虚拟条目（不进入用户助手列表，固定 id），默认使用；
 // - 用户可在设置页"系统助手"区替换为自己的任意助手；
 // - 选中用户助手时，使用该助手的 system prompt 执行对应任务。

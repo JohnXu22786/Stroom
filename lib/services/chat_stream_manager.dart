@@ -390,17 +390,17 @@ class ChatStreamManager {
     state.lastReasoningUpdate = DateTime.now();
 
     // ── 上下文管理：请求前检查工具输出累计是否达到 prune 阈值 ──
-    // 对齐 opencode（PRUNE_PROTECT=40K / PRUNE_MINIMUM=20K）：
+    // 依据保护阈值与最小压缩量（40K / 20K）：
     // 从新到旧累计工具输出 token，超过保护窗后开始收集，
     // 可 prune 量超 20K 才执行；执行 = 软删除标记（compactedAt，
     // 数据保留），此后每次请求渲染占位符释放上下文。
     // 阈值基于"工具输出累计"而非模型 context——1M 模型在 100k+
-    // 上下文时工具输出也早已超阈值，与 opencode 行为一致。
-    // 可在设置页"上下文管理"关闭（opencode compaction.prune）。
+    // 上下文时工具输出也早已超阈值，符合当前压缩策略。
+    // 可在设置页"上下文管理"关闭（上下文压缩设置）。
     final ctxSettings = _ref?.read(contextManagementSettingsProvider) ??
         const ContextManagementSettings();
     if (ctxSettings.pruneEnabled) {
-      // 压缩边界（对齐 opencode summary break）：有摘要时扫描到
+      // 压缩边界（摘要边界）：有摘要时扫描到
       // 尾部起点即停止（其之前 = 已压缩内容）
       final tailStartId = _ref
           ?.read(conversationsProvider)
@@ -470,7 +470,7 @@ class ChatStreamManager {
     // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
     // 1. 每次请求都注入对话已有的压缩摘要（如有）
     // 2. 发送历史 = 有摘要时从"压缩时记录的尾部起点"起（固定快照，
-    //    对齐 opencode tail_start_id），无摘要时全量——这就是
+    //    尾部起点标记），无摘要时全量——这就是
     //    "上下文显示越来越少、存储还在"的机制
     // 3. 压缩触发基于**发送量**（非存储总量），超限时把
     //    [快照之后 .. 新尾部起点] 压缩为锚定摘要
@@ -480,7 +480,7 @@ class ChatStreamManager {
         .firstOrNull;
     snappedChatService?.setContextSummary(conv?.contextSummary);
 
-    // 发送历史过滤（对齐 opencode filterCompacted）：
+    // 发送历史过滤（过滤已压缩结果）：
     // 有摘要时从 compactionTailStartId（固定快照）起发送，
     // 快照之前 = 已压缩内容，存储保留但不发送。
     // 快照消息不在历史中（被删）时安全回退为全量。

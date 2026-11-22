@@ -6,14 +6,14 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
   /// 上下文管理：发送量超限时，用压缩助手把新增头部历史压缩为锚定摘要。
   ///
   /// [requestHistory] 为本次实际发送的消息子集（有摘要时 = 尾部快照起，
-  /// 对齐 opencode filterCompacted），触发判断与估算都基于它——
+  /// 过滤已压缩结果），触发判断与估算都基于它——
   /// 压缩后发送量回到小值，不会每次发送都重复压缩。
   ///
   /// 成功后：
   /// - 摘要持久化到 [Conversation.contextSummary]（含前次摘要合并）
   /// - [Conversation.compactionTailStartId] 更新为新尾部起点
   ///   （固定快照，后续请求从该消息起发送）
-  /// - [state.history] **不裁剪**（存储完整保留，对齐 opencode）
+  /// - [state.history] **不裁剪**（存储完整保留）
   /// - 当前 ChatService 注入摘要（后续请求走 system 级摘要）
   ///
   /// 任何失败（未配置、请求失败、结果为空、头部为空）都静默返回 false
@@ -88,7 +88,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
 
     // 3. 划分头部（可压缩）与尾部（保留原文）。
     //    head 起点：有摘要时从 compactionTailStartId 之后开始
-    //    （快照之前 = 已压缩内容，不再转写；对齐 opencode hidden）。
+    //    （快照之前 = 已压缩内容，不再转写）。
     final tailStart = ChatStreamManager._findTailStart(state.history);
     var headStart = 0;
     final tailStartId = conv?.compactionTailStartId;
@@ -192,7 +192,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     if (summary.isEmpty) return false;
 
     // 6. 持久化摘要 + 尾部起点（prune 边界）+ 注入摘要。
-    //    注意：**不裁剪 state.history** —— 对齐 opencode：
+    //    注意：**不裁剪 state.history**：
     //    存储完整保留全部消息，发给 API 的只是"摘要 + 尾部"子集
     //    （由 startStreaming 的 requestHistory 过滤实现）。
     await ref.read(conversationsProvider.notifier).updateContextSummary(
