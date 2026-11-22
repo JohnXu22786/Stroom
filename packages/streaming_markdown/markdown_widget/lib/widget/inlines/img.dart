@@ -46,7 +46,10 @@ class ImageNode extends SpanNode {
         child: imgConfig.builder?.call(imageUrl, attributes) ?? result);
   }
 
-  Widget buildErrorImage(String url, String alt, Object? error) {
+  Widget buildErrorImage(String url, String alt, Object error) {
+    final errorBuilder = imgConfig.errorBuilder;
+    if (errorBuilder != null) return errorBuilder(url, alt, error);
+
     return ProxyRichText(
       TextSpan(children: [
         WidgetSpan(
