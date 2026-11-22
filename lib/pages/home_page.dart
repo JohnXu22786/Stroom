@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ import 'unified_task_list_page.dart';
 import 'unified_task_list/media_preview_sheet.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
+import '../catcatch/models/media_resource.dart';
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
 import 'chat_page.dart';
@@ -37,6 +39,7 @@ import 'anki_page.dart';
 import '../task_flow/pages/task_flow_list_page.dart';
 import '../task_flow/providers/task_flow_provider.dart';
 import '../task_flow/providers/task_flow_execution_provider.dart';
+import '../task_flow/services/task_flow_execution_service.dart';
 
 import '../widgets/constrained_text.dart';
 
@@ -63,6 +66,8 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
+  final _openMediaSelectionDialogs = <String>{};
+  final _dismissedMediaSelectionDialogs = <String>{};
 
   @override
   void initState() {
@@ -110,15 +115,32 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.listen(catcatchTasksProvider, (prev, next) {
       if (!mounted) return;
       for (final task in next) {
+        final awaitingSelection = task.steps.any(
+          (step) => step.type.name == 'userSelecting' && step.running,
+        );
+        if (task.selectedMedia != null ||
+            !awaitingSelection ||
+            task.status.name != 'running') {
+          _openMediaSelectionDialogs.remove(task.id);
+          _dismissedMediaSelectionDialogs.remove(task.id);
+        }
+        final flowManaged =
+            task.metadata[catcatch_task.CatCatchTask.flowManagedSelectionKey] ==
+                'true';
+        final flowCandidates = task
+            .metadata[catcatch_task.CatCatchTask.flowSelectionCandidatesKey];
         if (task.status.name == 'running' &&
-            task.metadata[catcatch_task.CatCatchTask.flowManagedSelectionKey] !=
-                'true' &&
-            task.steps.any(
-              (s) => s.type.name == 'userSelecting' && s.running,
-            ) &&
+            (!flowManaged || flowCandidates != null) &&
+            awaitingSelection &&
             task.detectedMedia.isNotEmpty &&
-            task.selectedMedia == null) {
-          _showMediaSelectionDialog(context, task);
+            task.selectedMedia == null &&
+            !_dismissedMediaSelectionDialogs.contains(task.id) &&
+            _openMediaSelectionDialogs.add(task.id)) {
+          if (flowManaged) {
+            _showFlowMediaSelectionDialog(context, task);
+          } else {
+            _showMediaSelectionDialog(context, task);
+          }
           break;
         }
       }
