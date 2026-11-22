@@ -444,6 +444,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "Möchtest du wirklich alle fehlgeschlagenen Aufgaben entfernen?",
   "unifiedTaskListConfirmClearCompletedMessage": "Möchtest du wirklich alle abgeschlossenen Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
   "unifiedTaskListConfirmClearAllMessage": "Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
+  "unifiedTaskListRetryCancelled": "Abgebrochene Task-Flows erneut versuchen",
+  "unifiedTaskListRetryFailed": "Fehlgeschlagene Task-Flows erneut versuchen",
+  "unifiedTaskListClearCancelled": "Abgebrochene Task-Flows entfernen",
+  "unifiedTaskListConfirmRetry": "Task-Flow-Wiederholung bestätigen",
+  "unifiedTaskListConfirmRetryCancelledMessage": "Alle {count} abgebrochenen Task-Flows erneut versuchen? Die ursprünglichen Einträge bleiben erhalten.",
+  "unifiedTaskListConfirmRetryFailedMessage": "Alle {count} fehlgeschlagenen Task-Flows erneut versuchen? Die ursprünglichen Einträge bleiben erhalten.",
+  "unifiedTaskListConfirmClearCancelledMessage": "Alle {count} abgebrochenen Task-Flows und ihre erzeugten Unteraufgaben entfernen? Dies kann nicht rückgängig gemacht werden.",
+  "unifiedTaskListBulkRetryResult": "Stapelwiederholung abgeschlossen: {succeeded} gestartet, {failed} fehlgeschlagen.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "Abbrechen",
   "unifiedTaskListConfirm": "Bestätigen",
   "unifiedTaskListClearCompleted": "Abgeschlossene Aufgaben entfernen",

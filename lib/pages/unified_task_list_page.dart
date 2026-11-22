@@ -152,38 +152,54 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     super.dispose();
   }
 
-  Future<void> _clearTerminalTasks(TaskStatus status) async {
+  Future<void> _clearTerminalTasks(
+    TaskStatus status, {
+    FlowExecutionStatus? flowStatus,
+  }) async {
     try {
       final executions = ref.read(taskFlowExecutionsProvider);
       var selectedExecutions = executions
-          .where((e) => e.isTerminal && e.taskStatus == status)
+          .where(
+            (e) =>
+                e.isTerminal &&
+                (flowStatus == null
+                    ? e.taskStatus == status
+                    : e.status == flowStatus),
+          )
           .toList();
       final nestedIds = {
         for (final execution in executions)
           for (final subTask in execution.subTasks) subTask.subTaskId,
       };
-      final catcatchIds = ref
-          .read(catcatchTasksProvider)
-          .where(
-            (t) => t.status.name == status.name && !nestedIds.contains(t.id),
-          )
-          .map((t) => t.id)
-          .toList();
-      final synthesisIds = ref
-          .read(taskListProvider)
-          .where((t) => t.status == status && !nestedIds.contains(t.id))
-          .map((t) => t.id)
-          .toList();
-      final backgroundIds = ref
-          .read(backgroundTasksProvider)
-          .where((t) => t.status == status && !nestedIds.contains(t.id))
-          .map((t) => t.id)
-          .toList();
+      final catcatchIds = flowStatus == null
+          ? ref
+              .read(catcatchTasksProvider)
+              .where(
+                (t) =>
+                    t.status.name == status.name && !nestedIds.contains(t.id),
+              )
+              .map((t) => t.id)
+              .toList()
+          : <String>[];
+      final synthesisIds = flowStatus == null
+          ? ref
+              .read(taskListProvider)
+              .where((t) => t.status == status && !nestedIds.contains(t.id))
+              .map((t) => t.id)
+              .toList()
+          : <String>[];
+      final backgroundIds = flowStatus == null
+          ? ref
+              .read(backgroundTasksProvider)
+              .where((t) => t.status == status && !nestedIds.contains(t.id))
+              .map((t) => t.id)
+              .toList()
+          : <String>[];
       final executionsNotifier = ref.read(taskFlowExecutionsProvider.notifier);
       final selectedIds = selectedExecutions.map((e) => e.id).toSet();
       final batchIds =
           selectedExecutions.map((e) => e.batchId).whereType<String>().toSet();
-      if (batchIds.isNotEmpty) {
+      if (batchIds.isNotEmpty && flowStatus == null) {
         final service = ref.read(taskFlowExecutionServiceProvider);
         while (mounted) {
           final active = ref
@@ -239,6 +255,37 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           ),
         );
       }
+    }
+  }
+
+  Future<void> _retryTaskFlows(FlowExecutionStatus status) async {
+    final strings = AppLocalizations.of(context)!;
+    final executions = ref.read(taskFlowExecutionsProvider).where(
+          (execution) => execution.status == status && execution.isTerminal,
+        );
+    var succeeded = 0;
+    var failed = 0;
+    final service = ref.read(taskFlowExecutionServiceProvider);
+    for (final execution in executions) {
+      if (!mounted) return;
+      try {
+        await service.retryExecution(
+          execution.id,
+          useLatestConfiguration: execution.snapshot == null,
+        );
+        succeeded++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            strings.unifiedTaskListBulkRetryResult(succeeded, failed),
+          ),
+        ),
+      );
     }
   }
 
@@ -333,268 +380,447 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           ),
         ),
         actions: [
-          PopupMenuButton<String>(
-            enabled: restoreStatus == FlowExecutionRestoreStatus.ready,
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              if (value == 'clear_completed') {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: ConstrainedText(
-                      strings.unifiedTaskListConfirmClear,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          Theme(
+            data: Theme.of(context).copyWith(
+              dividerColor: Theme.of(context).colorScheme.outlineVariant,
+              dividerTheme: DividerThemeData(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            child: PopupMenuButton<String>(
+              enabled: restoreStatus == FlowExecutionRestoreStatus.ready,
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'retry_cancelled' || value == 'retry_failed') {
+                  final status = value == 'retry_cancelled'
+                      ? FlowExecutionStatus.cancelled
+                      : FlowExecutionStatus.failed;
+                  final count = ref
+                      .read(taskFlowExecutionsProvider)
+                      .where(
+                        (execution) =>
+                            execution.status == status && execution.isTerminal,
+                      )
+                      .length;
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: ConstrainedText(
+                        strings.unifiedTaskListConfirmRetry,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      content: Text(
+                        status == FlowExecutionStatus.cancelled
+                            ? strings
+                                .unifiedTaskListConfirmRetryCancelledMessage(
+                                count,
+                              )
+                            : strings.unifiedTaskListConfirmRetryFailedMessage(
+                                count,
+                              ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: ConstrainedText(
+                            strings.unifiedTaskListCancel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await _retryTaskFlows(status);
+                          },
+                          child: ConstrainedText(
+                            strings.unifiedTaskListConfirm,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    content: Text(
-                      strings.unifiedTaskListConfirmClearCompletedMessage,
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: ConstrainedText(
-                          strings.unifiedTaskListCancel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  );
+                } else if (value == 'clear_cancelled') {
+                  final count = ref
+                      .read(taskFlowExecutionsProvider)
+                      .where(
+                        (execution) =>
+                            execution.status == FlowExecutionStatus.cancelled &&
+                            execution.isTerminal,
+                      )
+                      .length;
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: ConstrainedText(
+                        strings.unifiedTaskListConfirmClear,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      content: Text(
+                        strings.unifiedTaskListConfirmClearCancelledMessage(
+                          count,
                         ),
                       ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await _clearTerminalTasks(TaskStatus.completed);
-                        },
-                        child: ConstrainedText(
-                          strings.unifiedTaskListConfirm,
-                          style: TextStyle(color: Colors.red),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: ConstrainedText(
+                            strings.unifiedTaskListCancel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              } else if (value == 'clear_failed') {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: ConstrainedText(
-                      strings.unifiedTaskListConfirmClear,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    content: Text(
-                      strings.unifiedTaskListConfirmClearFailedMessage,
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: ConstrainedText(
-                          strings.unifiedTaskListCancel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await _clearTerminalTasks(TaskStatus.failed);
-                        },
-                        child: ConstrainedText(
-                          strings.unifiedTaskListConfirm,
-                          style: TextStyle(color: Colors.red),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              } else if (value == 'clear_all') {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: ConstrainedText(
-                      strings.unifiedTaskListConfirmClear,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    content: Text(
-                      strings.unifiedTaskListConfirmClearAllMessage,
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: ConstrainedText(
-                          strings.unifiedTaskListCancel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          try {
-                            final service = ref.read(
-                              taskFlowExecutionServiceProvider,
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await _clearTerminalTasks(
+                              TaskStatus.paused,
+                              flowStatus: FlowExecutionStatus.cancelled,
                             );
-                            // Re-read after each await: another run can start,
-                            // or a queued run can finish while cancellation
-                            // persistence is in progress.
-                            while (mounted) {
-                              final active = ref
-                                  .read(taskFlowExecutionsProvider)
-                                  .where((e) => !e.isTerminal)
-                                  .firstOrNull;
-                              if (active != null) {
-                                if (active.batchId == null) {
-                                  await service.cancelExecution(active.id);
-                                } else {
-                                  await service.cancelBatch(active.batchId!);
+                          },
+                          child: ConstrainedText(
+                            strings.unifiedTaskListConfirm,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else if (value == 'clear_completed') {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: ConstrainedText(
+                        strings.unifiedTaskListConfirmClear,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      content: Text(
+                        strings.unifiedTaskListConfirmClearCompletedMessage,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: ConstrainedText(
+                            strings.unifiedTaskListCancel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await _clearTerminalTasks(TaskStatus.completed);
+                          },
+                          child: ConstrainedText(
+                            strings.unifiedTaskListConfirm,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else if (value == 'clear_failed') {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: ConstrainedText(
+                        strings.unifiedTaskListConfirmClear,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      content: Text(
+                        strings.unifiedTaskListConfirmClearFailedMessage,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: ConstrainedText(
+                            strings.unifiedTaskListCancel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await _clearTerminalTasks(TaskStatus.failed);
+                          },
+                          child: ConstrainedText(
+                            strings.unifiedTaskListConfirm,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else if (value == 'clear_all') {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: ConstrainedText(
+                        strings.unifiedTaskListConfirmClear,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      content: Text(
+                        strings.unifiedTaskListConfirmClearAllMessage,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: ConstrainedText(
+                            strings.unifiedTaskListCancel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            try {
+                              final service = ref.read(
+                                taskFlowExecutionServiceProvider,
+                              );
+                              // Re-read after each await: another run can start,
+                              // or a queued run can finish while cancellation
+                              // persistence is in progress.
+                              while (mounted) {
+                                final active = ref
+                                    .read(taskFlowExecutionsProvider)
+                                    .where((e) => !e.isTerminal)
+                                    .firstOrNull;
+                                if (active != null) {
+                                  if (active.batchId == null) {
+                                    await service.cancelExecution(active.id);
+                                  } else {
+                                    await service.cancelBatch(active.batchId!);
+                                  }
+                                  if (!mounted) return;
+                                  final stillActive = ref
+                                      .read(taskFlowExecutionsProvider)
+                                      .where((e) => e.id == active.id)
+                                      .firstOrNull;
+                                  if (stillActive != null &&
+                                      !stillActive.isTerminal) {
+                                    throw StateError('任务流取消后仍在运行');
+                                  }
+                                  continue;
+                                }
+                                // Cancellation may have changed memory before
+                                // its save failed. A retry must durably write
+                                // even when every run is already terminal.
+                                final snapshot = ref.read(
+                                  taskFlowExecutionsProvider,
+                                );
+                                if (snapshot.isNotEmpty) {
+                                  if (!await ref
+                                      .read(taskFlowExecutionsProvider.notifier)
+                                      .persist()) {
+                                    throw const TaskFlowPersistenceException(
+                                      '任务流取消状态无法保存，请重试清除',
+                                    );
+                                  }
                                 }
                                 if (!mounted) return;
-                                final stillActive = ref
-                                    .read(taskFlowExecutionsProvider)
-                                    .where((e) => e.id == active.id)
-                                    .firstOrNull;
-                                if (stillActive != null &&
-                                    !stillActive.isTerminal) {
-                                  throw StateError('任务流取消后仍在运行');
-                                }
-                                continue;
-                              }
-                              // Cancellation may have changed memory before
-                              // its save failed. A retry must durably write
-                              // even when every run is already terminal.
-                              final snapshot = ref.read(
-                                taskFlowExecutionsProvider,
-                              );
-                              if (snapshot.isNotEmpty) {
-                                if (!await ref
-                                    .read(taskFlowExecutionsProvider.notifier)
-                                    .persist()) {
-                                  throw const TaskFlowPersistenceException(
-                                    '任务流取消状态无法保存，请重试清除',
-                                  );
+                                if (identical(
+                                  snapshot,
+                                  ref.read(taskFlowExecutionsProvider),
+                                )) {
+                                  break;
                                 }
                               }
                               if (!mounted) return;
-                              if (identical(
-                                snapshot,
-                                ref.read(taskFlowExecutionsProvider),
-                              )) {
-                                break;
-                              }
-                            }
-                            if (!mounted) return;
-                            // Snapshot after cancellation, then keep new
-                            // tasks started during the removal write intact.
-                            final executionsToClear = ref.read(
-                              taskFlowExecutionsProvider,
-                            );
-                            final catcatchIds = ref
-                                .read(catcatchTasksProvider)
-                                .map((t) => t.id)
-                                .toList();
-                            final synthesisIds = ref
-                                .read(taskListProvider)
-                                .map((t) => t.id)
-                                .toList();
-                            final backgroundIds = ref
-                                .read(backgroundTasksProvider)
-                                .map((t) => t.id)
-                                .toList();
-                            final executionsNotifier = ref.read(
-                              taskFlowExecutionsProvider.notifier,
-                            );
-                            await removeFlowChildTasksPersisted(
-                              ref,
-                              executionsToClear,
-                              catcatchIds: catcatchIds,
-                              synthesisIds: synthesisIds,
-                              backgroundIds: backgroundIds,
-                            );
-                            if (!await executionsNotifier
-                                .removeExecutionsPersisted(
-                              executionsToClear.map((e) => e.id),
-                            )) {
-                              throw const TaskFlowPersistenceException(
-                                '任务流记录删除状态无法保存，请重试清除',
+                              // Snapshot after cancellation, then keep new
+                              // tasks started during the removal write intact.
+                              final executionsToClear = ref.read(
+                                taskFlowExecutionsProvider,
                               );
-                            }
-                          } catch (error) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    strings.unifiedTaskListClearIncomplete(
-                                      _clearErrorMessage(error, strings),
+                              final catcatchIds = ref
+                                  .read(catcatchTasksProvider)
+                                  .map((t) => t.id)
+                                  .toList();
+                              final synthesisIds = ref
+                                  .read(taskListProvider)
+                                  .map((t) => t.id)
+                                  .toList();
+                              final backgroundIds = ref
+                                  .read(backgroundTasksProvider)
+                                  .map((t) => t.id)
+                                  .toList();
+                              final executionsNotifier = ref.read(
+                                taskFlowExecutionsProvider.notifier,
+                              );
+                              await removeFlowChildTasksPersisted(
+                                ref,
+                                executionsToClear,
+                                catcatchIds: catcatchIds,
+                                synthesisIds: synthesisIds,
+                                backgroundIds: backgroundIds,
+                              );
+                              if (!await executionsNotifier
+                                  .removeExecutionsPersisted(
+                                executionsToClear.map((e) => e.id),
+                              )) {
+                                throw const TaskFlowPersistenceException(
+                                  '任务流记录删除状态无法保存，请重试清除',
+                                );
+                              }
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      strings.unifiedTaskListClearIncomplete(
+                                        _clearErrorMessage(error, strings),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
+                                );
+                              }
                             }
-                          }
-                        },
-                        child: ConstrainedText(
-                          strings.unifiedTaskListConfirm,
-                          style: TextStyle(color: Colors.red),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          },
+                          child: ConstrainedText(
+                            strings.unifiedTaskListConfirm,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                      ],
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'retry_cancelled',
+                  child: ListTile(
+                    leading: const Icon(Icons.replay, size: 20),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListRetryCancelled,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'retry_failed',
+                  child: ListTile(
+                    leading: const Icon(Icons.replay, size: 20),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListRetryFailed,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'clear_completed',
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListClearCompleted,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
                       ),
-                    ],
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                );
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'clear_completed',
-                child: ListTile(
-                  leading: Icon(
-                    Icons.delete_outline,
-                    size: 20,
-                    color: Colors.red,
-                  ),
-                  title: Text(strings.unifiedTaskListClearCompleted),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
                 ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'clear_failed',
-                child: ListTile(
-                  leading: Icon(
-                    Icons.delete_outline,
-                    size: 20,
-                    color: Colors.red,
+                PopupMenuItem(
+                  value: 'clear_failed',
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListClearFailed,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                  title: Text(
-                    strings.unifiedTaskListClearFailed,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
                 ),
-              ),
-              PopupMenuItem(
-                value: 'clear_all',
-                child: ListTile(
-                  leading: Icon(
-                    Icons.delete_sweep,
-                    size: 20,
-                    color: Colors.red,
+                PopupMenuItem(
+                  value: 'clear_cancelled',
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListClearCancelled,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                  title: Text(
-                    strings.unifiedTaskListClearAll,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
                 ),
-              ),
-            ],
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'clear_all',
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.delete_sweep,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: ConstrainedText(
+                      strings.unifiedTaskListClearAll,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

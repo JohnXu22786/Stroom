@@ -1612,6 +1612,41 @@ class AppLocalizationsEs extends AppLocalizations {
       '¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.';
 
   @override
+  String get unifiedTaskListRetryCancelled =>
+      'Reintentar flujos de tareas cancelados';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Reintentar flujos de tareas fallidos';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Borrar flujos de tareas cancelados';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Confirmar reintento de flujos';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return '¿Reintentar los $count flujos de tareas cancelados? Se conservarán los registros originales.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '¿Reintentar los $count flujos de tareas fallidos? Se conservarán los registros originales.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return '¿Borrar los $count flujos cancelados y sus tareas generadas? Esta acción no se puede deshacer.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Reintento por lotes terminado: $succeeded iniciados, $failed fallidos.';
+  }
+
+  @override
   String get unifiedTaskListCancel => 'Cancelar';
 
   @override
@@ -13877,6 +13912,41 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.';
+
+  @override
+  String get unifiedTaskListRetryCancelled =>
+      'Reintentar flujos de tareas cancelados';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Reintentar flujos de tareas fallidos';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Borrar flujos de tareas cancelados';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Confirmar reintento de flujos';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return '¿Reintentar los $count flujos de tareas cancelados? Se conservarán los registros originales.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '¿Reintentar los $count flujos de tareas fallidos? Se conservarán los registros originales.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return '¿Borrar los $count flujos cancelados y sus tareas generadas? Esta acción no se puede deshacer.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Reintento por lotes terminado: $succeeded iniciados, $failed fallidos.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'Cancelar';

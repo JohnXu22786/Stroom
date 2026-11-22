@@ -434,6 +434,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "¿Está seguro de que desea borrar todas las tareas fallidas?",
   "unifiedTaskListConfirmClearCompletedMessage": "¿Seguro que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.",
   "unifiedTaskListConfirmClearAllMessage": "¿Estás seguro de que deseas borrar todas las tareas? Esta acción no se puede deshacer.",
+  "unifiedTaskListRetryCancelled": "Reintentar flujos de tareas cancelados",
+  "unifiedTaskListRetryFailed": "Reintentar flujos de tareas fallidos",
+  "unifiedTaskListClearCancelled": "Borrar flujos de tareas cancelados",
+  "unifiedTaskListConfirmRetry": "Confirmar reintento de flujos",
+  "unifiedTaskListConfirmRetryCancelledMessage": "¿Reintentar los {count} flujos de tareas cancelados? Se conservarán los registros originales.",
+  "unifiedTaskListConfirmRetryFailedMessage": "¿Reintentar los {count} flujos de tareas fallidos? Se conservarán los registros originales.",
+  "unifiedTaskListConfirmClearCancelledMessage": "¿Borrar los {count} flujos cancelados y sus tareas generadas? Esta acción no se puede deshacer.",
+  "unifiedTaskListBulkRetryResult": "Reintento por lotes terminado: {succeeded} iniciados, {failed} fallidos.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "Cancelar",
   "unifiedTaskListConfirm": "Confirmar",
   "unifiedTaskListClearCompleted": "Borrar tareas completadas",

@@ -1615,6 +1615,39 @@ class AppLocalizationsAr extends AppLocalizations {
       'هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.';
 
   @override
+  String get unifiedTaskListRetryCancelled =>
+      'إعادة محاولة تدفقات المهام الملغاة';
+
+  @override
+  String get unifiedTaskListRetryFailed => 'إعادة محاولة تدفقات المهام الفاشلة';
+
+  @override
+  String get unifiedTaskListClearCancelled => 'مسح تدفقات المهام الملغاة';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'تأكيد إعادة محاولة التدفق';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'هل تريد إعادة محاولة تدفقات المهام الملغاة وعددها $count؟ ستبقى السجلات الأصلية.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'هل تريد إعادة محاولة تدفقات المهام الفاشلة وعددها $count؟ ستبقى السجلات الأصلية.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'هل تريد مسح تدفقات المهام الملغاة وعددها $count والمهام الفرعية التي أنشأتها؟ لا يمكن التراجع عن هذا الإجراء.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'اكتملت إعادة المحاولة الجماعية: بدأ $succeeded وفشل $failed.';
+  }
+
+  @override
   String get unifiedTaskListCancel => 'إلغاء';
 
   @override
@@ -13793,6 +13826,39 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.';
+
+  @override
+  String get unifiedTaskListRetryCancelled =>
+      'إعادة محاولة تدفقات المهام الملغاة';
+
+  @override
+  String get unifiedTaskListRetryFailed => 'إعادة محاولة تدفقات المهام الفاشلة';
+
+  @override
+  String get unifiedTaskListClearCancelled => 'مسح تدفقات المهام الملغاة';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'تأكيد إعادة محاولة التدفق';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'هل تريد إعادة محاولة تدفقات المهام الملغاة وعددها $count؟ ستبقى السجلات الأصلية.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'هل تريد إعادة محاولة تدفقات المهام الفاشلة وعددها $count؟ ستبقى السجلات الأصلية.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'هل تريد مسح تدفقات المهام الملغاة وعددها $count والمهام الفرعية التي أنشأتها؟ لا يمكن التراجع عن هذا الإجراء.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'اكتملت إعادة المحاولة الجماعية: بدأ $succeeded وفشل $failed.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'إلغاء';
