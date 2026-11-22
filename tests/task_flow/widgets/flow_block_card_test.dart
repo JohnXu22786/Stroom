@@ -5,8 +5,89 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
+  testWidgets('narrow localized header preserves title and card actions',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var settings = 0;
+    var replacements = 0;
+    bool? temporaryOutput;
+
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('pt', 'BR'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: FlowBlockCard(
+            block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+            index: 1,
+            isFirst: true,
+            isLast: false,
+            onSettings: () => settings++,
+            onReplace: () => replacements++,
+            onTemporaryOutputChanged: (value) => temporaryOutput = value,
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.text('1. Separação de áudio'), findsOneWidget);
+    expect(find.byType(Checkbox), findsOneWidget);
+    expect(find.byTooltip('Definir parâmetros'), findsOneWidget);
+    expect(find.byTooltip('Substituir bloco'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('Definir parâmetros'));
+    await tester.tap(find.byTooltip('Substituir bloco'));
+    await tester.tap(find.byType(Checkbox));
+    expect(settings, 1);
+    expect(replacements, 1);
+    expect(temporaryOutput, isTrue);
+  });
+
+  testWidgets('wide header keeps actions beside the title at larger text scale',
+      (tester) async {
+    tester.view.physicalSize = const Size(700, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
+          child: Scaffold(
+            body: FlowBlockCard(
+              block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+              index: 1,
+              isFirst: true,
+              isLast: false,
+              onTemporaryOutputChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.byType(Checkbox), findsOneWidget);
+    expect(find.textContaining('Audiotrennung'), findsOneWidget);
+    final title = tester.widget<ConstrainedText>(
+      find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data.startsWith('1. '),
+      ),
+    );
+    expect(title.maxLines, 2);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('menu exposes duplicate and movement with disabled boundary',
       (tester) async {
     var duplicates = 0;
