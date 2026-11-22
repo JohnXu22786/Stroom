@@ -28,14 +28,25 @@ String escapeHtmlAttribute(String text) =>
 ///
 /// [CommonMark spec] https://spec.commonmark.org/0.30/#link-label
 String normalizeLinkLabel(String label) {
-  var text = label.trim().replaceAll(_oneOrMoreWhitespacePattern, ' ');
+  final text = label.trim().replaceAll(_oneOrMoreWhitespacePattern, ' ');
+  final buffer = StringBuffer();
   for (var i = 0; i < text.length; i++) {
-    final mapped = caseFoldingMap[text[i]];
-    if (mapped != null) {
-      text = text.replaceRange(i, i + 1, mapped);
+    var charLength = 1;
+    final firstCodeUnit = text.codeUnitAt(i);
+    if (firstCodeUnit >= 0xd800 &&
+        firstCodeUnit <= 0xdbff &&
+        i + 1 < text.length) {
+      final secondCodeUnit = text.codeUnitAt(i + 1);
+      if (secondCodeUnit >= 0xdc00 && secondCodeUnit <= 0xdfff) {
+        charLength = 2;
+      }
     }
+
+    final character = text.substring(i, i + charLength);
+    buffer.write(caseFoldingMap[character] ?? character);
+    i += charLength - 1;
   }
-  return text;
+  return buffer.toString();
 }
 
 /// Normalizes a link destination, including the process of HTML characters
@@ -95,7 +106,9 @@ String decodeHtmlCharacterFromMatch(Match match) {
   else if (decimalNumber != null) {
     final decimalValue = int.parse(decimalNumber);
     int hexValue;
-    if (decimalValue < 1114112 && decimalValue > 1) {
+    if (decimalValue > 1 &&
+        decimalValue <= 0x10ffff &&
+        (decimalValue < 0xd800 || decimalValue > 0xdfff)) {
       hexValue = int.parse(decimalValue.toRadixString(16), radix: 16);
     } else {
       hexValue = 0xFFFd;
@@ -107,7 +120,9 @@ String decodeHtmlCharacterFromMatch(Match match) {
   // https://spec.commonmark.org/0.30/#hexadecimal-numeric-character-references.
   else if (hexadecimalNumber != null) {
     var hexValue = int.parse(hexadecimalNumber, radix: 16);
-    if (hexValue > 0x10ffff || hexValue == 0) {
+    if (hexValue > 0x10ffff ||
+        hexValue == 0 ||
+        (hexValue >= 0xd800 && hexValue <= 0xdfff)) {
       hexValue = 0xFFFd;
     }
     return String.fromCharCode(hexValue);
