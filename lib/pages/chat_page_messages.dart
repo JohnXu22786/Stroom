@@ -8,15 +8,14 @@ part of 'chat_page.dart';
 
 extension _ChatPageMessagesExt on _ChatPageState {
   ({List<MessageSegment> segments, List<String>? reasoningContents})
-  _messagePresentationFor(ChatMessage message) {
-    final reasoningContents =
-        message.reasoningSections != null &&
+      _messagePresentationFor(ChatMessage message) {
+    final reasoningContents = message.reasoningSections != null &&
             message.reasoningSections!.isNotEmpty
         ? List<String>.from(message.reasoningSections!)
         : message.reasoningContent != null &&
-              message.reasoningContent!.isNotEmpty
-        ? [message.reasoningContent!]
-        : null;
+                message.reasoningContent!.isNotEmpty
+            ? [message.reasoningContent!]
+            : null;
     final rebuiltBlocks = legacyToBlocks(
       reasoningSections: message.reasoningSections ?? [],
       textChunks: message.textSections ?? [],
@@ -24,16 +23,14 @@ extension _ChatPageMessagesExt on _ChatPageState {
       toolCallRoundStarts: message.toolCallRoundStarts ?? [],
     );
     rebuiltBlocks.addAll(message.blocks?.whereType<ErrorBlock>() ?? const []);
-    final hasCanonicalFields =
-        message.toolCallRoundStarts != null ||
+    final hasCanonicalFields = message.toolCallRoundStarts != null ||
         ((message.toolCalls == null || message.toolCalls!.isEmpty) &&
             !(message.blocks?.any((block) => block is ToolCallBlock) ??
                 false) &&
             (message.reasoningSections != null ||
                 message.textSections != null));
-    final blocks = hasCanonicalFields
-        ? rebuiltBlocks
-        : (message.blocks ?? rebuiltBlocks);
+    final blocks =
+        hasCanonicalFields ? rebuiltBlocks : (message.blocks ?? rebuiltBlocks);
     final segments = blocksToSegments(blocks);
     final hasText = segments.any(
       (segment) => segment is TextSegment && segment.text.trim().isNotEmpty,
@@ -194,9 +191,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // empty) snapshot would skip MCP discovery entirely and leave the tool
     // list at built-in-only.
     try {
-      final freshEntriesState = mounted
-          ? ref.read(providerEntriesProvider)
-          : null;
+      final freshEntriesState =
+          mounted ? ref.read(providerEntriesProvider) : null;
       await AppLogService.info(
         'ChatPage',
         '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置',
@@ -314,8 +310,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // 若延迟放在插入之后，快速加载时新插入的旧消息会先闪现 0.5 秒，
       // 再被锚点拉回，产生可见跳动。先转满 0.5 秒再插入，指示器与内容
       // 就位保持同步，锚点校正的时机也与修复前一致。
-      final remaining =
-          _ChatPageState._loadMoreMinDisplayDuration -
+      final remaining = _ChatPageState._loadMoreMinDisplayDuration -
           DateTime.now().difference(loadStartedAt);
       // Search navigation skips the minimum-display delay so jumping to an
       // old match does not stall 500 ms per loaded batch.
@@ -540,9 +535,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
       final savedChatSegments = _isStreamingActive
           ? Map<String, List<MessageSegment>>.from(_chatSegments)
           : null;
-      final savedFinalizedMessages = _isStreamingActive
-          ? Set<String>.from(_finalizedMessages)
-          : null;
+      final savedFinalizedMessages =
+          _isStreamingActive ? Set<String>.from(_finalizedMessages) : null;
       final savedReasoningContents = _isStreamingActive
           ? Map<String, List<String>>.from(_reasoningContents)
           : null;
@@ -601,15 +595,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
           toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
         );
         rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
-        final hasCanonicalFields =
-            msg.toolCallRoundStarts != null ||
+        final hasCanonicalFields = msg.toolCallRoundStarts != null ||
             ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
                 !(msg.blocks?.any((block) => block is ToolCallBlock) ??
                     false) &&
                 (msg.reasoningSections != null || msg.textSections != null));
-        final blocks = hasCanonicalFields
-            ? rebuiltBlocks
-            : (msg.blocks ?? rebuiltBlocks);
+        final blocks =
+            hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
         final segments = blocksToSegments(blocks);
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
@@ -778,11 +770,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // without copying the full reply into the controller message.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
-            false;
+                false;
         if (!inCtrl) {
-          final restoredFullReply = ref
-              .read(chatStreamManagerProvider)
-              .fullReplyFor(activeId);
+          final restoredFullReply =
+              ref.read(chatStreamManagerProvider).fullReplyFor(activeId);
           _controller?.insertMessage(
             Message.text(
               id: savedStreamingMsgId,

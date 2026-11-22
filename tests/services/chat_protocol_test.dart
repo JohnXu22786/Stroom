@@ -357,8 +357,7 @@ void main() {
       ),
     ];
 
-    test('OpenAI：tool call chain omits unverified reasoning content',
-        () {
+    test('OpenAI：tool call chain omits unverified reasoning content', () {
       final msgs = OpenAIProtocol().buildAssistantChainMessage(
         content: '我来查一下',
         toolCalls: calls,

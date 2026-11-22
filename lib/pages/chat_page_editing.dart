@@ -74,9 +74,8 @@ extension _ChatPageEditingExt on _ChatPageState {
   /// id-based (the message must be looked up at removal time — the loop
   /// mutates the controller list, so positions shift).
   Future<void> _removeMessageFromController(String messageId) async {
-    final ctrlMsg = _controller?.messages
-        .where((m) => m.id == messageId)
-        .firstOrNull;
+    final ctrlMsg =
+        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
     if (ctrlMsg != null) {
       await _controller?.removeMessage(ctrlMsg);
     }
@@ -232,8 +231,8 @@ extension _ChatPageEditingExt on _ChatPageState {
       final completeHistory = conversationId == null
           ? List<ChatMessage>.from(_history)
           : await ref
-                .read(conversationsProvider.notifier)
-                .loadFullMessagesForContext(conversationId);
+              .read(conversationsProvider.notifier)
+              .loadFullMessagesForContext(conversationId);
       if (!mounted ||
           ref.read(activeConversationIdProvider) != conversationId ||
           _loadedConversationId != conversationId) {
@@ -313,9 +312,7 @@ extension _ChatPageEditingExt on _ChatPageState {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index >= _history.length) return;
       if (retryConversationId != null &&
-          ref
-              .read(conversationsProvider)
-              .any(
+          ref.read(conversationsProvider).any(
                 (conversation) =>
                     conversation.id == retryConversationId &&
                     conversation.isTemporary,
@@ -383,8 +380,7 @@ extension _ChatPageEditingExt on _ChatPageState {
         countdownResolved = true;
         await conversationsNotifier.finishTemporaryCountdown(
           retryConversationId!,
-          successful:
-              result != null &&
+          successful: result != null &&
               !result.cancelled &&
               !result.failed &&
               result.assistantMessage?.isError != true,
@@ -461,15 +457,14 @@ extension _ChatPageEditingExt on _ChatPageState {
     Future<void> restoreHistory() async {
       var persisted = false;
       try {
-        persisted =
-            activeId != null &&
+        persisted = activeId != null &&
             await ref
                 .read(conversationsProvider.notifier)
                 .restoreMessagesChecked(
-                  activeId,
-                  historyBeforeDelete,
-                  restoredIds: [messageId],
-                );
+              activeId,
+              historyBeforeDelete,
+              restoredIds: [messageId],
+            );
       } finally {
         if (mounted &&
             ref.read(activeConversationIdProvider) == activeId &&
@@ -506,19 +501,19 @@ extension _ChatPageEditingExt on _ChatPageState {
     final otherMessageAttachmentPaths = activeId == null
         ? const <String>{}
         : await ref
-              .read(conversationsProvider.notifier)
-              .getOtherMessageAttachmentPaths(activeId, messageId);
+            .read(conversationsProvider.notifier)
+            .getOtherMessageAttachmentPaths(activeId, messageId);
     final attachmentsToDelete = <Attachment>[];
     for (final att in msg.attachments) {
       final isReferencedElsewhere =
           otherMessageAttachmentPaths.contains(att.storagePath) ||
-          _history.asMap().entries.any(
-            (entry) =>
-                entry.key != index &&
-                entry.value.attachments.any(
-                  (a) => a.storagePath == att.storagePath,
-                ),
-          );
+              _history.asMap().entries.any(
+                    (entry) =>
+                        entry.key != index &&
+                        entry.value.attachments.any(
+                          (a) => a.storagePath == att.storagePath,
+                        ),
+                  );
       if (!isReferencedElsewhere) {
         attachmentsToDelete.add(att);
       }

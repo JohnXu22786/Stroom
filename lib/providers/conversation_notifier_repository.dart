@@ -12,8 +12,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
     await _loadStreamJournalMarkers(preferences);
     final repository = _ref.read(conversationRepositoryProvider);
     _conversationRepository = repository;
-    final migration = await ConversationMigrationService(repository)
-        .migrate(preferences);
+    final migration =
+        await ConversationMigrationService(repository).migrate(preferences);
     if (!migration.verified)
       throw StateError('Conversation migration was not verified.');
 
@@ -73,9 +73,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
       }
     }
     if (!mounted) return;
-    final loadedIds = conversations
-        .map((conversation) => conversation.id)
-        .toSet();
+    final loadedIds =
+        conversations.map((conversation) => conversation.id).toSet();
     final inMemoryAdditions = state
         .where((conversation) => !loadedIds.contains(conversation.id))
         .toList();
@@ -90,12 +89,10 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
     state = pinnedFirstStable([...inMemoryAdditions, ...conversations]);
     _repositoryReady = true;
     _loadHasRun = true;
-    final inMemoryAdditionIds = inMemoryAdditions
-        .map((conversation) => conversation.id)
-        .toSet();
-    final additionsPersisted = inMemoryAdditions.isEmpty
-        ? true
-        : await _persistCoreResult();
+    final inMemoryAdditionIds =
+        inMemoryAdditions.map((conversation) => conversation.id).toSet();
+    final additionsPersisted =
+        inMemoryAdditions.isEmpty ? true : await _persistCoreResult();
 
     final activeId = preferences.getString('active_conversation_id');
     if (activeId != null &&
@@ -176,9 +173,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
             ..addAll({
               for (final entry in decoded.entries)
                 if (entry.key is String && entry.value is List)
-                  entry.key as String: (entry.value as List)
-                      .whereType<String>()
-                      .toSet(),
+                  entry.key as String:
+                      (entry.value as List).whereType<String>().toSet(),
             });
         }
       } catch (error) {
@@ -316,13 +312,11 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
         loadGeneration) {
       return;
     }
-    final messages = repositoryMessages
-        .map(_legacyMessageFromRepository)
-        .toList();
+    final messages =
+        repositoryMessages.map(_legacyMessageFromRepository).toList();
     if (!mounted) return;
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return;
     if (completeMarkerAtStart != null &&
         _completeMessageSnapshotGenerations[conversationId] ==
@@ -358,9 +352,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
 
   bool hasLaterRepositoryMessages(String conversationId) {
     if (!_repositoryReady) return false;
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return false;
     final offset = _repositoryMessageOffsets[conversationId] ?? 0;
     final count = _repositoryMessageCounts[conversationId] ?? 0;
@@ -372,9 +365,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
   /// paging is unavailable for this conversation.
   int? repositoryMessagePageDirection(String conversationId, int messageOrder) {
     if (!_repositoryReady || messageOrder < 0) return null;
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return null;
     final start = _repositoryMessageOffsets[conversationId] ?? 0;
     final end = start + conversation.messages.length;
@@ -417,9 +409,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
     int limit = _conversationRepositoryMessagePageSize,
   }) async {
     if (!_repositoryReady || limit <= 0) return const [];
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return const [];
     final offset = _repositoryMessageOffsets[conversationId] ?? 0;
     final count = _repositoryMessageCounts[conversationId] ?? 0;
@@ -485,9 +476,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
     if (!rows.any((message) => message.id == messageId)) return false;
     final messages = rows.map(_legacyMessageFromRepository).toList();
     if (!mounted) return false;
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return false;
     final messageCount = await repository.countMessages(
       conversationId: conversationId,
@@ -526,16 +516,13 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
     List<ChatMessage> messages,
   ) {
     if (!_repositoryReady || messages.isEmpty) return;
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return;
-    final existingIds = conversation.messages
-        .map((message) => message.id)
-        .toSet();
-    final older = messages
-        .where((message) => !existingIds.contains(message.id))
-        .toList();
+    final existingIds =
+        conversation.messages.map((message) => message.id).toSet();
+    final older =
+        messages.where((message) => !existingIds.contains(message.id)).toList();
     if (older.isEmpty) return;
     conversation.messages = [...older, ...conversation.messages];
     final signatures = _persistedMessageRecords.putIfAbsent(
@@ -552,9 +539,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
       });
     }
     final currentOffset = _repositoryMessageOffsets[conversationId] ?? 0;
-    _repositoryMessageOffsets[conversationId] = (currentOffset - older.length)
-        .clamp(0, currentOffset)
-        .toInt();
+    _repositoryMessageOffsets[conversationId] =
+        (currentOffset - older.length).clamp(0, currentOffset).toInt();
     state = List<Conversation>.from(state);
   }
 
@@ -564,16 +550,13 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
     List<ChatMessage> messages,
   ) {
     if (!_repositoryReady || messages.isEmpty) return;
-    final conversation = state
-        .where((item) => item.id == conversationId)
-        .firstOrNull;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
     if (conversation == null) return;
-    final existingIds = conversation.messages
-        .map((message) => message.id)
-        .toSet();
-    final newer = messages
-        .where((message) => !existingIds.contains(message.id))
-        .toList();
+    final existingIds =
+        conversation.messages.map((message) => message.id).toSet();
+    final newer =
+        messages.where((message) => !existingIds.contains(message.id)).toList();
     if (newer.isEmpty) return;
     conversation.messages = [...conversation.messages, ...newer];
     final signatures = _persistedMessageRecords.putIfAbsent(
@@ -702,8 +685,7 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
             : sequences.values.reduce((a, b) => a > b ? a : b);
         final repositoryHighWaterMark =
             _repositoryMessageSequenceHighWaterMarks[conversation.id] ?? -1;
-        var nextSequence =
-            (cachedHighWaterMark > repositoryHighWaterMark
+        var nextSequence = (cachedHighWaterMark > repositoryHighWaterMark
                 ? cachedHighWaterMark
                 : repositoryHighWaterMark) +
             1;
@@ -750,12 +732,11 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
                   ...neutral.extensions,
                   ConversationRecordAdapter.legacyMessageNamespace: {
                     ...?neutral.extensions[ConversationRecordAdapter
-                            .legacyMessageNamespace]
-                        as Map<String, dynamic>?,
+                        .legacyMessageNamespace] as Map<String, dynamic>?,
                     'record':
                         ConversationRecordAdapter.legacyMessageRecordForStorage(
-                          message.toMap(),
-                        ),
+                      message.toMap(),
+                    ),
                   },
                 },
                 extraFields: neutral.extraFields,
@@ -766,14 +747,14 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
         }
         final deletionCandidates =
             completeSnapshots.containsKey(conversation.id)
-            ? sequences.keys
-            : oldRecords.keys;
+                ? sequences.keys
+                : oldRecords.keys;
         final deletedIds =
             _messageLoadedConversationIds.contains(conversation.id)
-            ? deletionCandidates
-                  .where((id) => !currentIds.contains(id))
-                  .toList()
-            : const <String>[];
+                ? deletionCandidates
+                    .where((id) => !currentIds.contains(id))
+                    .toList()
+                : const <String>[];
         for (final staleId in deletedIds) {
           oldRecords.remove(staleId);
           sequences.remove(staleId);
@@ -804,9 +785,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
           persistedMessageSequences[conversation.id] = sequences;
         }
       }
-      final currentIds = snapshot
-          .map((conversation) => conversation.id)
-          .toSet();
+      final currentIds =
+          snapshot.map((conversation) => conversation.id).toSet();
       final deletedConversationIds = persistedConversationRecords.keys
           .where((id) => !currentIds.contains(id))
           .toList();
@@ -826,9 +806,8 @@ extension ConversationsNotifierRepository on ConversationsNotifier {
       }
       await repository.applySnapshotChanges(
         changes: persistedChanges,
-        conversationOrder: snapshot
-            .map((conversation) => conversation.id)
-            .toList(),
+        conversationOrder:
+            snapshot.map((conversation) => conversation.id).toList(),
         deleteConversationIds: deletedConversationIds,
       );
       _persistedConversationRecords

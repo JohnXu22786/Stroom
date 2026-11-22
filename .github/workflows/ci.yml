@@ -112,6 +112,43 @@ jobs:
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
+              lib/ai_gateway/realtime_channel_io.dart|\
+              lib/ai_gateway/realtime_channel_unsupported.dart)
+                test_f="tests/ai_gateway/ai_gateway_realtime_session_test.dart"
+                ;;
+              lib/models/math_drawing_state.dart)
+                test_f="tests/widgets/math_canvas_test.dart"
+                ;;
+              lib/pages/trae_solo_authorization_page.dart)
+                test_f="tests/pages/llm_account_management_page_test.dart"
+                ;;
+              lib/services/aws_credential_chain.dart|\
+              lib/services/aws_credential_chain_io.dart|\
+              lib/services/aws_credential_chain_stub.dart)
+                test_f="tests/services/aws_credential_chain_io_test.dart"
+                ;;
+              lib/services/azure_openai_endpoint.dart|\
+              lib/utils/credential_field_sanitizer.dart)
+                test_f="tests/services/llm_connector_service_test.dart"
+                ;;
+              lib/services/conversation_repository_factory_io.dart|\
+              lib/services/conversation_repository_factory_stub.dart|\
+              lib/services/conversation_repository_factory_web.dart|\
+              lib/services/conversation_repository_sqflite.dart)
+                test_f="tests/services/conversation_repository_test.dart"
+                ;;
+              lib/services/devin_cli_acp_permissions_ffi.dart|\
+              lib/services/devin_cli_acp_permissions_stub.dart)
+                test_f="tests/services/devin_cli_acp_test.dart"
+                ;;
+              lib/services/llm_oauth_loopback_io.dart|\
+              lib/services/llm_oauth_loopback_stub.dart)
+                test_f="tests/services/llm_oauth_loopback_test.dart"
+                ;;
+              lib/services/startup_preferences_android.dart|\
+              lib/services/startup_preferences_android_stub.dart)
+                test_f="tests/startup/startup_preferences_android_options_test.dart"
+                ;;
               lib/l10n/app_localizations.dart|\
               lib/l10n/app_localizations_en.dart|\
               lib/l10n/app_localizations_zh.dart)

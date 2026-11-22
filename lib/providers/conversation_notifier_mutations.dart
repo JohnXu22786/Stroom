@@ -41,19 +41,15 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final deletedById = {
       for (final conversation in deleted) conversation.id: conversation,
     };
-    for (
-      var originalIndex = 0;
-      originalIndex < original.length;
-      originalIndex++
-    ) {
+    for (var originalIndex = 0;
+        originalIndex < original.length;
+        originalIndex++) {
       final conversation = deletedById[original[originalIndex].id];
       if (conversation == null) continue;
       var insertionIndex = -1;
-      for (
-        var previousIndex = originalIndex - 1;
-        previousIndex >= 0;
-        previousIndex--
-      ) {
+      for (var previousIndex = originalIndex - 1;
+          previousIndex >= 0;
+          previousIndex--) {
         final currentIndex = restored.indexWhere(
           (item) => item.id == original[previousIndex].id,
         );
@@ -63,11 +59,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         }
       }
       if (insertionIndex < 0) {
-        for (
-          var nextIndex = originalIndex + 1;
-          nextIndex < original.length;
-          nextIndex++
-        ) {
+        for (var nextIndex = originalIndex + 1;
+            nextIndex < original.length;
+            nextIndex++) {
           insertionIndex = restored.indexWhere(
             (item) => item.id == original[nextIndex].id,
           );
@@ -153,9 +147,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final assistant = assistantId == null
         ? null
         : _ref
-              .read(assistantProvider)
-              .where((a) => a.id == assistantId)
-              .firstOrNull;
+            .read(assistantProvider)
+            .where((a) => a.id == assistantId)
+            .firstOrNull;
     final hasToolDefaults = assistant?.defaultToolNames != null;
     final conv = Conversation(
       id: id,
@@ -456,8 +450,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     var markedRead = false;
     for (final conversation in state) {
       if (conversation.id != id && conversation.id != previousId) continue;
-      markedRead =
-          _markLatestAssistantMessageRead(
+      markedRead = _markLatestAssistantMessageRead(
             conversation,
             clearManualUnread: conversation.id == id,
           ) ||
@@ -660,9 +653,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     try {
       await _appendJournalBarrier({
         'kind': 'conversationsDeleted',
-        'conversationIds': deleted
-            .map((conversation) => conversation.id)
-            .toList(),
+        'conversationIds':
+            deleted.map((conversation) => conversation.id).toList(),
         'deletedAt': deletedAt.toIso8601String(),
       });
     } catch (error) {
@@ -694,9 +686,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         await restoreDeletedConversations(
           deleted,
           originalOrder: original,
-          previousActiveConversationId: idSet.contains(previousActiveId)
-              ? previousActiveId
-              : null,
+          previousActiveConversationId:
+              idSet.contains(previousActiveId) ? previousActiveId : null,
         );
       }
       return false;
@@ -718,9 +709,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       (m) => m.role == 'user',
       orElse: () => conv.messages.first,
     );
-    final firstAssistant = conv.messages
-        .where((m) => m.role == 'assistant')
-        .firstOrNull;
+    final firstAssistant =
+        conv.messages.where((m) => m.role == 'assistant').firstOrNull;
 
     String combined = firstUser.content.trim().isNotEmpty
         ? firstUser.content
@@ -728,9 +718,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (firstAssistant != null) {
       combined += ' - ${firstAssistant.content}';
     }
-    final title = combined.length > 60
-        ? '${combined.substring(0, 60)}…'
-        : combined;
+    final title =
+        combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
 
     state = state.map((c) {
       if (c.id != id) return c;
@@ -772,9 +761,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           .where((id) => _hasStreamCheckpoint(conversationId, id))
           .toList();
       if (!_streamCheckpointKeyIndexIsCurrent) {
-        final uncertainIds = allRemovedIds
-            .where((id) => !removedIds.contains(id))
-            .toList();
+        final uncertainIds =
+            allRemovedIds.where((id) => !removedIds.contains(id)).toList();
         if (uncertainIds.isNotEmpty) {
           _pendingUnindexedMessageDeletionIds
               .putIfAbsent(conversationId, () => <String>{})
@@ -804,9 +792,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
               .expand((conversation) => conversation.messages)
               .map((message) => message.id)
               .toSet();
-          final restoredDuringDelete = removedIds
-              .where(latestIds.contains)
-              .toList();
+          final restoredDuringDelete =
+              removedIds.where(latestIds.contains).toList();
           if (restoredDuringDelete.isNotEmpty) {
             await _appendMessageRestorations(
               conversationId,
@@ -850,9 +837,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
               );
             }
           } else if (mounted && latest != null) {
-            final latestIds = latest.messages
-                .map((message) => message.id)
-                .toSet();
+            final latestIds =
+                latest.messages.map((message) => message.id).toSet();
             final restoredIds = removedIds
                 .where((messageId) => latestIds.contains(messageId))
                 .toList();
@@ -921,11 +907,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         .firstOrNull;
     if (conversation != null) {
       checkpoint['updatedAt'] = checkpointUpdatedAt!.toIso8601String();
-      checkpoint['conversationCreatedAt'] = conversation.createdAt
-          .toIso8601String();
+      checkpoint['conversationCreatedAt'] =
+          conversation.createdAt.toIso8601String();
       checkpoint['isTemporary'] = conversation.isTemporary;
-      checkpoint['temporaryExpiresAt'] = conversation.temporaryExpiresAt
-          ?.toIso8601String();
+      checkpoint['temporaryExpiresAt'] =
+          conversation.temporaryExpiresAt?.toIso8601String();
       checkpoint['temporaryExpiryVersion'] =
           conversation.temporaryExpiryVersion;
       checkpoint['temporaryPausedRemainingMilliseconds'] =
@@ -967,9 +953,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           (m) => m.role == 'user',
           orElse: () => messages.first,
         );
-        final firstAssistant = messages
-            .where((m) => m.role == 'assistant')
-            .firstOrNull;
+        final firstAssistant =
+            messages.where((m) => m.role == 'assistant').firstOrNull;
 
         String combined = firstUser.content.trim().isNotEmpty
             ? firstUser.content
@@ -977,9 +962,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         if (firstAssistant != null) {
           combined += ' - ${firstAssistant.content}';
         }
-        c.title = combined.length > 60
-            ? '${combined.substring(0, 60)}…'
-            : combined;
+        c.title =
+            combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
         // 标记为自动生成：流完成后由标题助手用 AI 标题覆盖
         c.titleAutoGenerated = true;
       }

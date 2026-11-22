@@ -386,8 +386,8 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       }
       final fullHistoryForRequest = historyForRequestPrefix == null
           ? await ref
-                .read(conversationsProvider.notifier)
-                .loadFullMessagesForContext(convId)
+              .read(conversationsProvider.notifier)
+              .loadFullMessagesForContext(convId)
           : null;
       if (!mounted || ref.read(activeConversationIdProvider) != convId) {
         return null;

@@ -197,8 +197,8 @@ void main() {
       );
 
       var deleteCalls = 0;
-      AttachmentStorage.readFileOverrideForTesting = (path) async =>
-          Uint8List.fromList([1, 2, 3, 4]);
+      AttachmentStorage.readFileOverrideForTesting =
+          (path) async => Uint8List.fromList([1, 2, 3, 4]);
       AttachmentStorage.deleteFileOverrideForTesting = (path) async {
         deleteCalls++;
         return true;

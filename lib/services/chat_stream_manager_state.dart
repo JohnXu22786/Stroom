@@ -910,7 +910,6 @@ class _ConversationStreamState {
   _ConversationStreamState({required this.convId});
 }
 
-
 List<Map<String, dynamic>> _orderedAssistantContentParts(
   _ConversationStreamState state,
 ) {

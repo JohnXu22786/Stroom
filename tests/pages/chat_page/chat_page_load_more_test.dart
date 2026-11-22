@@ -447,8 +447,8 @@ void main() {
                 content: index == 0
                     ? '```dart\nneedle-code-only\n```'
                     : index == 40
-                    ? 'Newer plain text needle-code-only match'
-                    : 'Ordinary message $index',
+                        ? 'Newer plain text needle-code-only match'
+                        : 'Ordinary message $index',
                 createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
               ).toMap(),
           ],
@@ -1004,13 +1004,12 @@ void main() {
         addTearDown(repository.close);
         late final ProviderContainer container;
         final manager = _CompletingStreamManager(
-          onSuccess: (conversationId, messages) => container
-              .read(conversationsProvider.notifier)
-              .updateMessages(
-                conversationId,
-                messages,
-                completeHistorySnapshot: true,
-              ),
+          onSuccess: (conversationId, messages) =>
+              container.read(conversationsProvider.notifier).updateMessages(
+                    conversationId,
+                    messages,
+                    completeHistorySnapshot: true,
+                  ),
         );
         container = ProviderContainer(
           overrides: [
@@ -1455,15 +1454,14 @@ void main() {
                 role: index == 5 || index == 6
                     ? 'assistant'
                     : index.isEven
-                    ? 'user'
-                    : 'assistant',
+                        ? 'user'
+                        : 'assistant',
                 content: index == 6
                     ? 'Repeated paged text'
                     : 'Message $index content',
                 createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
-                reasoningSections: index == 5
-                    ? ['Reasoning for paged message']
-                    : null,
+                reasoningSections:
+                    index == 5 ? ['Reasoning for paged message'] : null,
                 textSections: index == 5 ? ['Message $index content'] : null,
                 toolCalls: index == 5
                     ? [
@@ -1543,18 +1541,16 @@ void main() {
       }
 
       chat = tester.widget<Chat>(find.byType(Chat));
-      final latestWindowIds = chat.chatController.messages
-          .map((message) => message.id)
-          .toList();
+      final latestWindowIds =
+          chat.chatController.messages.map((message) => message.id).toList();
       // The loaded page and sent response must not introduce duplicate rows.
       expect(latestWindowIds.toSet(), hasLength(latestWindowIds.length));
 
       await dragToTop(tester);
       await tester.pump(const Duration(milliseconds: 600));
       chat = tester.widget<Chat>(find.byType(Chat));
-      final pagedIds = chat.chatController.messages
-          .map((message) => message.id)
-          .toList();
+      final pagedIds =
+          chat.chatController.messages.map((message) => message.id).toList();
       expect(pagedIds.toSet(), hasLength(pagedIds.length));
       expect(pagedIds, contains('m6'));
       expect(pagedIds, contains('m25'));
@@ -1660,8 +1656,7 @@ void main() {
         expect(
           find.byKey(loadMoreIndicatorKey),
           findsOneWidget,
-          reason:
-              'spinner must stay visible at least 500ms after the '
+          reason: 'spinner must stay visible at least 500ms after the '
               'load finished',
         );
 
@@ -1676,8 +1671,7 @@ void main() {
         expect(
           chat.chatController.messages.length,
           35,
-          reason:
-              'the older-messages page was inserted after the '
+          reason: 'the older-messages page was inserted after the '
               'minimum display window',
         );
 
@@ -1685,7 +1679,8 @@ void main() {
       },
     );
 
-    testWidgets('no-more-content hint appears only after reaching the top with '
+    testWidgets(
+        'no-more-content hint appears only after reaching the top with '
         'nothing left to load', (tester) async {
       await pumpConversation(tester, messageCount: 35);
 
@@ -1740,8 +1735,7 @@ void main() {
         expect(
           find.text(noMoreMessagesText),
           findsOneWidget,
-          reason:
-              'reaching the top of a fully loaded conversation shows '
+          reason: 'reaching the top of a fully loaded conversation shows '
               'the hint',
         );
 
@@ -1749,7 +1743,8 @@ void main() {
       },
     );
 
-    testWidgets('short conversation: no hint on entry; hint appears only after '
+    testWidgets(
+        'short conversation: no hint on entry; hint appears only after '
         'the user pulls at the top', (tester) async {
       // Fewer messages than one page: everything is loaded from the start,
       // so reaching the top means "no more content" — but only after the
@@ -1770,8 +1765,7 @@ void main() {
       expect(
         find.text(noMoreMessagesText),
         findsOneWidget,
-        reason:
-            'pull at the top of a fully-loaded conversation shows '
+        reason: 'pull at the top of a fully-loaded conversation shows '
             'the hint',
       );
 
