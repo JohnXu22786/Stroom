@@ -105,6 +105,25 @@ List<String> _collectPlainText(List<m.Node> nodes) {
 }
 
 void main() {
+  group('HTML block source ranges', () {
+    test(
+      'unterminated block ends at EOF while terminated block is consumed',
+      () {
+        final unterminated = m.Document().parseLineListWithRanges([
+          m.Line('<!-- unterminated'),
+        ]);
+        expect(unterminated.blocks, hasLength(1));
+        expect(unterminated.blocks.single.startLine, 0);
+        expect(unterminated.blocks.single.endLine, 1);
+
+        final terminated = m.Document().parseLineListWithRanges([
+          m.Line('<!-- terminated -->'),
+        ]);
+        expect(terminated.blocks, hasLength(1));
+        expect(terminated.blocks.single.endLine, 1);
+      },
+    );
+  });
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
