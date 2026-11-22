@@ -132,15 +132,59 @@ class AudioPlayerToolbarButton extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.primary,
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating actions for text selected in the audio player's companion text.
+class AudioPlayerSelectionToolbar extends StatelessWidget {
+  final String playLabel;
+  final String generateLabel;
+  final VoidCallback onPlay;
+  final VoidCallback onGenerate;
+
+  const AudioPlayerSelectionToolbar({
+    super.key,
+    required this.playLabel,
+    required this.generateLabel,
+    required this.onPlay,
+    required this.onGenerate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Wrap(
+          spacing: 4,
+          children: [
+            AudioPlayerToolbarButton(
+              icon: Icons.play_arrow,
+              label: playLabel,
+              onPressed: onPlay,
+            ),
+            AudioPlayerToolbarButton(
+              icon: Icons.auto_awesome,
+              label: generateLabel,
+              onPressed: onGenerate,
+            ),
+          ],
         ),
       ),
     );

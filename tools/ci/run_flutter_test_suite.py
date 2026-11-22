@@ -183,6 +183,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/content/media_preview_sheet_test.dart",
         "pages/media_preview_audio_classification_test.dart",
         "pages/audio_player_shared_test.dart",
+        "widgets/audio_player_selection_toolbar_test.dart",
         "pages/settings/asr_page_test.dart",
         "pages/settings/asr_model_config_constrained_text_test.dart",
         "pages/settings/simple_model_config_constrained_text_test.dart",
