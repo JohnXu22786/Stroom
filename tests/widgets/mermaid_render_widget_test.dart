@@ -1280,8 +1280,8 @@ void main() {
     testWidgets('zoom tapped while loading is applied after WebView readiness',
         (tester) async {
       final previousPlatform = InAppWebViewPlatform.instance;
-      final platform = _MermaidWebViewPlatform();
-      InAppWebViewPlatform.instance = platform;
+      final webViewPlatform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = webViewPlatform;
       addTearDown(() => InAppWebViewPlatform.instance =
           previousPlatform ?? _MermaidWebViewPlatform());
 
@@ -1308,7 +1308,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pump();
 
-      final webView = platform.webView!;
+      final webView = webViewPlatform.webView!;
       final controller = webView.controllerFromPlatform<InAppWebViewController>(
         webView.controller,
       );
@@ -1318,11 +1318,9 @@ void main() {
       // The control is visible while loading, but its WebView controller has
       // not reported creation yet.
       expect(find.byIcon(Icons.zoom_in), findsOneWidget);
-      final firstTapTimestampLowerBound =
-          DateTime.now().microsecondsSinceEpoch / 1000.0;
+      final firstTapTimestampLowerBound = platform.mermaidZoomInputTimestamp;
       await tester.tap(find.byIcon(Icons.zoom_in));
-      final firstTapTimestampUpperBound =
-          DateTime.now().microsecondsSinceEpoch / 1000.0;
+      final firstTapTimestampUpperBound = platform.mermaidZoomInputTimestamp;
       await tester.pump();
       expect(
         fakeController.evaluatedScripts,
@@ -1379,12 +1377,14 @@ void main() {
             .every((operation) => operation['inputTimestamp'] is num),
         isTrue,
       );
+      final firstQueuedTimestamp = queuedOperations.first['inputTimestamp'];
       expect(
-        queuedOperations.first['inputTimestamp'],
+        firstQueuedTimestamp,
         inInclusiveRange(
             firstTapTimestampLowerBound, firstTapTimestampUpperBound),
-        reason:
-            'the queued command must retain its click time through the load delay',
+        reason: 'queued timestamp $firstQueuedTimestamp should be captured by '
+            'the tap-time clock [$firstTapTimestampLowerBound, '
+            '$firstTapTimestampUpperBound], even after the load delay',
       );
 
       // Load completion can precede Mermaid's asynchronous render and fit.
