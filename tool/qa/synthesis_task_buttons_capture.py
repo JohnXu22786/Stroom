@@ -20,19 +20,25 @@ def main():
             device_scale_factor=1,
             reduced_motion="reduce",
         )
-        for status in ("paused", "failed", "completed"):
-            page = context.new_page()
-            page.on("pageerror", lambda error: errors.append(str(error)))
-            page.goto(
-                f"{URL}/?status={status}&locale=zh-CN&scale=2.5&theme=light",
-                wait_until="load",
-                timeout=180_000,
-            )
-            page.wait_for_timeout(4_000)
-            if page.evaluate("devicePixelRatio") != 1:
-                raise RuntimeError("Expected device scale factor 1")
-            page.screenshot(path=str(OUTPUT / f"{status}-zh-CN-320x640-scale2_5.png"))
-            page.close()
+        for scale_label, scale in (("1_0", 1), ("2_5", 2.5)):
+            for status in ("paused", "failed", "completed"):
+                page = context.new_page()
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(
+                    f"{URL}/?status={status}&locale=en&scale={scale}&theme=light",
+                    wait_until="load",
+                    timeout=180_000,
+                )
+                page.wait_for_timeout(20_000)
+                if page.evaluate("devicePixelRatio") != 1:
+                    raise RuntimeError("Expected device scale factor 1")
+                page.screenshot(
+                    path=str(
+                        OUTPUT
+                        / f"{status}-en-320x640-scale{scale_label}.png"
+                    )
+                )
+                page.close()
         context.close()
         browser.close()
     if errors:
@@ -41,9 +47,9 @@ def main():
         {
             "viewport_css_px": {"width": 320, "height": 640},
             "device_pixel_ratio": 1,
-            "locale": "zh-CN",
+            "locale": "en",
             "theme": "light",
-            "text_scale": 2.5,
+            "text_scales": [1, 2.5],
             "focus": "none",
             "keyboard": "closed",
             "states": ["paused", "failed", "completed"],

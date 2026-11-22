@@ -17,13 +17,13 @@ void main() {
     'failed' => TaskStatus.failed,
     _ => TaskStatus.completed,
   };
-  final locale = const Locale('zh', 'CN');
+  final locale = const Locale('en');
   final task = SynthesisTask(
     id: 'local-screenshot-fixture',
-    title: '本地合成任务',
+    title: 'Local synthesis task',
     status: status,
-    error: status == TaskStatus.failed ? '本地示例错误' : null,
-    text: '仅用于按钮布局截图，不会调用服务。',
+    error: status == TaskStatus.failed ? 'Local example error' : null,
+    text: 'Layout screenshot fixture; no service is called.',
     providerConfig: ProviderConfigItem(
       providerName: 'Local fixture',
       host: 'https://example.invalid',
