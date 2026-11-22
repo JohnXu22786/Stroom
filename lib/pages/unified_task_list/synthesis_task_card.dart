@@ -291,9 +291,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           children: [
             ElevatedButton.icon(
               onPressed: () {
-                ref
-                    .read(taskListProvider.notifier)
-                    .resumeTask(widget.task.id);
+                ref.read(taskListProvider.notifier).resumeTask(widget.task.id);
               },
               icon: const Icon(Icons.play_arrow, size: 16),
               label: Text(
