@@ -743,6 +743,61 @@ void main() {
       },
     );
 
+    test('completeTask reconciles unfinished steps and preserves outcomes', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: '测试OCR',
+      );
+      notifier.setSteps(id, [
+        BgTaskStep(label: '已完成', status: BgStepStatus.completed),
+        BgTaskStep(label: '执行中', status: BgStepStatus.running),
+        BgTaskStep(label: '未开始', status: BgStepStatus.pending),
+        BgTaskStep(label: '主动跳过', status: BgStepStatus.skipped),
+        BgTaskStep(label: '实际失败', status: BgStepStatus.failed),
+      ]);
+
+      notifier.completeTask(id);
+
+      expect(
+        notifier.taskById(id)!.steps.map((step) => step.status),
+        [
+          BgStepStatus.completed,
+          BgStepStatus.completed,
+          BgStepStatus.completed,
+          BgStepStatus.skipped,
+          BgStepStatus.failed,
+        ],
+      );
+      notifier.dispose();
+    });
+
+    test('failTask closes active and pending steps without hiding failure', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: '测试OCR',
+      );
+      notifier.setSteps(id, [
+        BgTaskStep(label: '已完成', status: BgStepStatus.completed),
+        BgTaskStep(label: '执行中', status: BgStepStatus.running),
+        BgTaskStep(label: '未开始', status: BgStepStatus.pending),
+        BgTaskStep(label: '主动跳过', status: BgStepStatus.skipped),
+      ]);
+
+      notifier.failTask(id, error: '识别失败');
+
+      final task = notifier.taskById(id)!;
+      expect(task.steps.map((step) => step.status), [
+        BgStepStatus.completed,
+        BgStepStatus.failed,
+        BgStepStatus.skipped,
+        BgStepStatus.skipped,
+      ]);
+      expect(task.error, '识别失败');
+      notifier.dispose();
+    });
+
     test('completeTask without downloadedFilePath keeps it null', () {
       final notifier = BackgroundTaskNotifier();
 

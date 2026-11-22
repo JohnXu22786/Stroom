@@ -5924,8 +5924,25 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     state = state.map((t) {
       if (t.id != taskId) return t;
       final shouldClearError = error == null && status == TaskStatus.completed;
+      final steps = t.steps.map((step) {
+        if (status == TaskStatus.completed &&
+            (step.status == BgStepStatus.pending ||
+                step.status == BgStepStatus.running)) {
+          return step.copyWith(status: BgStepStatus.completed);
+        }
+        if (status == TaskStatus.failed) {
+          if (step.status == BgStepStatus.running) {
+            return step.copyWith(status: BgStepStatus.failed);
+          }
+          if (step.status == BgStepStatus.pending) {
+            return step.copyWith(status: BgStepStatus.skipped);
+          }
+        }
+        return step;
+      }).toList(growable: false);
       final updated = t.copyWith(
         status: status,
+        steps: steps,
         error: error,
         clearError: shouldClearError,
         downloadedFilePath: downloadedFilePath,
