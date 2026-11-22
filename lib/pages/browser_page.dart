@@ -491,6 +491,8 @@ class _BrowserPageState extends State<BrowserPage> {
   final ValueNotifier<Set<String>> _scriptRuntimeErrors =
       ValueNotifier<Set<String>>({});
   final Set<String> _scriptInjectionsInFlight = {};
+  final Set<String> _scriptCodeEvaluationsInFlight = {};
+  final Set<String> _scriptInjectionsPendingAfterManagerChange = {};
   final Map<String, String> _scriptInjectionsByPage = {};
   int _userscriptNavigationGeneration = 0;
 
@@ -746,7 +748,10 @@ class _BrowserPageState extends State<BrowserPage> {
     unawaited(injectionChain);
   }
 
-  Future<void> _injectUserScript(UserScript script) async {
+  Future<void> _injectUserScript(
+    UserScript script, {
+    bool requestedByManager = false,
+  }) async {
     final controller = _webViewController;
     if (controller == null || _isLoading || !script.shouldRunAt(_currentUrl)) {
       return;
@@ -755,8 +760,17 @@ class _BrowserPageState extends State<BrowserPage> {
     final navigationGeneration = _userscriptNavigationGeneration;
     final pageKey = '${script.id}\n$injectionUrl';
     final injectionKey = '$navigationGeneration\n$pageKey';
-    if (_scriptInjectionsByPage[pageKey] == script.code) return;
-    if (!_scriptInjectionsInFlight.add(injectionKey)) return;
+    if (!requestedByManager &&
+        _scriptInjectionsByPage[pageKey] == script.code) {
+      return;
+    }
+    if (!_scriptInjectionsInFlight.add(injectionKey)) {
+      if (requestedByManager &&
+          _scriptCodeEvaluationsInFlight.contains(injectionKey)) {
+        _scriptInjectionsPendingAfterManagerChange.add(injectionKey);
+      }
+      return;
+    }
     final errorSource = 'stroom-userscript-${script.id}.js';
     String? evaluatedCode;
     final monitor = '''
@@ -802,6 +816,7 @@ class _BrowserPageState extends State<BrowserPage> {
         return;
       }
       evaluatedCode = currentScript.code;
+      _scriptCodeEvaluationsInFlight.add(injectionKey);
       await controller.evaluateJavascript(
         source: '$evaluatedCode\n//# sourceURL=$errorSource',
       );
@@ -813,11 +828,14 @@ class _BrowserPageState extends State<BrowserPage> {
       }
     } catch (_) {
       debugPrint('[BrowserPage] user-script evaluation failed');
-      if (injectionUrl == _currentUrl && controller == _webViewController) {
+      if (navigationGeneration == _userscriptNavigationGeneration &&
+          injectionUrl == _currentUrl &&
+          controller == _webViewController) {
         _markScriptRuntimeError(script.id);
       }
     } finally {
       _scriptInjectionsInFlight.remove(injectionKey);
+      _scriptCodeEvaluationsInFlight.remove(injectionKey);
       UserScript? latestScript;
       for (final candidate in _scripts) {
         if (candidate.id == script.id) {
@@ -825,7 +843,16 @@ class _BrowserPageState extends State<BrowserPage> {
           break;
         }
       }
-      if (navigationGeneration == _userscriptNavigationGeneration &&
+      final requestedAgain =
+          _scriptInjectionsPendingAfterManagerChange.remove(injectionKey);
+      if (requestedAgain &&
+          navigationGeneration == _userscriptNavigationGeneration &&
+          injectionUrl == _currentUrl &&
+          latestScript != null &&
+          latestScript.shouldRunAt(_currentUrl)) {
+        _scriptInjectionsByPage.remove(pageKey);
+        unawaited(_injectUserScript(latestScript));
+      } else if (navigationGeneration == _userscriptNavigationGeneration &&
           injectionUrl == _currentUrl &&
           latestScript != null &&
           latestScript.shouldRunAt(_currentUrl) &&
@@ -1512,6 +1539,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 !updated.enabled ||
                 updated.code != previous.code) {
               _clearScriptRuntimeError(previous.id);
+              _scriptInjectionsByPage.remove(
+                '${previous.id}\n$_currentUrl',
+              );
             }
           }
           final scriptsToInject = scriptsToInjectAfterManagerChange(
@@ -1522,7 +1552,7 @@ class _BrowserPageState extends State<BrowserPage> {
           setState(() => _scripts = scripts);
           _saveScripts();
           for (final script in scriptsToInject) {
-            unawaited(_injectUserScript(script));
+            unawaited(_injectUserScript(script, requestedByManager: true));
           }
         },
       ),
