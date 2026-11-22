@@ -24,6 +24,7 @@ import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 import 'providers/locale_provider.dart';
+import 'widgets/startup_initialization_error_screen.dart';
 
 String _sanitizeDiagnosticText(String value) {
   return value
@@ -306,23 +307,9 @@ Future<void> main() async {
         final strings = appLocalizationsForLocale(null);
         runApp(
           MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      strings.startupErrorTitle,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(strings.startupErrorDetails('$e')),
-                  ],
-                ),
-              ),
+            home: StartupInitializationErrorScreen(
+              title: strings.startupErrorTitle,
+              details: strings.startupErrorDetails('$e'),
             ),
           ),
         );
