@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix="stroom-cookie-path-") as frame_dir:
         page.screenshot(
             path=str(OUTPUT / "cookie-path-en-320x640-1x-light.png")
         )
-        for frame in range(32):
+        for frame in range(160):
             page.screenshot(path=str(frames / f"frame-{frame:03d}.png"))
             page.wait_for_timeout(250)
         browser.close()

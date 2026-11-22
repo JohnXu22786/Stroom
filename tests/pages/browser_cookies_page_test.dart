@@ -147,11 +147,13 @@ void main() {
           .singleWhere((label) => label.data == path);
       expect(pathLabel.maxLines, 1);
       expect(
-        tester.getSize(
-          find.byWidgetPredicate(
-            (widget) => widget is ConstrainedText && widget.data == path,
-          ),
-        ).width,
+        tester
+            .getSize(
+              find.byWidgetPredicate(
+                (widget) => widget is ConstrainedText && widget.data == path,
+              ),
+            )
+            .width,
         lessThan(128),
       );
       expect(find.textContaining('private-session-secret'), findsNothing);

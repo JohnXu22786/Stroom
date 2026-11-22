@@ -8,7 +8,7 @@ path reveals horizontally within its bounded row slot; the cookie name, masked
 value, and delete action remain visible.
 
 - [Production screenshot](cookie-path-en-320x640-1x-light.png)
-- [Playable path reveal](cookie-path-reveal-320x640-1x-light.webm)
+- [40-second playable path reveal](cookie-path-reveal-320x640-1x-light.webm), showing the full horizontal reveal cycle.
 
 The capture uses a local synthetic cookie fixture with a fake session value and
 a long path. It does not browse to a site, make external requests, or reveal
