@@ -28,9 +28,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   void initState() {
     super.initState();
     _voices = widget.initialVoices.map((v) => v.copy()).toList();
-    _nameCtrls = _voices
-        .map((v) => TextEditingController(text: v.name))
-        .toList();
+    _nameCtrls =
+        _voices.map((v) => TextEditingController(text: v.name)).toList();
     _idCtrls = _voices.map((v) => TextEditingController(text: v.id)).toList();
     _idFocusNodes = _voices.map((_) => FocusNode()).toList();
     for (var i = 0; i < _idFocusNodes.length; i++) {
@@ -284,8 +283,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 );
-                final stackActions =
-                    constraints.maxWidth < 480 ||
+                final stackActions = constraints.maxWidth < 480 ||
                     MediaQuery.textScalerOf(context).scale(14) > 18;
                 if (stackActions) {
                   return Column(
