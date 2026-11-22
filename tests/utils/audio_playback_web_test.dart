@@ -12,6 +12,49 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_playback_web.dart';
 
 void main() {
+  test('natural playback completion resets state and emits final position', () async {
+    html.AudioElement? audio;
+    final player = AudioPlayerAdapter(
+      createAudio: () => audio = html.AudioElement(),
+    );
+    addTearDown(player.dispose);
+
+    const wav =
+        'UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+    await player.load('data:audio/wav;base64,$wav');
+
+    final states = <bool>[];
+    final positions = <Duration>[];
+    final stateSubscription = player.stateStream.listen((_) {
+      states.add(player.playing);
+    });
+    final positionSubscription = player.positionStream.listen(positions.add);
+    addTearDown(stateSubscription.cancel);
+    addTearDown(positionSubscription.cancel);
+
+    // Stub play() so the browser's autoplay policy does not affect this event test.
+    final audioJs = JSObject.fromInteropObject(audio!);
+    final promiseConstructor =
+        JSObject.fromInteropObject(html.window)['Promise']! as JSObject;
+    final resolvePromise = promiseConstructor['resolve'] as JSFunction;
+    audioJs['play'] = (() => resolvePromise.callAsFunction(
+      promiseConstructor,
+    )).toJS;
+    await player.play();
+    expect(player.playing, isTrue);
+
+    final stateChanged = player.stateStream.firstWhere((_) => !player.playing);
+    audio!.currentTime = audio!.duration;
+    audio!.dispatchEvent(html.Event('ended'));
+    await stateChanged;
+
+    expect(player.playing, isFalse);
+    expect(states, [true, false]);
+    expect(
+      positions.last,
+      greaterThanOrEqualTo(const Duration(milliseconds: 100)),
+    );
+  });
   test(
     'load settles when the player is disposed before audio is ready',
     () async {
