@@ -21,6 +21,12 @@ export 'provider_config_types.dart';
 export '../services/api_protocol_config.dart';
 part 'provider_config_persistence.dart';
 
+/// Indicates that a provider-entry update failed and its previous persisted
+/// value could not be restored.
+class ProviderEntriesRollbackException implements Exception {
+  const ProviderEntriesRollbackException();
+}
+
 /// Stable identity and label for the local Google/Bing/Baidu web search group.
 /// The callable tool name remains `web_search` for API and saved-tool compatibility.
 const kBuiltinWebSearchEntryId = 'builtin';

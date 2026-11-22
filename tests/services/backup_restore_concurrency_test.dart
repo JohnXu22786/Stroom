@@ -35,7 +35,7 @@ void main() {
       ankiData: false,
       browserCookies: false,
     );
-    const reference = 'shared-restore-credential-reference';
+    const reference = 'stroom.llm.credential.shared-restore-account';
     const firstSecret = 'sk_first_overlapping_restore_secret';
     const secondSecret = 'sk_second_overlapping_restore_secret';
     final prefs = await SharedPreferences.getInstance();
@@ -134,7 +134,7 @@ void main() {
       ankiData: false,
       browserCookies: false,
     );
-    const reference = 'shared-restore-migration-race-reference';
+    const reference = 'stroom.llm.credential.referenced-provider-config';
     const backupSecret = 'sk_preflighted_restore_secret';
     const concurrentSecret = 'sk_concurrent_migration_secret';
     final prefs = await SharedPreferences.getInstance();
@@ -199,7 +199,7 @@ void main() {
           'type': 'llm',
           'configs': [
             {
-              'id': 'concurrent-migration-config',
+              'id': 'referenced-provider-config',
               'providerName': 'Concurrent migration provider',
               'host': 'https://concurrent-migration.example.test',
               'credentialRef': reference,
@@ -231,7 +231,7 @@ void main() {
       ankiData: false,
       browserCookies: false,
     );
-    const reference = 'failed-preference-restore-reference';
+    const reference = 'stroom.llm.credential.failed-preference-config';
     const secret = 'sk_failed_preference_restore_secret';
     SharedPreferences.setMockInitialValues({'provider_entries': '[]'});
     final prefs = await SharedPreferences.getInstance();
@@ -303,7 +303,7 @@ void main() {
       ankiData: false,
       browserCookies: false,
     );
-    const reference = 'incomplete-preference-rollback-reference';
+    const reference = 'stroom.llm.credential.incomplete-rollback-config';
     const secret = 'sk_incomplete_preference_rollback_secret';
     SharedPreferences.setMockInitialValues({'provider_entries': '[]'});
     final prefs = await SharedPreferences.getInstance();
@@ -356,7 +356,9 @@ void main() {
         throwsA(isA<StateError>()),
       );
       await prefs.reload();
-      expect(prefs.containsKey('provider_entries'), isFalse);
+      // The outer restore snapshot repairs preferences after the migration
+      // rollback has exhausted its own write attempts.
+      expect(prefs.getString('provider_entries'), '[]');
       expect(await credentials.read(reference) == secret, isTrue);
     } finally {
       SharedPreferencesStorePlatform.instance = originalStore;

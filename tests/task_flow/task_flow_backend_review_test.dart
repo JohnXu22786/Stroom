@@ -291,6 +291,7 @@ class _Manager extends ChatStreamManager {
       String? streamingMsgId,
       Assistant? assistant,
       Map<String, String>? customParamValues,
+      String? selectedAccountId,
       ProviderEntriesState? entriesStateOverride}) async {
     assistants.add(assistant);
     entries.add(entriesStateOverride);

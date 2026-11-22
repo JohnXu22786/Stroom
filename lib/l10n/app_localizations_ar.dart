@@ -1664,16 +1664,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatSearchAll => 'البحث في جميع المحادثات...';
 
   @override
-  String get chatSearchCurrentMode => 'Current conversation';
+  String get chatSearchCurrentMode => 'المحادثة الحالية';
 
   @override
-  String get chatSearchAllMode => 'All conversations';
+  String get chatSearchAllMode => 'كل المحادثات';
 
   @override
-  String get chatSearchRetry => 'Retry search';
+  String get chatSearchRetry => 'إعادة البحث';
 
   @override
-  String get chatSearchError => 'Search failed';
+  String get chatSearchError => 'فشل البحث';
 
   @override
   String get searchPrevious => 'النتيجة السابقة';
@@ -13854,6 +13854,18 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get chatSearchAll => 'البحث في جميع المحادثات...';
+
+  @override
+  String get chatSearchCurrentMode => 'المحادثة الحالية';
+
+  @override
+  String get chatSearchAllMode => 'كل المحادثات';
+
+  @override
+  String get chatSearchRetry => 'إعادة البحث';
+
+  @override
+  String get chatSearchError => 'فشل البحث';
 
   @override
   String get searchPrevious => 'النتيجة السابقة';

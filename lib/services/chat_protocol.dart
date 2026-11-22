@@ -16,9 +16,11 @@ import 'context_manager.dart'
         kToolOutputTruncatedSuffix,
         truncateByChars;
 import 'openai_protocol.dart';
+import 'responses_protocol.dart';
 
 export 'anthropic_protocol.dart' show AnthropicProtocol;
 export 'openai_protocol.dart' show OpenAIProtocol;
+export 'responses_protocol.dart' show ResponsesProtocol;
 
 // ============================================================================
 // ChatProtocol — 聊天协议抽象层
@@ -644,7 +646,7 @@ String rebuildToolResultText(ToolCallData tc, {int? maxChars}) {
 // ============================================================================
 
 abstract class ChatProtocol {
-  /// 协议名称：'openai' | 'anthropic'
+  /// 协议名称：'openai' | 'anthropic' | 'responses'
   String get name;
 
   /// 将中立历史构建为 API 请求消息。
@@ -691,9 +693,11 @@ abstract class ChatProtocol {
 
 /// 根据端点类型创建协议实例。
 ///
-/// [endpointType] 取值 'anthropic' 或 'openai'（默认）。
+/// [endpointType] 取值 'anthropic'、'responses' 或 'openai'（默认）。
 ChatProtocol createChatProtocol(String endpointType) {
-  return endpointType == 'anthropic' ? AnthropicProtocol() : OpenAIProtocol();
+  if (endpointType == 'anthropic') return const AnthropicProtocol();
+  if (endpointType == 'responses') return const ResponsesProtocol();
+  return const OpenAIProtocol();
 }
 
 /// 计算有效端点类型：模型覆盖 > 供应商 > 'openai'。
