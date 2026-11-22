@@ -1426,34 +1426,40 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: colorScheme.onSurfaceVariant),
-                        ),
-                        if (media.isLikelySplitTrack) ...[
-                          const SizedBox(width: 6),
+                    ConstrainedText(
+                      '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                    if (media.isLikelySplitTrack) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
                           Icon(
                             Icons.call_split,
                             size: 12,
                             color: Colors.amber.shade600,
                           ),
                           const SizedBox(width: 2),
-                          Text(
-                            AppLocalizations.of(context)!
-                                .catcatchSeparateTracks,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.amber.shade600,
+                          Expanded(
+                            child: ConstrainedText(
+                              AppLocalizations.of(context)!
+                                  .catcatchSeparateTracks,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.amber.shade600,
+                              ),
                             ),
                           ),
                         ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
