@@ -340,8 +340,8 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
       final stableModelId = modelId is String && modelId.trim().isNotEmpty
           ? modelId
           : (modelName is String && modelName.trim().isNotEmpty
-                ? modelName
-                : '');
+              ? modelName
+              : '');
       return <String, dynamic>{
         'name': modelName is String && modelName.trim().isNotEmpty
             ? modelName
@@ -354,9 +354,8 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
       };
     }).toList();
     final migratedConfig = <String, dynamic>{
-      'providerName': oldItem['providerName'] is String
-          ? oldItem['providerName']
-          : '',
+      'providerName':
+          oldItem['providerName'] is String ? oldItem['providerName'] : '',
       'host': oldItem['host'] is String ? oldItem['host'] : '',
       'key': oldItem['key'] is String ? oldItem['key'] : '',
       'models': models,
@@ -433,7 +432,7 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
       final prepared = _prepareLegacyChatConfigsSync(jsonEncode([entry]));
       final topLevelConfigs = prepared['payload'] is String
           ? (jsonDecode(prepared['payload']! as String) as List)
-                .whereType<Map<String, dynamic>>()
+              .whereType<Map<String, dynamic>>()
           : const <Map<String, dynamic>>[];
       if (migratedConfigs.any(
         (legacy) => !topLevelConfigs.any(
@@ -478,10 +477,11 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
         ? rawConfigs.whereType<Map<String, dynamic>>().toList()
         : (jsonDecode(
             _prepareLegacyChatConfigsSync(
-                  jsonEncode([existingEntry]),
-                )['payload']!
-                as String,
-          ) as List).whereType<Map<String, dynamic>>().toList();
+              jsonEncode([existingEntry]),
+            )['payload']! as String,
+          ) as List)
+            .whereType<Map<String, dynamic>>()
+            .toList();
     final representedConfigs = rawConfigs is List ? configs : [existingEntry];
     final metadataMatchedConfigs = <Map<String, dynamic>>{};
     var metadataChanged = false;
@@ -557,13 +557,14 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
 String _legacyChatConfigIdentity(
   Map<String, dynamic> config, {
   bool legacyFormat = false,
-}) => jsonEncode([
-  config['providerName'] is String ? config['providerName'] : '',
-  config['host'] is String ? config['host'] : '',
-  config['key'] is String ? config['key'] : '',
-  (config['models'] is List ? config['models'] as List : const [])
-      .whereType<Map<String, dynamic>>()
-      .map((model) {
+}) =>
+    jsonEncode([
+      config['providerName'] is String ? config['providerName'] : '',
+      config['host'] is String ? config['host'] : '',
+      config['key'] is String ? config['key'] : '',
+      (config['models'] is List ? config['models'] as List : const [])
+          .whereType<Map<String, dynamic>>()
+          .map((model) {
         final typeConfig = model['typeConfig'] is Map
             ? Map<String, dynamic>.from(model['typeConfig'] as Map)
             : <String, dynamic>{};
@@ -578,9 +579,8 @@ String _legacyChatConfigIdentity(
               : legacyFormat,
           _canonicalLegacyChatIdentityValue(typeConfig),
         ];
-      })
-      .toList(),
-]);
+      }).toList(),
+    ]);
 
 Object? _canonicalLegacyChatIdentityValue(Object? value) {
   if (value is Map) {

@@ -92,20 +92,21 @@ class OcrConfig {
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
     int? requestSizeBudgetBytes,
-  }) => OcrConfig(
-    model: model ?? this.model,
-    apiKey: apiKey ?? this.apiKey,
-    host: host ?? this.host,
-    systemPrompt: systemPrompt ?? this.systemPrompt,
-    routingGroupId: routingGroupId ?? this.routingGroupId,
-    routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
-    routingAccountId: routingAccountId ?? this.routingAccountId,
-    routingDisplayName: routingDisplayName ?? this.routingDisplayName,
-    typeConfig: typeConfig ?? this.typeConfig,
-    customParams: customParams ?? this.customParams,
-    requestSizeBudgetBytes:
-        requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
-  );
+  }) =>
+      OcrConfig(
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        host: host ?? this.host,
+        systemPrompt: systemPrompt ?? this.systemPrompt,
+        routingGroupId: routingGroupId ?? this.routingGroupId,
+        routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
+        routingAccountId: routingAccountId ?? this.routingAccountId,
+        routingDisplayName: routingDisplayName ?? this.routingDisplayName,
+        typeConfig: typeConfig ?? this.typeConfig,
+        customParams: customParams ?? this.customParams,
+        requestSizeBudgetBytes:
+            requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
+      );
 }
 
 // ============================================================================
@@ -164,8 +165,7 @@ class OcrRequestTooLargeException implements Exception {
       localizations.bgTaskOcrRequestSizeExceeded(encodedBytes, budgetBytes);
 
   @override
-  String toString() =>
-      'OCR request JSON size is $encodedBytes bytes, '
+  String toString() => 'OCR request JSON size is $encodedBytes bytes, '
       'exceeding the configured limit of $budgetBytes bytes.';
 }
 
@@ -221,14 +221,12 @@ class OcrService {
             (entry.key as String).toLowerCase() != 'authorization') {
           continue;
         }
-        final rawValues = entry.value is List
-            ? entry.value as List
-            : [entry.value];
+        final rawValues =
+            entry.value is List ? entry.value as List : [entry.value];
         for (final rawValue in rawValues) {
           if (rawValue is! String) continue;
-          final credential = RegExp(r'^\S+\s+(\S+)')
-              .firstMatch(rawValue.trim())
-              ?.group(1);
+          final credential =
+              RegExp(r'^\S+\s+(\S+)').firstMatch(rawValue.trim())?.group(1);
           if (credential != null && credential.isNotEmpty) {
             values.add(credential);
           }
@@ -236,11 +234,11 @@ class OcrService {
             r'''(?:^|[, \t])([A-Za-z0-9_-]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^,\s]+))''',
           ).allMatches(rawValue)) {
             final name = match.group(1)?.toLowerCase();
-            final authParameter = (match.group(2) ?? match.group(3))
-                ?.replaceAllMapped(
-                  RegExp(r'\\(.)'),
-                  (match) => match.group(1)!,
-                );
+            final authParameter =
+                (match.group(2) ?? match.group(3))?.replaceAllMapped(
+              RegExp(r'\\(.)'),
+              (match) => match.group(1)!,
+            );
             if (authParameter != null &&
                 authParameter.isNotEmpty &&
                 (name == 'response' ||
@@ -284,9 +282,8 @@ class OcrService {
     Iterable<String> credentialValues,
   ) {
     var safeValue = value;
-    for (final credential
-        in credentialValues.toList()
-          ..sort((a, b) => b.length.compareTo(a.length))) {
+    for (final credential in credentialValues.toList()
+      ..sort((a, b) => b.length.compareTo(a.length))) {
       if (credential.isEmpty) continue;
       final encodedCredential = credential.contains('%')
           ? RegExp(RegExp.escape(credential), caseSensitive: false)
@@ -335,36 +332,35 @@ class OcrService {
       for (final entry in headers.entries)
         entry.key: entry.value
             .map(
-              (value) =>
-                  _redactResponseDiagnosticValue(value, credentialValues)
-                      as String,
+              (value) => _redactResponseDiagnosticValue(value, credentialValues)
+                  as String,
             )
             .toList(growable: false),
     };
   }
 
   List<String> get _diagnosticRequestCredentialValues => {
-    ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
-      'headers': lastRequestHeaders,
-      'url': lastRequestUrl,
-      'body': lastRequestBody,
-    }),
-    ..._credentialValuesFromHeaders(_dio.options.headers),
-  }.toList(growable: false);
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'headers': lastRequestHeaders,
+          'url': lastRequestUrl,
+          'body': lastRequestBody,
+        }),
+        ..._credentialValuesFromHeaders(_dio.options.headers),
+      }.toList(growable: false);
 
   List<String> get _diagnosticCredentialValues => [
-    config.apiKey,
-    ..._diagnosticRequestCredentialValues,
-  ];
+        config.apiKey,
+        ..._diagnosticRequestCredentialValues,
+      ];
 
   Map<String, dynamic> get diagnosticRequest => OcrDiagnosticSnapshot.request(
-    url: lastRequestUrl,
-    imageCount: _lastImageCount,
-    imageBytes: _lastImageBytes,
-    durationMs: _lastDurationMs,
-    requestId: null,
-    excludedValues: _diagnosticCredentialValues,
-  );
+        url: lastRequestUrl,
+        imageCount: _lastImageCount,
+        imageBytes: _lastImageBytes,
+        durationMs: _lastDurationMs,
+        requestId: null,
+        excludedValues: _diagnosticCredentialValues,
+      );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
       OcrDiagnosticSnapshot.response(
@@ -399,28 +395,27 @@ class OcrService {
     Duration? receiveTimeout,
     Future<AiGatewayFacade>? routingRuntime,
     @visibleForTesting String Function(List<int>)? encodeImageBytes,
-  }) : _sendTimeoutOverride = sendTimeout,
-       _routingRuntime = config.routingGroupId == null
-           ? null
-           : routingRuntime ?? AiGateway.sharedPlatform(),
-       _encodeImageBytes = encodeImageBytes ?? base64Encode,
-       _usesInjectedDio = dio != null,
-       _ownsDio = dio == null || ownsDio,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               headers: {
-                 'Content-Type': 'application/json',
-                 if (config.apiKey.isNotEmpty)
-                   'Authorization': 'Bearer ${config.apiKey}',
-                 ...openRouterAppHeaders,
-               },
-               connectTimeout: connectTimeout ?? connectTimeoutDefault,
-               sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
-               receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
-             ),
-           ) {
+  })  : _sendTimeoutOverride = sendTimeout,
+        _routingRuntime = config.routingGroupId == null
+            ? null
+            : routingRuntime ?? AiGateway.sharedPlatform(),
+        _encodeImageBytes = encodeImageBytes ?? base64Encode,
+        _usesInjectedDio = dio != null,
+        _ownsDio = dio == null || ownsDio,
+        _dio = dio ??
+            Dio(
+              BaseOptions(
+                headers: {
+                  'Content-Type': 'application/json',
+                  if (config.apiKey.isNotEmpty)
+                    'Authorization': 'Bearer ${config.apiKey}',
+                  ...openRouterAppHeaders,
+                },
+                connectTimeout: connectTimeout ?? connectTimeoutDefault,
+                sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
+                receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
+              ),
+            ) {
     _dio.options.connectTimeout =
         connectTimeout ?? _dio.options.connectTimeout ?? connectTimeoutDefault;
     _dio.options.receiveTimeout =
@@ -554,12 +549,10 @@ class OcrService {
         }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
-      _lastDiagnosticStatusCode =
-          OcrDiagnosticSnapshot.sanitizeResponse(
-                {'statusCode': response.statusCode},
-                excludedValues: [config.apiKey, ...responseCredentialValues],
-              )?['statusCode']
-              as int?;
+      _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': response.statusCode},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['statusCode'] as int?;
       lastResponseData = diagnosticResponseData is Map
           ? _redactResponseDiagnosticValue(
               diagnosticResponseData,
@@ -575,8 +568,7 @@ class OcrService {
         response.headers.map,
         responseCredentialValues,
       );
-      _lastRequestId =
-          OcrDiagnosticSnapshot.requestIdFromHeaders(
+      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
           ) ??
@@ -588,12 +580,10 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason =
-          OcrDiagnosticSnapshot.sanitizeResponse(
-                {'finishReason': parsed.finishReason},
-                excludedValues: [config.apiKey, ...responseCredentialValues],
-              )?['finishReason']
-              as String?;
+      _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'finishReason': parsed.finishReason},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['finishReason'] as String?;
 
       await AppLogService.info(
         'OcrService',
@@ -710,12 +700,10 @@ class OcrService {
         }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
-      _lastDiagnosticStatusCode =
-          OcrDiagnosticSnapshot.sanitizeResponse(
-                {'statusCode': response.statusCode},
-                excludedValues: [config.apiKey, ...responseCredentialValues],
-              )?['statusCode']
-              as int?;
+      _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': response.statusCode},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['statusCode'] as int?;
       lastResponseData = diagnosticResponseData is Map
           ? _redactResponseDiagnosticValue(
               diagnosticResponseData,
@@ -731,8 +719,7 @@ class OcrService {
         response.headers.map,
         responseCredentialValues,
       );
-      _lastRequestId =
-          OcrDiagnosticSnapshot.requestIdFromHeaders(
+      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
             excludedValues: [config.apiKey, ...responseCredentialValues],
           ) ??
@@ -744,12 +731,10 @@ class OcrService {
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       reportStage(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
-      _lastFinishReason =
-          OcrDiagnosticSnapshot.sanitizeResponse(
-                {'finishReason': parsed.finishReason},
-                excludedValues: [config.apiKey, ...responseCredentialValues],
-              )?['finishReason']
-              as String?;
+      _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'finishReason': parsed.finishReason},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['finishReason'] as String?;
 
       await AppLogService.info(
         'OcrService',
@@ -866,13 +851,12 @@ class OcrService {
   }
 
   Options _requestOptions({required int encodedBytes}) => Options(
-    headers: _requestAuthorizationHeaders,
-    sendTimeout:
-        _sendTimeoutOverride ??
-        (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
-        sendTimeoutForBytes(encodedBytes),
-    receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
-  );
+        headers: _requestAuthorizationHeaders,
+        sendTimeout: _sendTimeoutOverride ??
+            (_usesInjectedDio ? _dio.options.sendTimeout : null) ??
+            sendTimeoutForBytes(encodedBytes),
+        receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+      );
 
   Map<String, dynamic>? get _requestAuthorizationHeaders {
     final hasCallerAuthorization = _dio.options.headers.keys.any(
@@ -885,13 +869,14 @@ class OcrService {
   ProgressCallback _uploadProgress(
     ProgressCallback? progress,
     void Function(OcrRequestStage)? stage,
-  ) => (sent, total) {
-    stage?.call(OcrRequestStage.uploading);
-    progress?.call(sent, total);
-    if (total > 0 && sent >= total) {
-      stage?.call(OcrRequestStage.waiting);
-    }
-  };
+  ) =>
+      (sent, total) {
+        stage?.call(OcrRequestStage.uploading);
+        progress?.call(sent, total);
+        if (total > 0 && sent >= total) {
+          stage?.call(OcrRequestStage.waiting);
+        }
+      };
 
   Future<Response<dynamic>> _sendRequest({
     required Map<String, dynamic> body,
@@ -971,8 +956,7 @@ class OcrService {
         _ensureRequestWithinSizeBudget(routedBody);
         onSendProgress?.call(0, utf8.encode(jsonEncode(routedBody)).length);
         lastRequestBody = routedBody;
-        final baseUrl =
-            candidate.account.endpointConfig['baseUrl'] ??
+        final baseUrl = candidate.account.endpointConfig['baseUrl'] ??
             candidate.account.endpointConfig['host'] ??
             candidate.account.endpointConfig['apiBase'];
         lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -1000,8 +984,7 @@ class OcrService {
             onRequestSent: progress.markRequestSent,
             connectTimeout:
                 _dio.options.connectTimeout ?? connectTimeoutDefault,
-            sendTimeout:
-                _sendTimeoutOverride ??
+            sendTimeout: _sendTimeoutOverride ??
                 sendTimeoutForBytes(utf8.encode(jsonEncode(routedBody)).length),
             receiveTimeout:
                 _dio.options.receiveTimeout ?? receiveTimeoutFallback,
@@ -1087,9 +1070,8 @@ class OcrService {
       response['usage'],
     );
     if (usage == null) return;
-    final observedUnit = reported.isKnown && reported.value != null
-        ? reported.unit
-        : null;
+    final observedUnit =
+        reported.isKnown && reported.value != null ? reported.unit : null;
     final input = usage['inputTokens'];
     final output = usage['outputTokens'];
     if ((input is num || output is num) && observedUnit != 'tokens') {
@@ -1211,8 +1193,8 @@ class OcrService {
           final incomplete = data['incomplete_details'];
           finishReason =
               incomplete is Map && incomplete['reason'] == 'max_output_tokens'
-              ? 'length'
-              : 'incomplete';
+                  ? 'length'
+                  : 'incomplete';
         }
         usage = _normalizeProtocolUsage(data['usage']);
       case 'anthropic.messages':
@@ -1364,18 +1346,15 @@ class OcrService {
       lastResponseData = null;
     }
     lastResponseStatusCode = e.response?.statusCode;
-    _lastDiagnosticStatusCode =
-        OcrDiagnosticSnapshot.sanitizeResponse(
-              {'statusCode': e.response?.statusCode},
-              excludedValues: [config.apiKey, ...responseCredentialValues],
-            )?['statusCode']
-            as int?;
+    _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': e.response?.statusCode},
+      excludedValues: [config.apiKey, ...responseCredentialValues],
+    )?['statusCode'] as int?;
     lastResponseHeaders = _redactResponseDiagnosticHeaders(
       e.response?.headers.map,
       responseCredentialValues,
     );
-    _lastRequestId =
-        OcrDiagnosticSnapshot.requestIdFromHeaders(
+    _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
           excludedValues: [config.apiKey, ...responseCredentialValues],
         ) ??
@@ -1383,12 +1362,10 @@ class OcrService {
           e.response?.data,
           excludedValues: [config.apiKey, ...responseCredentialValues],
         );
-    _lastFinishReason =
-        OcrDiagnosticSnapshot.sanitizeResponse(
-              {'data': e.response?.data},
-              excludedValues: [config.apiKey, ...responseCredentialValues],
-            )?['finishReason']
-            as String?;
+    _lastFinishReason = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'data': e.response?.data},
+      excludedValues: [config.apiKey, ...responseCredentialValues],
+    )?['finishReason'] as String?;
     _lastErrorType = e.type.name;
   }
 
@@ -1424,15 +1401,15 @@ class OcrService {
   List<String> _credentialValuesFromRequestOptions(RequestOptions options) {
     final uri = options.uri;
     final url = uri.toString();
-    final urlCredentials = OcrDiagnosticSnapshot.credentialValuesFromUrl(url)
-        .toSet();
+    final urlCredentials =
+        OcrDiagnosticSnapshot.credentialValuesFromUrl(url).toSet();
     final encodedUrlCredentials = <String>{};
     // Keep the URI's original escapes too, including noncanonical forms like
     // `%6f` for an unreserved character.
     final rawUrl =
         options.path.startsWith(RegExp(r'https?://', caseSensitive: false))
-        ? options.path
-        : '${options.baseUrl}${options.path}';
+            ? options.path
+            : '${options.baseUrl}${options.path}';
     final queryStart = rawUrl.indexOf('?');
     final fragmentStart = rawUrl.indexOf('#', queryStart + 1);
     final rawQuery = queryStart < 0
@@ -1558,12 +1535,12 @@ class OcrService {
       final rawValue = param.type == 'json'
           ? param.defaultValue
           : param.options.isNotEmpty
-          ? param.options.first
-          : param.defaultValue.trim().isNotEmpty
-          ? param.defaultValue
-          : param.type == 'boolean'
-          ? 'true'
-          : '';
+              ? param.options.first
+              : param.defaultValue.trim().isNotEmpty
+                  ? param.defaultValue
+                  : param.type == 'boolean'
+                      ? 'true'
+                      : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
       if (const {'max_tokens', 'temperature', 'top_p'}.contains(name)) {
