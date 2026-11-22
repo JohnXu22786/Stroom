@@ -63,7 +63,13 @@ class CatCatchPolicyMenu extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Expanded(child: Text(options[value] ?? options.values.first)),
+            Expanded(
+              child: ConstrainedText(
+                options[value] ?? options.values.first,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const Icon(Icons.arrow_drop_down),
           ],
         ),
