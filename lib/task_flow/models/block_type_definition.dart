@@ -189,6 +189,7 @@ class BlockTypeDefinition {
         key: 'modelRef',
         label: '识别模型',
         type: BlockParamType.modelSelector,
+        required: true,
       ),
       BlockParamDefinition(
         key: 'saveFolder',

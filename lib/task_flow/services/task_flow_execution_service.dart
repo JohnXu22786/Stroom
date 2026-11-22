@@ -1231,7 +1231,9 @@ class TaskFlowExecutionService {
           return;
         }
         var savedResult = result;
-        if (temporaryOutput) {
+        // Text-producing ASR/OCR steps suppress their gallery text record in
+        // temporary mode, while media producers return a staged file payload.
+        if (temporaryOutput && result.fileReference != null) {
           final reference = result.fileReference;
           if (reference == null ||
               !await FlowTemporaryArtifactStorage.ownsReference(
@@ -1499,6 +1501,7 @@ class TaskFlowExecutionService {
               cancelToken: _activeRequestCancelTokens[execId],
               localizations:
                   appLocalizationsForLocale(_ref.read(localeProvider)),
+              temporaryOutput: temporaryOutput,
             ),
             def.outputType);
       case BlockType.ocr:
@@ -1515,6 +1518,7 @@ class TaskFlowExecutionService {
               localizations:
                   appLocalizationsForLocale(_ref.read(localeProvider)),
               cancelToken: _activeRequestCancelTokens[execId],
+              temporaryOutput: temporaryOutput,
             ),
             def.outputType);
       case BlockType.tts:

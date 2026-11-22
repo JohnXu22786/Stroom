@@ -50,9 +50,11 @@ void main() {
       isFlowTemporaryOutputEligible([catCatchAudio, blocks[1]], 0),
       isTrue,
     );
-    for (final index in [2, 3, 4, 5, -1, 6]) {
+    for (final index in [4, 5, -1, 6]) {
       expect(isFlowTemporaryOutputEligible(blocks, index), isFalse);
     }
+    expect(isFlowTemporaryOutputEligible(blocks, 2), isTrue);
+    expect(isFlowTemporaryOutputEligible(blocks, 3), isTrue);
     expect(
       isFlowTemporaryOutputEligible(
         [TaskFlowBlock(typeKey: BlockType.tts)],
