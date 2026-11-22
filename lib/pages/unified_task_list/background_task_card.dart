@@ -67,11 +67,18 @@ String _localizedBackgroundTaskTitle(
 // 点击卡片可展开查看步骤详情、错误信息、操作按钮。
 // =============================================================================
 
+/// Expansion state retained by the task list while a lazy card is evicted.
+class BackgroundTaskCardViewState {
+  bool expanded = false;
+  bool initialized = false;
+}
+
 class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
   final bool isFlowManaged;
   final String? flowBlockTypeKey;
+  final BackgroundTaskCardViewState? viewState;
 
   const BackgroundTaskCard({
     super.key,
@@ -79,6 +86,7 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
     this.isUnread = false,
     this.isFlowManaged = false,
     this.flowBlockTypeKey,
+    this.viewState,
   });
 
   @override
@@ -86,17 +94,30 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
 }
 
 class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
-  bool _expanded = false;
+  late BackgroundTaskCardViewState _viewState;
+  bool get _expanded => _viewState.expanded;
+  set _expanded(bool value) => _viewState.expanded = value;
 
   @override
   void initState() {
     super.initState();
-    _expanded = widget.task.status == TaskStatus.running;
+    _viewState = widget.viewState ?? BackgroundTaskCardViewState();
+    if (!_viewState.initialized) {
+      _expanded = widget.task.status == TaskStatus.running;
+      _viewState.initialized = true;
+    }
   }
 
   @override
   void didUpdateWidget(covariant BackgroundTaskCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewState != widget.viewState && widget.viewState != null) {
+      _viewState = widget.viewState!;
+      if (!_viewState.initialized) {
+        _expanded = widget.task.status == TaskStatus.running;
+        _viewState.initialized = true;
+      }
+    }
     // Auto-expand when the task transitions into running so the step
     // timeline is visible while the task executes.  Keeps behaviour
     // consistent with CatCatchTaskCard and SynthesisTaskCard which

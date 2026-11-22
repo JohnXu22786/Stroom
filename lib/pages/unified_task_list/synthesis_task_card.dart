@@ -13,16 +13,24 @@ import '../../widgets/constrained_text.dart';
 // 合成任务卡片
 // =============================================================================
 
+/// Expansion state retained by the task list while a lazy card is evicted.
+class SynthesisTaskCardViewState {
+  bool expanded = false;
+  bool initialized = false;
+}
+
 class SynthesisTaskCard extends ConsumerStatefulWidget {
   final SynthesisTask task;
   final bool isUnread;
   final bool isFlowManaged;
+  final SynthesisTaskCardViewState? viewState;
 
   const SynthesisTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
     this.isFlowManaged = false,
+    this.viewState,
   });
 
   @override
@@ -30,20 +38,34 @@ class SynthesisTaskCard extends ConsumerStatefulWidget {
 }
 
 class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
-  bool _expanded = false;
+  late SynthesisTaskCardViewState _viewState;
+  bool get _expanded => _viewState.expanded;
+  set _expanded(bool value) => _viewState.expanded = value;
 
   @override
   void initState() {
     super.initState();
+    _viewState = widget.viewState ?? SynthesisTaskCardViewState();
     // Failed tasks used to show their error box in the header unconditionally;
     // expand by default so the error stays visible in the collapsible design.
-    _expanded = widget.task.status == TaskStatus.running ||
-        widget.task.status == TaskStatus.failed;
+    if (!_viewState.initialized) {
+      _expanded = widget.task.status == TaskStatus.running ||
+          widget.task.status == TaskStatus.failed;
+      _viewState.initialized = true;
+    }
   }
 
   @override
   void didUpdateWidget(covariant SynthesisTaskCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewState != widget.viewState && widget.viewState != null) {
+      _viewState = widget.viewState!;
+      if (!_viewState.initialized) {
+        _expanded = widget.task.status == TaskStatus.running ||
+            widget.task.status == TaskStatus.failed;
+        _viewState.initialized = true;
+      }
+    }
     if (widget.task.status != oldWidget.task.status &&
         (widget.task.status == TaskStatus.running ||
             widget.task.status == TaskStatus.failed)) {
