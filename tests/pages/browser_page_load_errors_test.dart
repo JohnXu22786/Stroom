@@ -150,8 +150,8 @@ void main() {
     await tester.pump();
 
     expect(
-      webView.controller.evaluatedScripts
-          .where((script) => script.contains('window.savedUserscriptRan = true;')),
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
       isEmpty,
     );
 
@@ -160,10 +160,12 @@ void main() {
     await tester.pump();
 
     expect(
-      webView.controller.evaluatedScripts
-          .where((script) => script.contains('window.savedUserscriptRan = true;')),
-      ['window.savedUserscriptRan = true;\n'
-          '//# sourceURL=stroom-userscript-saved-script.js'],
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      [
+        'window.savedUserscriptRan = true;\n'
+            '//# sourceURL=stroom-userscript-saved-script.js'
+      ],
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -207,8 +209,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(
-      webView.controller.evaluatedScripts
-          .where((script) => script.contains('window.savedUserscriptRan = true;')),
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
       isEmpty,
     );
 
@@ -219,10 +221,12 @@ void main() {
     await tester.pump();
 
     expect(
-      webView.controller.evaluatedScripts
-          .where((script) => script.contains('window.savedUserscriptRan = true;')),
-      ['window.savedUserscriptRan = true;\n'
-          '//# sourceURL=stroom-userscript-saved-script.js'],
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      [
+        'window.savedUserscriptRan = true;\n'
+            '//# sourceURL=stroom-userscript-saved-script.js'
+      ],
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
