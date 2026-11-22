@@ -33,6 +33,13 @@ Locale resolveSystemLocale(Locale systemLocale) {
       return locale;
     }
   }
+  if (systemLocale.languageCode == 'zh') {
+    for (final locale in supportedAppLocales) {
+      if (locale.languageCode == 'zh' && locale.countryCode == 'CN') {
+        return locale;
+      }
+    }
+  }
   if (systemLocale.languageCode == 'es') {
     return const Locale('es', 'ES');
   }

@@ -22,6 +22,27 @@ void main() {
     expect(strings.localeName, 'zh_CN');
   });
 
+  test(
+    'Taiwanese system locale falls back to supported Simplified Chinese',
+    () {
+      const simplifiedChinese = Locale('zh', 'CN');
+
+      final resolved = resolveSystemLocale(const Locale('zh', 'TW'));
+
+      expect(resolved, simplifiedChinese);
+      expect(supportedAppLocales, contains(resolved));
+    },
+  );
+
+  test('generic Chinese system locale resolves to Simplified Chinese', () {
+    const simplifiedChinese = Locale('zh', 'CN');
+
+    final resolved = resolveSystemLocale(const Locale('zh'));
+
+    expect(resolved, simplifiedChinese);
+    expect(supportedAppLocales, contains(resolved));
+  });
+
   test('French is selectable and resolves French system preferences', () {
     const french = Locale('fr', 'FR');
 
