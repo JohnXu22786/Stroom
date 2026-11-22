@@ -111,6 +111,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
   final Map<String, CatCatchTaskCardViewState> _catCatchCardViewStates = {};
   final Map<String, BackgroundTaskCardViewState> _backgroundCardViewStates = {};
   final Map<String, SynthesisTaskCardViewState> _synthesisCardViewStates = {};
+  final Map<String, TaskFlowCardViewState> _taskFlowCardViewStates = {};
 
   String _clearErrorMessage(Object error, AppLocalizations strings) {
     if (error is StateError && error.message == '任务流取消后仍在运行') {
@@ -334,6 +335,31 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       }
       final taskIds = tasks.map((task) => task.id).toSet();
       _synthesisCardViewStates.removeWhere((id, _) => !taskIds.contains(id));
+    });
+    ref.listen(taskFlowExecutionsProvider, (previous, executions) {
+      final previousStatuses = {
+        for (final execution in previous ?? <TaskFlowExecution>[])
+          execution.id: execution.status,
+      };
+      for (final execution in executions) {
+        final previousStatus = previousStatuses[execution.id];
+        final viewState = _taskFlowCardViewStates[execution.id];
+        if ([
+              FlowExecutionStatus.failed,
+              FlowExecutionStatus.interrupted,
+            ].contains(execution.status) &&
+            execution.status != previousStatus) {
+          if (viewState != null) viewState.expanded = true;
+        } else if (previousStatus == FlowExecutionStatus.running &&
+            execution.status == FlowExecutionStatus.completed &&
+            viewState?.expanded == true) {
+          viewState!.expanded = false;
+        }
+      }
+      final executionIds = executions.map((execution) => execution.id).toSet();
+      _taskFlowCardViewStates.removeWhere(
+        (id, _) => !executionIds.contains(id),
+      );
     });
     final strings = AppLocalizations.of(context)!;
     final taskTabData = [
@@ -966,6 +992,10 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             execution: exec,
             isUnread: exec.createdAt.isAfter(lastRead),
             taskListViewportHeight: viewportHeight,
+            viewState: _taskFlowCardViewStates.putIfAbsent(
+              exec.id,
+              TaskFlowCardViewState.new,
+            ),
           );
         }
         if (item.isCatCatch) {
