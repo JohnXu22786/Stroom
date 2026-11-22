@@ -2551,7 +2551,7 @@
       }
     }
   },
-  "assistantSendFullResult": "إرسال النتيجة كاملة (ضمن حد التخزين البالغ 50 KB)",
+  "assistantSendFullResult": "إرسال النتيجة كاملة (من دون اقتطاع في إدخال النموذج)",
   "assistantMaxCharacters": "الحد الأقصى لعدد الأحرف",
   "assistantCharactersNotTokens": "الوحدة: أحرف (وليست رموزًا)",
   "assistantDefaultCharacterCount": "الافتراضي: {count}",

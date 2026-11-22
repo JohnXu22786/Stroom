@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import '../models/chat_message.dart';
 import '../models/message_block.dart';
 import '../models/tool_call.dart';
@@ -8,7 +6,6 @@ import '../utils/token_estimator.dart';
 // ContextManager — 上下文管理（工具 prune / 估算）
 // ============================================================================
 //
-// 对齐 opencode 的 compaction.ts prune 语义：
 // - 软删除：不物理删除消息，只把旧工具结果标记为 compacted（占位文本）
 // - 从新到旧扫描，跳过最近 [tailUserTurns] 轮用户消息
 // - 只统计 status == completed 的工具结果
@@ -16,8 +13,7 @@ import '../utils/token_estimator.dart';
 // - 累计超过 [pruneProtectTokens] 后才开始收集；
 //   收集总量超过 [pruneMinimumTokens] 才执行压缩
 //
-// 说明：工具结果**存储**完整保留（50KB 字节内，见 ChatService
-// maxToolResultBytes），发送给模型时按截断上限渲染（truncateByChars，
+// 说明：工具结果存储完整保留；发送给模型时按截断上限渲染（truncateByChars，
 // 字符数，协议层 rebuildToolResultText 与估算侧 _renderToolResult 共用
 // 同一实现）。prune 的收益是 UI 渲染与 SharedPreferences 持久化体积
 // （长 agent 会话的工具结果会迅速膨胀）；占位文本保留在 result 中，
@@ -37,16 +33,12 @@ const String kToolOutputTruncatedSuffix = '\n... [已截断]';
 /// 工具结果发送渲染的**默认**截断上限（单位：字符，非 token 亦非字节）。
 ///
 /// 助手设置了截断开关时以配置为准（[AssistantSettings.maxToolOutputChars]）；
-/// 无助手/未配置时使用此默认值（对齐 opencode TOOL_OUTPUT_MAX_CHARS 的
-/// "始终有兜底截断"语义）。用户配置的 5000 字符 ≈ 旧版 2K 字节上限的
-/// 2.5 倍 ASCII / 7.5 倍 CJK，避免中文工具结果被过早砍断。
+/// 无助手/未配置时使用此默认值，确保结果始终有合理的截断保护。
 const int kToolOutputMaxChars = 5000;
 
-/// 按字符数（Unicode code point）截断字符串，不会劈开代理对/多字节字符。
+/// 按字符数（Unicode code point）截断字符串，不会劈开代理对。
 ///
-/// 单位是"字符"（用户视角的可见字符，CJK 每个字计 1），与 token 估算
-/// 无关；与 [truncateUtf8]（字节上限，存储截断用）互补——发送渲染
-/// 按字符，存储上限按字节。
+/// 单位是"字符"（用户视角的可见字符，CJK 每个字计 1），与 token 估算无关。
 String truncateByChars(String text, int maxChars) {
   if (maxChars <= 0) return text;
   final runes = text.runes;
@@ -54,7 +46,7 @@ String truncateByChars(String text, int maxChars) {
   return String.fromCharCodes(runes.take(maxChars));
 }
 
-/// prune 保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS = ["skill"]）。
+/// prune 保护的工具（保护的重要工具）。
 ///
 /// 状态性工具的结果即使过期也不 prune：todo 列表是 agent 的
 /// 工作状态，清理后模型会丢失任务上下文。
@@ -80,7 +72,7 @@ class ContextManager {
     int pruneMinimumTokens = pruneMinimumTokens,
     int pruneProtectTokens = pruneProtectTokens,
 
-    /// 压缩边界（对齐 opencode "遇到 summary 消息 break loop"）：
+    /// 压缩边界（遇到 summary 消息时停止扫描）：
     /// 对话被压缩过时传入尾部起点消息 ID（[Conversation.compactionTailStartId]），
     /// 扫描到该消息即停止——它及其之前是已压缩内容，不再处理。
     String? stopAtMessageId,
@@ -114,7 +106,7 @@ class ContextManager {
       }
     }
 
-    // 可压缩总量不足时不执行（opencode: pruned > PRUNE_MINIMUM 才落印）
+    // 可压缩总量不足时不执行（超过压缩阈值才执行）
     var prunedTokens = 0;
     for (final t in toPrune) {
       prunedTokens += t.tokens;
@@ -185,23 +177,6 @@ class ContextManager {
 // 内部实现
 // ============================================================================
 
-/// 按 UTF-8 字节数截断字符串，并回退到完整字符边界
-/// （不会劈开多字节字符/代理对）。
-///
-/// 仅用于**存储层**截断（工具结果落库的 50KB 字节上限，
-/// ChatService.maxToolResultBytes）；发送渲染按字符截断走
-/// [truncateByChars]（估算侧与发送侧共用同一实现）。
-String truncateUtf8(String text, int maxBytes) {
-  final bytes = utf8.encode(text);
-  if (bytes.length <= maxBytes) return text;
-  var end = maxBytes;
-  // 回退到 UTF-8 字符边界：continuation byte 为 0b10xxxxxx
-  while (end > 0 && (bytes[end] & 0xC0) == 0x80) {
-    end--;
-  }
-  return utf8.decode(bytes.sublist(0, end));
-}
-
 /// 工具结果发送渲染（对齐协议层 rebuildToolResultText）：
 /// compacted → 占位；completed → [kToolOutputMaxChars] 字符截断
 /// （[toolOutputMaxChars] 为 0/负数时不截断，与协议层一致）；
@@ -237,7 +212,7 @@ class _CompactedMarker extends _PruneTarget {
 
 /// 收集单条消息内的可压缩工具结果。
 ///
-/// 返回 null 表示该消息内已有已压缩条目（扫描应立即停止，opencode
+/// 返回 null 表示该消息内已有已压缩条目（扫描应立即停止，
 /// `break loop` 语义：prune 边界之后不再扫描更早的消息）。
 /// 返回空列表表示无可压缩条目（继续扫描更早的消息）。
 ///
@@ -254,7 +229,7 @@ List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
       targets.add(_CompactedMarker());
       return;
     }
-    // 受保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS）：不 prune
+    // 受保护的工具（保护的重要工具）：不 prune
     if (kPruneProtectedTools.contains(name)) return;
     if (result == null || result.isEmpty) return;
     if (!seenIds.add(id)) return; // 双写去重
@@ -265,7 +240,7 @@ List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
   }
 
   // toolCalls 与 blocks 可能同时存在（双写），统一收集（按 id 去重）。
-  // 对齐 opencode：消息内**从新到旧**扫描（parts 倒序）——
+  // 消息内**从新到旧**扫描（parts 倒序）——
   // 同一消息内较新的工具先进保护窗（40K），更旧的才被收集。
   final toolCalls = msg.toolCalls;
   if (toolCalls != null) {
@@ -289,7 +264,7 @@ List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
 
 /// 重建消息：把 [prunedIds] 命中的工具结果**标记**为已压缩。
 ///
-/// 对齐 opencode prune 语义：**只软删除（标记 compactedAt），
+/// 压缩策略：**只软删除（标记 compactedAt），
 /// 不物理删除 result 数据**——UI/存储中完整结果仍可查看（占位符
 /// 由协议层 rebuildToolResultText 在发送/渲染时应用），
 /// 仅发送给模型时（历史重建）渲染为占位符释放上下文。

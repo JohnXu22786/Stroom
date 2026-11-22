@@ -5290,7 +5290,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get assistantSendFullResult => '完全な結果を送信します (50 KB のストレージ制限の対象となります)';
+  String get assistantSendFullResult => '完全な結果を送信します (モデル入力を切り捨てずに)';
 
   @override
   String get assistantMaxCharacters => '最大文字数';
@@ -17055,7 +17055,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   }
 
   @override
-  String get assistantSendFullResult => '完全な結果を送信します (50 KB のストレージ制限の対象となります)';
+  String get assistantSendFullResult => '完全な結果を送信します (モデル入力を切り捨てずに)';
 
   @override
   String get assistantMaxCharacters => '最大文字数';

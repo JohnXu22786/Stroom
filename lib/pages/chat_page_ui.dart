@@ -498,7 +498,7 @@ extension _ChatPageUiExt on _ChatPageState {
 
   /// 上下文统计行：显示实际 context（API usage）、使用比例、累计花费。
   ///
-  /// 与 opencode sidebar 一致的三项：
+  /// 与上下文统计一致的三项：
   /// - context：最近一次请求的实际输入 token 数（来自 API usage，不估算）
   /// - 使用比例：context / 模型上下文窗口（模型页"上下文长度"）
   /// - 花费：按模型价格累计的美元

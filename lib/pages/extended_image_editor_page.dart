@@ -221,45 +221,52 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
             top: 8,
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildToolButton(
-                icon: Icons.rotate_left,
-                label: AppLocalizations.of(context)!.imageEditorRotateLeft,
-                onTap: (_isProcessing || _isClosing)
-                    ? null
-                    : () {
-                        _editorKey.currentState?.rotate(degree: -90);
-                      },
+              Expanded(
+                child: _buildToolButton(
+                  icon: Icons.rotate_left,
+                  label: AppLocalizations.of(context)!.imageEditorRotateLeft,
+                  onTap: (_isProcessing || _isClosing)
+                      ? null
+                      : () {
+                          _editorKey.currentState?.rotate(degree: -90);
+                        },
+                ),
               ),
-              _buildToolButton(
-                icon: Icons.rotate_right,
-                label: AppLocalizations.of(context)!.imageEditorRotateRight,
-                onTap: (_isProcessing || _isClosing)
-                    ? null
-                    : () {
-                        _editorKey.currentState?.rotate(degree: 90);
-                      },
+              Expanded(
+                child: _buildToolButton(
+                  icon: Icons.rotate_right,
+                  label: AppLocalizations.of(context)!.imageEditorRotateRight,
+                  onTap: (_isProcessing || _isClosing)
+                      ? null
+                      : () {
+                          _editorKey.currentState?.rotate(degree: 90);
+                        },
+                ),
               ),
-              _buildToolButton(
-                icon: Icons.flip,
-                label: AppLocalizations.of(context)!.imageEditorFlip,
-                onTap: (_isProcessing || _isClosing)
-                    ? null
-                    : () {
-                        _editorKey.currentState?.flip();
-                      },
+              Expanded(
+                child: _buildToolButton(
+                  icon: Icons.flip,
+                  label: AppLocalizations.of(context)!.imageEditorFlip,
+                  onTap: (_isProcessing || _isClosing)
+                      ? null
+                      : () {
+                          _editorKey.currentState?.flip();
+                        },
+                ),
               ),
-              _buildToolButton(
-                icon: Icons.crop,
-                label: AppLocalizations.of(context)!.imageEditorCrop,
-                onTap: (_isProcessing || _isClosing)
-                    ? null
-                    : () {
-                        // Cropping is always active in editor mode — this
-                        // button is informational; the user can drag crop
-                        // handles directly.
-                      },
+              Expanded(
+                child: _buildToolButton(
+                  icon: Icons.crop,
+                  label: AppLocalizations.of(context)!.imageEditorCrop,
+                  onTap: (_isProcessing || _isClosing)
+                      ? null
+                      : () {
+                          // Cropping is always active in editor mode — this
+                          // button is informational; the user can drag crop
+                          // handles directly.
+                        },
+                ),
               ),
             ],
           ),
@@ -280,11 +287,15 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Icon(icon, color: disabled ? Colors.white38 : Colors.white, size: 28),
           const SizedBox(height: 4),
-          Text(
+          ConstrainedText(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: disabled ? Colors.white38 : Colors.white70,
               fontSize: 12,

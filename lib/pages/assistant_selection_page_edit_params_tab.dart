@@ -39,7 +39,7 @@ class _EditDialogVars {
   bool enableMaxToolCalls;
 
   /// 工具结果渲染截断上限（字符数，非 token/字节），默认 5000；
-  /// [enableMaxToolOutputChars] 关闭时完整发送（存储仍有 50KB 上限）。
+  /// [enableMaxToolOutputChars] 关闭时完整发送。
   int maxToolOutputChars;
   bool enableMaxToolOutputChars;
   bool streamOutput;

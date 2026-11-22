@@ -8,7 +8,7 @@ class ToolCallData {
   final String? result;
   final Map<String, dynamic> extraFields;
 
-  /// 工具结果被 prune 的时间戳（软删除标记，opencode compacted 语义）。
+  /// 工具结果被 prune 的时间戳（软删除标记，压缩标记）。
   /// 非 null 时 [result] 已被替换为占位文本，UI 显示"已压缩"，
   /// 序列化体积保持最小。v3 原位演进：旧数据缺省 null。
   final DateTime? compactedAt;

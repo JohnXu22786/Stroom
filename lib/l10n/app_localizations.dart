@@ -9159,7 +9159,7 @@ abstract class AppLocalizations {
   /// No description provided for @assistantSendFullResult.
   ///
   /// In en, this message translates to:
-  /// **'Send full result (subject to the 50 KB storage limit)'**
+  /// **'Send full result (no model-input truncation)'**
   String get assistantSendFullResult;
 
   /// No description provided for @assistantMaxCharacters.

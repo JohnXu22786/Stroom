@@ -5466,7 +5466,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get assistantSendFullResult =>
-      'إرسال النتيجة كاملة (ضمن حد التخزين البالغ 50 KB)';
+      'إرسال النتيجة كاملة (من دون اقتطاع في إدخال النموذج)';
 
   @override
   String get assistantMaxCharacters => 'الحد الأقصى لعدد الأحرف';
@@ -17658,7 +17658,7 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get assistantSendFullResult =>
-      'إرسال النتيجة كاملة (ضمن حد التخزين البالغ 50 KB)';
+      'إرسال النتيجة كاملة (من دون اقتطاع في إدخال النموذج)';
 
   @override
   String get assistantMaxCharacters => 'الحد الأقصى لعدد الأحرف';

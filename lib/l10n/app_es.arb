@@ -1507,7 +1507,7 @@
   "assistantTruncateToolOutputHelp": "Número máximo de caracteres en cada resultado de herramienta antes de enviarlo al modelo. Se aplica a todas las conversaciones bajo este asistente.",
   "assistantEnableTruncation": "Habilitar truncamiento",
   "assistantTruncatedTo": "Los resultados largos se truncan a caracteres {count}",
-  "assistantSendFullResult": "Enviar resultado completo (sujeto al límite de almacenamiento de 50 KB)",
+  "assistantSendFullResult": "Enviar resultado completo (sin truncar la entrada del modelo)",
   "assistantMaxCharacters": "Caracteres máximos",
   "assistantCharactersNotTokens": "Unidad: personajes (no fichas)",
   "assistantDefaultCharacterCount": "Valor predeterminado: {count}",

@@ -1134,7 +1134,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.contextSummary = summary;
-      // 记录尾部起点消息 ID（prune 边界，对齐 opencode tail_start_id）
+      // 记录尾部起点消息 ID（压缩边界）
       if (tailStartId != null) c.compactionTailStartId = tailStartId;
       c.updatedAt = DateTime.now();
       return c;

@@ -626,7 +626,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             children: [
               // ── Top bar ──
               _buildTopBar(title: title, conversation: currentConversation),
-              // ── 上下文统计行（标题栏下方悬挂，opencode sidebar 风格）──
+              // ── 上下文统计行（标题栏下方悬挂，简洁风格）──
               if (activeId != null) _buildContextStatusLine(activeId),
               // ── Search bar ──
               if (_isSearching) _buildSearchBar(),

@@ -5423,7 +5423,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assistantSendFullResult =>
-      'Send full result (subject to the 50 KB storage limit)';
+      'Send full result (no model-input truncation)';
 
   @override
   String get assistantMaxCharacters => 'Maximum characters';
@@ -17503,7 +17503,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get assistantSendFullResult =>
-      'Send full result (subject to the 50 KB storage limit)';
+      'Send full result (no model-input truncation)';
 
   @override
   String get assistantMaxCharacters => 'Maximum characters';

@@ -629,10 +629,9 @@ extension ChatServiceStreamingExt on ChatService {
 
   /// Executes a single tool for the parallel tool-call batch.
   ///
-  /// Wraps [_executeTool] with the per-tool error fallback ('Error: …') and
-  /// the storage-level truncation (50KB UTF-8 bytes, opencode MAX_BYTES —
-  /// CJK multi-byte content counted per character would exceed the limit
-  /// ~3x). Small results are kept intact for the UI and history rebuild.
+  /// Wraps [_executeTool] with the per-tool error fallback ('Error: …').
+  /// The complete result is retained; model-input truncation is applied
+  /// separately according to the assistant's tool-output setting.
   ///
   /// Never throws: the returned future always completes with a result
   /// string, so [Future.wait] on the batch can't fail as a whole and one
@@ -643,10 +642,6 @@ extension ChatServiceStreamingExt on ChatService {
       result = await _executeTool(name, args);
     } catch (e) {
       result = 'Error: $e';
-    }
-    if (utf8.encode(result).length > ChatService.maxToolResultBytes) {
-      result =
-          '${truncateUtf8(result, ChatService.maxToolResultBytes)}$kToolOutputTruncatedSuffix';
     }
     return result;
   }
