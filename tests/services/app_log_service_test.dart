@@ -60,19 +60,25 @@ void main() {
   group('AppLogService — memory buffer flushing', () {
     test('flush timer stops when drained and restarts for later logs',
         () async {
-      AppLogService.debugForceFlushTimer = true;
+      final logDir = await AppLogService.getLogDir();
+      try {
+        AppLogService.debugForceFlushTimer = true;
 
-      await AppLogService.info('TestSource', 'First batch');
-      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+        await AppLogService.info('TestSource', 'First batch');
+        expect(AppLogService.debugIsFlushTimerActive, isTrue);
 
-      await AppLogService.flush();
-      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+        await AppLogService.flush();
+        expect(AppLogService.debugIsFlushTimerActive, isFalse);
 
-      await AppLogService.info('TestSource', 'Second batch');
-      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+        await AppLogService.info('TestSource', 'Second batch');
+        expect(AppLogService.debugIsFlushTimerActive, isTrue);
 
-      await AppLogService.flush();
-      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+        await AppLogService.flush();
+        expect(AppLogService.debugIsFlushTimerActive, isFalse);
+      } finally {
+        AppLogService.reset();
+        if (await logDir.exists()) await logDir.delete(recursive: true);
+      }
     });
 
     test('logs are NOT written to file before flush()', () async {
