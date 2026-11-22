@@ -17,20 +17,28 @@ import 'package:stroom/widgets/html_code_block_widget.dart';
 /// This allows the user to freely browse the rendered HTML, interact with
 /// JavaScript, load CDN libraries, images, and other external resources,
 /// and navigate to linked pages by clicking hyperlinks.
-void showHtmlPreviewDialog({
+Future<bool?> showHtmlPreviewDialog({
   required BuildContext context,
   required String htmlCode,
+  bool showEditSourceAction = false,
 }) {
-  showDialog(
+  return showDialog<bool>(
     context: context,
-    builder: (ctx) => _HtmlPreviewDialogContent(htmlCode: htmlCode),
+    builder: (ctx) => _HtmlPreviewDialogContent(
+      htmlCode: htmlCode,
+      showEditSourceAction: showEditSourceAction,
+    ),
   );
 }
 
 class _HtmlPreviewDialogContent extends StatefulWidget {
   final String htmlCode;
+  final bool showEditSourceAction;
 
-  const _HtmlPreviewDialogContent({required this.htmlCode});
+  const _HtmlPreviewDialogContent({
+    required this.htmlCode,
+    required this.showEditSourceAction,
+  });
 
   @override
   State<_HtmlPreviewDialogContent> createState() =>
@@ -247,6 +255,25 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                     ),
                   ),
                   const Spacer(),
+                  if (widget.showEditSourceAction)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.85,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.edit, size: 20),
+                          tooltip:
+                              AppLocalizations.of(context)!.textPreviewEdit,
+                          color: cs.onSurface,
+                          onPressed: () => Navigator.pop(context, true),
+                        ),
+                      ),
+                    ),
                   // Close button
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -260,7 +287,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                         icon: const Icon(Icons.close, size: 24),
                         tooltip: AppLocalizations.of(context)!.chatPreviewClose,
                         color: cs.onSurface,
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => Navigator.pop(context, false),
                       ),
                     ),
                   ),

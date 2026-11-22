@@ -160,6 +160,64 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     });
 
+    testWidgets('opens HTML in rendered preview and edits its source', (
+      tester,
+    ) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _TestMermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _TestMermaidWebViewPlatform());
+
+      const htmlSource =
+          '<!doctype html><html><body><h1>Rendered</h1></body></html>';
+      final bytes = Uint8List.fromList(utf8.encode(htmlSource));
+      final htmlRecord = TextRecord(
+        name: 'page',
+        hash: computeTextHash(bytes),
+        format: 'html',
+        createdAt: DateTime.utc(2024),
+        size: bytes.length,
+      );
+      await TextManifest.writeText(htmlRecord.storageFileName, htmlSource);
+      await TextManifest.addRecord(htmlRecord);
+
+      await tester.pumpWidget(_buildTestApp(htmlRecord, htmlSource));
+      await tester.tap(find.text('Open Editor'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(InAppWebView), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byTooltip('编辑'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(TextField), findsOneWidget);
+
+      const changedSource = '<h1>Edited source</h1>';
+      await tester.enterText(find.byType(TextField), changedSource);
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+        (record) => record.format == 'html',
+      );
+      expect(savedRecord.format, 'html');
+      expect(
+        await TextManifest.readText(savedRecord.storagePath),
+        changedSource,
+      );
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(InAppWebView), findsOneWidget);
+    });
+
     // ==================== Edit Mode: Icon-Only Buttons ====================
 
     testWidgets(

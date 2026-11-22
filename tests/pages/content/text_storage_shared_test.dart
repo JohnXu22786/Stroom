@@ -219,6 +219,33 @@ void main() {
       );
     });
 
+    testWidgets('saves selected html format and source unchanged', (
+      tester,
+    ) async {
+      const source = '<h1>Raw HTML</h1>\n<script>keep()</script>';
+      await tester.pumpWidget(_buildTestApp(initialFolder: 'docs'));
+      await tester.pump();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, '标题').first,
+        'page',
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pump();
+      await tester.tap(find.text('html').last);
+      await tester.pump();
+      await tester.enterText(find.byType(TextField).last, source);
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final records = await TextManifest.loadRecords();
+      expect(records, hasLength(1));
+      expect(records.single.format, 'html');
+      expect(records.single.name, 'page');
+      expect(await TextManifest.readText(records.single.storagePath), source);
+    });
+
     testWidgets('allows same name and format in another folder', (
       tester,
     ) async {

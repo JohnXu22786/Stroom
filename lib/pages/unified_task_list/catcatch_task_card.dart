@@ -73,6 +73,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   final Set<int> _expandedSteps = {};
   final Map<String, Set<String>> _selectedMediaIdentities = {};
   final Map<String, String?> _mergeAudioUrls = {};
+  final Map<String, String> _mergePrimaryVideoIdentities = {};
   final Set<String> _pendingFlowActions = {};
   final Set<String> _expandedSegments = {};
   bool _recoveryPageOpened = false;
@@ -180,7 +181,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         if (widget.isFlowManaged) identities.clear();
         identities.add(identity);
       }
-      if (widget.isFlowManaged) _mergeAudioUrls[taskId] = null;
+      _mergeAudioUrls[taskId] = null;
+      _mergePrimaryVideoIdentities.remove(taskId);
     });
   }
 
@@ -870,6 +872,20 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   if (selectedMediaList.isEmpty) return;
                   final notifier = ref.read(catcatchTasksProvider.notifier);
                   final mergeAudio = _mergeAudioUrls[task.id];
+                  if (mergeAudio != null) {
+                    final primaryVideoIdentity =
+                        _mergePrimaryVideoIdentities[task.id];
+                    final primaryVideoIndex = selectedMediaList.indexWhere(
+                      (media) =>
+                          media.selectionIdentity == primaryVideoIdentity,
+                    );
+                    if (primaryVideoIndex > 0) {
+                      selectedMediaList.insert(
+                        0,
+                        selectedMediaList.removeAt(primaryVideoIndex),
+                      );
+                    }
+                  }
                   if (widget.isFlowManaged) {
                     await _performFlowAction(
                       task.id,
@@ -1018,6 +1034,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         final primaryVideo = videoResources.first;
                         setState(() {
                           final identities = _getSelectedIdentities(task.id);
+                          _mergePrimaryVideoIdentities[task.id] =
+                              primaryVideo.selectionIdentity;
                           if (widget.isFlowManaged) identities.clear();
                           identities.add(primaryVideo.selectionIdentity);
                           if (!widget.isFlowManaged) {
@@ -1058,6 +1076,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             }
                           }
                           _mergeAudioUrls[task.id] = null;
+                          _mergePrimaryVideoIdentities.remove(task.id);
                         });
                       },
                 icon: const Icon(Icons.videocam, size: 18),

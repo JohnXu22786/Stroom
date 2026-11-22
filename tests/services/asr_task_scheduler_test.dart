@@ -355,6 +355,59 @@ void main() {
         '${fraction.toString().padLeft(3, '0')}';
   }
 
+  test('URL task names retain distinguishing long suffixes', () async {
+    const sharedPrefix =
+        'https://media.example.test/recording-session-2026-11-22-interview-archive-';
+    const firstName = '${sharedPrefix}take-one-final.wav';
+    const secondName = '${sharedPrefix}take-two-final.wav';
+    final run = scheduler(
+      _ControlledAdapter(),
+      audios: [
+        AsrTaskAudio(bytes: Uint8List(0), name: firstName, format: 'url'),
+        AsrTaskAudio(bytes: Uint8List(0), name: secondName, format: 'url'),
+      ],
+    );
+
+    await run.start();
+
+    expect(
+      notifier.state.map((task) => task.title).toList(),
+      unorderedEquals([
+        'ASR_recording-session-2026-11-22-interview-archive-take-one-final.wav',
+        'ASR_recording-session-2026-11-22-interview-archive-take-two-final.wav',
+      ]),
+    );
+  });
+
+  test(
+    'URL task names keep diagnostic secrets sanitized',
+    () async {
+      const configuredApiKey = 'synthetic-configured-key-for-test';
+      const url =
+          'https://user:synthetic-user-secret@media.example.test/audio/$configuredApiKey?token=synthetic-query-secret';
+      final run = scheduler(
+        _ControlledAdapter(),
+        audios: [AsrTaskAudio(bytes: Uint8List(0), name: url, format: 'url')],
+        config: const AsrConfig(
+          apiKey: configuredApiKey,
+          host: 'https://asr.test/transcribe',
+        ),
+      );
+
+      await run.start();
+
+      final task = notifier.state.single;
+      expect(task.title, startsWith('ASR_'));
+      expect(task.title, isNot(contains(configuredApiKey)));
+      expect(task.title, isNot(contains('synthetic-user-secret')));
+      expect(task.title, isNot(contains('synthetic-query-secret')));
+      final persistedTask = jsonEncode(task.toMap());
+      expect(persistedTask, isNot(contains(configuredApiKey)));
+      expect(persistedTask, isNot(contains('synthetic-user-secret')));
+      expect(persistedTask, isNot(contains('synthetic-query-secret')));
+    },
+  );
+
   test('start is idempotent and snapshots each request chain', () async {
     final adapter = _ControlledAdapter(holdFirstResponse: true);
     final input = audio('captured.wav');
@@ -785,7 +838,10 @@ void main() {
       final task = notifier.taskById(run.taskIds.single)!;
       expect(task.status, TaskStatus.failed);
       expect(task.error, isNot(contains(configuredApiKey)));
-      expect(jsonEncode(task.toMap()), isNot(contains(configuredApiKey)));
+      final persistedTask = jsonEncode(task.toMap());
+      expect(persistedTask, isNot(contains(configuredApiKey)));
+      expect(persistedTask, isNot(contains('synthetic-user-secret')));
+      expect(persistedTask, isNot(contains('synthetic-query-secret')));
     },
   );
 
@@ -1086,7 +1142,10 @@ void main() {
       final task = notifier.taskById(run.taskIds.single)!;
       final diagnostics = jsonEncode(task.rawRequest);
       expect(diagnostics, isNot(contains(configuredApiKey)));
-      expect(jsonEncode(task.toMap()), isNot(contains(configuredApiKey)));
+      final persistedTask = jsonEncode(task.toMap());
+      expect(persistedTask, isNot(contains(configuredApiKey)));
+      expect(persistedTask, isNot(contains('synthetic-user-secret')));
+      expect(persistedTask, isNot(contains('synthetic-query-secret')));
       expect(diagnostics, contains('fast'));
     },
   );
