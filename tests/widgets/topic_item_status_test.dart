@@ -199,6 +199,29 @@ void main() {
     );
   });
 
+  testWidgets('narrow scaled topic date stays within metadata slot', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _app(topicWidth: 320, textScaler: const TextScaler.linear(2)),
+    );
+
+    final date = find.textContaining('-');
+    expect(date, findsOneWidget);
+    expect(
+      find.ancestor(of: date, matching: find.byType(ConstrainedText)),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('topic menu toggles temporary status in either direction', (
     tester,
   ) async {
