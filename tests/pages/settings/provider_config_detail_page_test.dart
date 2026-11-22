@@ -13,6 +13,7 @@ import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/pages/ocr_model_config_page.dart';
 import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/model_config_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// Helper to create a test ProviderEntry with one config
 ProviderEntry _createTestEntry({
@@ -92,6 +93,8 @@ extension on WidgetTester {
     int configIndex = 0,
     String entryType = 'llm',
     String entryName = 'LLM供应商',
+    String host = 'https://api.test.com',
+    ThemeData? theme,
     List<ModelConfig> models = const [],
     Map<String, dynamic> typeConfig = const {},
   }) {
@@ -102,9 +105,12 @@ extension on WidgetTester {
             (ref) => ProviderEntriesNotifierFake(
               type: entryType,
               name: entryName,
-              entries: models.isNotEmpty || typeConfig.isNotEmpty
+              entries: models.isNotEmpty ||
+                      typeConfig.isNotEmpty ||
+                      host != 'https://api.test.com'
                   ? [
                       _createTestEntry(
+                        host: host,
                         type: entryType,
                         name: entryName,
                         models: models,
@@ -116,6 +122,7 @@ extension on WidgetTester {
           ),
         ],
         child: MaterialApp(
+          theme: theme,
           locale: const Locale('zh', 'CN'),
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -160,6 +167,83 @@ void main() {
   });
 
   group('Display mode (existing config)', () {
+    testWidgets('provider host uses the shared clipped-label behavior', (
+      tester,
+    ) async {
+      const host =
+          'https://provider.example.com/with/a/very/long/path/that/exceeds/the/header';
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpDetailPage(host: host);
+
+      final hostFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == host,
+      );
+      expect(hostFinder, findsOneWidget);
+      final hostLabel = tester.widget<ConstrainedText>(hostFinder);
+      expect(hostLabel.data, host);
+      expect(hostLabel.maxLines, 1);
+      expect(hostLabel.style?.fontSize, 12);
+      expect(
+        hostLabel.style?.color,
+        Theme.of(
+          tester.element(find.byType(ProviderConfigDetailPage)),
+        ).colorScheme.onSurfaceVariant,
+      );
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      )!;
+      await tester.tap(find.byTooltip(l10n.providerEditSettings));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final hostField = find.byType(TextField).at(1);
+      expect(tester.widget<TextField>(hostField).controller!.text, host);
+
+      const editedHost = 'https://provider.example.com/edited';
+      await tester.enterText(hostField, editedHost);
+      await tester.tap(find.text(l10n.mermaidSaveButton).last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == editedHost,
+        ),
+        findsOneWidget,
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      );
+      expect(
+        container
+            .read(providerEntriesProvider)
+            .entries
+            .single
+            .configs
+            .single
+            .host,
+        editedHost,
+      );
+
+      await tester.pumpDetailPage(
+        host: editedHost,
+        theme: ThemeData.dark(),
+      );
+      final darkHostFinder = find.byWidgetPredicate(
+        (widget) => widget is ConstrainedText && widget.data == editedHost,
+      );
+      expect(darkHostFinder, findsOneWidget);
+      expect(
+        tester.widget<ConstrainedText>(darkHostFinder).style?.color,
+        Theme.of(
+          tester.element(find.byType(ProviderConfigDetailPage)),
+        ).colorScheme.onSurfaceVariant,
+      );
+    });
+
     testWidgets('shows provider card and model list, no edit button', (
       tester,
     ) async {
