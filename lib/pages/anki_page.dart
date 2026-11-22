@@ -69,11 +69,18 @@ class AnkiDroidPage extends ConsumerWidget {
       ),
       body: decksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Text(
-            e is AnkiStatsUnsupportedException
-                ? l10n.ankiWebDecksUnsupportedPlatform
-                : l10n.ankiDeckLoadError(e.toString()),
+        error: (e, _) => LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Text(
+                  e is AnkiStatsUnsupportedException
+                      ? l10n.ankiWebDecksUnsupportedPlatform
+                      : l10n.ankiDeckLoadError(e.toString()),
+                ),
+              ),
+            ),
           ),
         ),
         data: (decks) => decks.isEmpty
