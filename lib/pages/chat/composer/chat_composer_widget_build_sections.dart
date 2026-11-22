@@ -213,8 +213,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                 constraints: BoxConstraints(maxWidth: constraints.maxWidth),
                 child: TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: 1),
-                  duration:
-                      ChatComposerWidgetState._editWarningFadeOutDuration,
+                  duration: ChatComposerWidgetState._editWarningFadeOutDuration,
                   builder: (context, value, child) =>
                       Opacity(opacity: value, child: child),
                   child: Container(
