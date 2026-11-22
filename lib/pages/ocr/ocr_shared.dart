@@ -74,6 +74,7 @@ class ChoiceCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
+  final bool expandSubtitle;
 
   const ChoiceCard({
     super.key,
@@ -82,6 +83,7 @@ class ChoiceCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.expandSubtitle = false,
   });
 
   @override
@@ -120,15 +122,24 @@ class ChoiceCard extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    ConstrainedText(
-                      subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    if (expandSubtitle)
+                      Text(
+                        subtitle,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      )
+                    else
+                      ConstrainedText(
+                        subtitle,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                   ],
                 ),
               ),

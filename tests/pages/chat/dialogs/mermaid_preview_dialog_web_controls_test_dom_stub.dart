@@ -4,6 +4,18 @@ List<String> controlLabels() => const [];
 
 String? controlTitle() => null;
 
+void constrainControlsViewportForTest(double width) {}
+
+bool titleStaysBetweenControls() => false;
+
+String? titleMotionState() => null;
+
+String? titleTransform() => null;
+
+bool titleLeadingCharacterIsVisible() => false;
+
+double? titleLeadingCharacterCenterX() => null;
+
 String controlsSnapshot() => '<web controls are only available in a browser>';
 
 bool previewIframeReceivesPointer() => false;
