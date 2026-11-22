@@ -206,8 +206,10 @@ Future<void> pumpPageWithBackground(
 /// Pumps the UnifiedTaskListPage with given synthesis tasks and empty others.
 Future<void> pumpPageWithSynthesis(
   WidgetTester tester,
-  List<SynthesisTask> synthesisTasks,
-) async {
+  List<SynthesisTask> synthesisTasks, {
+  double textScale = 1,
+  int initialTab = 0,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -232,7 +234,13 @@ Future<void> pumpPageWithSynthesis(
         locale: const Locale('zh', 'CN'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: UnifiedTaskListPage(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+          ),
+          child: child!,
+        ),
+        home: UnifiedTaskListPage(initialTab: initialTab),
       ),
     ),
   );
@@ -1353,6 +1361,52 @@ void main() {
 
       expect(find.text('打开文件'), findsNothing,
           reason: '没有文件路径的ASR转写任务不应显示"打开文件"按钮');
+    });
+  });
+
+  group('Synthesis task action button text scaling', () {
+    testWidgets('Continue, Retry, and Open File fit at large text scale',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final completed = _createCompletedSynthTask(
+        id: 'large-text-open',
+        downloadedFilePath: 'C:\\audio\\large-text.mp3',
+      );
+      final paused = _createCompletedSynthTask(id: 'large-text-continue')
+          .copyWith(status: TaskStatus.paused);
+      final failed = _createCompletedSynthTask(id: 'large-text-retry')
+          .copyWith(status: TaskStatus.failed, error: 'Failed');
+
+      for (final task in [paused, failed, completed]) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await pumpPageWithSynthesis(
+          tester,
+          [task],
+          textScale: 2.5,
+          initialTab: task.status == TaskStatus.failed ? 3 : 0,
+        );
+        final actionText = switch (task.status) {
+          TaskStatus.paused => '继续',
+          TaskStatus.failed => '重试',
+          TaskStatus.completed => '打开文件',
+          _ => throw StateError('Unexpected status'),
+        };
+        expect(find.text(actionText), findsOneWidget);
+        final buttonFinder = find.ancestor(
+          of: find.text(actionText),
+          matching: find.byType(
+            task.status == TaskStatus.completed ? TextButton : ElevatedButton,
+          ),
+        );
+        expect(tester.getSize(buttonFinder).height, greaterThan(32),
+            reason: '$actionText button must grow with 2.5x text');
+        expect(tester.takeException(), isNull,
+            reason: '$actionText must not be vertically clipped at 2.5x');
+      }
     });
   });
 
