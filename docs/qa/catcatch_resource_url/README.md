@@ -14,14 +14,13 @@ The preview includes the component's initial still period (about one second),
 then the real `ConstrainedText` vertical scroll through to a stable endpoint.
 The endpoint screenshot shows the URL's final path and query text, while the
 initial screenshot shows its beginning. The sample is a synthetic reserved
-`.test` URL and its token is fake local QA text. Chromium routing aborted every
-request outside the local capture server before network access; the captured
-run blocked 45 font requests to `fonts.gstatic.com` and reported no page errors.
-No URL was opened or submitted.
+`.test` URL and its token is fake local QA text. No URL was opened or submitted.
 
 The capture harness rendered the repository's production widget directly in a
 small Flutter app shell, using `flutter build web --release` with local
-CanvasKit. The host has no CJK system font, so the panel's fixed Chinese chrome
-labels appear as fallback boxes; the URL itself uses Chromium's normal Latin
-font at the app's regular size. The capture verifies the real component layout
-and URL reveal, rather than a mock or a test-font rendering.
+CanvasKit. The host's installed Noto Sans CJK SC regular font was subset to the
+panel's Chinese glyphs and loaded as a temporary Flutter font fallback for
+this capture. The app's normal primary font remains in use for Latin URL text;
+the production font size and labels are unchanged. The font subset and capture
+harness are not production assets. Chromium made no external requests and
+reported no page errors.
