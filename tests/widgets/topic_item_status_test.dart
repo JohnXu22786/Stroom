@@ -255,39 +255,81 @@ void main() {
     await tester.tap(find.text('Rename'));
     await tester.pumpAndSettle();
 
+    const captureKey = ValueKey('topic-menu-capture');
+    tester.view.physicalSize = const Size(320, 640);
     await tester.pumpWidget(
       _app(
         locale: const Locale('de'),
-        textScaler: const TextScaler.linear(2),
-        captureKey: const ValueKey('topic-menu-capture'),
+        textScaler: const TextScaler.linear(1),
+        captureKey: captureKey,
       ),
     );
-    tester.view.physicalSize = const Size(320, 640);
     await tester.pump();
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
 
     const germanLabel = 'Als temporäres Gespräch festlegen';
     final germanText = find.text(germanLabel);
-    final germanConstrainedText = find.ancestor(
+    final fittingGermanConstrainedText = find.ancestor(
       of: germanText,
       matching: find.byType(ConstrainedText),
     );
-    expect(germanConstrainedText, findsOneWidget);
+    expect(fittingGermanConstrainedText, findsOneWidget);
     expect(
       find.descendant(
-        of: germanConstrainedText,
+        of: fittingGermanConstrainedText,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsNothing,
+    );
+    final fittingSemantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(fittingGermanConstrainedText).label,
+      germanLabel,
+    );
+    fittingSemantics.dispose();
+    expect(find.text('2024-01-02 03:04'), findsOneWidget);
+    await expectLater(
+      find.byKey(captureKey),
+      matchesGoldenFile('goldens/topic_item_temporary_menu_de_320x640.png'),
+    );
+
+    await tester.tap(find.text('Umbenennen'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      _app(
+        locale: const Locale('de'),
+        textScaler: const TextScaler.linear(2),
+        captureKey: captureKey,
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    final clippedGermanConstrainedText = find.ancestor(
+      of: germanText,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(clippedGermanConstrainedText, findsOneWidget);
+    expect(
+      find.descendant(
+        of: clippedGermanConstrainedText,
         matching: find.byType(AnimatedBuilder),
       ),
       findsOneWidget,
     );
-    final semantics = tester.ensureSemantics();
-    expect(tester.getSemantics(germanConstrainedText).label, germanLabel);
-    semantics.dispose();
+    final clippedSemantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(clippedGermanConstrainedText).label,
+      germanLabel,
+    );
+    clippedSemantics.dispose();
     expect(find.text('2024-01-02 03:04'), findsOneWidget);
     await expectLater(
-      find.byKey(const ValueKey('topic-menu-capture')),
-      matchesGoldenFile('goldens/topic_item_temporary_menu_de_320x640.png'),
+      find.byKey(captureKey),
+      matchesGoldenFile(
+        'goldens/topic_item_temporary_menu_de_320x640_scale2.png',
+      ),
     );
     expect(tester.takeException(), isNull);
   });
