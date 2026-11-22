@@ -379,8 +379,7 @@ void main() {
     'CatCatch picker selection survives task card eviction and re-entry',
     (tester) async {
       final tasks = [
-        for (var i = 0; i < 80; i++)
-          _createCompletedTask(id: 'preceding-$i'),
+        for (var i = 0; i < 80; i++) _createCompletedTask(id: 'preceding-$i'),
         _createResourceSelectionTask(
           id: 'target-picker-task',
           createdAt: DateTime(2024, 12, 31),
