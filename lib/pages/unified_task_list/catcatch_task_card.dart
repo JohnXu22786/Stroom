@@ -399,8 +399,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 8),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               child: _buildStepTimeline(task, colorScheme),
                             ),
                           ),
@@ -794,7 +793,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         (widget.isFlowManaged
                             ? AppLocalizations.of(context)!
                                 .catcatchFlowSelectOrCombine
-                            : AppLocalizations.of(context)!.catcatchSelectMultiple),
+                            : AppLocalizations.of(context)!
+                                .catcatchSelectMultiple),
                 style: Theme.of(context)
                     .textTheme
                     .titleSmall
@@ -803,7 +803,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               const SizedBox(height: 8),
               if (splitGroups.isNotEmpty) ...[
                 for (final entry in splitGroups.entries)
-                  _buildSplitTrackGroup(context, task, entry.value, colorScheme),
+                  _buildSplitTrackGroup(
+                      context, task, entry.value, colorScheme),
                 const SizedBox(height: 12),
               ],
             ],

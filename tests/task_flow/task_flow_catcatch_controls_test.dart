@@ -392,7 +392,8 @@ void main() {
     expect(actionRect.bottom, lessThanOrEqualTo(screenHeight));
     expect(resourceViewport.height, lessThanOrEqualTo(screenHeight * 2 / 3));
     expect(scrollViewRect.height, lessThanOrEqualTo(screenHeight * 2 / 3));
-    expect(tester.widget<CustomScrollView>(scrollViewFinder).shrinkWrap, isTrue);
+    expect(
+        tester.widget<CustomScrollView>(scrollViewFinder).shrinkWrap, isTrue);
     expect(find.text('resource-0.mp4').hitTestable(), findsOneWidget);
     expect(find.text('resource-59.mp4'), findsNothing);
     await tester.drag(scrollViewFinder, const Offset(0, -500));
