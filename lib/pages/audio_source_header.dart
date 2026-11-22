@@ -102,9 +102,8 @@ class AudioSourceHeader extends StatelessWidget {
               child: Icon(
                 Icons.text_decrease,
                 size: 20,
-                color: canDecreaseFontSize
-                    ? Colors.grey[700]
-                    : Colors.grey[300],
+                color:
+                    canDecreaseFontSize ? Colors.grey[700] : Colors.grey[300],
               ),
             ),
             const SizedBox(width: 4),
@@ -113,9 +112,8 @@ class AudioSourceHeader extends StatelessWidget {
               child: Icon(
                 Icons.text_increase,
                 size: 20,
-                color: canIncreaseFontSize
-                    ? Colors.grey[700]
-                    : Colors.grey[300],
+                color:
+                    canIncreaseFontSize ? Colors.grey[700] : Colors.grey[300],
               ),
             ),
           ],
