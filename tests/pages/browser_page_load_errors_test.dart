@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
@@ -105,6 +109,330 @@ void main() {
     expect(
       platform.webView!.params.initialSettings?.mixedContentMode,
       MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('injects saved userscripts when preferences load after page',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final preferencesReady = Completer<void>();
+    SharedPreferencesStorePlatform.instance = _DelayedPreferencesStore(
+      {
+        'flutter.browser_user_scripts': jsonEncode([
+          {
+            'id': 'saved-script',
+            'name': 'Saved script',
+            'code': 'window.savedUserscriptRan = true;',
+            'enabled': true,
+            'origin': 'manual',
+          },
+        ]),
+      },
+      preferencesReady,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      isEmpty,
+    );
+
+    preferencesReady.complete();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      [
+        'window.savedUserscriptRan = true;\n'
+            '//# sourceURL=stroom-userscript-saved-script.js'
+      ],
+    );
+
+    final scriptsTooltip = AppLocalizations.of(
+      tester.element(find.byType(BrowserPage)),
+    )!
+        .browserUserScripts;
+    await tester.tap(find.byTooltip(scriptsTooltip));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      hasLength(2),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('waits for load stop and injects each saved userscript once',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final preferencesReady = Completer<void>();
+    SharedPreferencesStorePlatform.instance = _DelayedPreferencesStore(
+      {
+        'flutter.browser_user_scripts': jsonEncode([
+          {
+            'id': 'saved-script',
+            'name': 'Saved script',
+            'code': 'window.savedUserscriptRan = true;',
+            'enabled': true,
+            'origin': 'manual',
+          },
+        ]),
+      },
+      preferencesReady,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStart!(controller, WebUri('https://example.com/'));
+
+    preferencesReady.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      isEmpty,
+    );
+
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+    await tester.pump();
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      [
+        'window.savedUserscriptRan = true;\n'
+            '//# sourceURL=stroom-userscript-saved-script.js'
+      ],
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('ignores stale script failures after same-URL navigation',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    SharedPreferencesStorePlatform.instance =
+        InMemorySharedPreferencesStore.withData({
+      'flutter.browser_user_scripts': jsonEncode([
+        {
+          'id': 'saved-script',
+          'name': 'Saved script',
+          'code': 'window.savedUserscriptRan = true;',
+          'enabled': true,
+          'origin': 'manual',
+        },
+      ]),
+    });
+    final evaluationStarted = Completer<void>();
+    final evaluationGate = Completer<void>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.controller.userScriptEvaluationStarted = evaluationStarted;
+    webView.controller.userScriptEvaluationGate = evaluationGate;
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStart!(controller, WebUri('https://example.com/'));
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+    await tester.pump();
+    expect(evaluationStarted.isCompleted, isTrue);
+
+    webView.params.onLoadStart!(controller, WebUri('https://example.com/'));
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+    await tester.pump();
+    evaluationGate.completeError(StateError('stale evaluation failed'));
+    await tester.pump();
+
+    final scriptsTooltip = AppLocalizations.of(
+      tester.element(find.byType(BrowserPage)),
+    )!
+        .browserUserScripts;
+    await tester.tap(find.byTooltip(scriptsTooltip));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(AppLocalizations.of(
+        tester.element(find.byType(BrowserPage)),
+      )!
+          .browserScriptRuntimeError),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('re-enabling while evaluation is pending requests a rerun',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    SharedPreferencesStorePlatform.instance =
+        InMemorySharedPreferencesStore.withData({
+      'flutter.browser_user_scripts': jsonEncode([
+        {
+          'id': 'saved-script',
+          'name': 'Saved script',
+          'code': 'window.savedUserscriptRan = true;',
+          'enabled': true,
+          'origin': 'manual',
+        },
+      ]),
+    });
+    final evaluationStarted = Completer<void>();
+    final evaluationGate = Completer<void>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.controller.userScriptEvaluationStarted = evaluationStarted;
+    webView.controller.userScriptEvaluationGate = evaluationGate;
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStart!(controller, WebUri('https://example.com/'));
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+    await tester.pump();
+    expect(evaluationStarted.isCompleted, isTrue);
+
+    final scriptsTooltip = AppLocalizations.of(
+      tester.element(find.byType(BrowserPage)),
+    )!
+        .browserUserScripts;
+    await tester.tap(find.byTooltip(scriptsTooltip));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    evaluationGate.complete();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      hasLength(2),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('manager changes during error monitor do not duplicate script',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    SharedPreferencesStorePlatform.instance =
+        InMemorySharedPreferencesStore.withData({
+      'flutter.browser_user_scripts': jsonEncode([
+        {
+          'id': 'saved-script',
+          'name': 'Saved script',
+          'code': 'window.savedUserscriptRan = true;',
+          'enabled': true,
+          'origin': 'manual',
+        },
+      ]),
+    });
+    final evaluationStarted = Completer<void>();
+    final evaluationGate = Completer<void>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.controller.userScriptEvaluationStarted = evaluationStarted;
+    webView.controller.userScriptEvaluationGate = evaluationGate;
+    webView.controller.userScriptEvaluationMatch = 'var errorScriptId';
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStart!(controller, WebUri('https://example.com/'));
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+    await tester.pump();
+    expect(evaluationStarted.isCompleted, isTrue);
+
+    final scriptsTooltip = AppLocalizations.of(
+      tester.element(find.byType(BrowserPage)),
+    )!
+        .browserUserScripts;
+    await tester.tap(find.byTooltip(scriptsTooltip));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    evaluationGate.complete();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts.where(
+          (script) => script.contains('window.savedUserscriptRan = true;')),
+      hasLength(1),
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -444,14 +772,36 @@ class _BrowserPageWebView extends PlatformInAppWebViewWidget {
 }
 
 class _BrowserPageController extends PlatformInAppWebViewController {
+  final evaluatedScripts = <String>[];
+  Completer<void>? userScriptEvaluationStarted;
+  Completer<void>? userScriptEvaluationGate;
+  String? userScriptEvaluationMatch;
+
   _BrowserPageController()
       : super.implementation(
             const PlatformInAppWebViewControllerCreationParams(id: 0));
 
   @override
   Future<dynamic> evaluateJavascript(
-          {required String source, ContentWorld? contentWorld}) async =>
-      null;
+      {required String source, ContentWorld? contentWorld}) async {
+    evaluatedScripts.add(source);
+    if (source.contains(
+          userScriptEvaluationMatch ?? 'window.savedUserscriptRan = true;',
+        ) &&
+        userScriptEvaluationStarted != null &&
+        !userScriptEvaluationStarted!.isCompleted) {
+      userScriptEvaluationStarted!.complete();
+      await userScriptEvaluationGate!.future;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> loadUrl({
+    required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
 
   @override
   void addJavaScriptHandler(
@@ -460,4 +810,17 @@ class _BrowserPageController extends PlatformInAppWebViewController {
 
   @override
   void dispose({bool isKeepAlive = false}) {}
+}
+
+class _DelayedPreferencesStore extends InMemorySharedPreferencesStore {
+  _DelayedPreferencesStore(super.data, this.preferencesReady)
+      : super.withData();
+
+  final Completer<void> preferencesReady;
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    await preferencesReady.future;
+    return super.getAll();
+  }
 }
