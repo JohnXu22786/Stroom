@@ -106,7 +106,7 @@ String decodeHtmlCharacterFromMatch(Match match) {
   else if (decimalNumber != null) {
     final decimalValue = int.parse(decimalNumber);
     int hexValue;
-    if (decimalValue > 1 &&
+    if (decimalValue > 0 &&
         decimalValue <= 0x10ffff &&
         (decimalValue < 0xd800 || decimalValue > 0xdfff)) {
       hexValue = int.parse(decimalValue.toRadixString(16), radix: 16);

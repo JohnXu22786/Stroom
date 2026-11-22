@@ -11,8 +11,8 @@ void main() {
 
   test('numeric references replace surrogate code points only', () {
     expect(
-      markdown.markdownToHtml('&#55296; &#xDFFF; &#128512; &#x1F600;'),
-      '<p>� � 😀 😀</p>\n',
+      markdown.markdownToHtml('&#55296; &#xDFFF; &#1; &#128512; &#x1F600;'),
+      '<p>� � \u0001 😀 😀</p>\n',
     );
   });
 }
