@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
@@ -105,6 +109,120 @@ void main() {
     expect(
       platform.webView!.params.initialSettings?.mixedContentMode,
       MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('injects saved userscripts when preferences load after page',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final preferencesReady = Completer<void>();
+    SharedPreferencesStorePlatform.instance = _DelayedPreferencesStore(
+      {
+        'flutter.browser_user_scripts': jsonEncode([
+          {
+            'id': 'saved-script',
+            'name': 'Saved script',
+            'code': 'window.savedUserscriptRan = true;',
+            'enabled': true,
+            'origin': 'manual',
+          },
+        ]),
+      },
+      preferencesReady,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts
+          .where((script) => script.contains('window.savedUserscriptRan = true;')),
+      isEmpty,
+    );
+
+    preferencesReady.complete();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts
+          .where((script) => script.contains('window.savedUserscriptRan = true;')),
+      ['window.savedUserscriptRan = true;\n'
+          '//# sourceURL=stroom-userscript-saved-script.js'],
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('waits for load stop and injects each saved userscript once',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final preferencesReady = Completer<void>();
+    SharedPreferencesStorePlatform.instance = _DelayedPreferencesStore(
+      {
+        'flutter.browser_user_scripts': jsonEncode([
+          {
+            'id': 'saved-script',
+            'name': 'Saved script',
+            'code': 'window.savedUserscriptRan = true;',
+            'enabled': true,
+            'origin': 'manual',
+          },
+        ]),
+      },
+      preferencesReady,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const BrowserPage(initialUrl: 'https://example.com/'),
+      ),
+    );
+    final webView = platform.webView!;
+    final controller = webView
+        .controllerFromPlatform<InAppWebViewController>(webView.controller);
+    webView.params.onWebViewCreated!(controller);
+    webView.params.onLoadStart!(controller, WebUri('https://example.com/'));
+
+    preferencesReady.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      webView.controller.evaluatedScripts
+          .where((script) => script.contains('window.savedUserscriptRan = true;')),
+      isEmpty,
+    );
+
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+    await tester.pump();
+    webView.params.onLoadStop!(controller, WebUri('https://example.com/'));
+    await tester.pump();
+
+    expect(
+      webView.controller.evaluatedScripts
+          .where((script) => script.contains('window.savedUserscriptRan = true;')),
+      ['window.savedUserscriptRan = true;\n'
+          '//# sourceURL=stroom-userscript-saved-script.js'],
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -444,14 +562,25 @@ class _BrowserPageWebView extends PlatformInAppWebViewWidget {
 }
 
 class _BrowserPageController extends PlatformInAppWebViewController {
+  final evaluatedScripts = <String>[];
+
   _BrowserPageController()
       : super.implementation(
             const PlatformInAppWebViewControllerCreationParams(id: 0));
 
   @override
   Future<dynamic> evaluateJavascript(
-          {required String source, ContentWorld? contentWorld}) async =>
-      null;
+      {required String source, ContentWorld? contentWorld}) async {
+    evaluatedScripts.add(source);
+    return null;
+  }
+
+  @override
+  Future<void> loadUrl({
+    required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
 
   @override
   void addJavaScriptHandler(
@@ -460,4 +589,17 @@ class _BrowserPageController extends PlatformInAppWebViewController {
 
   @override
   void dispose({bool isKeepAlive = false}) {}
+}
+
+class _DelayedPreferencesStore extends InMemorySharedPreferencesStore {
+  _DelayedPreferencesStore(super.data, this.preferencesReady)
+      : super.withData();
+
+  final Completer<void> preferencesReady;
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    await preferencesReady.future;
+    return super.getAll();
+  }
 }
