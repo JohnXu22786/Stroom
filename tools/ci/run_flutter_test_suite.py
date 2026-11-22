@@ -52,6 +52,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/responses_protocol_test.dart",
         "services/anthropic_provider_test.dart",
         "services/assistant_catalog_service_test.dart",
+        "services/provider_model_migration_test.dart",
         "services/assistant_prompt_safety_review_test.dart",
         "services/assistant_tool_policy_test.dart",
         "services/assistant_update_service_test.dart",
