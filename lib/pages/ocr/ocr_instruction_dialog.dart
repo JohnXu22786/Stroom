@@ -83,9 +83,13 @@ class _OcrInstructionManageDialogState
             child: Icon(Icons.edit_note, size: 16, color: cs.primary),
           ),
           const SizedBox(width: 10),
-          Text(
-            l10n.ocrManageInstructions,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          Expanded(
+            child: ConstrainedText(
+              l10n.ocrManageInstructions,
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
