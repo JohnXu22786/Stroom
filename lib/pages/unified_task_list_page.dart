@@ -108,6 +108,7 @@ class UnifiedTaskListPage extends ConsumerStatefulWidget {
 class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final Map<String, CatCatchTaskCardViewState> _catCatchCardViewStates = {};
 
   String _clearErrorMessage(Object error, AppLocalizations strings) {
     if (error is StateError && error.message == '任务流取消后仍在运行') {
@@ -291,6 +292,20 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(catcatchTasksProvider, (previous, tasks) {
+      final previousStatuses = {
+        for (final task in previous ?? <catcatch.CatCatchTask>[])
+          task.id: task.status,
+      };
+      for (final task in tasks) {
+        if (task.status == catcatch.TaskStatus.running &&
+            previousStatuses[task.id] != catcatch.TaskStatus.running) {
+          _catCatchCardViewStates[task.id]?.expanded = true;
+        }
+      }
+      final taskIds = tasks.map((task) => task.id).toSet();
+      _catCatchCardViewStates.removeWhere((id, _) => !taskIds.contains(id));
+    });
     final strings = AppLocalizations.of(context)!;
     final taskTabData = [
       _TabData(strings.unifiedTaskListTabAll, Icons.list),
@@ -880,6 +895,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
 
   Widget _buildTaskList(List<UnifiedTaskItem> tasks, double viewportHeight) {
     return ListView.builder(
+      key: const Key('unified_task_list_scroll_view'),
       padding: const EdgeInsets.only(top: 8, bottom: 24),
       itemCount: tasks.length,
       itemBuilder: (_, i) {
@@ -902,6 +918,10 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             task: t,
             isUnread: isUnread,
             taskListViewportHeight: viewportHeight,
+            viewState: _catCatchCardViewStates.putIfAbsent(
+              t.id,
+              CatCatchTaskCardViewState.new,
+            ),
           );
         }
         if (item.isBackground) {

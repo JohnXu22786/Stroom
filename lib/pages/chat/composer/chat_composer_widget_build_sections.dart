@@ -213,62 +213,76 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
   Widget _buildEditModeCapsule({required ColorScheme cs}) {
     return Padding(
       padding: const EdgeInsets.only(left: 12, right: 12, top: 6, bottom: 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: ChatComposerWidgetState._editWarningFadeOutDuration,
-            builder: (context, value, child) =>
-                Opacity(opacity: value, child: child),
-            child: Container(
-              key: const Key('editModeCapsule'),
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: cs.primary.withValues(alpha: 0.3),
-                  width: 1,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.edit, size: 16, color: cs.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    AppLocalizations.of(context)!.chatEditMessage,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: cs.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: AppLocalizations.of(context)!.actionClose,
-                    child: GestureDetector(
-                      onTap: widget.onEditCancel,
-                      // Small padding around the close icon for a slightly
-                      // larger touch target on mobile, kept subtle so the
-                      // right side does not read as a button next to the
-                      // bare left icon.
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: Icon(
-                          Icons.close,
-                          size: 16,
-                          color: cs.onSurfaceVariant,
-                        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: ChatComposerWidgetState._editWarningFadeOutDuration,
+                  builder: (context, value, child) =>
+                      Opacity(opacity: value, child: child),
+                  child: Container(
+                    key: const Key('editModeCapsule'),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: cs.primary.withValues(alpha: 0.3),
+                        width: 1,
                       ),
                     ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.edit, size: 16, color: cs.primary),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: ConstrainedText(
+                            AppLocalizations.of(context)!.chatEditMessage,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: AppLocalizations.of(context)!.actionClose,
+                          child: GestureDetector(
+                            onTap: widget.onEditCancel,
+                            // Small padding around the close icon for a slightly
+                            // larger touch target on mobile, kept subtle so the
+                            // right side does not read as a button next to the
+                            // bare left icon.
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
