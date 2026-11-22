@@ -408,7 +408,7 @@ void main() {
         });
         AppStorage.resetCache();
 
-        // 移动端视口（HomePage 的 NavigationBar 仅在宽度 < 600 时渲染，
+        // 移动端视口（HomePage 的底部导航仅在宽度 < 600 时渲染，
         // 便于断言主应用接管界面）。
         tester.view.physicalSize = const Size(400, 800);
         tester.view.devicePixelRatio = 1.0;
@@ -474,7 +474,7 @@ void main() {
         // 启动页（含 tagline）已从树中移除 → 主应用可见。
         expect(find.text('你的学习助理'), findsNothing);
         expect(
-          find.byType(NavigationBar),
+          find.byKey(const ValueKey('home-bottom-navigation')),
           findsOneWidget,
           reason: '主应用（HomePage）应已接管界面',
         );

@@ -39,6 +39,7 @@ class _HomeBottomNavigationBar extends StatelessWidget {
         child: SizedBox(
           height: navigationBarHeight,
           child: Semantics(
+            key: const ValueKey('home-bottom-navigation'),
             role: SemanticsRole.tabBar,
             explicitChildNodes: true,
             container: true,
