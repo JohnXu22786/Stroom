@@ -188,6 +188,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/ocr*_test.dart",
         "providers/tts_config_persistence_test.dart",
         "providers/tts_save_cancellation_test.dart",
+        "providers/tts_state_shared_test.dart",
         "utils/ocr_page_failure_summary_test.dart",
         "utils/ocr_request_size_failure_summary_test.dart",
         "utils/ocr_diagnostics_test.dart",
