@@ -131,6 +131,8 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.text('模型未选择或已失效，请重新选择'), findsOneWidget);
+    await tester.ensureVisible(find.text('确认'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(result!.params['modelRef'], missing);
