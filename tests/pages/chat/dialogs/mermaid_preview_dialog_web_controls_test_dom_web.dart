@@ -17,6 +17,69 @@ List<String> controlLabels() {
 String? controlTitle() =>
     html.document.querySelector('[data-mermaid-preview-controls-title]')?.text;
 
+void constrainControlsViewportForTest(double width) {
+  final root = html.document.querySelector('[data-mermaid-preview-controls]');
+  if (root == null) return;
+  root.style
+    ..width = '${width}px'
+    ..right = 'auto';
+  html.window.dispatchEvent(html.Event('resize'));
+}
+
+bool titleStaysBetweenControls() {
+  final root = html.document.querySelector('[data-mermaid-preview-controls]');
+  final title = root?.querySelector('[data-mermaid-preview-controls-title]');
+  final zoom = root?.querySelector('[data-action="zoom-in"]');
+  final close = root?.querySelector('[data-action="close"]');
+  if (title == null || zoom == null || close == null) return false;
+  final titleRect = title.getBoundingClientRect();
+  final zoomRect = zoom.getBoundingClientRect();
+  final closeRect = close.getBoundingClientRect();
+  return titleRect.left >= zoomRect.right && titleRect.right <= closeRect.left;
+}
+
+String? titleMotionState() => html.document
+    .querySelector('[data-mermaid-preview-controls-title]')
+    ?.getAttribute('data-motion-state');
+
+String? titleTransform() {
+  return html.document
+      .querySelector('[data-mermaid-preview-controls-title-text]')
+      ?.style
+      .transform;
+}
+
+bool titleLeadingCharacterIsVisible() {
+  final title = html.document.querySelector(
+    '[data-mermaid-preview-controls-title]',
+  );
+  final span = html.document.querySelector(
+    '[data-mermaid-preview-controls-title-text]',
+  );
+  final text = span?.firstChild;
+  if (title == null || text is! html.Text) return false;
+  final range = html.document.createRange()
+    ..setStart(text, 0)
+    ..setEnd(text, 1);
+  final characterRect = range.getBoundingClientRect();
+  final titleRect = title.getBoundingClientRect();
+  return characterRect.left >= titleRect.left + 12 &&
+      characterRect.right <= titleRect.right - 12;
+}
+
+double? titleLeadingCharacterCenterX() {
+  final span = html.document.querySelector(
+    '[data-mermaid-preview-controls-title-text]',
+  );
+  final text = span?.firstChild;
+  if (text is! html.Text) return null;
+  final range = html.document.createRange()
+    ..setStart(text, 0)
+    ..setEnd(text, 1);
+  final rect = range.getBoundingClientRect();
+  return (rect.left + rect.right) / 2;
+}
+
 String controlsSnapshot() {
   return html.document
           .querySelector('[data-mermaid-preview-controls]')
