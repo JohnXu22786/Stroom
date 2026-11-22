@@ -21,6 +21,7 @@ import '../utils/audio_utils.dart';
 import '../utils/system_pick_utils.dart';
 import '../widgets/app_media_picker_dialog.dart';
 import 'audio_player_shared.dart';
+import 'audio_source_header.dart';
 import 'audio_separation_shared.dart';
 import 'tts_create_page.dart';
 
@@ -177,9 +178,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               const SizedBox(height: 24),
               Text(
                 _l10n.audioPlayerSourceTextSource,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
+                style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
@@ -415,9 +414,12 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           debugPrint('AudioPlayerPage 清理失败: $disposeError');
         }
         if (!mounted) return;
-        final ext =
-            path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
-        final diag = '文件: ${path.basename(widget.filePath)} | '
+        final ext = path
+            .extension(widget.filePath)
+            .replaceAll('.', '')
+            .toLowerCase();
+        final diag =
+            '文件: ${path.basename(widget.filePath)} | '
             '扩展名: $ext | '
             '源错: $e';
         debugPrint('AudioPlayerPage 错误: $diag');
@@ -431,8 +433,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   }
 
   Future<void> _loadAudio() async {
-    final extension =
-        path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
+    final extension = path
+        .extension(widget.filePath)
+        .replaceAll('.', '')
+        .toLowerCase();
 
     if (!kIsWeb) {
       // Native: read into memory, validate/convert format, play from temp
@@ -519,8 +523,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     // 获取支持流式输出的模型
     final entriesState = ref.read(providerEntriesProvider);
-    final ttsEntry =
-        entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
+    final ttsEntry = entriesState.entries
+        .where((e) => e.name == 'TTS供应商')
+        .firstOrNull;
     if (ttsEntry == null) {
       _showSnackBar(_l10n.audioPlayerConfigureTtsProvider);
       return;
@@ -604,7 +609,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   void _startStreamingPlayback(String text, StreamModelOption opt) {
     // 使用 TTSStateNotifier 的 startStreaming 方法
-    ref.read(ttsStateProvider.notifier).startStreaming(
+    ref
+        .read(ttsStateProvider.notifier)
+        .startStreaming(
           text,
           providerConfig: opt.configItem,
           modelConfig: opt.model,
@@ -689,151 +696,18 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          _l10n.audioPlayerSourceText,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_sourceText.isEmpty)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _l10n.audioPlayerNoSourceText,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[400],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: _uploadSourceText,
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.upload_file,
-                                        size: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _l10n.audioPlayerUploadSourceText,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        if (_sourceText.isNotEmpty)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              InkWell(
-                                onTap: _uploadSourceText,
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.edit,
-                                        size: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _l10n.audioPlayerEditSourceText,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${_fontSize.toInt()}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              InkWell(
-                                onTap: _fontSize > _minFontSize
-                                    ? _decreaseFontSize
-                                    : null,
-                                child: Icon(
-                                  Icons.text_decrease,
-                                  size: 20,
-                                  color: _fontSize > _minFontSize
-                                      ? Colors.grey[700]
-                                      : Colors.grey[300],
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              InkWell(
-                                onTap: _fontSize < _maxFontSize
-                                    ? _increaseFontSize
-                                    : null,
-                                child: Icon(
-                                  Icons.text_increase,
-                                  size: 20,
-                                  color: _fontSize < _maxFontSize
-                                      ? Colors.grey[700]
-                                      : Colors.grey[300],
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
+                    AudioSourceHeader(
+                      title: _l10n.audioPlayerSourceText,
+                      hasSource: _sourceText.isNotEmpty,
+                      emptyMessage: _l10n.audioPlayerNoSourceText,
+                      uploadLabel: _l10n.audioPlayerUploadSourceText,
+                      editLabel: _l10n.audioPlayerEditSourceText,
+                      fontSize: _fontSize.toInt(),
+                      onUpload: _uploadSourceText,
+                      onDecreaseFontSize: _decreaseFontSize,
+                      onIncreaseFontSize: _increaseFontSize,
+                      canDecreaseFontSize: _fontSize > _minFontSize,
+                      canIncreaseFontSize: _fontSize < _maxFontSize,
                     ),
                     const SizedBox(height: 8),
                     Expanded(
