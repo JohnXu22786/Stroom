@@ -57,9 +57,7 @@ void main() {
     await tester.tapAt(const Offset(10, 10));
     await tester.pump(const Duration(milliseconds: 300));
     expect(
-      tester.widget<DropdownButton<String>>(dropdownButton).value,
-      'openai.chat_completions',
-    );
+        tester.widget<DropdownButton<String>>(dropdownButton).value, 'openai');
     expect(tester.takeException(), isNull);
   });
 
@@ -88,7 +86,10 @@ void main() {
       textScaler: MediaQuery.textScalerOf(textContext),
       maxLines: 1,
     )..layout();
-    expect(naturalText.width, lessThanOrEqualTo(tester.getSize(label).width));
+    expect(
+      naturalText.width,
+      lessThanOrEqualTo(tester.getSize(label).width),
+    );
 
     final start = tester.getTopLeft(text);
     await tester.pump(const Duration(seconds: 3));
@@ -96,12 +97,10 @@ void main() {
 
     final dropdown = find.byType(DropdownButtonFormField<String>);
     final dropdownButton = find.descendant(
-      of: dropdown,
-      matching: find.byType(DropdownButton<String>),
-    );
+        of: dropdown, matching: find.byType(DropdownButton<String>));
     expect(
       tester.widget<DropdownButton<String>>(dropdownButton).value,
-      'openai.chat_completions',
+      'openai',
     );
     expect(
       tester.widget<DropdownButton<String>>(dropdownButton).items,
@@ -114,9 +113,7 @@ void main() {
     await tester.tapAt(const Offset(10, 10));
     await tester.pump(const Duration(milliseconds: 300));
     expect(
-      tester.widget<DropdownButton<String>>(dropdownButton).value,
-      'openai.chat_completions',
-    );
+        tester.widget<DropdownButton<String>>(dropdownButton).value, 'openai');
     expect(tester.takeException(), isNull);
   });
 }

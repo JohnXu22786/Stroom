@@ -124,7 +124,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
   // 端点类型覆盖（默认关 = 继承供应商的端点类型）
   bool _overrideEndpointType = false;
-  String _apiProtocol = 'openai.chat_completions';
+  String _endpointType = 'openai';
 
   bool _isSaving = false;
 
@@ -246,12 +246,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       return true;
     }
     // 端点类型覆盖
-    final mOverride = m.apiProtocolOverride ??
-        (m.endpointType == null
-            ? null
-            : apiProtocolFromLegacyEndpointType(m.endpointType));
+    final mOverride = m.endpointType;
     if ((mOverride != null) != _overrideEndpointType) return true;
-    if (_overrideEndpointType && _apiProtocol != mOverride) return true;
+    if (_overrideEndpointType && _endpointType != mOverride) return true;
     // Custom params and reasoning params (simple check via serialization)
     // 用 jsonEncode 而非 toString 比较：List/Map 的 toString 不引用
     // 字符串，空选项 [''] 会与无选项 [] 混淆。
@@ -517,13 +514,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
 
     // 端点类型覆盖（默认关 = 继承供应商）
-    _overrideEndpointType =
-        m?.apiProtocolOverride != null || m?.endpointType != null;
-    _apiProtocol = m?.apiProtocolOverride ??
-        widget.provider?.apiProtocol ??
-        apiProtocolFromLegacyEndpointType(
-          m?.endpointType ?? widget.provider?.endpointType,
-        );
+    _overrideEndpointType = m?.endpointType != null;
+    _endpointType = m?.endpointType ?? 'openai';
 
     // 自定义参数：合并供应商与模型参数。同名时默认继承供应商类型/默认
     // 值，仅显式编辑后才使用模型覆盖；模型保存的选项选择与顺序仍保留。

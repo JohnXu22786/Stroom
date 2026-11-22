@@ -30,15 +30,11 @@ import 'package:stroom/widgets/constrained_text.dart';
 Widget _buildSettingsTestApp({
   Locale locale = const Locale('zh', 'CN'),
   UpdateNotifier? updateNotifier,
-  ProviderEntriesState? providerEntriesState,
 }) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        if (providerEntriesState != null) {
-          return _ReadyProviderEntriesNotifier(providerEntriesState);
-        }
         final notifier = ProviderEntriesNotifier();
         // load() is normally called in the provider factory, so we call it here too.
         notifier.load();
@@ -58,20 +54,6 @@ Widget _buildSettingsTestApp({
       home: const SettingsPage(),
     ),
   );
-}
-
-class _ReadyProviderEntriesNotifier extends ProviderEntriesNotifier {
-  _ReadyProviderEntriesNotifier(ProviderEntriesState initialState) {
-    state = initialState;
-  }
-}
-
-ProviderEntriesState _llmEntriesState() {
-  final entries = (jsonDecode(_llmEntryWithModels()) as List)
-      .map(
-          (raw) => ProviderEntry.fromMap(Map<String, dynamic>.from(raw as Map)))
-      .toList();
-  return ProviderEntriesState(entries: entries);
 }
 
 Future<void> _scrollSettingsToEnd(WidgetTester tester) async {
@@ -558,9 +540,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(
-        _buildSettingsTestApp(providerEntriesState: _llmEntriesState()),
-      );
+      await tester.pumpWidget(_buildSettingsTestApp());
       await tester.pumpAndSettle();
 
       await openCompactionPanel(tester);
@@ -598,10 +578,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _buildSettingsTestApp(
-          locale: const Locale('de', 'DE'),
-          providerEntriesState: _llmEntriesState(),
-        ),
+        _buildSettingsTestApp(locale: const Locale('de', 'DE')),
       );
       await tester.pumpAndSettle();
       await openCompactionPanel(tester);
@@ -683,9 +660,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(
-        _buildSettingsTestApp(providerEntriesState: _llmEntriesState()),
-      );
+      await tester.pumpWidget(_buildSettingsTestApp());
       await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 
@@ -765,9 +740,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(
-        _buildSettingsTestApp(providerEntriesState: _llmEntriesState()),
-      );
+      await tester.pumpWidget(_buildSettingsTestApp());
       await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 
@@ -833,9 +806,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(
-        _buildSettingsTestApp(providerEntriesState: _llmEntriesState()),
-      );
+      await tester.pumpWidget(_buildSettingsTestApp());
       await tester.pumpAndSettle();
       await openCompactionPanel(tester);
 

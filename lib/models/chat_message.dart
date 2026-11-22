@@ -37,9 +37,6 @@ class Attachment {
   /// 避免同一会话内重复写盘（每次发送都会经过读取路径）。
   bool compressedCachePersisted = false;
 
-  /// Preserve attachment metadata unknown to this version across saves.
-  final Map<String, dynamic> extraFields;
-
   Attachment({
     String? id,
     required this.fileName,
@@ -52,12 +49,10 @@ class Attachment {
     this.thumbnailPath,
     this.base64Data,
     this.conversationId,
-    this.extraFields = const {},
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap({bool includeBase64Data = false}) => {
-        ...extraFields,
         'id': id,
         'fileName': fileName,
         'mimeType': mimeType,
@@ -75,19 +70,6 @@ class Attachment {
       };
 
   factory Attachment.fromMap(Map<String, dynamic> map) {
-    const knownFields = {
-      'id',
-      'fileName',
-      'mimeType',
-      'fileType',
-      'hash',
-      'storagePath',
-      'fileSize',
-      'createdAt',
-      'thumbnailPath',
-      'conversationId',
-      'base64Data',
-    };
     // Defensive DateTime parsing
     DateTime? createdAt;
     final createdAtRaw = map['createdAt'];
@@ -113,9 +95,6 @@ class Attachment {
       // 仅对话草稿附件会序列化 base64Data（预压缩产物）；
       // 历史消息附件没有该字段，保持 null。
       base64Data: map['base64Data'] as String?,
-      extraFields: Map<String, dynamic>.fromEntries(
-        map.entries.where((entry) => !knownFields.contains(entry.key)),
-      ),
     );
   }
 
@@ -132,7 +111,6 @@ class Attachment {
     String? base64Data,
     String? conversationId,
     bool? compressedCachePersisted,
-    Map<String, dynamic>? extraFields,
   }) =>
       Attachment(
         id: id ?? this.id,
@@ -146,7 +124,6 @@ class Attachment {
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
         base64Data: base64Data ?? this.base64Data,
         conversationId: conversationId ?? this.conversationId,
-        extraFields: extraFields ?? this.extraFields,
       )..compressedCachePersisted =
           compressedCachePersisted ?? this.compressedCachePersisted;
 
@@ -156,11 +133,8 @@ class Attachment {
 }
 
 class ChatMessage {
-  static const int currentSchemaVersion = 1;
-
   final String id;
   final String role; // 'user' | 'assistant'
-  final String? originalRole;
   final String? _content;
 
   /// The full text, materialized from [textSections] when needed.
@@ -199,9 +173,6 @@ class ChatMessage {
   /// When null or empty, fall back to [content] as a single block.
   final List<String>? textSections;
 
-  /// Ordered protocol-neutral text and media parts retained with a message.
-  final List<Map<String, dynamic>>? contentParts;
-
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Round 0 always starts at index 0 (when [toolCalls] is non-empty).
   /// Each subsequent entry is the index of the first tool call in that
@@ -214,13 +185,10 @@ class ChatMessage {
   final List<int>? toolCallRoundStarts;
 
   final List<MessageBlock>? blocks;
-  final int schemaVersion;
-  final Map<String, dynamic> legacyFields;
 
   ChatMessage({
     String? id,
     required this.role,
-    this.originalRole,
     required String content,
     DateTime? createdAt,
     List<Attachment>? attachments,
@@ -232,11 +200,8 @@ class ChatMessage {
     this.toolCalls,
     this.reasoningSections,
     this.textSections,
-    this.contentParts,
     this.toolCallRoundStarts,
     this.blocks,
-    this.schemaVersion = currentSchemaVersion,
-    this.legacyFields = const {},
     bool contentFromTextSections = false,
   })  : id = id ?? const Uuid().v4(),
         _content = contentFromTextSections ? null : content,
@@ -313,17 +278,7 @@ class ChatMessage {
     final body = raw['body'];
     if (body is! Map) return Map<String, dynamic>.from(raw);
     final messages = body['messages'];
-    if (messages is! List) {
-      final input = body['input'];
-      if (input is! List) return Map<String, dynamic>.from(raw);
-      return <String, dynamic>{
-        ...raw,
-        'body': <String, dynamic>{
-          ...Map<String, dynamic>.from(body),
-          'input': _compactResponsesInput(input),
-        },
-      };
-    }
+    if (messages is! List) return Map<String, dynamic>.from(raw);
 
     // Tool loops append protocol messages after the original conversation.
     // The newest user message without tool-result blocks is the current input
@@ -378,103 +333,6 @@ class ChatMessage {
         'messages': compactMessages,
       },
     };
-  }
-
-  /// Responses API requests encode conversation history under `input`, with
-  /// message and tool items using a different shape from chat-completions
-  /// `messages`. Compact that diagnostic copy while retaining the latest user
-  /// input and its readable text.
-  static List<dynamic> _compactResponsesInput(List input) {
-    var currentUserMessage = -1;
-    for (var i = 0; i < input.length; i++) {
-      final item = input[i];
-      if (item is Map && item['type'] == 'message' && item['role'] == 'user') {
-        currentUserMessage = i;
-      }
-    }
-    if (currentUserMessage < 0) return input;
-
-    return [
-      for (var i = 0; i < input.length; i++)
-        _compactResponsesInputItem(
-          input[i],
-          isCurrentUserMessage: i == currentUserMessage,
-          isHistorical: i < currentUserMessage,
-        ),
-    ];
-  }
-
-  static dynamic _compactResponsesInputItem(
-    dynamic item, {
-    required bool isCurrentUserMessage,
-    required bool isHistorical,
-  }) {
-    if (item is! Map) return item;
-    if (item['type'] == 'message') {
-      if (isHistorical) {
-        return <dynamic, dynamic>{
-          ...item,
-          if (item['content'] != null)
-            'content': '[previous message content omitted]',
-        };
-      }
-      if (isCurrentUserMessage) {
-        final content = item['content'];
-        if (content is! List) return item;
-        return <dynamic, dynamic>{
-          ...item,
-          'content': [
-            for (final part in content)
-              if (part is Map) _compactResponsesUserPart(part) else part,
-          ],
-        };
-      }
-      if (item['role'] == 'assistant') {
-        return <dynamic, dynamic>{
-          ...item,
-          if (item['content'] != null)
-            'content': '[generated assistant content omitted]',
-        };
-      }
-    }
-    if (item['type'] == 'function_call' && item['arguments'] != null) {
-      return <dynamic, dynamic>{
-        ...item,
-        'arguments': '[generated function arguments omitted]',
-      };
-    }
-    if (item['type'] == 'function_call_output' && item['output'] != null) {
-      return <dynamic, dynamic>{
-        ...item,
-        'output': '[generated function output omitted]',
-      };
-    }
-    return item;
-  }
-
-  static Map _compactResponsesUserPart(Map part) {
-    switch (part['type']) {
-      case 'input_image':
-        final imageUrl = part['image_url'];
-        if (imageUrl is! String || imageUrl.contains('[base64 data:')) {
-          return part;
-        }
-        return <dynamic, dynamic>{
-          ...part,
-          'image_url': DataSanitizer.sanitizeBase64String(imageUrl),
-        };
-      case 'input_file':
-        final fileData = part['file_data'];
-        if (fileData is! String || fileData.contains('[base64 data:')) {
-          return part;
-        }
-        return <dynamic, dynamic>{
-          ...part,
-          'file_data': DataSanitizer.sanitizeBase64String(fileData),
-        };
-      default:
-        return part;
-    }
   }
 
   /// Keep the newest user text and attachment metadata in raw diagnostics while
@@ -687,17 +545,12 @@ class ChatMessage {
             ((reasoningSections?.isNotEmpty ?? false) ||
                 (textSections?.isNotEmpty ?? false)));
     final errorBlocks = hasCanonicalSections
-        ? blocks
-            ?.where(
-                (block) => block is ErrorBlock || block is UnknownMessageBlock)
-            .toList()
+        ? blocks?.whereType<ErrorBlock>().toList()
         : blocks;
     final savedReasoningContent = _reasoningContent;
     return {
-      ...legacyFields,
-      'schemaVersion': schemaVersion,
       'id': id,
-      'role': originalRole ?? role,
+      'role': role,
       if (_content != null &&
           !(_content!.isEmpty && (textSections?.isNotEmpty ?? false)) &&
           !_matchesJoinedSections(
@@ -732,10 +585,6 @@ class ChatMessage {
       // Persist per-round text sections if present and non-empty.
       if (textSections != null && textSections!.isNotEmpty)
         'textSections': textSections!.toList(),
-      if (contentParts != null && contentParts!.isNotEmpty)
-        'contentParts': contentParts!
-            .map((part) => Map<String, dynamic>.from(part))
-            .toList(),
       // Persist round boundary indices for multi-tool grouping.
       if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
         'toolCallRoundStarts': toolCallRoundStarts!.toList(),
@@ -745,25 +594,6 @@ class ChatMessage {
   }
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
-    const knownKeys = {
-      'schemaVersion',
-      'id',
-      'role',
-      'content',
-      'createdAt',
-      'attachments',
-      'isStreaming',
-      'isError',
-      'reasoningContent',
-      'rawRequest',
-      'rawResponse',
-      'toolCalls',
-      'reasoningSections',
-      'textSections',
-      'contentParts',
-      'toolCallRoundStarts',
-      'blocks',
-    };
     final roleRaw = map['role'];
     var roleStr = roleRaw is String ? roleRaw : '';
     if (roleStr != 'user' && roleStr != 'assistant') {
@@ -858,18 +688,10 @@ class ChatMessage {
     final contentFromTextSections = rawContent is String
         ? _matchesJoinedSections(textSections, content)
         : textSections != null;
-    final contentPartsRaw = map['contentParts'];
-    final contentParts = contentPartsRaw is List
-        ? contentPartsRaw
-            .whereType<Map>()
-            .map((part) => Map<String, dynamic>.from(part))
-            .toList()
-        : null;
 
     return ChatMessage(
       id: map['id'] is String ? map['id'] as String : null,
       role: roleStr,
-      originalRole: roleRaw is String && roleRaw != roleStr ? roleRaw : null,
       // 防御：content 非 String（损坏数据）时回退空串，
       // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
       content: content,
@@ -896,15 +718,8 @@ class ChatMessage {
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
       textSections: textSections,
-      contentParts: contentParts,
       toolCallRoundStarts: toolCallRoundStarts,
       blocks: _parseBlocks(map['blocks']),
-      schemaVersion: map['schemaVersion'] is num
-          ? (map['schemaVersion'] as num).toInt()
-          : currentSchemaVersion,
-      legacyFields: Map<String, dynamic>.fromEntries(
-        map.entries.where((entry) => !knownKeys.contains(entry.key)),
-      ),
     );
   }
 
@@ -934,14 +749,12 @@ class ChatMessage {
     List<ToolCallData>? toolCalls,
     List<String>? reasoningSections,
     List<String>? textSections,
-    List<Map<String, dynamic>>? contentParts,
     List<int>? toolCallRoundStarts,
     List<MessageBlock>? blocks,
   }) =>
       ChatMessage(
         id: id,
         role: role ?? this.role,
-        originalRole: role == null ? originalRole : null,
         content: content ?? (_content == null ? '' : this.content),
         contentFromTextSections: _content == null && content == null,
         createdAt: createdAt ?? this.createdAt,
@@ -954,11 +767,8 @@ class ChatMessage {
         toolCalls: toolCalls ?? this.toolCalls,
         reasoningSections: reasoningSections ?? this.reasoningSections,
         textSections: textSections ?? this.textSections,
-        contentParts: contentParts ?? this.contentParts,
         toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
         blocks: blocks ?? this.blocks,
-        schemaVersion: schemaVersion,
-        legacyFields: legacyFields,
       );
 
   @override

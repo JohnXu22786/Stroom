@@ -3,68 +3,6 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 
 void main() {
-  test('canonical section saves retain unknown message blocks', () {
-    final message = ChatMessage.fromMap({
-      'id': 'future-block',
-      'role': 'assistant',
-      'content': 'visible text',
-      'textSections': ['visible text'],
-      'createdAt': DateTime.utc(2025).toIso8601String(),
-      'attachments': <dynamic>[],
-      'blocks': [
-        {'type': 'future_widget', 'payload': 'preserve me'},
-      ],
-    });
-
-    expect(message.toMap()['blocks'], [
-      {'type': 'future_widget', 'payload': 'preserve me'},
-    ]);
-  });
-
-  test('copyWith role change clears the retained legacy role', () {
-    final message = ChatMessage.fromMap({
-      'id': 'legacy-tool-role',
-      'role': 'tool',
-      'content': 'result',
-    });
-
-    final updated = message.copyWith(role: 'assistant');
-
-    expect(updated.toMap()['role'], 'assistant');
-  });
-
-  test('ordered assistant content parts survive persistence roundtrip', () {
-    final message = ChatMessage(
-      role: 'assistant',
-      content: 'before after',
-      attachments: [
-        Attachment(
-          id: 'generated-file',
-          fileName: 'output.png',
-          mimeType: 'image/png',
-          fileType: 'image',
-          hash: 'output-hash',
-          storagePath: 'attachments/output.png',
-          fileSize: 3,
-        ),
-      ],
-      contentParts: const [
-        {'type': 'text', 'text': 'before'},
-        {'type': 'attachment', 'attachmentId': 'generated-file'},
-        {'type': 'text', 'text': 'after'},
-      ],
-    );
-
-    final restored = ChatMessage.fromMap(message.toMap());
-
-    expect(restored.contentParts, [
-      {'type': 'text', 'text': 'before'},
-      {'type': 'attachment', 'attachmentId': 'generated-file'},
-      {'type': 'text', 'text': 'after'},
-    ]);
-    expect(restored.attachments.single.id, 'generated-file');
-  });
-
   group('ChatMessage rawRequest/rawResponse', () {
     test('toMap includes rawRequest and rawResponse when set', () {
       final msg = ChatMessage(

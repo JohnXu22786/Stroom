@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -27,48 +25,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  List<Conversation>? _searchConversations;
-  bool _searchFailed = false;
-  Timer? _searchDebounce;
-  int _searchGeneration = 0;
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
-  }
-
-  void _onSearchChanged(String value) {
-    final query = value.trim().toLowerCase();
-    final generation = ++_searchGeneration;
-    _searchDebounce?.cancel();
-    setState(() {
-      _searchQuery = query;
-      _searchConversations = null;
-      _searchFailed = false;
-    });
-    if (query.isEmpty) return;
-    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-      unawaited(_loadSearchConversations(query, generation));
-    });
-  }
-
-  Future<void> _loadSearchConversations(String query, int generation) async {
-    try {
-      final results = await ref
-          .read(conversationsProvider.notifier)
-          .loadConversationsForSearch();
-      if (!mounted ||
-          generation != _searchGeneration ||
-          _searchController.text.trim().toLowerCase() != query) {
-        return;
-      }
-      setState(() => _searchConversations = results);
-    } catch (_) {
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() => _searchFailed = true);
-    }
   }
 
   String _formatDate(DateTime date) {
@@ -100,11 +61,6 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     var result = _sortedConversations(conversations);
     if (query.isNotEmpty) {
       // Search both conversation titles AND message content
-      final searchById = {
-        for (final conversation
-            in _searchConversations ?? const <Conversation>[])
-          conversation.id: conversation,
-      };
       result = result.where((c) {
         // Check title match
         final displayTitle = c.title.isEmpty
@@ -112,7 +68,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             : c.title;
         if (displayTitle.toLowerCase().contains(query)) return true;
         // Check message content match
-        if (countMessageMatches(searchById[c.id] ?? c, query) > 0) return true;
+        if (countMessageMatches(c, query) > 0) return true;
         return false;
       }).toList();
     }
@@ -244,10 +200,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         .where((conversation) => !selectedIds.contains(conversation.id))
         .toList();
     final activeConversationId = ref.read(activeConversationIdProvider);
-    final deleted = await notifier.batchDelete(
-      selectedIds.toList(),
-      cleanupFiles: false,
-    );
+    final deleted = await notifier.batchDelete(selectedIds.toList());
     if (deleted) {
       final deletedConversations =
           convs.where((conv) => selectedIds.contains(conv.id)).toList();
@@ -332,7 +285,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final fallbackCurrentConversations =
         convs.where((conversation) => conversation.id != id).toList();
     final activeConversationId = ref.read(activeConversationIdProvider);
-    final deleted = await notifier.deleteConversation(id, cleanupFiles: false);
+    final deleted = await notifier.deleteConversation(id);
     if (deleted) {
       final currentConversations = notifier.mounted
           ? notifier.currentConversations
@@ -473,13 +426,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () {
-                  _searchGeneration++;
-                  _searchDebounce?.cancel();
                   setState(() {
                     _showSearch = false;
-                    _searchQuery = '';
-                    _searchConversations = null;
-                    _searchFailed = false;
                     _searchController.clear();
                   });
                 },
@@ -493,7 +441,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
-                onChanged: _onSearchChanged,
+                onChanged: (value) => setState(() {}),
               ),
             )
           : AppBar(
@@ -539,85 +487,61 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 ),
               ],
             ),
-      body: filtered.isEmpty &&
-              _searchController.text.trim().isNotEmpty &&
-              _searchConversations == null &&
-              !_searchFailed
-          ? const Center(child: CircularProgressIndicator())
-          : filtered.isEmpty && _searchFailed
-              ? Center(
-                  child: Text('搜索失败，请稍后重试', style: TextStyle(color: cs.error)),
+      body: filtered.isEmpty
+          ? _buildEmptyState(cs)
+          : _searchController.text.trim().isNotEmpty
+              ? ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final conv = filtered[index];
+                    final isActive = conv.id == activeId;
+                    return _buildConversationItem(
+                      conv,
+                      isActive,
+                      cs,
+                      index,
+                      activeId,
+                    );
+                  },
                 )
-              : filtered.isEmpty
-                  ? _buildEmptyState(cs)
-                  : _searchController.text.trim().isNotEmpty
-                      ? ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: filtered.length + (_searchFailed ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (_searchFailed && index == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                child: Text(
-                                  '搜索失败，部分消息结果可能未显示',
-                                  style: TextStyle(color: cs.error),
-                                ),
-                              );
-                            }
-                            final conv =
-                                filtered[index - (_searchFailed ? 1 : 0)];
-                            final isActive = conv.id == activeId;
-                            return _buildConversationItem(
-                              conv,
-                              isActive,
-                              cs,
-                              index,
-                              activeId,
-                            );
-                          },
-                        )
-                      : ReorderableListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: filtered.length,
-                          buildDefaultDragHandles: false,
-                          onReorderItem: (oldIndex, newIndex) {
-                            // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
-                            // 调整过的索引（框架保证），直接按显示位置映射回存储
-                            // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
-                            final convs = ref.read(conversationsProvider);
-                            final item = filtered[oldIndex];
-                            final realOld =
-                                convs.indexWhere((c) => c.id == item.id);
-                            final target = filtered[newIndex];
-                            final realNew =
-                                convs.indexWhere((c) => c.id == target.id);
-                            if (realOld >= 0 && realNew >= 0) {
-                              ref
-                                  .read(conversationsProvider.notifier)
-                                  .reorderConversation(realOld, realNew);
-                            }
-                          },
-                          proxyDecorator: (child, index, animation) => Material(
-                            elevation: 2,
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(8),
-                            child: child,
-                          ),
-                          itemBuilder: (context, index) {
-                            final conv = filtered[index];
-                            final isActive = conv.id == activeId;
-                            return _buildConversationItem(
-                              conv,
-                              isActive,
-                              cs,
-                              index,
-                              activeId,
-                            );
-                          },
-                        ),
+              : ReorderableListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: filtered.length,
+                  buildDefaultDragHandles: false,
+                  onReorderItem: (oldIndex, newIndex) {
+                    // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
+                    // 调整过的索引（框架保证），直接按显示位置映射回存储
+                    // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
+                    final convs = ref.read(conversationsProvider);
+                    final item = filtered[oldIndex];
+                    final realOld = convs.indexWhere((c) => c.id == item.id);
+                    final target = filtered[newIndex];
+                    final realNew = convs.indexWhere((c) => c.id == target.id);
+                    if (realOld >= 0 && realNew >= 0) {
+                      ref
+                          .read(conversationsProvider.notifier)
+                          .reorderConversation(realOld, realNew);
+                    }
+                  },
+                  proxyDecorator: (child, index, animation) => Material(
+                    elevation: 2,
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                    child: child,
+                  ),
+                  itemBuilder: (context, index) {
+                    final conv = filtered[index];
+                    final isActive = conv.id == activeId;
+                    return _buildConversationItem(
+                      conv,
+                      isActive,
+                      cs,
+                      index,
+                      activeId,
+                    );
+                  },
+                ),
       floatingActionButton: _selectionMode && _selectedIds.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: _batchDelete,
@@ -821,11 +745,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   Widget _buildMatchBadge(Conversation conv, ColorScheme cs) {
-    final source = _searchConversations
-            ?.where((conversation) => conversation.id == conv.id)
-            .firstOrNull ??
-        conv;
-    final matchCount = countMessageMatches(source, _searchQuery);
+    final matchCount = countMessageMatches(conv, _searchQuery);
     if (matchCount == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 4),

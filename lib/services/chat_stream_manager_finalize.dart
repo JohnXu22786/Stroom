@@ -185,12 +185,6 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       }
     }
     final hasTextContent = textChunks.any((chunk) => chunk.isNotEmpty);
-    final assistantAttachments = [
-      ...state.mediaAttachments.map(
-        (attachment) => attachment.copyWith(conversationId: convId),
-      ),
-      ...imageAttachments,
-    ];
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
       // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
@@ -198,7 +192,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
       final hasContent = wasCancelled ||
-          assistantAttachments.isNotEmpty ||
+          imageAttachments.isNotEmpty ||
           (fullReply?.isNotEmpty ?? hasTextContent) ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
@@ -235,7 +229,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
               !state.hasSyntheticErrorReply && hasTextContent,
           id: state.streamingMsgId ?? '',
           isError: isError,
-          attachments: assistantAttachments,
+          attachments: imageAttachments,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
           toolCalls: state.accumulatedToolCalls.isNotEmpty
@@ -246,9 +240,6 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
               : null,
           textSections: textChunks.any((c) => c.isNotEmpty)
               ? List<String>.from(textChunks)
-              : null,
-          contentParts: state.mediaAttachments.isNotEmpty
-              ? _orderedAssistantContentParts(state)
               : null,
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
@@ -330,7 +321,6 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         reasoningSections: List.from(state.reasoningSections),
         textSections: List.from(textChunks),
         toolCalls: List.from(state.accumulatedToolCalls),
-        attachments: List.from(assistantAttachments),
         toolCallRoundStarts: List.from(state.toolCallRoundStarts),
         blocks: legacyToBlocks(
           reasoningSections: state.reasoningSections,

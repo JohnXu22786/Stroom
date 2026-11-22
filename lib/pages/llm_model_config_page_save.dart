@@ -226,14 +226,6 @@ extension _SaveExt on _LlmModelConfigPageState {
 
     // Build typeConfig with context and all LLM-specific params (with toggles)
     final typeConfig = <String, dynamic>{'context': contextValue};
-    // Connectivity probes are attached to this model independently of its
-    // editable generation settings. Keep the last probe result when the user
-    // edits a model; other stale/unknown fields still follow the existing
-    // allowlist-based save behavior.
-    final savedConnectivityTest = widget.model?.typeConfig['connectivityTest'];
-    if (savedConnectivityTest != null) {
-      typeConfig['connectivityTest'] = savedConnectivityTest;
-    }
 
     // Only include enabled params
     if (_enableTemperature) {
@@ -310,16 +302,6 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
-    validateApiProtocolOverride(
-      _overrideEndpointType ? _apiProtocol : null,
-      supportedApiProtocolsForSupplier(
-        widget.provider?.apiProtocol ??
-            apiProtocolFromLegacyEndpointType(widget.provider?.endpointType),
-        connectorType:
-            widget.provider?.legacyFields['connectorType'] as String?,
-      ),
-    );
-
     final result = ModelConfig(
       id: widget.model?.id,
       name: name,
@@ -328,10 +310,7 @@ extension _SaveExt on _LlmModelConfigPageState {
       customParams: _customParams.map((p) => p.copy()).toList(),
       // 全量保存工作副本（页面显示什么就保存什么）
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
-      endpointType: _overrideEndpointType
-          ? legacyEndpointTypeForApiProtocol(_apiProtocol)
-          : null,
-      apiProtocolOverride: _overrideEndpointType ? _apiProtocol : null,
+      endpointType: _overrideEndpointType ? _endpointType : null,
     );
 
     Navigator.pop(context, result);

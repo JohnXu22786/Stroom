@@ -134,9 +134,11 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       Center(
         child: TextButton.icon(
           icon: Icon(Icons.add, size: 16, color: null),
-          label: Text(
+          label: ConstrainedText(
             AppLocalizations.of(context)!.llmAddReasoningParam,
             style: TextStyle(fontSize: 13, color: null),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onPressed: _addReasoningParam,
         ),
@@ -190,7 +192,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
                     isExpanded: true,
-                    initialValue: _apiProtocol,
+                    initialValue: _endpointType,
                     decoration: InputDecoration(
                       label: ConstrainedText(
                         AppLocalizations.of(context)!.providerEndpointTypeLabel,
@@ -200,31 +202,34 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
                     ),
-                    items: supportedApiProtocolsForSupplier(
-                      widget.provider?.apiProtocol ??
-                          apiProtocolFromLegacyEndpointType(
-                            widget.provider?.endpointType,
-                          ),
-                      connectorType: widget
-                          .provider?.legacyFields['connectorType'] as String?,
-                    ).map((protocol) {
-                      final l10n = AppLocalizations.of(context)!;
-                      final label = switch (protocol) {
-                        'openai.responses' => l10n.endpointResponsesApi,
-                        'anthropic.messages' => l10n.llmEndpointAnthropic,
-                        _ => l10n.llmEndpointOpenAi,
-                      };
-                      return DropdownMenuItem(
-                        value: protocol,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'openai',
                         child: ConstrainedText(
-                          label,
+                          AppLocalizations.of(context)!.llmEndpointOpenAi,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      );
-                    }).toList(),
+                      ),
+                      DropdownMenuItem(
+                        value: 'anthropic',
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.llmEndpointAnthropic,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'responses',
+                        child: ConstrainedText(
+                          AppLocalizations.of(context)!.endpointResponsesApi,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                     onChanged: (v) {
-                      if (v != null) setState(() => _apiProtocol = v);
+                      if (v != null) setState(() => _endpointType = v);
                     },
                   ),
                 ),

@@ -56,13 +56,11 @@ class NeutralToolCall {
   final String id;
   final String name;
   final String argumentsJson;
-  final String? thoughtSignature;
 
   const NeutralToolCall({
     required this.id,
     required this.name,
     required this.argumentsJson,
-    this.thoughtSignature,
   });
 }
 
@@ -84,7 +82,6 @@ NeutralToolCall normalizeToolCall(Map<String, dynamic> tc) {
       id: tc['id'] as String? ?? '',
       name: fn['name'] as String? ?? 'unknown',
       argumentsJson: fn['arguments'] as String? ?? '{}',
-      thoughtSignature: tc['thoughtSignature'] as String?,
     );
   }
   // Anthropic 形状: {id, name, input}
@@ -94,7 +91,6 @@ NeutralToolCall normalizeToolCall(Map<String, dynamic> tc) {
     name: tc['name'] as String? ?? 'unknown',
     argumentsJson:
         input is Map ? jsonEncode(input) : (input?.toString() ?? '{}'),
-    thoughtSignature: tc['thoughtSignature'] as String?,
   );
 }
 
@@ -226,8 +222,8 @@ bool attachmentHasReadyPayload(Attachment att, {required int maxBytes}) {
 /// [AttachmentReadStatus.tooLarge] 占位。
 ///
 /// 非图片附件（音频/视频等）超过 [maxAttachmentBytes] 仍返回
-/// [AttachmentReadStatus.tooLarge]（无法无损压缩，且提前按 fileSize
-/// 拦截可避免读取超大文件）。
+/// [AttachmentReadStatus.tooLarge]（无法无损压缩；缓存分块解码，磁盘读取也
+/// 按实际字节数设限）。
 ///
 /// 读取失败返回 [AttachmentReadStatus.unreadable]。
 Future<AttachmentReadOutcome> readAttachmentBase64(
@@ -471,8 +467,8 @@ const List<String> textAttachmentExtensions = [
 ///
 /// 超过 [maxAttachmentBytes]（10MB）硬顶的返回"文件过大已跳过"占位
 /// ——与视频/音频/文档等其余附件类型一致：内容要么完整发送、要么
-/// 明确提示跳过，绝不静默截断。超限附件按 [fileSize] 在读取前拦截，
-/// 避免把超大文件整包读入内存（与 readAttachmentBase64 一致）。
+/// 明确提示跳过，绝不静默截断。读取按实际存储字节数设限，避免把
+/// 超大文件整包读入内存；缓存的 fileSize 元数据可能过期。
 /// 失败返回 null。
 Future<String?> readTextAttachmentContent(
   String fileName,
