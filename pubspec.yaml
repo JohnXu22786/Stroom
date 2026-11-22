@@ -130,6 +130,10 @@ hooks:
         linux: system
 
 dependency_overrides:
+  # Project-maintained 6.3.1 Android plugin patch: do not hold a CPU wake lock
+  # for the lifetime of Stroom's idle foreground service. See package README.
+  flutter_background_service_android:
+    path: packages/flutter_background_service_android
   markdown:
     path: packages/streaming_markdown/markdown
   markdown_widget:

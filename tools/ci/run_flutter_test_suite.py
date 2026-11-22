@@ -227,6 +227,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     "application-shared": (
         "l10n/**",
         "startup/**",
+        "services/background_service_android_wakelock_test.dart",
         "services/app_log_service_test.dart",
         "services/background_service_test.dart",
         "services/bundled_asset_licenses_test.dart",
