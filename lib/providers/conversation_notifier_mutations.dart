@@ -196,13 +196,27 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
-  Future<bool> deleteConversation(String id) async {
+  Future<bool> deleteConversation(
+    String id, {
+    bool cleanupFiles = true,
+  }) async {
     final original = List<Conversation>.from(state);
     final deleted = state.where((c) => c.id == id).toList();
     if (deleted.isEmpty) return false;
     if (_repositoryReady) {
       try {
-        deleted.single.messages = await _readAllRepositoryMessages(id);
+        final allMessages = <String, ChatMessage>{
+          for (final message in await _readAllRepositoryMessages(id))
+            message.id: message,
+        };
+        // The notifier may already hold a newer in-memory window than the
+        // repository snapshot. Keep those records too, while hydrating older
+        // messages so the caller can clean every attachment after the delete
+        // journal is durable.
+        for (final message in deleted.single.messages) {
+          allMessages[message.id] = message;
+        }
+        deleted.single.messages = allMessages.values.toList();
       } catch (error) {
         debugPrint('Failed to read deleted conversation history: $error');
         return false;
@@ -249,6 +263,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       return false;
     }
     await _persistActiveId();
+    if (!cleanupFiles) return true;
     for (final conversation in deleted) {
       await _cleanupConversationFiles(conversation);
     }
@@ -628,7 +643,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Deletes multiple conversations by [ids]. Also clears active if included.
-  Future<bool> batchDelete(List<String> ids) async {
+  Future<bool> batchDelete(
+    List<String> ids, {
+    bool cleanupFiles = true,
+  }) async {
     final original = List<Conversation>.from(state);
     final idSet = ids.toSet();
     final deleted = state.where((c) => idSet.contains(c.id)).toList();
@@ -693,6 +711,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       return false;
     }
     await _persistActiveId();
+    if (!cleanupFiles) return true;
     for (final conversation in deleted) {
       await _cleanupConversationFiles(conversation);
     }

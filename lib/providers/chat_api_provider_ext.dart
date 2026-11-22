@@ -33,7 +33,12 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     final normalizedMessages =
         body.remove('messages') as List<Map<String, dynamic>>;
     final instructions = <String>[];
+    if (system != null && system.isNotEmpty) instructions.add(system);
     final input = <Map<String, dynamic>>[];
+    final requiresTypedContent = normalizedMessages.any((message) =>
+        message['content'] is List ||
+        message['role'] == 'tool' ||
+        message['tool_calls'] is List);
     for (final message in normalizedMessages) {
       final role = message['role'];
       if (role == 'system' || role == 'developer') {
@@ -108,7 +113,17 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
               },
             ];
       if (parts.isNotEmpty && content != null) {
-        input.add({'type': 'message', 'role': role, 'content': parts});
+        final messageContent = !requiresTypedContent &&
+                parts.length == 1 &&
+                parts.single['type'] ==
+                    (role == 'assistant' ? 'output_text' : 'input_text')
+            ? parts.single['text']
+            : parts;
+        input.add({
+          'type': 'message',
+          'role': role,
+          'content': messageContent,
+        });
       }
     }
     final responseTools = body.remove('tools');
@@ -134,7 +149,9 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
                 'parameters': (tool['function'] as Map)['parameters'],
                 if ((tool['function'] as Map).containsKey('strict'))
                   'strict': (tool['function'] as Map)['strict'],
-              },
+              }
+            else
+              Map<String, dynamic>.from(tool),
         ],
     };
   }

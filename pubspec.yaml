@@ -152,6 +152,8 @@ flutter:
   assets:
     - assets/images/
     - assets/vendor/
+    - assets/vendor/mathlive/
+    - assets/vendor/mathlive/fonts/
     - assets/vendor/native/
     - assets/vendor/mermaid/
     - web/data_integrity_json_worker.js

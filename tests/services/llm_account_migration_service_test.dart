@@ -1614,7 +1614,7 @@ void main() {
     );
 
     test(
-      'does not persist provider entries when the group preference write fails',
+      'does not persist provider entries when the account preference write fails',
       () async {
         SharedPreferences.setMockInitialValues({
           'provider_entries': _legacyProviderEntries(),
@@ -1632,7 +1632,7 @@ void main() {
         SharedPreferencesStorePlatform.instance =
             _RejectOnePreferenceWriteStore(
           initialValues,
-          rejectedKey: 'mcp_provider_groups',
+          rejectedKey: LlmAccountMigrationService.accountsPreferenceKey,
         );
         addTearDown(
           () => SharedPreferencesStorePlatform.instance = previousStore,
@@ -1691,7 +1691,7 @@ void main() {
     );
 
     test(
-      'does not restore stale state when an earlier concurrent mutation fails',
+      'allows a later provider mutation after an earlier save fails',
       () async {
         SharedPreferences.setMockInitialValues({
           'provider_entries': _legacyProviderEntries(),
@@ -1705,7 +1705,9 @@ void main() {
         final initialValues = <String, Object>{
           for (final key in prefs.getKeys()) 'flutter.$key': prefs.get(key)!,
         };
-        final blockingStore = _BlockFirstMcpGroupWriteStore(initialValues);
+        final blockingStore = _BlockFirstProviderEntriesWriteStore(
+          initialValues,
+        );
         SharedPreferencesStorePlatform.instance = blockingStore;
         addTearDown(
           () => SharedPreferencesStorePlatform.instance = previousStore,
@@ -1726,17 +1728,16 @@ void main() {
             .singleWhere((entry) => entry.id == 'builtin_asr');
         final first =
             notifier.update(ocr.id, named(ocr, 'First successful edit'));
-        await blockingStore.firstMcpGroupWriteStarted.future;
-
-        await notifier.update(asr.id, named(asr, 'Later successful edit'));
-        blockingStore.releaseFirstMcpGroupWrite.complete();
+        await blockingStore.firstProviderEntriesWriteStarted.future;
+        blockingStore.releaseFirstProviderEntriesWrite.complete();
         await expectLater(first, throwsA(isA<StateError>()));
+        await notifier.update(asr.id, named(asr, 'Later successful edit'));
 
         expect(
           notifier.state.entries
               .singleWhere((entry) => entry.id == ocr.id)
               .name,
-          'First successful edit',
+          ocr.name,
         );
         expect(
           notifier.state.entries
@@ -1747,7 +1748,7 @@ void main() {
         final persisted = _decodeList(prefs.getString('provider_entries')!);
         expect(
           persisted.singleWhere((entry) => entry['id'] == ocr.id)['name'],
-          'First successful edit',
+          ocr.name,
         );
         expect(
           persisted.singleWhere((entry) => entry['id'] == asr.id)['name'],
@@ -2252,20 +2253,21 @@ class _RejectOnePreferenceWriteStore extends InMemorySharedPreferencesStore {
   }
 }
 
-class _BlockFirstMcpGroupWriteStore extends InMemorySharedPreferencesStore {
-  final Completer<void> firstMcpGroupWriteStarted = Completer<void>();
-  final Completer<void> releaseFirstMcpGroupWrite = Completer<void>();
+class _BlockFirstProviderEntriesWriteStore
+    extends InMemorySharedPreferencesStore {
+  final Completer<void> firstProviderEntriesWriteStarted = Completer<void>();
+  final Completer<void> releaseFirstProviderEntriesWrite = Completer<void>();
   var _blocked = false;
 
-  _BlockFirstMcpGroupWriteStore(Map<String, Object> values)
+  _BlockFirstProviderEntriesWriteStore(Map<String, Object> values)
       : super.withData(values);
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) async {
-    if (!_blocked && key == 'flutter.mcp_provider_groups') {
+    if (!_blocked && key == 'flutter.provider_entries') {
       _blocked = true;
-      firstMcpGroupWriteStarted.complete();
-      await releaseFirstMcpGroupWrite.future;
+      firstProviderEntriesWriteStarted.complete();
+      await releaseFirstProviderEntriesWrite.future;
       return false;
     }
     return super.setValue(valueType, key, value);

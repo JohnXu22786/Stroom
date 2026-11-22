@@ -120,7 +120,7 @@ class DataMigrationOldConfigs {
           '[DataMigrationService] Failed to migrate old chat configs: '
           '${prepared['error']}',
         );
-        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
+        await _quarantineCorruptData(prefs, 'provider_entries', oldJson);
         await _removeMigratedPreference(prefs, 'chat_selected_config_id');
         await _removeMigratedPreference(prefs, 'chat_configs');
         return;
@@ -130,7 +130,7 @@ class DataMigrationOldConfigs {
           '[DataMigrationService] chat_configs 不是合法数组，'
           '隔离后清理旧配置',
         );
-        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
+        await _quarantineCorruptData(prefs, 'provider_entries', oldJson);
         await _removeMigratedPreference(prefs, 'chat_selected_config_id');
         await _removeMigratedPreference(prefs, 'chat_configs');
         return;
@@ -175,6 +175,14 @@ class DataMigrationOldConfigs {
         debugPrint(
           '[DataMigrationService] Migrated ${prepared['legacyConfigCount']} old chat config(s) to provider_entries',
         );
+      } else if (merged['status'] == 'conflict') {
+        // Conflicting credentials are left in their original locations for
+        // account-level recovery. Continue loading provider_entries without
+        // quarantining or deleting the legacy source.
+        debugPrint(
+          '[DataMigrationService] Conflicting legacy provider credentials were preserved.',
+        );
+        return;
       } else if (merged['status'] != 'alreadyMigrated') {
         throw StartupDataValidationUnavailable.isolate(
           StateError('Invalid legacy chat config merge result.'),
@@ -422,26 +430,16 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
   for (final entry in existingEntries.where(
     (entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm',
   )) {
-    final rawConfigs = entry['configs'];
-    final hasTopLevelConfig = entry.keys.any(
-      (key) =>
-          key != 'configs' &&
-          !const {'id', 'type', 'name', 'enabled'}.contains(key),
-    );
-    if (rawConfigs is! List && (rawConfigs != null || hasTopLevelConfig)) {
-      final prepared = _prepareLegacyChatConfigsSync(jsonEncode([entry]));
-      final topLevelConfigs = prepared['payload'] is String
-          ? (jsonDecode(prepared['payload']! as String) as List)
-              .whereType<Map<String, dynamic>>()
-          : const <Map<String, dynamic>>[];
-      if (migratedConfigs.any(
-        (legacy) => !topLevelConfigs.any(
-          (topLevel) => _sameLegacyProviderConfig(topLevel, legacy),
-        ),
-      )) {
-        return {'status': 'conflict', 'corruptExisting': corruptExisting};
-      }
+    try {
+      final parsed = ProviderEntry.fromMap(entry);
+      if (parsed.configs.isEmpty) continue;
+      jsonEncode(parsed.toMap());
+    } catch (_) {
+      // A malformed row cannot represent an existing credential. Treat it as
+      // corrupt so valid legacy rows can be recovered alongside it.
+      continue;
     }
+    final rawConfigs = entry['configs'];
     if (rawConfigs is! List) continue;
     for (final rawConfig in rawConfigs.whereType<Map>()) {
       final existingConfig = Map<String, dynamic>.from(rawConfig);
@@ -462,7 +460,17 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') return false;
     try {
       final parsed = ProviderEntry.fromMap(entry);
-      if (parsed.configs.isEmpty) return false;
+      final rawConfigs = entry['configs'];
+      if (parsed.configs.isEmpty && rawConfigs is List) return false;
+      if (parsed.configs.isEmpty && rawConfigs == null) {
+        final prepared = _prepareLegacyChatConfigsSync(jsonEncode([entry]));
+        if (prepared['status'] != 'ready' || prepared['payload'] is! String) {
+          return false;
+        }
+        if ((jsonDecode(prepared['payload']! as String) as List).isEmpty) {
+          return false;
+        }
+      }
       jsonEncode(parsed.toMap());
       return true;
     } catch (_) {

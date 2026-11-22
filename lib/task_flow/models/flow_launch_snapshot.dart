@@ -687,7 +687,11 @@ class FlowLaunchSnapshot {
       final id = block.params['assistantId'];
       final assistant = assistants.where((a) => a.id == id).firstOrNull;
       if (assistant != null) {
-        final available = flattenProviderModels(providers, 'llm');
+        final available = flattenProviderModels(
+          providers,
+          'llm',
+          includeShadowedLegacyModels: true,
+        );
         final boundId = assistant.modelId?.trim();
         final requestedId = boundId != null && boundId.isNotEmpty
             ? boundId

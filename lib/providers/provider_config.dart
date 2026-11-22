@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../ai_gateway/ai_gateway.dart';
 import '../models/mcp.dart';
 import '../models/mcp_provider_group.dart';
@@ -324,11 +326,13 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   final LlmCredentialStore _credentialStore;
   final Future<AiGatewayFacade> Function() _gatewayFactory;
   bool _providerEntriesSourceUnreadable = false;
+  String? _corruptProviderEntriesAwaitingBackup;
   bool _reloadBeforeNextMutation = false;
   bool _lastLoadSucceeded = false;
   int _providerEntriesSourceConflictGeneration = 0;
   final Map<String, String> _conflictedEntryUpdateFingerprints = {};
   String? _loadedProviderEntriesSourceJson;
+  int _providerEntriesMigrationInFlightCount = 0;
 
   ProviderEntriesNotifier({
     LlmCredentialStore? credentialStore,
@@ -338,7 +342,17 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
+  Future<void> _stateMutationQueue = Future<void>.value();
   Future<void> get ready => _loading;
+
+  Future<void> _enqueueStateMutation(Future<void> Function() mutation) {
+    final operation = _stateMutationQueue.then((_) => mutation());
+    _stateMutationQueue = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return operation;
+  }
 
   Future<void> load() async {
     _lastLoadSucceeded = false;
@@ -350,8 +364,12 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       final prefs = await SharedPreferences.getInstance();
       mcpGroups = _readMcpGroups(prefs.getString('mcp_provider_groups'));
 
+      await _ensureCorruptProviderEntriesBackedUp(prefs);
+
       // 第1步：迁移旧版 chat_configs → provider_entries
+      if (_corruptProviderEntriesAwaitingBackup == null) {
       await _migrateOldChatConfigs(prefs);
+      }
 
       // 第2步：迁移旧版 CustomParam 缺少 type 字段的问题
       await _migrateOldCustomParams(prefs);
@@ -440,7 +458,12 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           // 否则后续任意 CRUD 的 _persist 会用默认值覆盖写坏，
           // 含 API key 的原始配置不可恢复地丢失。
           debugPrint('Failed to decode provider entries.');
-          await _backupCorruptProviderEntries(prefs, json);
+          if (await _backupCorruptProviderEntries(prefs, json)) {
+            await prefs.remove('provider_entries');
+            _loadedProviderEntriesSourceJson = null;
+            _corruptProviderEntriesAwaitingBackup = null;
+            _providerEntriesSourceUnreadable = false;
+          }
           if (!mounted) return;
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
@@ -613,9 +636,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     }
   }
 
-  Future<void> _appendLlmModelGroupConfigs(
-    List<ProviderEntry> entries,
-  ) async {
+  Future<void> _appendLlmModelGroupConfigs(List<ProviderEntry> entries) async {
     final gateway = await _gatewayFactory();
     final accountManagement = gateway.accountManagement;
     final accounts = await accountManagement.listAccounts();
@@ -651,10 +672,22 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   }
 
   Future<void> _setStateAndPersist(ProviderEntriesState next) async {
+    await _persist(rethrowOnFailure: true, stateToPersist: next);
+    state = next;
+  }
+
+  Future<void> _setStateAndPersistOptimistically(
+    ProviderEntriesState next, {
+    bool persistMcpGroups = true,
+  }) async {
     final previous = state;
     state = next;
     try {
-      await _persist(rethrowOnFailure: true);
+      await _persist(
+        rethrowOnFailure: true,
+        persistMcpGroups: persistMcpGroups,
+        stateToPersist: next,
+      );
     } catch (_) {
       if (identical(state, next)) state = previous;
       rethrow;
@@ -773,26 +806,24 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   }
 
   /// 在列表第一个位置添加新条目
-  Future<void> addFirst(ProviderEntry entry) async {
+  Future<void> addFirst(ProviderEntry entry) => _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
       state.copyWith(entries: [entry, ...state.entries]),
     );
-  }
+      });
 
   /// 更新条目
   Future<void> update(
     String id,
     ProviderEntry updated, {
-    bool requirePersistence = false,
+    bool requirePersistence = true,
   }) async {
     await _reloadBeforeMutationIfNeeded();
     final updateFingerprint = _entryUpdateFingerprint(updated);
     final conflictedFingerprint = _conflictedEntryUpdateFingerprints[id];
     if (conflictedFingerprint != null &&
         conflictedFingerprint == updateFingerprint) {
-      // A whole-entry object that already failed against a concurrent update
-      // must not be retried after the notifier reloads newer settings.
       throw StateError(
         'Provider settings changed before this update; reload and try again.',
       );
@@ -811,8 +842,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     entries[index] = updated;
     final conflictGeneration = _providerEntriesSourceConflictGeneration;
     try {
-      await _setStateAndPersist(
+      await _setStateAndPersistOptimistically(
         state.copyWith(entries: entries),
+        persistMcpGroups: false,
       );
     } catch (_) {
       if (_providerEntriesSourceConflictGeneration != conflictGeneration) {
@@ -827,24 +859,28 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       .toString();
 
   /// 删除条目
-  Future<void> remove(String id) async {
+  Future<void> remove(String id) => _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      state.copyWith(entries: state.entries.where((e) => e.id != id).toList()),
+          state.copyWith(
+              entries: state.entries.where((e) => e.id != id).toList()),
     );
-  }
+      });
 
-  Future<void> addMcpGroup(McpProviderGroup group) async {
+  Future<void> addMcpGroup(McpProviderGroup group) =>
+      _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
       state.copyWith(mcpGroups: [...state.mcpGroups, group]),
     );
-  }
+      });
 
-  Future<void> updateMcpGroup(McpProviderGroup updated) async {
+  Future<void> updateMcpGroup(McpProviderGroup updated) =>
+      _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
-    final current =
-        state.mcpGroups.where((group) => group.id == updated.id).firstOrNull;
+        final current = state.mcpGroups
+            .where((group) => group.id == updated.id)
+            .firstOrNull;
     if (current == null || current.isBuiltin) return;
     await _setStateAndPersist(
       state.copyWith(
@@ -853,9 +889,10 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             .toList(),
       ),
     );
-  }
+      });
 
-  Future<void> setMcpGroupEnabled(String id, bool enabled) async {
+  Future<void> setMcpGroupEnabled(String id, bool enabled) =>
+      _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
       state.copyWith(
@@ -867,11 +904,12 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             .toList(),
       ),
     );
-  }
+      });
 
-  Future<void> removeMcpGroup(String id) async {
+  Future<void> removeMcpGroup(String id) => _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
-    final group = state.mcpGroups.where((item) => item.id == id).firstOrNull;
+        final group =
+            state.mcpGroups.where((item) => item.id == id).firstOrNull;
     if (group == null || group.isBuiltin) return;
     final fallbackId = id == builtinMcpServicesGroupId
         ? builtinSearchMcpGroupId
@@ -899,9 +937,10 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
       ),
     );
-  }
+      });
 
-  Future<void> moveMcpConfigToGroup(String configId, String groupId) async {
+  Future<void> moveMcpConfigToGroup(String configId, String groupId) =>
+      _enqueueStateMutation(() async {
     await _reloadBeforeMutationIfNeeded();
     final entries = state.entries.map((entry) {
       if (entry.type != 'mcp' ||
@@ -920,8 +959,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         }).toList(),
       );
     }).toList();
-    await _setStateAndPersist(
-      state.copyWith(entries: entries),
+        await _persist(
+          rethrowOnFailure: true,
+          persistMcpGroups: false,
+          stateToPersist: state.copyWith(entries: entries),
     );
-  }
+        state = state.copyWith(entries: entries);
+      });
 }

@@ -368,6 +368,7 @@ class TaskFlowExecutionService {
   Future<List<String>> _launchFlowMany(
       String flowId, List<FlowRunInput> inputs) async {
     final flow = await _prepareFlow(flowId);
+    await _ref.read(providerEntriesProvider.notifier).ready;
     final snapshot = FlowLaunchSnapshot.capture(
         flow, _ref.read(providerEntriesProvider), _ref.read(assistantProvider),
         selectedChatModel: _ref

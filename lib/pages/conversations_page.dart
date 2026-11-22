@@ -244,7 +244,10 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         .where((conversation) => !selectedIds.contains(conversation.id))
         .toList();
     final activeConversationId = ref.read(activeConversationIdProvider);
-    final deleted = await notifier.batchDelete(selectedIds.toList());
+    final deleted = await notifier.batchDelete(
+      selectedIds.toList(),
+      cleanupFiles: false,
+    );
     if (deleted) {
       final deletedConversations =
           convs.where((conv) => selectedIds.contains(conv.id)).toList();
@@ -329,7 +332,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final fallbackCurrentConversations =
         convs.where((conversation) => conversation.id != id).toList();
     final activeConversationId = ref.read(activeConversationIdProvider);
-    final deleted = await notifier.deleteConversation(id);
+    final deleted = await notifier.deleteConversation(id, cleanupFiles: false);
     if (deleted) {
       final currentConversations = notifier.mounted
           ? notifier.currentConversations

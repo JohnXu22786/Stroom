@@ -306,6 +306,12 @@ class _Manager extends ChatStreamManager {
   void cancel([String? convId]) {}
 }
 
+class _ProviderEntriesOverride extends ProviderEntriesNotifier {
+  _ProviderEntriesOverride(ProviderEntriesState initialState) {
+    state = initialState;
+  }
+}
+
 ProviderEntriesState _providers(String type, String id,
         {String api = 'api',
         String key = 'old-key',
@@ -371,7 +377,8 @@ void main() {
       TaskFlowScheduler? scheduler,
       _Tasks Function(Ref)? tasks,
       _Assistants? assistants,
-      _Manager? manager}) {
+      _Manager? manager,
+      ProviderEntriesState? providerEntries}) {
     final container = ProviderContainer(overrides: [
       if (notifier != null)
         taskFlowExecutionsProvider.overrideWith((ref) => notifier),
@@ -383,6 +390,10 @@ void main() {
       if (assistants != null)
         assistantProvider.overrideWith((ref) => assistants),
       if (manager != null) chatStreamManagerProvider.overrideWithValue(manager),
+      if (providerEntries != null)
+        providerEntriesProvider.overrideWith(
+          (ref) => _ProviderEntriesOverride(providerEntries),
+        ),
     ]);
     containers.add(container);
     container.read(taskFlowListProvider.notifier).state = [flow];
@@ -827,13 +838,11 @@ void main() {
             ])
       ])
     ]);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('provider_entries',
-        jsonEncode(providers.entries.map((e) => e.toMap()).toList()));
     final manager = _Manager();
     manager.adapter.selectModel(providers, 0, 1);
     final container = make(
         manager: manager,
+        providerEntries: providers,
         runner: (b, input, id, step) async => const FlowPayload.text('done'));
     final ids = await container
         .read(taskFlowExecutionServiceProvider)

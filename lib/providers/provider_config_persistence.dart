@@ -1,4 +1,5 @@
 part of 'provider_config.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -422,14 +423,15 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// _backupCorruptConversationsFile 模式）：结构性损坏或全部条目损坏
   /// 时把原始 JSON 存到独立 key，最多保留 [_maxCorruptProviderBackups] 份，
   /// 避免回退默认后后续 _persist 把含 API key 的原始配置永久覆盖。
-  Future<void> _backupCorruptProviderEntries(
+  Future<bool> _backupCorruptProviderEntries(
     SharedPreferences prefs,
     String corruptJson,
   ) async {
     try {
       final backupKey =
           'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
-      await prefs.setString(backupKey, corruptJson);
+      final saved = await prefs.setString(backupKey, corruptJson);
+      if (!saved || prefs.getString(backupKey) != corruptJson) return false;
       // 只保留最近的 N 份
       final keys = prefs.getKeys().toList()
         ..sort()
@@ -440,16 +442,87 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       debugPrint(
         '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey',
       );
+      return true;
     } catch (_) {
       debugPrint('Failed to back up corrupt provider entries.');
+      return false;
     }
   }
 
-  Future<void> _persist({bool rethrowOnFailure = false}) async {
+  Future<void> _ensureCorruptProviderEntriesBackedUp(
+    SharedPreferences prefs,
+  ) async {
+    final original = prefs.getString('provider_entries');
+    if (original == null || original.isEmpty) return;
+    var corrupt = false;
+    try {
+      final decoded = jsonDecode(original);
+      if (decoded is! List) {
+        corrupt = true;
+      } else {
+        for (final raw in decoded) {
+          if (raw is! Map) {
+            corrupt = true;
+            break;
+          }
+          try {
+            ProviderEntry.fromMap(Map<String, dynamic>.from(raw));
+          } catch (_) {
+            corrupt = true;
+            break;
+          }
+        }
+      }
+    } catch (_) {
+      corrupt = true;
+    }
+    if (!corrupt) return;
+    if (await _backupCorruptProviderEntries(prefs, original)) {
+      _corruptProviderEntriesAwaitingBackup = null;
+      // Once the exact original is recoverable from the backup, keep valid
+      // rows available to the credential migration and remove malformed rows
+      // from the active source. A non-array document has no usable rows.
+      try {
+        final decoded = jsonDecode(original);
+        final validRows = <Map<String, dynamic>>[];
+        if (decoded is List) {
+          for (final raw in decoded) {
+            if (raw is! Map) continue;
+            try {
+              final row = Map<String, dynamic>.from(raw);
+              ProviderEntry.fromMap(row);
+              validRows.add(row);
+            } catch (_) {
+              // The malformed row is retained in the timestamped backup.
+            }
+          }
+        }
+        final normalized = decoded is List && validRows.isNotEmpty
+            ? jsonEncode(validRows)
+            : null;
+        if (normalized == null) {
+          await prefs.remove('provider_entries');
+        } else {
+          await prefs.setString('provider_entries', normalized);
+        }
+      } catch (_) {
+        await prefs.remove('provider_entries');
+      }
+    } else {
+      _corruptProviderEntriesAwaitingBackup = original;
+    }
+  }
+
+  Future<void> _persist({
+    bool rethrowOnFailure = false,
+    bool persistMcpGroups = true,
+    ProviderEntriesState? stateToPersist,
+  }) async {
     SharedPreferences? prefsForRollback;
     String? providerEntriesBeforeMigration;
     String? mcpGroupsBeforeMigration;
     String? attemptedProviderEntries;
+    String? migrationWrittenProviderEntries;
     String? attemptedMcpGroups;
     var pairedWriteStarted = false;
     try {
@@ -457,42 +530,37 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       prefsForRollback = prefs;
       providerEntriesBeforeMigration = prefs.getString('provider_entries');
       mcpGroupsBeforeMigration = prefs.getString('mcp_provider_groups');
-      if (_providerEntriesSourceUnreadable) {
-        _reloadBeforeNextMutation = true;
-        debugPrint(
-          'Provider settings were not persisted because stored entries could not be read safely.',
+      final persistedState = stateToPersist ?? state;
+      final pendingCorruptEntries = _corruptProviderEntriesAwaitingBackup;
+      if (pendingCorruptEntries != null) {
+        if (!await _backupCorruptProviderEntries(
+          prefs,
+          pendingCorruptEntries,
+        )) {
+          throw StateError(
+            'Cannot persist provider configuration before corrupt data is backed up.',
         );
-        if (rethrowOnFailure) {
-          throw StateError('Stored provider entries require recovery.');
         }
-        return;
+        _corruptProviderEntriesAwaitingBackup = null;
       }
-      if (providerEntriesBeforeMigration != _loadedProviderEntriesSourceJson) {
+      if (providerEntriesBeforeMigration != _loadedProviderEntriesSourceJson &&
+          _providerEntriesMigrationInFlightCount == 0) {
         _reloadBeforeNextMutation = true;
         _providerEntriesSourceConflictGeneration++;
         throw StateError('Provider settings changed since they were loaded.');
       }
       final groupsJson = jsonEncode(
-        state.mcpGroups.map((group) => group.toMap()).toList(),
+        persistedState.mcpGroups.map((group) => group.toMap()).toList(),
       );
-      if (!_jsonPreferenceEquals(
+      if (persistMcpGroups &&
+          !_jsonPreferenceEquals(
         prefs.getString('mcp_provider_groups'),
         mcpGroupsBeforeMigration,
       )) {
         throw StateError('Provider settings changed during persistence.');
       }
-      attemptedMcpGroups = groupsJson;
-      pairedWriteStarted = true;
-      final groupsSaved = await prefs.setString(
-        'mcp_provider_groups',
-        groupsJson,
-      );
-      if (!groupsSaved ||
-          prefs.getString('mcp_provider_groups') != groupsJson) {
-        throw StateError('Failed to persist provider configuration.');
-      }
 
-      final persistedSourceEntries = state.entries.map((entry) {
+      final persistedSourceEntries = persistedState.entries.map((entry) {
         if (entry.type != 'llm') return entry;
         return ProviderEntry(
           id: entry.id,
@@ -514,6 +582,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             .map((entry) => entry.toCredentialMigrationMap())
             .toList(),
       );
+      _providerEntriesMigrationInFlightCount++;
       try {
         await LlmAccountMigrationService(
           preferences: _SharedPreferencesLlmAccountPreferences(prefs),
@@ -533,8 +602,16 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           'Secure credential storage is unavailable; provider settings were not persisted.',
         );
         throw StateError('Secure credential migration is unavailable.');
+      } finally {
+        _providerEntriesMigrationInFlightCount--;
       }
 
+      migrationWrittenProviderEntries = prefs.getString('provider_entries');
+      // Treat this service's own credential-reference rewrite as the next
+      // valid optimistic source. A concurrent provider edit can then build on
+      // it while the first edit is still persisting its separate MCP-group
+      // preference.
+      _loadedProviderEntriesSourceJson = migrationWrittenProviderEntries;
       _applyCredentialReferencesFromSavedEntries(
         persistedSourceEntries,
         prefs.getString('provider_entries'),
@@ -558,9 +635,10 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         entriesAfterMigration,
         json,
       );
-      final mcpGroupsMatch = _jsonPreferenceEquals(
+      final mcpGroupsMatch = !persistMcpGroups ||
+          _jsonPreferenceEquals(
         prefs.getString('mcp_provider_groups'),
-        groupsJson,
+            mcpGroupsBeforeMigration,
       );
       if (!providerEntriesMatch || !mcpGroupsMatch) {
         if (!providerEntriesMatch) {
@@ -569,6 +647,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         throw StateError('Provider settings changed during persistence.');
       }
       attemptedProviderEntries = json;
+      pairedWriteStarted = true;
       final entriesAlreadySaved = _jsonPreferenceEquals(
         prefs.getString('provider_entries'),
         json,
@@ -579,9 +658,20 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         prefs.getString('provider_entries'),
         json,
       );
-      final groupsVerified =
-          prefs.getString('mcp_provider_groups') == groupsJson;
-      if (!entriesSaved || !entriesVerified || !groupsVerified) {
+      var groupsSaved = true;
+      var groupsVerified = !persistMcpGroups;
+      if (persistMcpGroups) {
+        attemptedMcpGroups = groupsJson;
+        groupsSaved = await prefs.setString('mcp_provider_groups', groupsJson);
+        groupsVerified = _jsonPreferenceEquals(
+          prefs.getString('mcp_provider_groups'),
+          groupsJson,
+        );
+      }
+      if (!entriesSaved ||
+          !entriesVerified ||
+          !groupsSaved ||
+          !groupsVerified) {
         if (!entriesVerified) {
           _providerEntriesSourceConflictGeneration++;
         }
@@ -591,44 +681,59 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         _reloadBeforeNextMutation = false;
       }
     } catch (_) {
+      var rollbackFailed = false;
       if (pairedWriteStarted && prefsForRollback != null) {
-        await _rollbackPairedPreferenceWrite(
+        final entriesRolledBack = await _rollbackPairedPreferenceWrite(
           prefsForRollback,
           'provider_entries',
           providerEntriesBeforeMigration,
           attemptedProviderEntries,
+          transactionWrittenValue: migrationWrittenProviderEntries,
         );
-        await _rollbackPairedPreferenceWrite(
+        rollbackFailed = !entriesRolledBack;
+        if (persistMcpGroups) {
+          final groupsRolledBack = await _rollbackPairedPreferenceWrite(
           prefsForRollback,
           'mcp_provider_groups',
           mcpGroupsBeforeMigration,
           attemptedMcpGroups,
         );
+          rollbackFailed = rollbackFailed || !groupsRolledBack;
+        }
       }
       _reloadBeforeNextMutation = true;
       debugPrint('Failed to persist provider entries.');
+      if (rollbackFailed) {
+        if (rethrowOnFailure) throw const ProviderEntriesRollbackException();
+      }
       if (rethrowOnFailure) rethrow;
     }
   }
 
-  Future<void> _rollbackPairedPreferenceWrite(
+  Future<bool> _rollbackPairedPreferenceWrite(
     SharedPreferences prefs,
     String key,
     String? previous,
-    String? attempted,
-  ) async {
-    if (attempted == null || attempted == previous) return;
+    String? attempted, {
+    String? transactionWrittenValue,
+  }) async {
+    final transactionValues = {attempted, transactionWrittenValue}
+      ..remove(null)
+      ..remove(previous);
+    if (transactionValues.isEmpty) return true;
     try {
-      if (prefs.getString(key) != attempted) return;
+      final current = prefs.getString(key);
+      if (current == previous) return true;
+      if (!transactionValues.contains(current)) return true;
       if (previous == null) {
         final removed = await prefs.remove(key);
-        if (!removed || prefs.getString(key) != null) return;
+        return removed && prefs.getString(key) == null;
       } else {
         final saved = await prefs.setString(key, previous);
-        if (!saved || prefs.getString(key) != previous) return;
+        return saved && prefs.getString(key) == previous;
       }
     } catch (_) {
-      // The notifier is marked for reload by _persist's caller on failure.
+      return false;
     }
   }
 

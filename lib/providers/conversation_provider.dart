@@ -822,6 +822,19 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       _syncTemporaryTimer();
       return;
     }
+    if (!_loadHasRun) {
+      final expiredIds =
+          candidates.map((conversation) => conversation.id).toSet();
+      final activeId = _ref.read(activeConversationIdProvider);
+      state = state
+          .where((conversation) => !expiredIds.contains(conversation.id))
+          .toList();
+      if (expiredIds.contains(activeId) && mounted) {
+        _ref.read(activeConversationIdProvider.notifier).state = null;
+      }
+      _syncTemporaryTimer();
+      return;
+    }
     final expired = <Conversation>[];
     for (final candidate in candidates) {
       List<ChatMessage>? repositoryMessages;

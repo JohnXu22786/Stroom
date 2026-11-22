@@ -274,7 +274,12 @@ Future<String> executeOcrBlock({
     modelValue: model.typeConfig['requestSizeBudgetBytes'],
     providerValue: config.typeConfig['requestSizeBudgetBytes'],
   );
-  final selectedGroupId = llmModelGroupIdForConfig(config);
+  final isModelGroupConfig = isLlmModelGroupProviderConfig(config);
+  final selectedGroupId = isModelGroupConfig
+      ? llmModelGroupIdForConfig(config)
+      : routingRuntime == null
+          ? null
+          : llmOcrModelGroupIdForConfig(config.id, model.id);
   final ocrConfig = OcrConfig(
     host: config.host,
     apiKey: config.key,
@@ -283,6 +288,9 @@ Future<String> executeOcrBlock({
     requestSizeBudgetBytes: requestSizeBudgetBytes,
     routingGroupId: selectedGroupId,
     routingLocalModelId: selectedGroupId == null ? null : model.id,
+    routingAccountId: selectedGroupId != null && !isModelGroupConfig
+        ? llmOcrAccountIdForConfig(config.id)
+        : null,
     routingDisplayName: '${config.providerName} · ${model.name}',
     typeConfig: model.typeConfig,
     customParams: model.customParams,

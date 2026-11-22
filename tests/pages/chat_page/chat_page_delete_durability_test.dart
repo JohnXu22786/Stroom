@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -48,7 +49,9 @@ void main() {
               fileName: 'file.txt',
               mimeType: 'text/plain',
               fileType: 'file',
-              hash: 'file-hash',
+              hash: AttachmentStorage.computeHash(
+                Uint8List.fromList([1, 2, 3, 4]),
+              ),
               storagePath: 'attachments/file.txt',
               fileSize: 4,
             ),
@@ -56,19 +59,31 @@ void main() {
         ),
       ],
     );
+    final repository = MemoryConversationRepository();
+    await repository.initialize();
+    await repository.importConversation(
+      ConversationRecordAdapter.fromLegacyMap(conversation.toMap()),
+    );
+    AttachmentStorage.readFileOverrideForTesting =
+        (path) async => Uint8List.fromList([1, 2, 3, 4]);
     SharedPreferences.setMockInitialValues({
-      'conversations': jsonEncode([conversation.toMap()]),
+      'conversations': jsonEncode([]),
       'active_conversation_id': conversation.id,
     });
     final container = ProviderContainer(
       overrides: [
+        conversationRepositoryProvider.overrideWithValue(repository),
         activeConversationIdProvider.overrideWith((ref) => conversation.id),
         providerEntriesProvider.overrideWith(
           (ref) => ProviderEntriesNotifier(),
         ),
       ],
     );
-    addTearDown(container.dispose);
+    addTearDown(() async {
+      container.dispose();
+      await repository.close();
+    });
+    await container.read(conversationsProvider.notifier).ready;
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -85,28 +100,25 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    Map<String, dynamic>? persistedAtDelete;
-    AttachmentStorage.readFileOverrideForTesting =
-        (path) async => Uint8List.fromList([1, 2, 3, 4]);
+    bool? historyWasSavedBeforeDelete;
     AttachmentStorage.deleteFileOverrideForTesting = (path) async {
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('conversations');
-      if (json != null) {
-        final conversations = jsonDecode(json) as List<dynamic>;
-        persistedAtDelete = (conversations.single as Map<String, dynamic>);
-      }
+      final messages = await repository.getMessages(conversation.id);
+      historyWasSavedBeforeDelete = messages.isEmpty;
       return true;
     };
 
     await tester.tap(find.byIcon(Icons.delete_outline).first);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('删除').last);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
 
-    expect(persistedAtDelete, isNotNull);
-    expect(persistedAtDelete!['messages'], isEmpty);
+    expect(historyWasSavedBeforeDelete, isTrue);
   });
 
   testWidgets(
