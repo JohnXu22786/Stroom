@@ -918,7 +918,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: TextField(
                 controller: hCtrl,
                 decoration: dec().copyWith(
-                  hintText: AppLocalizations.of(context)!.taskFlowUiHour,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiHour,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -931,7 +936,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: TextField(
                 controller: mCtrl,
                 decoration: dec().copyWith(
-                  hintText: AppLocalizations.of(context)!.taskFlowUiMinute,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiMinute,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -944,7 +954,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: TextField(
                 controller: sCtrl,
                 decoration: dec().copyWith(
-                  hintText: AppLocalizations.of(context)!.taskFlowUiSecond,
+                  label: ConstrainedText(
+                    AppLocalizations.of(context)!.taskFlowUiSecond,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
