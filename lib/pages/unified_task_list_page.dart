@@ -109,6 +109,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final Map<String, CatCatchTaskCardViewState> _catCatchCardViewStates = {};
+  final Map<String, BackgroundTaskCardViewState> _backgroundCardViewStates = {};
+  final Map<String, SynthesisTaskCardViewState> _synthesisCardViewStates = {};
 
   String _clearErrorMessage(Object error, AppLocalizations strings) {
     if (error is StateError && error.message == '任务流取消后仍在运行') {
@@ -305,6 +307,33 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       }
       final taskIds = tasks.map((task) => task.id).toSet();
       _catCatchCardViewStates.removeWhere((id, _) => !taskIds.contains(id));
+    });
+    ref.listen(backgroundTasksProvider, (previous, tasks) {
+      final previousStatuses = {
+        for (final task in previous ?? <BackgroundTask>[]) task.id: task.status,
+      };
+      for (final task in tasks) {
+        if (task.status == TaskStatus.running &&
+            previousStatuses[task.id] != TaskStatus.running) {
+          _backgroundCardViewStates[task.id]?.expanded = true;
+        }
+      }
+      final taskIds = tasks.map((task) => task.id).toSet();
+      _backgroundCardViewStates.removeWhere((id, _) => !taskIds.contains(id));
+    });
+    ref.listen(taskListProvider, (previous, tasks) {
+      final previousStatuses = {
+        for (final task in previous ?? <SynthesisTask>[]) task.id: task.status,
+      };
+      for (final task in tasks) {
+        if ((task.status == TaskStatus.running ||
+                task.status == TaskStatus.failed) &&
+            previousStatuses[task.id] != task.status) {
+          _synthesisCardViewStates[task.id]?.expanded = true;
+        }
+      }
+      final taskIds = tasks.map((task) => task.id).toSet();
+      _synthesisCardViewStates.removeWhere((id, _) => !taskIds.contains(id));
     });
     final strings = AppLocalizations.of(context)!;
     final taskTabData = [
@@ -960,6 +989,10 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             key: ValueKey(item.id),
             task: t,
             isUnread: isUnread,
+            viewState: _backgroundCardViewStates.putIfAbsent(
+              t.id,
+              BackgroundTaskCardViewState.new,
+            ),
           );
         }
         final t = item.synthesisTask!;
@@ -968,6 +1001,10 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           key: ValueKey(item.id),
           task: t,
           isUnread: isUnread,
+          viewState: _synthesisCardViewStates.putIfAbsent(
+            t.id,
+            SynthesisTaskCardViewState.new,
+          ),
         );
       },
     );

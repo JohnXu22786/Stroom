@@ -275,13 +275,14 @@ BackgroundTask _createCompletedOcrTask({
   required String id,
   String title = '已完成任务',
   String? downloadedFilePath,
+  DateTime? createdAt,
 }) {
   return BackgroundTask(
     id: id,
     type: BackgroundTaskType.ocr,
     title: title,
     status: TaskStatus.completed,
-    createdAt: DateTime(2025, 6, 1),
+    createdAt: createdAt ?? DateTime(2025, 6, 1),
     completedAt: DateTime(2025, 6, 1, 0, 3),
     statusChangedAt: DateTime(2025, 6, 1, 0, 3),
     downloadedFilePath: downloadedFilePath,
@@ -357,6 +358,7 @@ SynthesisTask _createCompletedSynthTask({
   required String id,
   String title = '合成任务',
   String? downloadedFilePath,
+  DateTime? createdAt,
 }) {
   return SynthesisTask(
     id: id,
@@ -372,7 +374,7 @@ SynthesisTask _createCompletedSynthTask({
       name: 'TestModel',
       modelId: 'test-model',
     ),
-    createdAt: DateTime(2025, 6, 1),
+    createdAt: createdAt ?? DateTime(2025, 6, 1),
     completedAt: DateTime(2025, 6, 1, 0, 3),
     statusChangedAt: DateTime(2025, 6, 1, 0, 3),
     downloadedFilePath: downloadedFilePath,
@@ -442,6 +444,118 @@ void main() {
       expect(tester.state(targetCard), isNot(same(originalCardState)));
       expect(find.byIcon(Icons.check_box), findsOneWidget);
       expect(find.text('1 of 1 resources selected'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'background card expansion survives task list eviction and re-entry',
+    (tester) async {
+      final tasks = [
+        for (var i = 0; i < 80; i++)
+          _createCompletedOcrTask(
+            id: 'background-$i',
+            title: 'Background $i',
+          ),
+        _createCompletedOcrTask(
+          id: 'expanded-background-target',
+          title: 'Expanded background target',
+          createdAt: DateTime(2024, 1, 1),
+        ),
+      ];
+
+      await pumpPageWithBackground(tester, tasks);
+      final targetTitle = find.text('Expanded background target');
+      final targetCard =
+          find.byKey(const ValueKey('expanded-background-target'));
+      final expandIndicator = find.descendant(
+        of: targetCard,
+        matching: find.byType(AnimatedRotation),
+      );
+      final listScroll = find
+          .descendant(
+            of: find.byKey(const Key('unified_task_list_scroll_view')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        targetTitle,
+        400,
+        scrollable: listScroll,
+      );
+      await tester.tap(targetTitle);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.widget<AnimatedRotation>(expandIndicator).turns, 0.5);
+
+      final originalCardState = tester.state(targetCard);
+      final listPosition = tester.state<ScrollableState>(listScroll).position;
+      listPosition.jumpTo(0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(targetTitle, findsNothing);
+
+      await tester.scrollUntilVisible(
+        targetTitle,
+        400,
+        scrollable: listScroll,
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.state(targetCard), isNot(same(originalCardState)));
+      expect(tester.widget<AnimatedRotation>(expandIndicator).turns, 0.5);
+    },
+  );
+
+  testWidgets(
+    'synthesis card expansion survives task list eviction and re-entry',
+    (tester) async {
+      final tasks = [
+        for (var i = 0; i < 80; i++)
+          _createCompletedSynthTask(
+            id: 'synthesis-$i',
+            title: 'Synthesis $i',
+          ),
+        _createCompletedSynthTask(
+          id: 'expanded-synthesis-target',
+          title: 'Expanded synthesis target',
+          createdAt: DateTime(2024, 1, 1),
+        ),
+      ];
+
+      await pumpPageWithSynthesis(tester, tasks);
+      final targetTitle = find.text('Expanded synthesis target');
+      final targetCard =
+          find.byKey(const ValueKey('expanded-synthesis-target'));
+      final expandIndicator = find.descendant(
+        of: targetCard,
+        matching: find.byType(AnimatedRotation),
+      );
+      final listScroll = find
+          .descendant(
+            of: find.byKey(const Key('unified_task_list_scroll_view')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        targetTitle,
+        400,
+        scrollable: listScroll,
+      );
+      await tester.tap(targetTitle);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.widget<AnimatedRotation>(expandIndicator).turns, 0.5);
+
+      final originalCardState = tester.state(targetCard);
+      final listPosition = tester.state<ScrollableState>(listScroll).position;
+      listPosition.jumpTo(0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(targetTitle, findsNothing);
+
+      await tester.scrollUntilVisible(
+        targetTitle,
+        400,
+        scrollable: listScroll,
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.state(targetCard), isNot(same(originalCardState)));
+      expect(tester.widget<AnimatedRotation>(expandIndicator).turns, 0.5);
     },
   );
 
