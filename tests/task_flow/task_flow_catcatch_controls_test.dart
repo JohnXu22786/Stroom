@@ -322,14 +322,12 @@ void main() {
     await _pump(tester, task);
     await tester.tap(find.text(StepType.fetching.label));
     await tester.pump();
+    final scrollView = find.byKey(const Key('catcatch_resource_scroll_view'));
     await tester.ensureVisible(find.byKey(const Key('m3u8_segments_toggle')));
     await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
     await tester.pump();
 
-    final details = find.textContaining('expanded task detail');
-    await tester.ensureVisible(details);
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.drag(details, const Offset(0, -500));
+    await tester.drag(scrollView, const Offset(0, -500));
     await tester.pump(const Duration(milliseconds: 100));
 
     final toggle = find.byKey(const Key('m3u8_segments_toggle'));
@@ -369,7 +367,7 @@ void main() {
   });
 
   testWidgets(
-      'resource list shares task detail scrolling while action stays reachable',
+      'resource rows stay lazy on the selection scroll owner while action stays reachable',
       (tester) async {
     final media = List.generate(
       60,
@@ -384,24 +382,25 @@ void main() {
 
     final action = find.text('请选择要下载的资源');
     final actionRect = tester.getRect(action);
-    final listFinder = find.byKey(const Key('catcatch_resource_list'));
-    final listRect = tester.getRect(listFinder);
+    final scrollViewFinder =
+        find.byKey(const Key('catcatch_resource_scroll_view'));
+    final scrollViewRect = tester.getRect(scrollViewFinder);
     final resourceViewport = tester
         .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
     final screenHeight =
         tester.view.physicalSize.height / tester.view.devicePixelRatio;
     expect(actionRect.bottom, lessThanOrEqualTo(screenHeight));
     expect(resourceViewport.height, lessThanOrEqualTo(screenHeight * 2 / 3));
-    expect(listRect.height, greaterThan(screenHeight * 2 / 3));
+    expect(scrollViewRect.height, lessThanOrEqualTo(screenHeight * 2 / 3));
     expect(
-      tester.widget<ListView>(listFinder).physics,
-      isA<NeverScrollableScrollPhysics>(),
-    );
+        tester.widget<CustomScrollView>(scrollViewFinder).shrinkWrap, isTrue);
     expect(find.text('resource-0.mp4').hitTestable(), findsOneWidget);
-    await tester.drag(find.text('resource-0.mp4'), const Offset(0, -500));
+    expect(find.text('resource-59.mp4'), findsNothing);
+    await tester.drag(scrollViewFinder, const Offset(0, -500));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('resource-0.mp4').hitTestable(), findsNothing);
     expect(find.text('resource-8.mp4').hitTestable(), findsOneWidget);
+    expect(find.text('resource-59.mp4'), findsNothing);
     expect(action.hitTestable(), findsOneWidget);
   });
 
@@ -479,7 +478,9 @@ void main() {
         groupId: 'group',
         isLikelySplitTrack: true);
     final downloads = await _pump(tester, _task([video, audio]));
-    await tester.ensureVisible(find.text('合并音视频'));
+    final scrollView = find.byKey(const Key('catcatch_resource_scroll_view'));
+    await tester.drag(scrollView, const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text('合并音视频'));
     await tester.pump();
     final submit = find.textContaining('下载选中的');
