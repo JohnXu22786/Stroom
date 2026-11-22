@@ -90,7 +90,8 @@ Future<_Downloads> _pump(WidgetTester tester, CatCatchTask task,
 }
 
 Future<void> _pumpInShortTaskListViewport(
-    WidgetTester tester, CatCatchTask task) async {
+    WidgetTester tester, CatCatchTask task,
+    {double height = 300}) async {
   await tester.pumpWidget(ProviderScope(
       key: UniqueKey(),
       overrides: [
@@ -107,7 +108,7 @@ Future<void> _pumpInShortTaskListViewport(
             alignment: Alignment.topCenter,
             child: SizedBox(
               key: const Key('task_list_main_viewport'),
-              height: 300,
+              height: height,
               child: LayoutBuilder(
                 builder: (context, constraints) => ListView(
                   children: [
@@ -342,7 +343,7 @@ void main() {
   });
 
   testWidgets(
-      'resource viewport is capped by a short task-list viewport, not the screen',
+      'one resource keeps the selection viewport compact and action reachable',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -353,6 +354,7 @@ void main() {
       tester,
       _task([one])
           .copyWith(steps: [StepStatus.running(StepType.userSelecting)]),
+      height: 640,
     );
 
     final taskListViewport =
@@ -361,8 +363,9 @@ void main() {
         .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
     expect(
       resourceViewport.height,
-      lessThanOrEqualTo(taskListViewport.height * 2 / 3),
+      lessThan(taskListViewport.height * 2 / 3 - 40),
     );
+    expect(find.text('请选择要下载的资源').hitTestable(), findsOneWidget);
   });
 
   testWidgets(
@@ -383,9 +386,12 @@ void main() {
     final actionRect = tester.getRect(action);
     final listFinder = find.byKey(const Key('catcatch_resource_list'));
     final listRect = tester.getRect(listFinder);
+    final resourceViewport = tester
+        .getRect(find.byKey(const Key('catcatch_task_resource_viewport')));
     final screenHeight =
         tester.view.physicalSize.height / tester.view.devicePixelRatio;
     expect(actionRect.bottom, lessThanOrEqualTo(screenHeight));
+    expect(resourceViewport.height, lessThanOrEqualTo(screenHeight * 2 / 3));
     expect(listRect.height, greaterThan(screenHeight * 2 / 3));
     expect(
       tester.widget<ListView>(listFinder).physics,

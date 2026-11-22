@@ -381,17 +381,19 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           if (_expanded) ...[
             const Divider(height: 1, indent: 12, endIndent: 12),
             if (isSelectingMedia)
-              SizedBox(
+              ConstrainedBox(
                 key: const Key('catcatch_task_resource_viewport'),
-                height: resourceViewportHeight,
+                constraints: BoxConstraints(maxHeight: resourceViewportHeight),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (_expandedSegments.contains(task.id) &&
                         _getMediaSelectionData(task)
                             .selectableMedia
                             .any((media) => media.isPlaylistSegment))
                       _buildSegmentCollapseControl(task),
-                    Expanded(
+                    Flexible(
+                      fit: FlexFit.loose,
                       child: SingleChildScrollView(
                         child: Column(
                           children: [
