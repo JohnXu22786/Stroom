@@ -65,8 +65,7 @@ class FlowBlockCard extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final strings = AppLocalizations.of(context)!;
     final def = block.getDefinition();
-    final temporaryOutput =
-        !isLast &&
+    final temporaryOutput = !isLast &&
         producesTemporaryOutputFile(block) &&
         isFlowTemporaryOutputEnabled(block);
 
