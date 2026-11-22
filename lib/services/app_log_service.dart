@@ -255,15 +255,34 @@ class AppLogService {
   /// during the same clock tick.
   static int _nextLogSequence = 0;
 
-  /// 定时刷入计时器（每 10 秒）。
+  /// One-shot timer for the next buffered log flush.
   static Timer? _flushTimer;
 
   static bool debugForceFlushTimer = false;
 
+  /// Overrides storage writes in deterministic timer tests.
+  static Future<bool> Function()? debugFlushWriter;
+
   static bool get debugIsFlushTimerActive => _flushTimer?.isActive ?? false;
 
-  /// 刷入间隔。
+  /// Queues a synthetic entry so timer retries can be tested with fake time.
+  static void debugQueueLogForTimerTest() {
+    _addBufferedLog(
+      _LogEntry(
+        timestamp: DateTime.now(),
+        sequence: ++_nextLogSequence,
+        level: LogLevel.info,
+        source: 'Test',
+        message: 'Timer test entry',
+      ),
+    );
+  }
+
+  /// Base delay before flushing logs and before the first retry.
   static const Duration _flushInterval = Duration(seconds: 10);
+  static const Duration _maxFlushRetryInterval = Duration(minutes: 5);
+  static const int _maxFlushRetryExponent = 5;
+  static int _consecutiveFlushFailures = 0;
 
   /// 是否正在刷入中（防重入）。
   static bool _isFlushing = false;
@@ -325,7 +344,7 @@ class AppLogService {
 
     final timestamp = debugTimestampOverride ?? DateTime.now();
     final sequence = ++_nextLogSequence;
-    _buffer.add(
+    _addBufferedLog(
       _LogEntry(
         timestamp: timestamp,
         sequence: sequence,
@@ -334,21 +353,43 @@ class AppLogService {
         message: message,
       ),
     );
+  }
 
-    // 启动定时刷入（仅一次，非测试环境）
+  static void _addBufferedLog(_LogEntry entry) {
+    final startsNewBatch = _buffer.isEmpty;
+    _buffer.add(entry);
+    if (!startsNewBatch) return;
+
+    _consecutiveFlushFailures = 0;
     if (_flushTimer == null) _startFlushTimer();
   }
 
-  /// 启动定时刷入（仅在非测试环境下运行一次）。
-  static void _startFlushTimer() {
+  /// Schedules the next flush (only outside tests unless explicitly enabled).
+  static void _startFlushTimer([Duration delay = _flushInterval]) {
     if (_flushTimer != null) return;
-    // 测试环境不启动定时器，依赖显式 flush() 调用
+    // Tests normally flush explicitly; selected timer tests opt in.
     if (!debugForceFlushTimer && (WebFileStore.isTestMode || _isTestEnv)) {
       return;
     }
-    _flushTimer = Timer.periodic(_flushInterval, (_) {
+    _flushTimer = Timer(delay, () {
+      _flushTimer = null;
       _flushBuffer();
     });
+  }
+
+  static void _restartFlushTimer(Duration delay) {
+    _cancelFlushTimer();
+    _startFlushTimer(delay);
+  }
+
+  static Duration _flushRetryDelay(int failureCount) {
+    final exponent = failureCount
+        .clamp(0, _maxFlushRetryExponent)
+        .toInt();
+    final seconds = _flushInterval.inSeconds * (1 << exponent);
+    return Duration(
+      seconds: seconds.clamp(0, _maxFlushRetryInterval.inSeconds).toInt(),
+    );
   }
 
   static void _cancelFlushTimer() {
@@ -367,6 +408,7 @@ class AppLogService {
       return;
     }
     _isFlushing = true;
+    var flushFailed = false;
 
     // 原子性取出所有待写入条目
     final entries = List<_LogEntry>.from(_buffer);
@@ -374,18 +416,26 @@ class AppLogService {
     var entriesToRetry = entries;
 
     try {
-      // Android log writes use BackupLocationManager for SAF and local fallback.
-      final bool useSaf = await _usesBackupLocationManager();
-
-      if (useSaf) {
-        // SAF 模式：通过 BackupLocationManager 写入日志
-        entriesToRetry = await _flushViaSaf(entries);
+      final debugWriter = debugFlushWriter;
+      if (debugWriter != null) {
+        entriesToRetry = await debugWriter() ? [] : entries;
       } else {
-        // 标准模式：直接使用 dart:io
-        entriesToRetry = await _flushViaDartIO(entries);
+        // Android log writes use BackupLocationManager for SAF and local fallback.
+        final bool useSaf = await _usesBackupLocationManager();
+
+        if (useSaf) {
+          // SAF 模式：通过 BackupLocationManager 写入日志
+          entriesToRetry = await _flushViaSaf(entries);
+        } else {
+          // 标准模式：直接使用 dart:io
+          entriesToRetry = await _flushViaDartIO(entries);
+        }
       }
 
-      if (entriesToRetry.isNotEmpty) _buffer.insertAll(0, entriesToRetry);
+      if (entriesToRetry.isNotEmpty) {
+        _buffer.insertAll(0, entriesToRetry);
+        flushFailed = true;
+      }
 
       if (_policy.maxStorageBytes != null) {
         try {
@@ -398,11 +448,16 @@ class AppLogService {
     } catch (e) {
       // A failure before a writer reports per-group results retains its input.
       debugPrint('[AppLogService] 写入日志文件失败: $e');
+      flushFailed = true;
       if (entriesToRetry.isNotEmpty) _buffer.insertAll(0, entriesToRetry);
     } finally {
       _isFlushing = false;
       if (_buffer.isEmpty) {
         _cancelFlushTimer();
+        _consecutiveFlushFailures = 0;
+      } else if (flushFailed) {
+        _consecutiveFlushFailures++;
+        _restartFlushTimer(_flushRetryDelay(_consecutiveFlushFailures));
       } else {
         _startFlushTimer();
       }
@@ -523,6 +578,8 @@ class AppLogService {
   static void reset() {
     _cancelFlushTimer();
     debugForceFlushTimer = false;
+    debugFlushWriter = null;
+    _consecutiveFlushFailures = 0;
     _buffer.clear();
     debugTimestampOverride = null;
     _nextLogSequence = 0;

@@ -81,6 +81,67 @@ void main() {
       }
     });
 
+    testWidgets('repeated failed writes back off to a bounded retry interval',
+        (tester) async {
+      AppLogService.debugForceFlushTimer = true;
+      var attempts = 0;
+      AppLogService.debugFlushWriter = () async {
+        attempts++;
+        return false;
+      };
+
+      AppLogService.debugQueueLogForTimerTest();
+      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+
+      const delays = [10, 20, 40, 80, 160, 300, 300];
+      for (var i = 0; i < delays.length; i++) {
+        await tester.pump(Duration(seconds: delays[i] - 1));
+        expect(attempts, i);
+        await tester.pump(const Duration(seconds: 1));
+        expect(attempts, i + 1);
+      }
+      AppLogService.reset();
+    });
+
+    testWidgets('successful retry drains and restarts at the base interval',
+        (tester) async {
+      AppLogService.debugForceFlushTimer = true;
+      var attempts = 0;
+      var shouldSucceed = false;
+      AppLogService.debugFlushWriter = () async {
+        attempts++;
+        return shouldSucceed;
+      };
+
+      AppLogService.debugQueueLogForTimerTest();
+      await tester.pump(const Duration(seconds: 10));
+      expect(attempts, 1);
+      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+
+      // New entries must not postpone an already scheduled retry.
+      AppLogService.debugQueueLogForTimerTest();
+      await tester.pump(const Duration(seconds: 19));
+      expect(attempts, 1);
+      await tester.pump(const Duration(seconds: 1));
+      expect(attempts, 2);
+      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+
+      shouldSucceed = true;
+      await tester.pump(const Duration(seconds: 39));
+      expect(attempts, 2);
+      await tester.pump(const Duration(seconds: 1));
+      expect(attempts, 3);
+      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+
+      AppLogService.debugQueueLogForTimerTest();
+      await tester.pump(const Duration(seconds: 9));
+      expect(attempts, 3);
+      await tester.pump(const Duration(seconds: 1));
+      expect(attempts, 4);
+      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+      AppLogService.reset();
+    });
+
     test('logs are NOT written to file before flush()', () async {
       await AppLogService.info('TestSource', 'Buffered message');
 
