@@ -19,6 +19,7 @@ import 'package:stroom/services/llm_oauth_token_client.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 import 'package:stroom/services/devin_cli_acp.dart';
 import 'package:stroom/services/devin_cli_acp_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -5233,6 +5234,10 @@ void main() {
   testWidgets('member selection follows the first duplicate upstream model', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final service = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentialStore(),
@@ -5242,12 +5247,14 @@ void main() {
         id: 'duplicate-upstream-account',
         connectorType: 'openai-compatibility',
         authType: 'none',
-        displayName: 'Duplicate upstream account',
+        displayName:
+            'Duplicate upstream account with a deliberately long display label for narrow dropdowns',
         models: const [
           LlmUpstreamModel(
             id: 'duplicate-record-a',
             upstreamModelId: 'same-upstream-model',
-            displayName: 'Model record A',
+            displayName:
+                'Model record A with a deliberately long display label for narrow dropdowns',
             capabilities: {'vision': false},
           ),
           LlmUpstreamModel(
@@ -5275,6 +5282,10 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
         home: LlmAccountManagementPage(gateway: _testGateway(service)),
       ),
     );
@@ -5289,7 +5300,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+    final accountDropdown = find.byType(DropdownButtonFormField<String>).first;
+    expect(
+      find.descendant(
+        of: accountDropdown,
+        matching: find.byType(ConstrainedText),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(accountDropdown);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(
+      find
+          .text(
+            'Duplicate upstream account with a deliberately long display label for narrow dropdowns',
+          )
+          .last,
+    );
+    await tester.pumpAndSettle();
     final modelDropdown = find.byType(DropdownButtonFormField<String>).last;
+    expect(
+      find.descendant(
+        of: modelDropdown,
+        matching: find.byType(ConstrainedText),
+      ),
+      findsOneWidget,
+    );
     final modelButton = tester.widget<DropdownButton<String>>(
       find.descendant(
         of: modelDropdown,
@@ -5301,9 +5338,20 @@ void main() {
     ]);
     await tester.tap(modelDropdown);
     await tester.pumpAndSettle();
-    expect(find.text('Model record A'), findsWidgets);
+    expect(
+      find.text(
+        'Model record A with a deliberately long display label for narrow dropdowns',
+      ),
+      findsWidgets,
+    );
     expect(find.text('Model record B'), findsNothing);
-    await tester.tap(find.text('Model record A').last);
+    await tester.tap(
+      find
+          .text(
+            'Model record A with a deliberately long display label for narrow dropdowns',
+          )
+          .last,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('添加').last);
     await tester.pumpAndSettle();

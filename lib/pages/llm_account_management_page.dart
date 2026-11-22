@@ -24,6 +24,7 @@ import '../services/zed_keychain_import.dart';
 import '../services/trae_solo_connector.dart';
 import 'browser_page.dart';
 import 'trae_solo_authorization_page.dart';
+import '../widgets/constrained_text.dart';
 
 List<AiGatewayUpstreamModel> _pinnedAuggieModels(String accountId) => [
       for (var index = 0; index < AuggieCliService.pinnedModels.length; index++)
@@ -2530,12 +2531,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _connectorType,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '连接器'),
                 items: [
                   for (final item in connectors)
                     DropdownMenuItem(
                       value: item.id,
-                      child: Text(item.displayName),
+                      child: ConstrainedText(
+                        item.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        useNaturalWidthLayout: true,
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -3270,12 +3277,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedCommandCodeModelId,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: '要配置的模型'),
                   items: [
                     for (final model in commandCodeModels)
                       DropdownMenuItem(
                         value: model.upstreamModelId,
-                        child: Text(model.displayName),
+                        child: ConstrainedText(
+                          model.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          useNaturalWidthLayout: true,
+                        ),
                       ),
                   ],
                   onChanged: (value) {
@@ -4580,12 +4593,18 @@ class _AddModelGroupMemberDialogState
             children: [
               DropdownButtonFormField<String>(
                 initialValue: _accountId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '账号'),
                 items: [
                   for (final account in _accountsWithModels)
                     DropdownMenuItem(
                       value: account.id,
-                      child: Text(account.displayName),
+                      child: ConstrainedText(
+                        account.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        useNaturalWidthLayout: true,
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -4604,12 +4623,18 @@ class _AddModelGroupMemberDialogState
               DropdownButtonFormField<String>(
                 key: ValueKey('upstream_model_$_accountId'),
                 initialValue: _modelRecordId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '上游模型'),
                 items: [
                   for (final model in _selectableModels)
                     DropdownMenuItem(
                       value: model.id,
-                      child: Text(model.displayName),
+                      child: ConstrainedText(
+                        model.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        useNaturalWidthLayout: true,
+                      ),
                     ),
                 ],
                 onChanged: (value) => setState(() => _modelRecordId = value),
