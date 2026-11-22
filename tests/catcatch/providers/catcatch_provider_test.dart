@@ -579,7 +579,8 @@ void main() {
         expect(notifier.executorStarts, 0);
         expect(servicePlatform.startCalls, 1);
         expect(preferences.getBool('background_service_enabled'), isFalse);
-        expect(await isWatchdogEnabled(), isTrue);
+        expect(await isWatchdogEnabled(), isFalse,
+            reason: 'task startup must not opt the watchdog in implicitly');
         expect(servicePlatform.running, isTrue);
         expect(servicePlatform.stopCalls, 0);
         expect(
@@ -661,7 +662,8 @@ void main() {
         expect(notifier.executorStarts, 0);
         expect(servicePlatform.startCalls, 1);
         expect(preferences.getBool('background_service_enabled'), isTrue);
-        expect(await isWatchdogEnabled(), isTrue);
+        expect(await isWatchdogEnabled(), isFalse,
+            reason: 'resuming a task must not opt the watchdog in implicitly');
         expect(servicePlatform.stopCalls, 0);
         final persisted = await _waitForPersistedTaskForTest(
           directory,

@@ -1554,6 +1554,9 @@ void main() {
       'toggling watchdog off persists the pref and disables the alarm',
       (tester) async {
         registerMockPlatform();
+        SharedPreferences.setMockInitialValues({
+          'background_service_watchdog': true,
+        });
         // Record keep-alive channel calls.
         final keepAliveCalls = <String>[];
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

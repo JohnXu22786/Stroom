@@ -310,10 +310,12 @@ class _DelayedRejectedWatchdogWriteStore
 
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
     SharedPreferences preferences,
-    {bool initiallyEnabled = false}) async {
+    {bool initiallyEnabled = false, bool? initiallyWatchdogEnabled}) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
   SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
     'flutter.background_service_enabled': initiallyEnabled,
+    if (initiallyWatchdogEnabled != null)
+      'flutter.background_service_watchdog': initiallyWatchdogEnabled,
   });
   await preferences.reload();
   return originalStore;
@@ -630,6 +632,7 @@ void main() {
         ..setThrowOnCheckCalls({2});
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
 
       await withAndroidPlatform(() async {
         expect(await stopBackgroundService(), isFalse);
@@ -1417,7 +1420,7 @@ void main() {
     });
 
     test(
-        'restoreBackgroundServiceOnColdStart does not assume enabled when preference read fails',
+        'restoreBackgroundServiceOnColdStart does not arm the watchdog when preferences are unreadable',
         () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
@@ -1440,9 +1443,8 @@ void main() {
       );
       expect(
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
-        isTrue,
-        reason: 'unknown intent must leave recovery to the native persisted-'
-            'state check without starting the service immediately',
+        isFalse,
+        reason: 'an unreadable watchdog preference must stay opt-out',
       );
     });
 
@@ -1757,6 +1759,7 @@ void main() {
         ..setServiceRunning(true)
         ..deferStopCompletion();
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', true);
 
       await withAndroidPlatform(() async {
         expect(await restartBackgroundService(), isFalse);
@@ -1800,6 +1803,11 @@ void main() {
   });
 
   group('BackgroundService - keep-alive watchdog wiring', () {
+    setUp(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', true);
+    });
+
     test('AndroidConfiguration declares the dataSync foreground service type',
         () async {
       final mock = registerMockPlatform();
@@ -1829,6 +1837,7 @@ void main() {
       final originalStore = await _rejectEnabledPreferenceWrites(
         prefs,
         initiallyEnabled: true,
+        initiallyWatchdogEnabled: true,
       );
       addTearDown(() {
         SharedPreferencesStorePlatform.instance = originalStore;
@@ -2192,7 +2201,7 @@ void main() {
     });
 
     test(
-        'cold-start read failure safely rearms without undoing a persisted stop',
+        'cold-start read failure keeps watchdog off without undoing a persisted stop',
         () async {
       final mock = registerMockPlatform()..setServiceRunning(true);
       final originalStore = SharedPreferencesStorePlatform.instance;
@@ -2243,9 +2252,8 @@ void main() {
       );
       expect(
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
-        isTrue,
-        reason: 'unknown intent may re-arm because the native watchdog checks '
-            'the durable enabled state before recovery',
+        isFalse,
+        reason: 'an unreadable watchdog preference must stay opt-out',
       );
 
       store.failReads = false;
@@ -2420,7 +2428,8 @@ void main() {
       });
     });
 
-    test('rearmKeepAliveOnResume proceeds when enabled preference read fails',
+    test(
+        'rearmKeepAliveOnResume keeps watchdog off when preferences are unreadable',
         () async {
       registerMockPlatform();
       final originalStore = SharedPreferencesStorePlatform.instance;
@@ -2437,7 +2446,7 @@ void main() {
 
       expect(
         keepAliveCalls.map((call) => call.method),
-        contains('rearmKeepAlive'),
+        isNot(contains('rearmKeepAlive')),
       );
     });
 
