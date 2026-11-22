@@ -6,6 +6,7 @@ class ToolCallData {
   final Map<String, dynamic> arguments;
   final ToolCallStatus status;
   final String? result;
+  final Map<String, dynamic> extraFields;
 
   /// 工具结果被 prune 的时间戳（软删除标记，opencode compacted 语义）。
   /// 非 null 时 [result] 已被替换为占位文本，UI 显示"已压缩"，
@@ -19,6 +20,7 @@ class ToolCallData {
     this.status = ToolCallStatus.pending,
     this.result,
     this.compactedAt,
+    this.extraFields = const {},
   });
 
   ToolCallData copyWith({
@@ -33,9 +35,11 @@ class ToolCallData {
         status: status ?? this.status,
         result: result ?? this.result,
         compactedAt: compactedAt ?? this.compactedAt,
+        extraFields: extraFields,
       );
 
   Map<String, dynamic> toMap() => {
+        ...extraFields,
         'id': id,
         'name': name,
         'arguments': arguments,
@@ -45,6 +49,14 @@ class ToolCallData {
       };
 
   factory ToolCallData.fromMap(Map<String, dynamic> map) {
+    const knownFields = {
+      'id',
+      'name',
+      'arguments',
+      'status',
+      'result',
+      'compactedAt',
+    };
     // Parse arguments defensively: handle null, non-Map, or Map types.
     Map<String, dynamic> parsedArgs;
     final rawArgs = map['arguments'];
@@ -83,6 +95,9 @@ class ToolCallData {
       status: status,
       result: map['result'] as String?,
       compactedAt: compactedAt,
+      extraFields: Map<String, dynamic>.fromEntries(
+        map.entries.where((entry) => !knownFields.contains(entry.key)),
+      ),
     );
   }
 }

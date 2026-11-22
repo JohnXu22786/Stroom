@@ -1658,6 +1658,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chatSearchAll => 'Rechercher dans toutes les conversations…';
 
   @override
+  String get chatSearchCurrentMode => 'Current conversation';
+
+  @override
+  String get chatSearchAllMode => 'All conversations';
+
+  @override
+  String get chatSearchRetry => 'Retry search';
+
+  @override
+  String get chatSearchError => 'Search failed';
+
+  @override
   String get searchPrevious => 'Correspondance précédente';
 
   @override

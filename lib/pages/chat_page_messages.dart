@@ -7,6 +7,132 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageMessagesExt on _ChatPageState {
+  ({List<MessageSegment> segments, List<String>? reasoningContents})
+  _messagePresentationFor(ChatMessage message) {
+    final reasoningContents =
+        message.reasoningSections != null &&
+            message.reasoningSections!.isNotEmpty
+        ? List<String>.from(message.reasoningSections!)
+        : message.reasoningContent != null &&
+              message.reasoningContent!.isNotEmpty
+        ? [message.reasoningContent!]
+        : null;
+    final rebuiltBlocks = legacyToBlocks(
+      reasoningSections: message.reasoningSections ?? [],
+      textChunks: message.textSections ?? [],
+      toolCalls: message.toolCalls ?? [],
+      toolCallRoundStarts: message.toolCallRoundStarts ?? [],
+    );
+    rebuiltBlocks.addAll(message.blocks?.whereType<ErrorBlock>() ?? const []);
+    final hasCanonicalFields =
+        message.toolCallRoundStarts != null ||
+        ((message.toolCalls == null || message.toolCalls!.isEmpty) &&
+            !(message.blocks?.any((block) => block is ToolCallBlock) ??
+                false) &&
+            (message.reasoningSections != null ||
+                message.textSections != null));
+    final blocks = hasCanonicalFields
+        ? rebuiltBlocks
+        : (message.blocks ?? rebuiltBlocks);
+    final segments = blocksToSegments(blocks);
+    final hasText = segments.any(
+      (segment) => segment is TextSegment && segment.text.trim().isNotEmpty,
+    );
+    final contentIsAlreadyAnErrorSegment = segments.any(
+      (segment) =>
+          segment is ErrorSegment &&
+          segment.message.trim() == message.content.trim(),
+    );
+    if (!hasText &&
+        !contentIsAlreadyAnErrorSegment &&
+        message.content.isNotEmpty) {
+      segments.add(TextSegment(message.content));
+    }
+    return (segments: segments, reasoningContents: reasoningContents);
+  }
+
+  void _hydrateMessagePresentation(ChatMessage message) {
+    final presentation = _messagePresentationFor(message);
+    if (presentation.reasoningContents != null) {
+      _reasoningContents[message.id] = presentation.reasoningContents!;
+    }
+    if (presentation.segments.isNotEmpty) {
+      _chatSegments[message.id] = presentation.segments;
+    }
+  }
+
+  /// Loads one newer repository page when a search result opened an older
+  /// window and the user scrolls toward the conversation's newest messages.
+  Future<void> _loadNewerRepositoryMessages() async {
+    if (_isLoadingNewer) {
+      if (_loadingNewerConversationGeneration != _conversationLoadGeneration) {
+        _pendingNewerConversationLoad = true;
+      }
+      return;
+    }
+    final conversationId = _loadedConversationId;
+    final conversationLoadGeneration = _conversationLoadGeneration;
+    final controller = _controller;
+    if (conversationId == null ||
+        controller == null ||
+        !ref
+            .read(conversationsProvider.notifier)
+            .hasLaterRepositoryMessages(conversationId)) {
+      return;
+    }
+    _isLoadingNewer = true;
+    _loadingNewerConversationGeneration = conversationLoadGeneration;
+    try {
+      final notifier = ref.read(conversationsProvider.notifier);
+      final messages = await notifier.loadLaterRepositoryMessages(
+        conversationId,
+        limit: _ChatPageState._pageSize,
+      );
+      if (!mounted ||
+          messages.isEmpty ||
+          conversationLoadGeneration != _conversationLoadGeneration ||
+          _loadedConversationId != conversationId ||
+          ref.read(activeConversationIdProvider) != conversationId) {
+        return;
+      }
+      for (final message in messages) {
+        _hydrateMessagePresentation(message);
+      }
+      final chatMessages = messages
+          .map(
+            (message) => Message.text(
+              id: message.id,
+              authorId: message.role == 'user' ? _currentUser.id : _aiUser.id,
+              text: message.content,
+              createdAt: message.createdAt,
+            ),
+          )
+          .toList();
+      await controller.insertAllMessages(
+        chatMessages,
+        index: controller.messages.length,
+      );
+      if (!mounted ||
+          conversationLoadGeneration != _conversationLoadGeneration ||
+          !identical(_controller, controller) ||
+          _loadedConversationId != conversationId ||
+          ref.read(activeConversationIdProvider) != conversationId) {
+        return;
+      }
+      _history.addAll(messages);
+      notifier.commitLoadedLaterRepositoryMessages(conversationId, messages);
+    } catch (e, s) {
+      debugPrint('[ChatPage] _loadNewerRepositoryMessages error: $e\\n$s');
+    } finally {
+      _isLoadingNewer = false;
+      _loadingNewerConversationGeneration = null;
+      if (_pendingNewerConversationLoad && mounted) {
+        _pendingNewerConversationLoad = false;
+        unawaited(_loadNewerRepositoryMessages());
+      }
+    }
+  }
+
   Future<void> _initialize() async {
     await AppLogService.info('ChatPage', '开始初始化聊天页面');
     // 先加载拖动排序（model_order）：_configureAdapter → 恢复链的
@@ -68,8 +194,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // empty) snapshot would skip MCP discovery entirely and leave the tool
     // list at built-in-only.
     try {
-      final freshEntriesState =
-          mounted ? ref.read(providerEntriesProvider) : null;
+      final freshEntriesState = mounted
+          ? ref.read(providerEntriesProvider)
+          : null;
       await AppLogService.info(
         'ChatPage',
         '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置',
@@ -129,12 +256,46 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // 避免动画一闪而过。
     final loadStartedAt = DateTime.now();
     final loadGeneration = ++_loadMoreGeneration;
+    final loadingConversationId = _loadedConversationId;
+    bool isCurrentLoad() =>
+        loadGeneration == _loadMoreGeneration &&
+        loadingConversationId != null &&
+        _loadedConversationId == loadingConversationId &&
+        ref.read(activeConversationIdProvider) == loadingConversationId;
 
     try {
-      final newStart = _loadedUpToIndex >= _ChatPageState._pageSize
-          ? _loadedUpToIndex - _ChatPageState._pageSize
+      final oldLoadedUpToIndex = _loadedUpToIndex;
+      final newStart = oldLoadedUpToIndex >= _ChatPageState._pageSize
+          ? oldLoadedUpToIndex - _ChatPageState._pageSize
           : 0;
-      final batchMessages = _history.sublist(newStart, _loadedUpToIndex);
+      final List<ChatMessage> batchMessages;
+      if (oldLoadedUpToIndex > 0) {
+        batchMessages = _history.sublist(newStart, oldLoadedUpToIndex);
+      } else {
+        final conversationId = loadingConversationId;
+        if (conversationId == null) {
+          _markNoMoreMessagesReached();
+          return;
+        }
+        batchMessages = await ref
+            .read(conversationsProvider.notifier)
+            .loadEarlierRepositoryMessages(
+              conversationId,
+              limit: _ChatPageState._pageSize,
+            );
+        if (!isCurrentLoad()) return;
+        if (batchMessages.isEmpty) {
+          _markNoMoreMessagesReached();
+          return;
+        }
+        _history.insertAll(0, batchMessages);
+        ref
+            .read(conversationsProvider.notifier)
+            .commitLoadedRepositoryMessages(conversationId, batchMessages);
+      }
+      for (final message in batchMessages) {
+        _hydrateMessagePresentation(message);
+      }
 
       // Convert ChatMessage list to flutter_chat_ui Message list
       final msgs = batchMessages
@@ -153,7 +314,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // 若延迟放在插入之后，快速加载时新插入的旧消息会先闪现 0.5 秒，
       // 再被锚点拉回，产生可见跳动。先转满 0.5 秒再插入，指示器与内容
       // 就位保持同步，锚点校正的时机也与修复前一致。
-      final remaining = _ChatPageState._loadMoreMinDisplayDuration -
+      final remaining =
+          _ChatPageState._loadMoreMinDisplayDuration -
           DateTime.now().difference(loadStartedAt);
       // Search navigation skips the minimum-display delay so jumping to an
       // old match does not stall 500 ms per loaded batch.
@@ -161,7 +323,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         await Future<void>.delayed(remaining);
       }
       // 延迟期间可能已切换对话（_loadMoreGeneration 已推进）：放弃本批。
-      if (loadGeneration != _loadMoreGeneration) return;
+      if (!isCurrentLoad()) return;
 
       // Guard: controller might have been disposed during the async gap
       // (e.g., conversation switched).
@@ -170,7 +332,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         await _controller!.insertAllMessages(msgs, index: 0);
         // Re-check after await: conversation might have switched during the
         // insertion.
-        if (loadGeneration == _loadMoreGeneration) {
+        if (isCurrentLoad()) {
           _loadedUpToIndex = newStart;
         }
       }
@@ -303,6 +465,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
           mounted &&
           loadGeneration == _conversationLoadGeneration &&
           ref.read(activeConversationIdProvider) == activeId;
+      if (activeId != null) {
+        await ref.read(conversationsProvider.notifier).loadMessages(activeId);
+      }
       final convs = ref.read(conversationsProvider);
       await AppLogService.info(
         'ChatPage',
@@ -375,8 +540,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       final savedChatSegments = _isStreamingActive
           ? Map<String, List<MessageSegment>>.from(_chatSegments)
           : null;
-      final savedFinalizedMessages =
-          _isStreamingActive ? Set<String>.from(_finalizedMessages) : null;
+      final savedFinalizedMessages = _isStreamingActive
+          ? Set<String>.from(_finalizedMessages)
+          : null;
       final savedReasoningContents = _isStreamingActive
           ? Map<String, List<String>>.from(_reasoningContents)
           : null;
@@ -435,13 +601,15 @@ extension _ChatPageMessagesExt on _ChatPageState {
           toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
         );
         rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
-        final hasCanonicalFields = msg.toolCallRoundStarts != null ||
+        final hasCanonicalFields =
+            msg.toolCallRoundStarts != null ||
             ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
                 !(msg.blocks?.any((block) => block is ToolCallBlock) ??
                     false) &&
                 (msg.reasoningSections != null || msg.textSections != null));
-        final blocks =
-            hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
+        final blocks = hasCanonicalFields
+            ? rebuiltBlocks
+            : (msg.blocks ?? rebuiltBlocks);
         final segments = blocksToSegments(blocks);
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
@@ -610,10 +778,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // without copying the full reply into the controller message.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
-                false;
+            false;
         if (!inCtrl) {
-          final restoredFullReply =
-              ref.read(chatStreamManagerProvider).fullReplyFor(activeId);
+          final restoredFullReply = ref
+              .read(chatStreamManagerProvider)
+              .fullReplyFor(activeId);
           _controller?.insertMessage(
             Message.text(
               id: savedStreamingMsgId,

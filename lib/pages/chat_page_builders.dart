@@ -176,6 +176,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
     final list = ChatAnimatedList(
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
+      onStartReached: _loadNewerRepositoryMessages,
       scrollController: _chatScrollController,
       // 顶部"没有更多内容了"提示（用户滚到顶部且无更早历史消息时显示）。
       topSliver: _buildNoMoreMessagesSliver(),

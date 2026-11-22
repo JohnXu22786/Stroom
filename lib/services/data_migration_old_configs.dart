@@ -320,30 +320,46 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
         ? rawModels.whereType<Map<String, dynamic>>().toList()
         : <Map<String, dynamic>>[];
     final models = oldModels.map((model) {
-      final typeConfig = model['typeConfig'] is Map
-          ? Map<String, dynamic>.from(model['typeConfig'] as Map)
-          : <String, dynamic>{};
+      final typeConfig = <String, dynamic>{};
       final temperature = model['temperature'];
       if (temperature != null) typeConfig['temperature'] = temperature;
       final context = model['maxTokens'] ?? model['context'];
       if (context != null) typeConfig['context'] = context;
       final modelId = model['modelId'];
+      final modelName = model['name'];
+      final stableModelId = modelId is String && modelId.trim().isNotEmpty
+          ? modelId
+          : (modelName is String && modelName.trim().isNotEmpty
+              ? modelName
+              : '');
       return <String, dynamic>{
-        'name': modelId is String ? modelId : '',
-        'modelId': modelId is String ? modelId : '',
+        'name': modelName is String && modelName.trim().isNotEmpty
+            ? modelName
+            : stableModelId,
+        'modelId': stableModelId,
         'supportStream': model['supportStream'] is bool
             ? model['supportStream'] as bool
             : true,
         'typeConfig': typeConfig,
       };
     }).toList();
-    migratedConfigs.add(<String, dynamic>{
+    final migratedConfig = <String, dynamic>{
       'providerName':
           oldItem['providerName'] is String ? oldItem['providerName'] : '',
       'host': oldItem['host'] is String ? oldItem['host'] : '',
       'key': oldItem['key'] is String ? oldItem['key'] : '',
       'models': models,
-    });
+    };
+    for (final field in const ['credentialRef', 'publicKey']) {
+      final value = oldItem[field];
+      if (value != null) {
+        if (value is! String || value.trim().isEmpty) {
+          throw const FormatException('Invalid safe legacy metadata.');
+        }
+        migratedConfig[field] = value;
+      }
+    }
+    migratedConfigs.add(migratedConfig);
   }
 
   return {
@@ -357,16 +373,7 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
   String migratedConfigsJson,
   String? existingJson,
 ) {
-  final decodedMigratedConfigs = jsonDecode(migratedConfigsJson) as List;
-  final migratedConfigs = <Map<String, dynamic>>[];
-  final migratedIdentities = <String>{};
-  for (final config
-      in decodedMigratedConfigs.whereType<Map<String, dynamic>>()) {
-    if (migratedIdentities.add(_legacyChatConfigIdentity(config))) {
-      migratedConfigs.add(config);
-    }
-  }
-
+  final migratedConfigs = jsonDecode(migratedConfigsJson) as List;
   List<Map<String, dynamic>> existingEntries = [];
   var corruptExisting = false;
   if (existingJson != null && existingJson.isNotEmpty) {
@@ -382,50 +389,33 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     }
   }
 
-  final usableLlmEntryIndex = existingEntries.indexWhere((entry) {
-    if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') return false;
-    try {
-      final parsed = ProviderEntry.fromMap(entry);
-      if (parsed.configs.isEmpty) return false;
-      jsonEncode(parsed.toMap());
-      return true;
-    } catch (_) {
-      return false;
+  final hasLlmEntry = existingEntries
+      .any((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm');
+  if (!hasLlmEntry) {
+    final priorLegacyConfigs = <Map<String, dynamic>>[];
+    for (final rawLegacy in migratedConfigs) {
+      if (rawLegacy is! Map<String, dynamic>) {
+        return {'status': 'conflict', 'corruptExisting': corruptExisting};
+      }
+      final legacy = Map<String, dynamic>.from(rawLegacy);
+      for (final prior in priorLegacyConfigs) {
+        if (_sameLegacyProviderConfig(prior, legacy) &&
+            _mergeLegacySafeMetadata(
+                  Map<String, dynamic>.from(prior),
+                  legacy,
+                ) ==
+                null) {
+          return {'status': 'conflict', 'corruptExisting': corruptExisting};
+        }
+      }
+      priorLegacyConfigs.add(legacy);
     }
-  });
-  if (usableLlmEntryIndex >= 0) {
-    final existingEntry = existingEntries[usableLlmEntryIndex];
-    final rawConfigs = existingEntry['configs'];
-    final parsedEntry = ProviderEntry.fromMap(existingEntry);
-    final configs = rawConfigs is List
-        ? rawConfigs.whereType<Map<String, dynamic>>().toList()
-        : (jsonDecode(
-            _prepareLegacyChatConfigsSync(
-                jsonEncode([existingEntry]))['payload']! as String,
-          ) as List)
-            .whereType<Map<String, dynamic>>()
-            .toList();
-    final representedConfigs = rawConfigs is List ? configs : [existingEntry];
-    final representedIdentities = representedConfigs
-        .map(
-          (config) => _legacyChatConfigIdentity(
-            config,
-            legacyFormat: rawConfigs is! List,
-          ),
-        )
-        .toSet();
-    final unrepresentedConfigs = migratedConfigs
-        .where(
-          (config) => representedIdentities.add(
-            _legacyChatConfigIdentity(config),
-          ),
-        )
-        .toList();
-    if (unrepresentedConfigs.isEmpty) {
-      return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
-    }
-    configs.addAll(unrepresentedConfigs);
-    existingEntry['configs'] = configs;
+    existingEntries.add({
+      'id': 'migrated_llm',
+      'type': 'llm',
+      'name': 'LLM供应商',
+      'configs': migratedConfigs,
+    });
     return {
       'status': 'write',
       'corruptExisting': corruptExisting,
@@ -433,12 +423,63 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     };
   }
 
-  existingEntries.add({
-    'id': 'migrated_llm',
-    'type': 'llm',
-    'name': 'LLM供应商',
-    'configs': migratedConfigs,
-  });
+  final llmEntries = existingEntries
+      .where((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm')
+      .toList();
+  final destination = llmEntries.first;
+  final rawDestinationConfigs = destination['configs'];
+  final hasTopLevelConfig = destination.keys.any(
+    (key) =>
+        key != 'configs' &&
+        !const {'id', 'type', 'name', 'enabled'}.contains(key),
+  );
+  if (rawDestinationConfigs is! List &&
+      (rawDestinationConfigs != null || hasTopLevelConfig)) {
+    return {'status': 'conflict', 'corruptExisting': corruptExisting};
+  }
+  final destinationConfigs =
+      rawDestinationConfigs is List ? rawDestinationConfigs : <dynamic>[];
+  destination['configs'] = destinationConfigs;
+  var changed = false;
+  for (final rawLegacy in migratedConfigs) {
+    if (rawLegacy is! Map<String, dynamic>) {
+      throw const FormatException('Invalid migrated legacy config.');
+    }
+    final matches = <(List<dynamic>, int, Map<String, dynamic>)>[];
+    for (final entry in llmEntries) {
+      final configs = entry['configs'];
+      if (configs is! List) continue;
+      for (var index = 0; index < configs.length; index++) {
+        final rawExisting = configs[index];
+        if (rawExisting is! Map) continue;
+        final existing = Map<String, dynamic>.from(rawExisting);
+        if (_sameLegacyProviderConfig(existing, rawLegacy)) {
+          matches.add((configs, index, existing));
+        }
+      }
+    }
+    if (matches.length > 1) {
+      return {'status': 'conflict', 'corruptExisting': corruptExisting};
+    }
+    if (matches.isEmpty) {
+      destinationConfigs.add(rawLegacy);
+      changed = true;
+      continue;
+    }
+    final match = matches.single;
+    final existing = match.$3;
+    final merged = _mergeLegacySafeMetadata(existing, rawLegacy);
+    if (merged == null) {
+      return {'status': 'conflict', 'corruptExisting': corruptExisting};
+    }
+    if (merged) {
+      match.$1[match.$2] = existing;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
+  }
   return {
     'status': 'write',
     'corruptExisting': corruptExisting,
@@ -446,46 +487,91 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
   };
 }
 
-String _legacyChatConfigIdentity(
-  Map<String, dynamic> config, {
-  bool legacyFormat = false,
-}) =>
-    jsonEncode([
-      config['providerName'] is String ? config['providerName'] : '',
-      config['host'] is String ? config['host'] : '',
-      config['key'] is String ? config['key'] : '',
-      (config['models'] is List ? config['models'] as List : const [])
-          .whereType<Map<String, dynamic>>()
-          .map((model) {
-        final typeConfig = model['typeConfig'] is Map
-            ? Map<String, dynamic>.from(model['typeConfig'] as Map)
-            : <String, dynamic>{};
-        final temperature = model['temperature'];
-        if (temperature != null) typeConfig['temperature'] = temperature;
-        final context = model['maxTokens'] ?? model['context'];
-        if (context != null) typeConfig['context'] = context;
-        return [
-          model['modelId'] is String ? model['modelId'] : '',
-          model['supportStream'] is bool
-              ? model['supportStream']
-              : legacyFormat,
-          _canonicalLegacyChatIdentityValue(typeConfig),
-        ];
-      }).toList(),
-    ]);
+bool _sameLegacyProviderConfig(
+  Map<String, dynamic> existing,
+  Map<String, dynamic> legacy,
+) {
+  if ((existing['providerName'] is String ? existing['providerName'] : '') !=
+          (legacy['providerName'] is String ? legacy['providerName'] : '') ||
+      (existing['host'] is String ? existing['host'] : '') !=
+          (legacy['host'] is String ? legacy['host'] : '')) {
+    return false;
+  }
+  List<String>? modelIds(Object? value) {
+    if (value is! List) return null;
+    if (value.isEmpty) return null;
+    final result = <String>[];
+    for (final item in value) {
+      if (item is! Map) return null;
+      final modelId = item['modelId'];
+      final name = item['name'];
+      final id = modelId is String && modelId.trim().isNotEmpty
+          ? modelId
+          : (name is String && name.trim().isNotEmpty ? name : '');
+      if (id.isEmpty) return null;
+      result.add(id);
+    }
+    return result;
+  }
 
-Object? _canonicalLegacyChatIdentityValue(Object? value) {
-  if (value is Map) {
-    final keys = value.keys.whereType<String>().toList()..sort();
-    return {
-      for (final key in keys)
-        key: _canonicalLegacyChatIdentityValue(value[key]),
-    };
+  final existingModels = modelIds(existing['models']);
+  final legacyModels = modelIds(legacy['models']);
+  return existingModels != null &&
+      legacyModels != null &&
+      jsonEncode(existingModels) == jsonEncode(legacyModels);
+}
+
+bool? _mergeLegacySafeMetadata(
+  Map<String, dynamic> existing,
+  Map<String, dynamic> legacy,
+) {
+  final existingKey = existing['key'];
+  final legacyKey = legacy['key'];
+  if (existingKey != null && existingKey is! String ||
+      legacyKey != null && legacyKey is! String) {
+    return null;
   }
-  if (value is List) {
-    return value.map(_canonicalLegacyChatIdentityValue).toList();
+  if (existingKey is String &&
+      existingKey.isNotEmpty &&
+      legacyKey is String &&
+      legacyKey.isNotEmpty &&
+      existingKey != legacyKey) {
+    return null;
   }
-  return value;
+  final existingReference = existing['credentialRef'];
+  if (existingReference is String &&
+      existingReference.isNotEmpty &&
+      (existingKey == null || existingKey == '') &&
+      legacyKey is String &&
+      legacyKey.isNotEmpty) {
+    // A legacy source cannot safely rotate a reference already used by the
+    // provider entry. Keep both preferences intact for recovery or explicit
+    // account-level rotation after migration.
+    return null;
+  }
+  var changed = false;
+  if ((existingKey == null || existingKey == '') &&
+      legacyKey is String &&
+      legacyKey.isNotEmpty) {
+    existing['key'] = legacyKey;
+    changed = true;
+  }
+  for (final field in const ['credentialRef', 'publicKey']) {
+    final current = existing[field];
+    final incoming = legacy[field];
+    if (current != null && (current is! String || current.trim().isEmpty) ||
+        incoming != null && (incoming is! String || incoming.trim().isEmpty)) {
+      return null;
+    }
+    if (current != null && incoming != null && current != incoming) {
+      return null;
+    }
+    if (current == null && incoming != null) {
+      existing[field] = incoming;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 Map<String, Object?> _fixProviderEntriesSync(String raw) {

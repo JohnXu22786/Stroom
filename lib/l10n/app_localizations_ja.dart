@@ -1573,6 +1573,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatSearchAll => 'すべての会話を検索...';
 
   @override
+  String get chatSearchCurrentMode => 'Current conversation';
+
+  @override
+  String get chatSearchAllMode => 'All conversations';
+
+  @override
+  String get chatSearchRetry => 'Retry search';
+
+  @override
+  String get chatSearchError => 'Search failed';
+
+  @override
   String get searchPrevious => '前回の試合';
 
   @override

@@ -9,6 +9,18 @@ import 'package:stroom/services/assistant_catalog_service.dart';
 
 void main() {
   group('AssistantCatalogService', () {
+    test('rejects an oversized streamed body before retaining it', () async {
+      final client = _OversizedChunkedClient();
+      final service = AssistantCatalogService(client: client);
+
+      await expectLater(
+        service.fetchCatalog('https://example.com/catalog.json'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(client.sentChunks, 2);
+      service.close();
+    });
+
     test('fetches a direct Stroom JSON assistant over HTTPS', () async {
       final body = _assistantJson(version: '1.0.0');
       final client = MockClient((request) async {
@@ -29,7 +41,7 @@ void main() {
     });
 
     test(
-      'rejects non-HTTPS and private host URLs before making a request',
+      'rejects non-HTTPS and nonpublic IP URLs before making a request',
       () async {
         var requestCount = 0;
         final service = AssistantCatalogService(
@@ -43,10 +55,25 @@ void main() {
           service.fetchCatalog('http://example.com/catalog.json'),
           throwsA(isA<FormatException>()),
         );
-        await expectLater(
-          service.fetchCatalog('https://127.0.0.1/catalog.json'),
-          throwsA(isA<FormatException>()),
-        );
+        for (final host in [
+          '127.0.0.1',
+          '0177.0.0.1',
+          '0x7f.0.0.1',
+          '2130706433',
+          '127.1',
+          '0x7f000001',
+          '192.0.2.10',
+          '[::1]',
+          '[0:0:0:0:0:0:0:1]',
+          '[::ffff:127.0.0.1]',
+          '[::ffff:172.16.0.1]',
+          '[2001:db8::1]',
+        ]) {
+          await expectLater(
+            service.fetchCatalog('https://$host/catalog.json'),
+            throwsA(isA<FormatException>()),
+          );
+        }
         expect(requestCount, 0);
         service.close();
       },
@@ -152,3 +179,21 @@ String _assistantJson({required String version}) => '''
   "prompt": "Be helpful."
 }
 ''';
+
+class _OversizedChunkedClient extends http.BaseClient {
+  int sentChunks = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    Stream<List<int>> body() async* {
+      sentChunks++;
+      yield List<int>.filled(600 * 1024, 1);
+      sentChunks++;
+      yield List<int>.filled(600 * 1024, 2);
+      sentChunks++;
+      yield List<int>.filled(600 * 1024, 3);
+    }
+
+    return http.StreamedResponse(body(), 200, request: request);
+  }
+}

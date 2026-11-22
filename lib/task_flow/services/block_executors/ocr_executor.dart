@@ -11,6 +11,8 @@ import '../../../l10n/app_localizations.dart';
 import '../../../providers/locale_provider.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
+import '../../../ai_gateway/ai_gateway.dart';
+import '../../../services/llm_model_group_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../services/ocr_service.dart';
 import '../../../utils/http_timeout.dart';
@@ -164,6 +166,7 @@ Future<String> executeOcrBlock({
 
   /// Shared Dio client for this request. The executor does not own or close it.
   Dio? ocrDio,
+  Future<AiGatewayFacade>? routingRuntime,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
@@ -271,12 +274,20 @@ Future<String> executeOcrBlock({
     modelValue: model.typeConfig['requestSizeBudgetBytes'],
     providerValue: config.typeConfig['requestSizeBudgetBytes'],
   );
+  final selectedGroupId = llmModelGroupIdForConfig(config);
+  final isLegacyOcrConfig = selectedGroupId == null;
   final ocrConfig = OcrConfig(
     host: config.host,
     apiKey: config.key,
     model: model.modelId,
     systemPrompt: strings.ocrDefaultSystemPrompt,
     requestSizeBudgetBytes: requestSizeBudgetBytes,
+    routingGroupId:
+        selectedGroupId ?? llmOcrModelGroupIdForConfig(config.id, model.id),
+    routingLocalModelId: model.id,
+    routingAccountId:
+        isLegacyOcrConfig ? llmOcrAccountIdForConfig(config.id) : null,
+    routingDisplayName: '${config.providerName} · ${model.name}',
     typeConfig: model.typeConfig,
     customParams: model.customParams,
   );
@@ -507,6 +518,7 @@ Future<String> executeOcrBlock({
       final service = OcrService(
         config: ocrConfig,
         dio: ocrDio,
+        routingRuntime: routingRuntime,
         connectTimeout: connectTimeoutDefault,
         sendTimeout: sendTimeoutForBytes(
           sizeEstimator.encodedRequestSizeBytes(

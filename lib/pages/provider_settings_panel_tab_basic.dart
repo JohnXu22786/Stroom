@@ -16,9 +16,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _nameController,
             decoration: InputDecoration(
-              label: _buildProviderInputLabel(
-                AppLocalizations.of(context)!.providerNameLabel,
-              ),
+              labelText: AppLocalizations.of(context)!.providerNameLabel,
               hintText: AppLocalizations.of(context)!.providerNameHint,
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.label, color: Colors.teal),
@@ -28,9 +26,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _hostController,
             decoration: InputDecoration(
-              label: _buildProviderInputLabel(
-                AppLocalizations.of(context)!.providerApiUrlLabel,
-              ),
+              labelText: AppLocalizations.of(context)!.providerApiUrlLabel,
               hintText: AppLocalizations.of(context)!.providerApiUrlHint,
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.link, color: Colors.orange),
@@ -40,9 +36,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _keyController,
             decoration: InputDecoration(
-              label: _buildProviderInputLabel(
-                AppLocalizations.of(context)!.mcpApiKey,
-              ),
+              labelText: AppLocalizations.of(context)!.mcpApiKey,
               hintText: AppLocalizations.of(context)!.providerApiKeyInputHint,
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.key, color: Colors.amber),
@@ -58,58 +52,36 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
           if (_isLlmType) ...[
             const SizedBox(height: 16),
-            // 端点类型：该供应商下所有对话统一使用的协议格式
+            // Supplier protocol default; authentication belongs to the connector.
             DropdownButtonFormField<String>(
               dropdownColor: StroomMenuStyle.surface(context),
               borderRadius: StroomMenuStyle.borderRadius,
-              isExpanded: true,
-              initialValue: _endpointType,
+              initialValue: _apiProtocol,
               decoration: InputDecoration(
-                label: _buildProviderInputLabel(
-                  AppLocalizations.of(context)!.providerEndpointTypeLabel,
-                ),
+                labelText:
+                    AppLocalizations.of(context)!.providerEndpointTypeLabel,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
-              items: [
-                DropdownMenuItem(
-                  value: 'openai',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerEndpointOpenAi,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'anthropic',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerEndpointAnthropic,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'responses',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.endpointResponsesApi,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+              items: supportedApiProtocolsForSupplier(
+                _apiProtocol,
+                connectorType:
+                    widget.config.legacyFields['connectorType'] as String?,
+              )
+                  .map(
+                    (protocol) => DropdownMenuItem(
+                      value: protocol,
+                      child: Text(apiProtocolLabels[protocol] ?? protocol),
+                    ),
+                  )
+                  .toList(),
               onChanged: (v) {
-                if (v != null) setState(() => _endpointType = v);
+                if (v != null) setState(() => _apiProtocol = v);
               },
             ),
             const SizedBox(height: 8),
             Text(
-              _endpointType == 'anthropic'
-                  ? AppLocalizations.of(context)!.providerAnthropicEndpointHelp
-                  : _endpointType == 'responses'
-                      ? AppLocalizations.of(context)!
-                          .providerResponsesEndpointHelp
-                      : AppLocalizations.of(context)!
-                          .providerOpenAiEndpointHelp,
+              AppLocalizations.of(context)!.llmEndpointHelp,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],
@@ -133,9 +105,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 decimal: true,
               ),
               decoration: InputDecoration(
-                label: _buildProviderInputLabel(
-                  AppLocalizations.of(context)!.providerRequestJsonDefault,
-                ),
+                labelText:
+                    AppLocalizations.of(context)!.providerRequestJsonDefault,
                 hintText: AppLocalizations.of(context)!.providerUseAppDefault,
                 suffixText: 'MiB',
                 border: OutlineInputBorder(),
@@ -210,74 +181,65 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerUploadMethodHelp,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
-      _buildResponsiveSettingsRow(
-        context,
-        label: AppLocalizations.of(context)!.providerUploadMethod,
-        control: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<AudioUploadMethod>(
-              dropdownColor: StroomMenuStyle.surface(context),
-              borderRadius: StroomMenuStyle.borderRadius,
-              value: _uploadMethod,
-              isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
-              selectedItemBuilder: (context) => [
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerMultipart,
-                ),
-                _buildAsrSelectedDropdownText(context, 'Base64 JSON'),
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerUrlUpload,
-                ),
-              ],
-              items: [
-                DropdownMenuItem(
-                  value: AudioUploadMethod.multipart,
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerMultipart,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: AudioUploadMethod.base64Json,
-                  child: ConstrainedText(
-                    'Base64 JSON',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: AudioUploadMethod.url,
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerUrlUpload,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) {
-                if (v != null) setState(() => _uploadMethod = v);
-              },
+      Row(
+        children: [
+          Text(
+            AppLocalizations.of(context)!.providerUploadMethod,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: cs.onSurface,
             ),
           ),
-        ),
+          const Spacer(),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<AudioUploadMethod>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
+                value: _uploadMethod,
+                isDense: true,
+                items: [
+                  DropdownMenuItem(
+                    value: AudioUploadMethod.multipart,
+                    child: Text(
+                      AppLocalizations.of(context)!.providerMultipart,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: AudioUploadMethod.base64Json,
+                    child: Text(
+                      'Base64 JSON',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: AudioUploadMethod.url,
+                    child: Text(
+                      AppLocalizations.of(context)!.providerUrlUpload,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _uploadMethod = v);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 8),
       Text(
@@ -297,42 +259,44 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildResponsiveSettingsRow(
-              context,
-              label: AppLocalizations.of(context)!.providerMaxUploadSize,
-              control: SizedBox(
-                width: 90,
-                child: TextField(
-                  controller: _maxFileSizeController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+            Row(
+              children: [
+                Text(
+                  AppLocalizations.of(context)!.providerMaxUploadSize,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
                   ),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(),
-                    suffixText: 'MB',
-                    errorText: _maxFileSizeError,
-                  ),
-                  onChanged: (v) {
-                    final parsed = double.tryParse(v.trim());
-                    setState(() {
-                      if (parsed != null && parsed.isFinite && parsed > 0) {
-                        _maxFileSizeMb = parsed;
-                        _maxFileSizeError = null;
-                      } else {
-                        _maxFileSizeError = AppLocalizations.of(context)!
-                            .providerMaxUploadSizePositive;
-                      }
-                    });
-                  },
                 ),
-              ),
+                const Spacer(),
+                SizedBox(
+                  width: 90,
+                  child: TextField(
+                    controller: _maxFileSizeController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(),
+                      suffixText: 'MB',
+                    ),
+                    onChanged: (v) {
+                      final parsed = double.tryParse(v);
+                      if (parsed != null && parsed > 0) {
+                        setState(() => _maxFileSizeMb = parsed);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Text(
@@ -362,97 +326,74 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerFallbackTriggerHelp,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
-      _buildResponsiveSettingsRow(
-        context,
-        label: AppLocalizations.of(context)!.providerFallbackMethod,
-        control: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              dropdownColor: StroomMenuStyle.surface(context),
-              borderRadius: StroomMenuStyle.borderRadius,
-              value: _fallbackMethod,
-              isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
-              selectedItemBuilder: (context) => [
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerFallbackNone,
-                ),
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerFallbackSpecific,
-                ),
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerFallbackGeneric,
-                ),
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerFallbackAll,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ],
-              items: [
-                DropdownMenuItem(
-                  value: 'none',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerFallbackNone,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'specific',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerFallbackSpecific,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'generic',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerFallbackGeneric,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'all',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerFallbackAll,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) {
-                if (v != null) setState(() => _fallbackMethod = v);
-              },
+      Row(
+        children: [
+          Text(
+            AppLocalizations.of(context)!.providerFallbackMethod,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: cs.onSurface,
             ),
           ),
-        ),
+          const Spacer(),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
+                value: _fallbackMethod,
+                isDense: true,
+                items: [
+                  DropdownMenuItem(
+                    value: 'none',
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackNone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'specific',
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackSpecific,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'generic',
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackGeneric,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackAll,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _fallbackMethod = v);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 8),
       Text(
@@ -486,64 +427,58 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerPreprocessingHelp,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
-      _buildResponsiveSettingsRow(
-        context,
-        label: AppLocalizations.of(context)!.providerPreprocessingMethod,
-        control: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              dropdownColor: StroomMenuStyle.surface(context),
-              borderRadius: StroomMenuStyle.borderRadius,
-              value: _preprocessing,
-              isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
-              selectedItemBuilder: (context) => [
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerPreprocessNone,
-                ),
-                _buildAsrSelectedDropdownText(
-                  context,
-                  AppLocalizations.of(context)!.providerPreprocessResample,
-                ),
-              ],
-              items: [
-                DropdownMenuItem(
-                  value: 'none',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerPreprocessNone,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'resampleMono',
-                  child: ConstrainedText(
-                    AppLocalizations.of(context)!.providerPreprocessResample,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (v) {
-                if (v != null) setState(() => _preprocessing = v);
-              },
+      Row(
+        children: [
+          Text(
+            AppLocalizations.of(context)!.providerPreprocessingMethod,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: cs.onSurface,
             ),
           ),
-        ),
+          const Spacer(),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
+                value: _preprocessing,
+                isDense: true,
+                items: [
+                  DropdownMenuItem(
+                    value: 'none',
+                    child: Text(
+                      AppLocalizations.of(context)!.providerPreprocessNone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'resampleMono',
+                    child: Text(
+                      AppLocalizations.of(context)!.providerPreprocessResample,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _preprocessing = v);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 8),
       Text(

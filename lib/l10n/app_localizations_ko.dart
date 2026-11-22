@@ -1588,6 +1588,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatSearchAll => '모든 대화 검색...';
 
   @override
+  String get chatSearchCurrentMode => 'Current conversation';
+
+  @override
+  String get chatSearchAllMode => 'All conversations';
+
+  @override
+  String get chatSearchRetry => 'Retry search';
+
+  @override
+  String get chatSearchError => 'Search failed';
+
+  @override
   String get searchPrevious => '이전 일치 항목';
 
   @override

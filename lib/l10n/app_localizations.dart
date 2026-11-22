@@ -70,7 +70,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -93,11 +93,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -2808,6 +2808,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search all conversations...'**
   String get chatSearchAll;
+
+  /// No description provided for @chatSearchCurrentMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Current conversation'**
+  String get chatSearchCurrentMode;
+
+  /// No description provided for @chatSearchAllMode.
+  ///
+  /// In en, this message translates to:
+  /// **'All conversations'**
+  String get chatSearchAllMode;
+
+  /// No description provided for @chatSearchRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry search'**
+  String get chatSearchRetry;
+
+  /// No description provided for @chatSearchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Search failed'**
+  String get chatSearchError;
 
   /// No description provided for @searchPrevious.
   ///
@@ -19872,16 +19896,16 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'de',
-        'en',
-        'es',
-        'fr',
-        'ja',
-        'ko',
-        'pt',
-        'zh',
-      ].contains(locale.languageCode);
+    'ar',
+    'de',
+    'en',
+    'es',
+    'fr',
+    'ja',
+    'ko',
+    'pt',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;

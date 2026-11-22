@@ -86,6 +86,53 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('continuation request keeps text and generated media in order',
+        () async {
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (_) async {},
+      );
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final attachment = Attachment(
+        id: 'before-continuation',
+        fileName: 'generated.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'generated-hash',
+        storagePath: 'attachments/generated.png',
+        fileSize: 3,
+        extraFields: const {'stroom.contentOrder': 1},
+      );
+      final provider = _MockProvider([
+        [
+          AIStreamEvent('Before', contentOrder: 0),
+          AIStreamEvent(
+            '',
+            contentOrder: 1,
+            mediaAttachments: [attachment],
+          ),
+        ],
+        [AIStreamEvent(' after', contentOrder: 0)],
+      ])
+        ..errorsAfterCall[1] = networkFailure;
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Generate an image',
+        convId: 'continuation-content-order',
+        history: [_userMsg('Generate an image', 'u-continuation-order')],
+      );
+
+      expect(result.assistantMessage!.toMap()['contentParts'], [
+        {'type': 'text', 'text': 'Before'},
+        {'type': 'attachment', 'attachmentId': attachment.id},
+        {'type': 'text', 'text': ' after'},
+      ]);
+      manager.dispose();
+    });
+
     test('repeated partial interruptions continue without losing history',
         () async {
       final networkFailure = DioException(
@@ -123,6 +170,50 @@ void chatStreamManagerGroup1() {
       expect(result.history.where((message) => message.role == 'user'),
           hasLength(3));
       expect(result.fullReply, 'first part second part final part');
+      manager.dispose();
+    });
+
+    test('continues after a media-only partial transport interruption',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final attachment = Attachment(
+        id: 'generated-media-once',
+        fileName: 'generated.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'generated-media-hash',
+        storagePath: 'attachments/generated-once.png',
+        fileSize: 3,
+        extraFields: const {'stroom.contentOrder': 0},
+      );
+      final provider = _MockProvider([
+        [
+          AIStreamEvent(
+            '',
+            mediaAttachments: [attachment],
+          ),
+        ],
+        [AIStreamEvent('finished')],
+      ])
+        ..errorsAfterCall[1] = networkFailure;
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (_) async {},
+        transportRetryPolicy: const TransportRetryPolicy(jitter: false),
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Generate an image',
+        convId: 'media-only-interruption',
+        history: [_userMsg('Generate an image', 'u-media-only')],
+      );
+
+      expect(provider.callCount, 2);
+      expect(result.assistantMessage!.attachments, hasLength(1));
+      expect(result.assistantMessage!.attachments.single.id, attachment.id);
       manager.dispose();
     });
 

@@ -343,6 +343,19 @@ extension ChatServiceStreamingExt on ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
+              final inputTranscript = event.inputTranscript?.trim();
+              if (inputTranscript != null && inputTranscript.isNotEmpty) {
+                controller.add(InputTranscriptEvent(inputTranscript));
+              }
+              final mediaAttachments = event.mediaAttachments;
+              if (mediaAttachments != null && mediaAttachments.isNotEmpty) {
+                controller.add(
+                  MediaAttachmentsEvent(
+                    mediaAttachments,
+                    contentOrder: event.contentOrder,
+                  ),
+                );
+              }
               if (event.images != null) {
                 for (final image in event.images!) {
                   controller.add(
@@ -372,6 +385,7 @@ extension ChatServiceStreamingExt on ChatService {
                 controller.add(
                   TextEvent(
                     event.text,
+                    contentOrder: event.contentOrder,
                     alreadyAccumulated: onTextDelta != null,
                   ),
                 );

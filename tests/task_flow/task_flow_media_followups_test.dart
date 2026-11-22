@@ -95,6 +95,7 @@ class _Manager extends ChatStreamManager {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
     Map<String, String>? customParamValues,
@@ -140,6 +141,24 @@ class _RejectExecutionRemovalNotifier extends TaskFlowExecutionNotifier {
   @override
   Future<bool> persist() =>
       rejectWrites ? Future<bool>.value(false) : super.persist();
+}
+
+class _ResetAppStorageAfterNextPersistNotifier
+    extends TaskFlowExecutionNotifier {
+  bool resetAfterNextPersist = false;
+
+  @override
+  Future<bool> persist() {
+    final pending = super.persist();
+    if (!resetAfterNextPersist) return pending;
+    resetAfterNextPersist = false;
+    return pending.then((saved) {
+      // Let record removal finish before re-arming the path-provider gate for
+      // the subsequent attachment-copy deletion.
+      AppStorage.resetCache();
+      return saved;
+    });
+  }
 }
 
 class _GatedRegistrationNotifier extends TaskFlowExecutionNotifier {
@@ -678,7 +697,8 @@ void main() {
       Uint8List.fromList(utf8.encode('%PDF-1.7\nreport')),
     );
     final copy = File('${directory.path}/$path');
-    final executions = trackedExecution();
+    final executions = _ResetAppStorageAfterNextPersistNotifier();
+    trackedExecutions.add(executions);
     final assistant = Assistant(
       id: 'assistant',
       name: 'Assistant',
@@ -729,6 +749,7 @@ void main() {
     final documents = PathProviderPlatform.instance as _Documents;
     final deleteGate = documents.gate = Completer<void>();
     documents.entered = Completer<void>();
+    executions.resetAfterNextPersist = true;
     final removal = executions.removeExecution(old);
     await documents.entered!.future.timeout(const Duration(seconds: 5));
     expect(

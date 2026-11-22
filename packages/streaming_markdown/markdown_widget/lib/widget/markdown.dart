@@ -114,10 +114,7 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
   @override
   void initState() {
     super.initState();
-    _tocController = widget.tocController;
-    _tocController?.jumpToIndexCallback = (index) {
-      controller.scrollToIndex(index, preferPosition: AutoScrollPosition.begin);
-    };
+    _attachTocController(widget.tocController);
     if (_usesIncrementalSession(widget)) {
       _startIncrementalSession(widget.data);
     } else {
@@ -259,6 +256,9 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
   @override
   void didUpdateWidget(MarkdownWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.tocController, widget.tocController)) {
+      _attachTocController(widget.tocController);
+    }
     final sameSession = _usesIncrementalSession(widget) &&
         _usesIncrementalSession(oldWidget) &&
         oldWidget.incrementalKey == widget.incrementalKey &&
@@ -313,6 +313,14 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
         updateState();
       }
     }
+  }
+
+  void _attachTocController(TocController? tocController) {
+    _tocController?.jumpToIndexCallback = null;
+    _tocController = tocController;
+    _tocController?.jumpToIndexCallback = (index) {
+      controller.scrollToIndex(index, preferPosition: AutoScrollPosition.begin);
+    };
   }
 }
 

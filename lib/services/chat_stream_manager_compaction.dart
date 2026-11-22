@@ -89,19 +89,18 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     // 3. 划分头部（可压缩）与尾部（保留原文）。
     //    head 起点：有摘要时从 compactionTailStartId 之后开始
     //    （快照之前 = 已压缩内容，不再转写；对齐 opencode hidden）。
-    final tailStart = ChatStreamManager._findTailStart(state.history);
-    var headStart = 0;
-    final tailStartId = conv?.compactionTailStartId;
-    if (tailStartId != null) {
-      final idx = state.history.indexWhere((m) => m.id == tailStartId);
-      if (idx >= 0) headStart = idx;
-    }
-    if (headStart >= tailStart) return false; // 无新增可压缩内容
+    // Keep the summary within the same prefix sent for this request. During
+    // retries, state.history can still contain later turns that are excluded
+    // from requestHistory and must not leak into a persisted summary.
+    final parts = ChatStreamManager.splitCompactionHistory(
+      requestHistory,
+      tailStartId: conv?.compactionTailStartId,
+    );
+    if (parts.head.isEmpty) return false; // 无新增可压缩内容
     // The summary prompt below reads only text/tool results; keep originals
     // so attachment-bearing messages do not retain copied full text.
-    final head = state.history.sublist(headStart, tailStart);
-    final tail = state.history.sublist(tailStart);
-    if (head.isEmpty) return false;
+    final head = parts.head;
+    final tail = parts.tail;
 
     // 4. 组装压缩请求：前次摘要（如有）+ 头部转写 + 模板指令
     final previousSummary = conv?.contextSummary;

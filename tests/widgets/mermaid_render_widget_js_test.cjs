@@ -1250,7 +1250,7 @@ test('native fitToViewport refits after a successful viewport resize', () => {
   assert.equal((listeners.get('resize') || []).length, 1);
 });
 
-test('web fitToViewport refits after the viewport resizes', () => {
+test('web resize preserves zoom and centers the existing diagram view', () => {
   const viewport = {clientWidth: 200, clientHeight: 100};
   const svg = {
     getBBox: () => ({width: 100, height: 50}),
@@ -1304,11 +1304,11 @@ test('web fitToViewport refits after the viewport resizes', () => {
   viewport.clientWidth = 100;
   viewport.clientHeight = 200;
   dispatchResize();
-  assert.deepEqual(transforms, [[2, 0, 0], [1, 0, 75]]);
+  assert.deepEqual(transforms, [[2, 0, 0], [2, -50, 50]]);
 
   viewport.clientHeight = 100;
   dispatchResize();
-  assert.deepEqual(transforms, [[2, 0, 0], [1, 0, 75], [1, 0, 25]]);
+  assert.deepEqual(transforms, [[2, 0, 0], [2, -50, 50], [2, -50, 0]]);
   assert.equal(notifications, 3);
   assert.equal((listeners.get('resize') || []).length, 1);
 });

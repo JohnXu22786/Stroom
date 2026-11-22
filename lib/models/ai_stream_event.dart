@@ -1,6 +1,12 @@
+import 'chat_message.dart';
+
 class AIStreamEvent {
   final String text;
   final bool isReasoning;
+
+  /// Provider transcription of user-supplied audio, kept separate from the
+  /// assistant's generated text so callers can retain the user's transcript.
+  final String? inputTranscript;
   final List<Map<String, dynamic>>? toolCalls;
 
   /// Images returned as outputs by providers such as Responses image
@@ -20,6 +26,12 @@ class AIStreamEvent {
   /// 多次更新，事件携带累计快照；[usageCostIncrement] 是本次新增的成本。
   final Map<String, dynamic>? usage;
 
+  /// Provider-generated media already stored in M2 attachment storage.
+  final List<Attachment>? mediaAttachments;
+
+  /// Position of this text/media output among visible streamed content.
+  final int? contentOrder;
+
   /// 当流在完成前被取消时，已收到的 usage 也必须可计入。多次 usage
   /// 快照若携带累计 cost，此字段避免每次更新都重复累加。
   final double? usageCostIncrement;
@@ -27,10 +39,13 @@ class AIStreamEvent {
   const AIStreamEvent(
     this.text, {
     this.isReasoning = false,
+    this.inputTranscript,
     this.toolCalls,
     this.images,
     this.thinkingSignature,
     this.usage,
+    this.mediaAttachments,
+    this.contentOrder,
     this.usageCostIncrement,
   });
 
