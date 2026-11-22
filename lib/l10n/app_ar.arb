@@ -446,6 +446,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "هل تريد بالتأكيد مسح جميع المهام الفاشلة؟",
   "unifiedTaskListConfirmClearCompletedMessage": "هل تريد بالتأكيد مسح جميع المهام المكتملة؟ لا يمكن التراجع عن هذا الإجراء.",
   "unifiedTaskListConfirmClearAllMessage": "هل تريد بالتأكيد مسح جميع المهام؟ لا يمكن التراجع عن هذا الإجراء.",
+  "unifiedTaskListRetryCancelled": "إعادة محاولة تدفقات المهام الملغاة",
+  "unifiedTaskListRetryFailed": "إعادة محاولة تدفقات المهام الفاشلة",
+  "unifiedTaskListClearCancelled": "مسح تدفقات المهام الملغاة",
+  "unifiedTaskListConfirmRetry": "تأكيد إعادة محاولة التدفق",
+  "unifiedTaskListConfirmRetryCancelledMessage": "هل تريد إعادة محاولة تدفقات المهام الملغاة وعددها {count}؟ ستبقى السجلات الأصلية.",
+  "unifiedTaskListConfirmRetryFailedMessage": "هل تريد إعادة محاولة تدفقات المهام الفاشلة وعددها {count}؟ ستبقى السجلات الأصلية.",
+  "unifiedTaskListConfirmClearCancelledMessage": "هل تريد مسح تدفقات المهام الملغاة وعددها {count} والمهام الفرعية التي أنشأتها؟ لا يمكن التراجع عن هذا الإجراء.",
+  "unifiedTaskListBulkRetryResult": "اكتملت إعادة المحاولة الجماعية: بدأ {succeeded} وفشل {failed}.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "إلغاء",
   "unifiedTaskListConfirm": "تأكيد",
   "unifiedTaskListClearCompleted": "مسح المهام المكتملة",

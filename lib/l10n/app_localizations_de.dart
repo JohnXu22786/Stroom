@@ -1461,8 +1461,7 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -1604,6 +1603,41 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get unifiedTaskListRetryCancelled =>
+      'Abgebrochene Task-Flows erneut versuchen';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Fehlgeschlagene Task-Flows erneut versuchen';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Abgebrochene Task-Flows entfernen';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Task-Flow-Wiederholung bestätigen';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Alle $count abgebrochenen Task-Flows erneut versuchen? Die ursprünglichen Einträge bleiben erhalten.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Alle $count fehlgeschlagenen Task-Flows erneut versuchen? Die ursprünglichen Einträge bleiben erhalten.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Alle $count abgebrochenen Task-Flows und ihre erzeugten Unteraufgaben entfernen? Dies kann nicht rückgängig gemacht werden.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Stapelwiederholung abgeschlossen: $succeeded gestartet, $failed fehlgeschlagen.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'Abbrechen';
@@ -13699,8 +13733,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -13842,6 +13875,41 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Möchtest du wirklich alle Aufgaben entfernen? Dieser Vorgang kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get unifiedTaskListRetryCancelled =>
+      'Abgebrochene Task-Flows erneut versuchen';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Fehlgeschlagene Task-Flows erneut versuchen';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Abgebrochene Task-Flows entfernen';
+
+  @override
+  String get unifiedTaskListConfirmRetry => 'Task-Flow-Wiederholung bestätigen';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Alle $count abgebrochenen Task-Flows erneut versuchen? Die ursprünglichen Einträge bleiben erhalten.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Alle $count fehlgeschlagenen Task-Flows erneut versuchen? Die ursprünglichen Einträge bleiben erhalten.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Alle $count abgebrochenen Task-Flows und ihre erzeugten Unteraufgaben entfernen? Dies kann nicht rückgängig gemacht werden.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Stapelwiederholung abgeschlossen: $succeeded gestartet, $failed fehlgeschlagen.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'Abbrechen';

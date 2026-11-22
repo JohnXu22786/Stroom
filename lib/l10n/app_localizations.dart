@@ -70,7 +70,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -93,11 +93,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -2724,6 +2724,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to clear all tasks? This action cannot be undone.'**
   String get unifiedTaskListConfirmClearAllMessage;
+
+  /// No description provided for @unifiedTaskListRetryCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry cancelled Task Flow runs'**
+  String get unifiedTaskListRetryCancelled;
+
+  /// No description provided for @unifiedTaskListRetryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry failed Task Flow runs'**
+  String get unifiedTaskListRetryFailed;
+
+  /// No description provided for @unifiedTaskListClearCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cancelled Task Flow runs'**
+  String get unifiedTaskListClearCancelled;
+
+  /// No description provided for @unifiedTaskListConfirmRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Task Flow retry'**
+  String get unifiedTaskListConfirmRetry;
+
+  /// No description provided for @unifiedTaskListConfirmRetryCancelledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all {count} cancelled Task Flow runs? Original runs will be kept.'**
+  String unifiedTaskListConfirmRetryCancelledMessage(int count);
+
+  /// No description provided for @unifiedTaskListConfirmRetryFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all {count} failed Task Flow runs? Original runs will be kept.'**
+  String unifiedTaskListConfirmRetryFailedMessage(int count);
+
+  /// No description provided for @unifiedTaskListConfirmClearCancelledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all {count} cancelled Task Flow runs and their generated tasks? This action cannot be undone.'**
+  String unifiedTaskListConfirmClearCancelledMessage(int count);
+
+  /// No description provided for @unifiedTaskListBulkRetryResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk retry finished: {succeeded} started, {failed} failed.'**
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed);
 
   /// No description provided for @unifiedTaskListCancel.
   ///
@@ -19872,16 +19920,16 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'de',
-        'en',
-        'es',
-        'fr',
-        'ja',
-        'ko',
-        'pt',
-        'zh',
-      ].contains(locale.languageCode);
+    'ar',
+    'de',
+    'en',
+    'es',
+    'fr',
+    'ja',
+    'ko',
+    'pt',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;

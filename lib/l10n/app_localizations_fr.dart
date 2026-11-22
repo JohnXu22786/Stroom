@@ -1609,6 +1609,42 @@ class AppLocalizationsFr extends AppLocalizations {
       'Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.';
 
   @override
+  String get unifiedTaskListRetryCancelled =>
+      'Réessayer les flux de tâches annulés';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Réessayer les flux de tâches échoués';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Effacer les flux de tâches annulés';
+
+  @override
+  String get unifiedTaskListConfirmRetry =>
+      'Confirmer la nouvelle tentative du flux';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Réessayer les $count flux annulés ? Les enregistrements d’origine seront conservés.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Réessayer les $count flux échoués ? Les enregistrements d’origine seront conservés.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Effacer les $count flux annulés et leurs tâches générées ? Cette action est irréversible.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Nouvelle tentative groupée terminée : $succeeded démarrés, $failed échecs.';
+  }
+
+  @override
   String get unifiedTaskListCancel => 'Annuler';
 
   @override
@@ -13905,6 +13941,42 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       'Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.';
+
+  @override
+  String get unifiedTaskListRetryCancelled =>
+      'Réessayer les flux de tâches annulés';
+
+  @override
+  String get unifiedTaskListRetryFailed =>
+      'Réessayer les flux de tâches échoués';
+
+  @override
+  String get unifiedTaskListClearCancelled =>
+      'Effacer les flux de tâches annulés';
+
+  @override
+  String get unifiedTaskListConfirmRetry =>
+      'Confirmer la nouvelle tentative du flux';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return 'Réessayer les $count flux annulés ? Les enregistrements d’origine seront conservés.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return 'Réessayer les $count flux échoués ? Les enregistrements d’origine seront conservés.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return 'Effacer les $count flux annulés et leurs tâches générées ? Cette action est irréversible.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return 'Nouvelle tentative groupée terminée : $succeeded démarrés, $failed échecs.';
+  }
 
   @override
   String get unifiedTaskListCancel => 'Annuler';

@@ -1540,6 +1540,38 @@ class AppLocalizationsKo extends AppLocalizations {
       '작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
 
   @override
+  String get unifiedTaskListRetryCancelled => '취소된 작업 흐름 모두 재시도';
+
+  @override
+  String get unifiedTaskListRetryFailed => '실패한 작업 흐름 모두 재시도';
+
+  @override
+  String get unifiedTaskListClearCancelled => '취소된 작업 흐름 모두 지우기';
+
+  @override
+  String get unifiedTaskListConfirmRetry => '작업 흐름 재시도 확인';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return '취소된 작업 흐름 $count개를 모두 재시도할까요? 원래 기록은 유지됩니다.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '실패한 작업 흐름 $count개를 모두 재시도할까요? 원래 기록은 유지됩니다.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return '취소된 작업 흐름 $count개와 생성된 하위 작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return '일괄 재시도 완료: $succeeded개 시작, $failed개 실패.';
+  }
+
+  @override
   String get unifiedTaskListCancel => '취소';
 
   @override
@@ -13282,6 +13314,38 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   @override
   String get unifiedTaskListConfirmClearAllMessage =>
       '작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
+
+  @override
+  String get unifiedTaskListRetryCancelled => '취소된 작업 흐름 모두 재시도';
+
+  @override
+  String get unifiedTaskListRetryFailed => '실패한 작업 흐름 모두 재시도';
+
+  @override
+  String get unifiedTaskListClearCancelled => '취소된 작업 흐름 모두 지우기';
+
+  @override
+  String get unifiedTaskListConfirmRetry => '작업 흐름 재시도 확인';
+
+  @override
+  String unifiedTaskListConfirmRetryCancelledMessage(int count) {
+    return '취소된 작업 흐름 $count개를 모두 재시도할까요? 원래 기록은 유지됩니다.';
+  }
+
+  @override
+  String unifiedTaskListConfirmRetryFailedMessage(int count) {
+    return '실패한 작업 흐름 $count개를 모두 재시도할까요? 원래 기록은 유지됩니다.';
+  }
+
+  @override
+  String unifiedTaskListConfirmClearCancelledMessage(int count) {
+    return '취소된 작업 흐름 $count개와 생성된 하위 작업을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.';
+  }
+
+  @override
+  String unifiedTaskListBulkRetryResult(int succeeded, int failed) {
+    return '일괄 재시도 완료: $succeeded개 시작, $failed개 실패.';
+  }
 
   @override
   String get unifiedTaskListCancel => '취소';

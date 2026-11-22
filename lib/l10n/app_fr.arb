@@ -446,6 +446,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "Voulez-vous vraiment effacer toutes les tâches échouées ?",
   "unifiedTaskListConfirmClearCompletedMessage": "Voulez-vous vraiment effacer toutes les tâches terminées ? Cette action est irréversible.",
   "unifiedTaskListConfirmClearAllMessage": "Voulez-vous vraiment effacer toutes les tâches ? Cette action est irréversible.",
+  "unifiedTaskListRetryCancelled": "Réessayer les flux de tâches annulés",
+  "unifiedTaskListRetryFailed": "Réessayer les flux de tâches échoués",
+  "unifiedTaskListClearCancelled": "Effacer les flux de tâches annulés",
+  "unifiedTaskListConfirmRetry": "Confirmer la nouvelle tentative du flux",
+  "unifiedTaskListConfirmRetryCancelledMessage": "Réessayer les {count} flux annulés ? Les enregistrements d’origine seront conservés.",
+  "unifiedTaskListConfirmRetryFailedMessage": "Réessayer les {count} flux échoués ? Les enregistrements d’origine seront conservés.",
+  "unifiedTaskListConfirmClearCancelledMessage": "Effacer les {count} flux annulés et leurs tâches générées ? Cette action est irréversible.",
+  "unifiedTaskListBulkRetryResult": "Nouvelle tentative groupée terminée : {succeeded} démarrés, {failed} échecs.",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "Annuler",
   "unifiedTaskListConfirm": "Confirmer",
   "unifiedTaskListClearCompleted": "Effacer les tâches terminées",

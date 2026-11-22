@@ -446,6 +446,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "确定要清除所有失败任务吗？",
   "unifiedTaskListConfirmClearCompletedMessage": "确定要清除所有已完成任务吗？此操作不可撤销。",
   "unifiedTaskListConfirmClearAllMessage": "确定要清除所有任务吗？此操作不可撤销。",
+  "unifiedTaskListRetryCancelled": "重试所有已取消的任务流",
+  "unifiedTaskListRetryFailed": "重试所有失败的任务流",
+  "unifiedTaskListClearCancelled": "清除所有已取消的任务流",
+  "unifiedTaskListConfirmRetry": "确认重试任务流",
+  "unifiedTaskListConfirmRetryCancelledMessage": "确定要重试所有 {count} 个已取消的任务流吗？原任务流记录会保留。",
+  "unifiedTaskListConfirmRetryFailedMessage": "确定要重试所有 {count} 个失败的任务流吗？原任务流记录会保留。",
+  "unifiedTaskListConfirmClearCancelledMessage": "确定要清除所有 {count} 个已取消的任务流及其生成的子任务吗？此操作不可撤销。",
+  "unifiedTaskListBulkRetryResult": "批量重试完成：已启动 {succeeded} 个，失败 {failed} 个。",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "取消",
   "unifiedTaskListConfirm": "确定",
   "unifiedTaskListClearCompleted": "清除已完成",

@@ -434,6 +434,45 @@
   "unifiedTaskListConfirmClearFailedMessage": "失敗したタスクをすべてクリアしてもよろしいですか?",
   "unifiedTaskListConfirmClearCompletedMessage": "完了したタスクをすべてクリアしますか？この操作は取り消せません。",
   "unifiedTaskListConfirmClearAllMessage": "すべてのタスクをクリアしてもよろしいですか?この操作は元に戻すことができません。",
+  "unifiedTaskListRetryCancelled": "キャンセル済みのタスクフローをすべて再試行",
+  "unifiedTaskListRetryFailed": "失敗したタスクフローをすべて再試行",
+  "unifiedTaskListClearCancelled": "キャンセル済みのタスクフローをすべて削除",
+  "unifiedTaskListConfirmRetry": "タスクフローの再試行を確認",
+  "unifiedTaskListConfirmRetryCancelledMessage": "キャンセル済みのタスクフロー {count} 件を再試行しますか？元の記録は保持されます。",
+  "unifiedTaskListConfirmRetryFailedMessage": "失敗したタスクフロー {count} 件を再試行しますか？元の記録は保持されます。",
+  "unifiedTaskListConfirmClearCancelledMessage": "キャンセル済みのタスクフロー {count} 件と生成された子タスクを削除しますか？この操作は取り消せません。",
+  "unifiedTaskListBulkRetryResult": "一括再試行完了：{succeeded} 件を開始、{failed} 件が失敗。",
+  "@unifiedTaskListConfirmRetryCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmRetryFailedMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListConfirmClearCancelledMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@unifiedTaskListBulkRetryResult": {
+    "placeholders": {
+      "succeeded": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "unifiedTaskListCancel": "キャンセル",
   "unifiedTaskListConfirm": "確認する",
   "unifiedTaskListClearCompleted": "完了したタスクをクリアする",
