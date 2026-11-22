@@ -324,31 +324,38 @@ class _SearchPanelState extends State<SearchPanel> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(
+                        ConstrainedText(
                           formatDate(conv.updatedAt),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,
                           ),
                         ),
-                        if (conv.messages.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.message_outlined,
-                            size: 12,
-                            color: cs.onSurfaceVariant,
+                        if (conv.messages.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.message_outlined,
+                                size: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${conv.messages.length}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 2),
-                          Text(
-                            '${conv.messages.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ],
