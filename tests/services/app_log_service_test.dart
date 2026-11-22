@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -108,9 +109,11 @@ void main() {
       AppLogService.debugForceFlushTimer = true;
       var attempts = 0;
       var shouldSucceed = false;
-      AppLogService.debugFlushWriter = () async {
+      final secondAttempt = Completer<bool>();
+      AppLogService.debugFlushWriter = () {
         attempts++;
-        return shouldSucceed;
+        if (attempts == 2) return secondAttempt.future;
+        return Future.value(shouldSucceed);
       };
 
       AppLogService.debugQueueLogForTimerTest();
@@ -118,12 +121,13 @@ void main() {
       expect(attempts, 1);
       expect(AppLogService.debugIsFlushTimerActive, isTrue);
 
-      // New entries must not postpone an already scheduled retry.
-      AppLogService.debugQueueLogForTimerTest();
-      await tester.pump(const Duration(seconds: 19));
-      expect(attempts, 1);
-      await tester.pump(const Duration(seconds: 1));
+      // New entries during a retry must preserve its failure count and timer.
+      await tester.pump(const Duration(seconds: 20));
       expect(attempts, 2);
+      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+      AppLogService.debugQueueLogForTimerTest();
+      secondAttempt.complete(false);
+      await tester.pump();
       expect(AppLogService.debugIsFlushTimerActive, isTrue);
 
       shouldSucceed = true;
