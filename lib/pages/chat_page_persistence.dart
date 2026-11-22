@@ -434,7 +434,9 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // this message even before the manager's periodic partial save runs.
       final historyForStream =
           fullHistoryForRequest ?? List<ChatMessage>.from(_history);
-      historyForStream.add(_history.last);
+      if (fullHistoryForRequest != null) {
+        historyForStream.add(_history.last);
+      }
       final requestHistory = historyForRequestPrefix == null
           ? null
           : <ChatMessage>[
