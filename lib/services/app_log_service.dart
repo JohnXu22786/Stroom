@@ -356,7 +356,7 @@ class AppLogService {
   }
 
   static void _addBufferedLog(_LogEntry entry) {
-    final startsNewBatch = _buffer.isEmpty;
+    final startsNewBatch = _buffer.isEmpty && !_isFlushing;
     _buffer.add(entry);
     if (!startsNewBatch) return;
 
@@ -383,9 +383,7 @@ class AppLogService {
   }
 
   static Duration _flushRetryDelay(int failureCount) {
-    final exponent = failureCount
-        .clamp(0, _maxFlushRetryExponent)
-        .toInt();
+    final exponent = failureCount.clamp(0, _maxFlushRetryExponent).toInt();
     final seconds = _flushInterval.inSeconds * (1 << exponent);
     return Duration(
       seconds: seconds.clamp(0, _maxFlushRetryInterval.inSeconds).toInt(),
@@ -459,6 +457,7 @@ class AppLogService {
         _consecutiveFlushFailures++;
         _restartFlushTimer(_flushRetryDelay(_consecutiveFlushFailures));
       } else {
+        _consecutiveFlushFailures = 0;
         _startFlushTimer();
       }
     }
