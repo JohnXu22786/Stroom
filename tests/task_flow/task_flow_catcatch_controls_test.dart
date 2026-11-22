@@ -478,7 +478,9 @@ void main() {
         groupId: 'group',
         isLikelySplitTrack: true);
     final downloads = await _pump(tester, _task([video, audio]));
-    await tester.ensureVisible(find.text('合并音视频'));
+    final scrollView = find.byKey(const Key('catcatch_resource_scroll_view'));
+    await tester.drag(scrollView, const Offset(0, -500));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text('合并音视频'));
     await tester.pump();
     final submit = find.textContaining('下载选中的');
