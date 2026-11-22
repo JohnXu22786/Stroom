@@ -11,7 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
+import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
+import 'package:stroom/pages/unified_task_list/catcatch_task_card.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -47,6 +49,30 @@ catcatch.CatCatchTask _createRunningTask({required String id}) {
     status: catcatch.TaskStatus.running,
     createdAt: DateTime(2025, 1, 1),
     progress: 50,
+  );
+}
+
+catcatch.CatCatchTask _createResourceSelectionTask({
+  required String id,
+  required DateTime createdAt,
+}) {
+  return catcatch.CatCatchTask(
+    id: id,
+    url: 'https://example.com/$id',
+    expectedDurationSec: 120,
+    title: id,
+    status: catcatch.TaskStatus.running,
+    createdAt: createdAt,
+    steps: [
+      catcatch.StepStatus.running(catcatch.StepType.userSelecting),
+    ],
+    detectedMedia: const [
+      MediaResource(
+        url: 'https://example.com/selected.mp4',
+        name: 'selected',
+        ext: 'mp4',
+      ),
+    ],
   );
 }
 
@@ -99,13 +125,15 @@ class _InMemoryTaskFlowExecutionNotifier extends TaskFlowExecutionNotifier {
 // =============================================================================
 /// Pump the UnifiedTaskListPage with given catcatch tasks and no synthesis tasks.
 Future<void> pumpPage(WidgetTester tester, List<catcatch.CatCatchTask> tasks,
-    {Locale locale = const Locale('zh', 'CN')}) async {
+    {Locale locale = const Locale('zh', 'CN'),
+    void Function(CatCatchNotifier)? onCatCatchNotifier}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         catcatchTasksProvider.overrideWith((ref) {
           final notifier = CatCatchNotifier(ref);
           notifier.state = tasks;
+          onCatCatchNotifier?.call(notifier);
           return notifier;
         }),
         taskListProvider.overrideWith((ref) {
@@ -347,6 +375,133 @@ SynthesisTask _createCompletedSynthTask({
 // Tests
 // =============================================================================
 void main() {
+  testWidgets(
+    'CatCatch picker selection survives task card eviction and re-entry',
+    (tester) async {
+      final tasks = [
+        for (var i = 0; i < 80; i++) _createCompletedTask(id: 'preceding-$i'),
+        _createResourceSelectionTask(
+          id: 'target-picker-task',
+          createdAt: DateTime(2024, 12, 31),
+        ),
+      ];
+
+      await pumpPage(tester, tasks, locale: const Locale('en', 'US'));
+      final targetTitle =
+          find.byKey(const Key('catcatch_task_title_target-picker-task'));
+      final listScroll = find
+          .descendant(
+            of: find.byKey(const Key('unified_task_list_scroll_view')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        targetTitle,
+        400,
+        scrollable: listScroll,
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.text('selected.mp4'));
+      await tester.pump();
+      expect(find.byIcon(Icons.check_box), findsOneWidget);
+
+      final listPosition = tester.state<ScrollableState>(listScroll).position;
+      expect(listPosition.pixels, greaterThan(0));
+      final targetCard = find.ancestor(
+        of: targetTitle,
+        matching: find.byType(CatCatchTaskCard),
+      );
+      final originalCardState = tester.state(targetCard);
+      listPosition.jumpTo(0);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(listPosition.pixels, 0);
+      expect(targetTitle, findsNothing);
+
+      await tester.tap(find.text('Completed'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(targetTitle, findsNothing);
+
+      await tester.tap(find.text('All'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.scrollUntilVisible(
+        targetTitle,
+        400,
+        scrollable: listScroll,
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.state(targetCard), isNot(same(originalCardState)));
+      expect(find.byIcon(Icons.check_box), findsOneWidget);
+      expect(find.text('1 of 1 resources selected'), findsOneWidget);
+    },
+  );
+
+  testWidgets('removed CatCatch task releases retained picker state', (
+    tester,
+  ) async {
+    final task = _createResourceSelectionTask(
+      id: 'removed-picker-task',
+      createdAt: DateTime(2025, 1, 1),
+    );
+    late CatCatchNotifier notifier;
+    await pumpPage(
+      tester,
+      [task],
+      locale: const Locale('en', 'US'),
+      onCatCatchNotifier: (value) => notifier = value,
+    );
+
+    await tester.tap(find.text('selected.mp4'));
+    await tester.pump();
+    expect(find.byIcon(Icons.check_box), findsOneWidget);
+
+    notifier.state = [];
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.byKey(const Key('catcatch_task_title_removed-picker-task')),
+      findsNothing,
+    );
+
+    notifier.state = [task];
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const Key('catcatch_task_title_removed-picker-task')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.check_box), findsNothing);
+  });
+
+  testWidgets('off-screen task status change expands its retained card', (
+    tester,
+  ) async {
+    final task = _createResourceSelectionTask(
+      id: 'off-screen-running-task',
+      createdAt: DateTime(2025, 1, 1),
+    ).copyWith(status: catcatch.TaskStatus.paused);
+    late CatCatchNotifier notifier;
+    await pumpPage(
+      tester,
+      [task],
+      locale: const Locale('en', 'US'),
+      onCatCatchNotifier: (value) => notifier = value,
+    );
+    expect(find.text('selected.mp4'), findsNothing);
+
+    await tester.tap(find.text('Completed'));
+    await tester.pump(const Duration(milliseconds: 300));
+    notifier.state = [task.copyWith(status: catcatch.TaskStatus.running)];
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.text('All'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('selected.mp4'), findsOneWidget);
+    expect(find.byKey(const Key('catcatch_task_resource_viewport')),
+        findsOneWidget);
+  });
+
   // ===========================================================================
   // 1. unified_task_list_page_test.dart
   // ===========================================================================

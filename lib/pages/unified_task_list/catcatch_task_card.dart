@@ -50,11 +50,23 @@ String _localizedCatCatchStep(
 // CatCatch 任务卡片
 // =============================================================================
 
+/// View state retained by the task list while a lazily built card is evicted.
+class CatCatchTaskCardViewState {
+  bool expanded = false;
+  bool initialized = false;
+  final Set<int> expandedSteps = {};
+  final Map<String, Set<String>> selectedMediaIdentities = {};
+  final Map<String, String?> mergeAudioUrls = {};
+  final Map<String, String> mergePrimaryVideoIdentities = {};
+  final Set<String> expandedSegments = {};
+}
+
 class CatCatchTaskCard extends ConsumerStatefulWidget {
   final catcatch.CatCatchTask task;
   final bool isUnread;
   final bool isFlowManaged;
   final double? taskListViewportHeight;
+  final CatCatchTaskCardViewState? viewState;
 
   const CatCatchTaskCard({
     super.key,
@@ -62,6 +74,7 @@ class CatCatchTaskCard extends ConsumerStatefulWidget {
     this.isUnread = false,
     this.isFlowManaged = false,
     this.taskListViewportHeight,
+    this.viewState,
   });
 
   @override
@@ -69,13 +82,17 @@ class CatCatchTaskCard extends ConsumerStatefulWidget {
 }
 
 class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
-  bool _expanded = false;
-  final Set<int> _expandedSteps = {};
-  final Map<String, Set<String>> _selectedMediaIdentities = {};
-  final Map<String, String?> _mergeAudioUrls = {};
-  final Map<String, String> _mergePrimaryVideoIdentities = {};
+  late CatCatchTaskCardViewState _viewState;
+  bool get _expanded => _viewState.expanded;
+  set _expanded(bool value) => _viewState.expanded = value;
+  Set<int> get _expandedSteps => _viewState.expandedSteps;
+  Map<String, Set<String>> get _selectedMediaIdentities =>
+      _viewState.selectedMediaIdentities;
+  Map<String, String?> get _mergeAudioUrls => _viewState.mergeAudioUrls;
+  Map<String, String> get _mergePrimaryVideoIdentities =>
+      _viewState.mergePrimaryVideoIdentities;
   final Set<String> _pendingFlowActions = {};
-  final Set<String> _expandedSegments = {};
+  Set<String> get _expandedSegments => _viewState.expandedSegments;
   bool _recoveryPageOpened = false;
 
   void _openRecoveryPageWhenReady() {
@@ -189,13 +206,20 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   @override
   void initState() {
     super.initState();
-    _expanded = widget.task.status == catcatch.TaskStatus.running;
+    _viewState = widget.viewState ?? CatCatchTaskCardViewState();
+    if (!_viewState.initialized) {
+      _expanded = widget.task.status == catcatch.TaskStatus.running;
+      _viewState.initialized = true;
+    }
     _openRecoveryPageWhenReady();
   }
 
   @override
   void didUpdateWidget(covariant CatCatchTaskCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewState != widget.viewState && widget.viewState != null) {
+      _viewState = widget.viewState!;
+    }
     if (widget.task.status == catcatch.TaskStatus.running &&
         oldWidget.task.status != catcatch.TaskStatus.running) {
       setState(() => _expanded = true);
@@ -313,6 +337,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       children: [
                         ConstrainedText(
                           task.title.isNotEmpty ? task.title : task.url,
+                          key: ValueKey('catcatch_task_title_${task.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
