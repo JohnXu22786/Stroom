@@ -14,6 +14,7 @@ void main() {
       double textScale = 1,
       Brightness brightness = Brightness.light,
       MarkdownConfig? config,
+      MarkdownGenerator? markdownGenerator,
     }) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -26,6 +27,7 @@ void main() {
                 child: MarkdownWidget(
                   data: data,
                   config: config,
+                  markdownGenerator: markdownGenerator,
                   shrinkWrap: true,
                   selectable: false,
                   physics: const NeverScrollableScrollPhysics(),
@@ -41,9 +43,9 @@ void main() {
     Finder marker(String value) => find.text(value);
 
     Finder itemText(String value) => find.byWidgetPredicate(
-      (widget) =>
-          widget is RichText && widget.text.toPlainText().contains(value),
-    );
+          (widget) =>
+              widget is RichText && widget.text.toPlainText().contains(value),
+        );
 
     void expectMarkerSeparated(
       String markerText,
@@ -96,6 +98,23 @@ void main() {
 ''');
     expectMarkerSeparated('1.', 'Short item');
     expectMarkerSeparated('2.', 'Another short item');
+
+    var customBuilderSawListItem = false;
+    const customListChildKey = ValueKey('custom-list-child');
+    await pumpMarkdown(
+      '1. A list using the custom rich text builder.',
+      markdownGenerator: MarkdownGenerator(
+        richTextBuilder: (span) {
+          if (span is WidgetSpan) {
+            customBuilderSawListItem = true;
+            return KeyedSubtree(key: customListChildKey, child: span.child);
+          }
+          return Text.rich(span);
+        },
+      ),
+    );
+    expect(customBuilderSawListItem, isTrue);
+    expect(find.byKey(customListChildKey), findsOneWidget);
 
     await pumpMarkdown(
       '10000. Dark-theme marker keeps its full width and body text.',

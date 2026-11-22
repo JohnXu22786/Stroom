@@ -41,12 +41,13 @@ class UlOrOLNode extends ElementNode {
           children: List.generate(children.length, (index) {
             final childNode = children[index];
             final span = childNode.build();
-            return span is WidgetSpan
-                ? span.child
-                : ProxyRichText(
-                    span,
-                    richTextBuilder: visitor.richTextBuilder,
-                  );
+            if (span is WidgetSpan) {
+              return visitor.richTextBuilder?.call(span) ?? span.child;
+            }
+            return ProxyRichText(
+              span,
+              richTextBuilder: visitor.richTextBuilder,
+            );
           }),
         ),
       ),
