@@ -136,6 +136,9 @@ jobs:
               lib/services/sse_client_io.dart)
                 test_f="tests/services/sse_client_web_test.dart"
                 ;;
+              lib/providers/update_provider_shared.dart)
+                test_f="tests/providers/update_provider_test.dart"
+                ;;
               lib/pages/gallery_page.dart|\
               lib/pages/tts_page.dart|\
               lib/pages/video_gallery_page.dart|\

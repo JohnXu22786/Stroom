@@ -645,8 +645,8 @@ void main() {
       expect(
           Version.parse('1.0.0-beta.alpha') < Version.parse('1.0.0-beta.beta'),
           isTrue);
-      expect(Version.parse('1.0.0-beta') < Version.parse('1.0.0-beta.1'),
-          isTrue);
+      expect(
+          Version.parse('1.0.0-beta') < Version.parse('1.0.0-beta.1'), isTrue);
     });
 
     test('rc.1 > beta.5 in pre-release ordering (lexicographic)', () {

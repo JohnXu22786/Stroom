@@ -83,11 +83,9 @@ class Version implements Comparable<Version> {
     // Both have pre-release: compare dot-separated identifiers by SemVer.
     final identifiers = preRelease!.split('.');
     final otherIdentifiers = other.preRelease!.split('.');
-    for (
-      var i = 0;
-      i < identifiers.length && i < otherIdentifiers.length;
-      i++
-    ) {
+    for (var i = 0;
+        i < identifiers.length && i < otherIdentifiers.length;
+        i++) {
       final identifier = identifiers[i];
       final otherIdentifier = otherIdentifiers[i];
       final isNumeric = RegExp(r'^\d+$').hasMatch(identifier);
