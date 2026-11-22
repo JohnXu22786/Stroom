@@ -173,34 +173,32 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       };
       final catcatchIds = flowStatus == null
           ? ref
-                .read(catcatchTasksProvider)
-                .where(
-                  (t) =>
-                      t.status.name == status.name && !nestedIds.contains(t.id),
-                )
-                .map((t) => t.id)
-                .toList()
+              .read(catcatchTasksProvider)
+              .where(
+                (t) =>
+                    t.status.name == status.name && !nestedIds.contains(t.id),
+              )
+              .map((t) => t.id)
+              .toList()
           : <String>[];
       final synthesisIds = flowStatus == null
           ? ref
-                .read(taskListProvider)
-                .where((t) => t.status == status && !nestedIds.contains(t.id))
-                .map((t) => t.id)
-                .toList()
+              .read(taskListProvider)
+              .where((t) => t.status == status && !nestedIds.contains(t.id))
+              .map((t) => t.id)
+              .toList()
           : <String>[];
       final backgroundIds = flowStatus == null
           ? ref
-                .read(backgroundTasksProvider)
-                .where((t) => t.status == status && !nestedIds.contains(t.id))
-                .map((t) => t.id)
-                .toList()
+              .read(backgroundTasksProvider)
+              .where((t) => t.status == status && !nestedIds.contains(t.id))
+              .map((t) => t.id)
+              .toList()
           : <String>[];
       final executionsNotifier = ref.read(taskFlowExecutionsProvider.notifier);
       final selectedIds = selectedExecutions.map((e) => e.id).toSet();
-      final batchIds = selectedExecutions
-          .map((e) => e.batchId)
-          .whereType<String>()
-          .toSet();
+      final batchIds =
+          selectedExecutions.map((e) => e.batchId).whereType<String>().toSet();
       if (batchIds.isNotEmpty && flowStatus == null) {
         final service = ref.read(taskFlowExecutionServiceProvider);
         while (mounted) {
@@ -262,9 +260,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
 
   Future<void> _retryTaskFlows(FlowExecutionStatus status) async {
     final strings = AppLocalizations.of(context)!;
-    final executions = ref
-        .read(taskFlowExecutionsProvider)
-        .where(
+    final executions = ref.read(taskFlowExecutionsProvider).where(
           (execution) => execution.status == status && execution.isTerminal,
         );
     var succeeded = 0;
@@ -417,9 +413,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                       content: Text(
                         status == FlowExecutionStatus.cancelled
                             ? strings
-                                  .unifiedTaskListConfirmRetryCancelledMessage(
-                                    count,
-                                  )
+                                .unifiedTaskListConfirmRetryCancelledMessage(
+                                count,
+                              )
                             : strings.unifiedTaskListConfirmRetryFailedMessage(
                                 count,
                               ),
@@ -680,8 +676,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                               );
                               if (!await executionsNotifier
                                   .removeExecutionsPersisted(
-                                    executionsToClear.map((e) => e.id),
-                                  )) {
+                                executionsToClear.map((e) => e.id),
+                              )) {
                                 throw const TaskFlowPersistenceException(
                                   '任务流记录删除状态无法保存，请重试清除',
                                 );
