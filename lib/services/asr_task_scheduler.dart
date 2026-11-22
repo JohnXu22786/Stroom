@@ -287,8 +287,7 @@ class AsrTaskScheduler {
     try {
       final uri = Uri.parse(safeUrl);
       final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
-      final name = segments.isEmpty ? uri.host : segments.last;
-      return name.length <= 40 ? name : name.substring(0, 40);
+      return segments.isEmpty ? uri.host : segments.last;
     } catch (_) {
       return safeUrl;
     }
