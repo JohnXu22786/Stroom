@@ -58,6 +58,23 @@ void main() {
   // ==================================================================
 
   group('AppLogService — memory buffer flushing', () {
+    test('flush timer stops when drained and restarts for later logs',
+        () async {
+      AppLogService.debugForceFlushTimer = true;
+
+      await AppLogService.info('TestSource', 'First batch');
+      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+
+      await AppLogService.flush();
+      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+
+      await AppLogService.info('TestSource', 'Second batch');
+      expect(AppLogService.debugIsFlushTimerActive, isTrue);
+
+      await AppLogService.flush();
+      expect(AppLogService.debugIsFlushTimerActive, isFalse);
+    });
+
     test('logs are NOT written to file before flush()', () async {
       await AppLogService.info('TestSource', 'Buffered message');
 
@@ -283,6 +300,7 @@ void main() {
 
   group('AppLogService — flush failure recovery', () {
     test('retry does not duplicate hourly groups already written', () async {
+      AppLogService.debugForceFlushTimer = true;
       final logDir = await AppLogService.getLogDir();
       await logDir.create(recursive: true);
 
@@ -301,9 +319,11 @@ void main() {
       // after the first hour has already been committed.
       await Directory(failedFile.path).create(recursive: true);
       await AppLogService.flush();
+      expect(AppLogService.debugIsFlushTimerActive, isTrue);
       await Directory(failedFile.path).delete(recursive: true);
 
       await AppLogService.flush();
+      expect(AppLogService.debugIsFlushTimerActive, isFalse);
 
       final firstContent = await firstFile.readAsString();
       final failedContent = await failedFile.readAsString();

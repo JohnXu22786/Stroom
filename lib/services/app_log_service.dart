@@ -258,6 +258,10 @@ class AppLogService {
   /// 定时刷入计时器（每 10 秒）。
   static Timer? _flushTimer;
 
+  static bool debugForceFlushTimer = false;
+
+  static bool get debugIsFlushTimerActive => _flushTimer?.isActive ?? false;
+
   /// 刷入间隔。
   static const Duration _flushInterval = Duration(seconds: 10);
 
@@ -339,10 +343,17 @@ class AppLogService {
   static void _startFlushTimer() {
     if (_flushTimer != null) return;
     // 测试环境不启动定时器，依赖显式 flush() 调用
-    if (WebFileStore.isTestMode || _isTestEnv) return;
+    if (!debugForceFlushTimer && (WebFileStore.isTestMode || _isTestEnv)) {
+      return;
+    }
     _flushTimer = Timer.periodic(_flushInterval, (_) {
       _flushBuffer();
     });
+  }
+
+  static void _cancelFlushTimer() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
   }
 
   /// 将内存缓冲区中的所有日志刷入文件。
@@ -350,7 +361,11 @@ class AppLogService {
   /// 按小时分组写入对应的小时日志文件。写入成功后从缓冲区移除。
   /// 写入失败时回退（重新加入缓冲区前端）。
   static Future<void> _flushBuffer() async {
-    if (_buffer.isEmpty || _isFlushing) return;
+    if (_isFlushing) return;
+    if (_buffer.isEmpty) {
+      _cancelFlushTimer();
+      return;
+    }
     _isFlushing = true;
 
     // 原子性取出所有待写入条目
@@ -386,6 +401,11 @@ class AppLogService {
       if (entriesToRetry.isNotEmpty) _buffer.insertAll(0, entriesToRetry);
     } finally {
       _isFlushing = false;
+      if (_buffer.isEmpty) {
+        _cancelFlushTimer();
+      } else {
+        _startFlushTimer();
+      }
     }
   }
 
@@ -501,8 +521,8 @@ class AppLogService {
 
   /// 重置所有内部状态（仅用于测试）。
   static void reset() {
-    _flushTimer?.cancel();
-    _flushTimer = null;
+    _cancelFlushTimer();
+    debugForceFlushTimer = false;
     _buffer.clear();
     debugTimestampOverride = null;
     _nextLogSequence = 0;
