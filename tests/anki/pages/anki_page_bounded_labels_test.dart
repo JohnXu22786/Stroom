@@ -161,4 +161,69 @@ void main() {
     expect(countLefts, orderedEquals([...countLefts]..sort()));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('long deck load errors remain fully reachable on a short screen',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final detail = List.filled(100, 'database diagnostic').join(' ');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiDeckListProvider
+              .overrideWith((ref) async => throw StateError(detail)),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiDroidPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining(detail), findsOneWidget);
+    final scrollable = find.byType(Scrollable).last;
+    final position = tester.state<ScrollableState>(scrollable).position;
+    expect(
+      position.maxScrollExtent,
+      greaterThan(0),
+    );
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getBottomLeft(find.textContaining(detail)).dy,
+      lessThanOrEqualTo(640),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        key: UniqueKey(),
+        overrides: [
+          ankiDeckListProvider.overrideWith(
+            (ref) async => throw const AnkiStatsUnsupportedException(),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiDroidPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
