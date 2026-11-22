@@ -50,11 +50,18 @@ void main() {
                   note:
                       'Lokaler Vorschaudialog. Es wird keine Verbindung gestartet.',
                   onSave: (_) async {},
-                  onRun: (_) async => const ConnectivityTestResult(
-                    succeeded: true,
-                    summary: 'Lokale Vorschau',
-                    details: '',
-                    elapsed: Duration.zero,
+                  onRun: (_) async => ConnectivityTestResult(
+                    succeeded: false,
+                    summary: 'Lokaler Diagnosetest fehlgeschlagen',
+                    details: [
+                      ...List.generate(
+                        160,
+                        (index) =>
+                            'Diagnosezeile ${index + 1}: Lokaler Vorschautext ohne Netzwerk- oder Kontodaten.',
+                      ),
+                      'ENDE DER VOLLSTÄNDIGEN LOKALEN DIAGNOSE',
+                    ].join('\n'),
+                    elapsed: const Duration(milliseconds: 184),
                   ),
                 );
               },
