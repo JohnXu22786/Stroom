@@ -25,16 +25,23 @@ import '../../widgets/constrained_text.dart';
 ///
 /// Watches the execution provider DIRECTLY (not via parent prop) so
 /// subTaskId updates from the execution service are always reflected.
+class TaskFlowCardViewState {
+  bool expanded = false;
+  bool initialized = false;
+}
+
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
   final double? taskListViewportHeight;
+  final TaskFlowCardViewState? viewState;
 
   const TaskFlowCard({
     super.key,
     required this.execution,
     this.isUnread = false,
     this.taskListViewportHeight,
+    this.viewState,
   });
 
   @override
@@ -42,23 +49,29 @@ class TaskFlowCard extends ConsumerStatefulWidget {
 }
 
 class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
-  bool _expanded = false;
+  late TaskFlowCardViewState _viewState;
+  bool get _expanded => _viewState.expanded;
+  set _expanded(bool value) => _viewState.expanded = value;
   final Map<String, CatCatchTaskCardViewState> _catCatchCardViewStates = {};
 
   @override
   void initState() {
     super.initState();
-    // A restored failed run has no status transition for ref.listen to catch.
-    final initialStatus = ref
-            .read(taskFlowExecutionsProvider)
-            .where((execution) => execution.id == widget.execution.id)
-            .firstOrNull
-            ?.status ??
-        widget.execution.status;
-    _expanded = [
-      FlowExecutionStatus.failed,
-      FlowExecutionStatus.interrupted,
-    ].contains(initialStatus);
+    _viewState = widget.viewState ?? TaskFlowCardViewState();
+    if (!_viewState.initialized) {
+      // A restored failed run has no status transition for ref.listen to catch.
+      final initialStatus = ref
+              .read(taskFlowExecutionsProvider)
+              .where((execution) => execution.id == widget.execution.id)
+              .firstOrNull
+              ?.status ??
+          widget.execution.status;
+      _expanded = [
+        FlowExecutionStatus.failed,
+        FlowExecutionStatus.interrupted,
+      ].contains(initialStatus);
+      _viewState.initialized = true;
+    }
   }
 
   @override
@@ -75,27 +88,30 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       ),
     );
 
-    // Keep failure details visible; successful runs may collapse.
-    ref.listen(
-      taskFlowExecutionsProvider.select(
-        (list) => list.where((e) => e.id == widget.execution.id).firstOrNull,
-      ),
-      (prev, next) {
-        final wasRunning =
-            prev != null && prev.status == FlowExecutionStatus.running;
-        if ([
-              FlowExecutionStatus.failed,
-              FlowExecutionStatus.interrupted,
-            ].contains(next?.status) &&
-            next?.status != prev?.status) {
-          setState(() => _expanded = true);
-        } else if (wasRunning &&
-            next?.status == FlowExecutionStatus.completed &&
-            _expanded) {
-          setState(() => _expanded = false);
-        }
-      },
-    );
+    // Other TaskFlowCard callers do not have the list owner's retained state
+    // or status listener, so keep their transition behavior local.
+    if (widget.viewState == null) {
+      ref.listen(
+        taskFlowExecutionsProvider.select(
+          (list) => list.where((e) => e.id == widget.execution.id).firstOrNull,
+        ),
+        (prev, next) {
+          final wasRunning =
+              prev != null && prev.status == FlowExecutionStatus.running;
+          if ([
+                FlowExecutionStatus.failed,
+                FlowExecutionStatus.interrupted,
+              ].contains(next?.status) &&
+              next?.status != prev?.status) {
+            setState(() => _expanded = true);
+          } else if (wasRunning &&
+              next?.status == FlowExecutionStatus.completed &&
+              _expanded) {
+            setState(() => _expanded = false);
+          }
+        },
+      );
+    }
 
     if (execution == null) return const SizedBox.shrink();
 

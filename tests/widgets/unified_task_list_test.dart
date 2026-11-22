@@ -14,6 +14,7 @@ import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list/catcatch_task_card.dart';
+import 'package:stroom/pages/unified_task_list/task_flow_card.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -109,6 +110,33 @@ TaskFlowExecution _createCompletedFlowExecution({required String id}) {
     completedAt: DateTime(2025, 6, 1, 0, 3),
   );
 }
+
+TaskFlowExecution _createFlowExecution({
+  required String id,
+  required FlowExecutionStatus status,
+  required DateTime createdAt,
+}) {
+  return TaskFlowExecution(
+    id: id,
+    flowId: 'test-flow',
+    flowName: id,
+    status: status,
+    createdAt: createdAt,
+  );
+}
+
+List<TaskFlowExecution> _createFlowExecutionsAround(
+  TaskFlowExecution target,
+) =>
+    [
+      for (var i = 0; i < 30; i++)
+        _createFlowExecution(
+          id: 'filler-flow-$i',
+          status: FlowExecutionStatus.completed,
+          createdAt: DateTime(2025, 6, 1 + i),
+        ),
+      target,
+    ];
 
 class _InMemoryTaskFlowExecutionNotifier extends TaskFlowExecutionNotifier {
   @override
@@ -906,6 +934,88 @@ void main() {
       await pumpPageWithBackground(tester, []);
 
       expect(find.text('暂无任务'), findsOneWidget, reason: '空任务列表应显示"暂无任务"占位符');
+    });
+
+    testWidgets(
+        'completed flow keeps manual expansion after lazy-list eviction',
+        (tester) async {
+      const targetId = 'manual-expanded-flow';
+      final target = _createFlowExecution(
+        id: targetId,
+        status: FlowExecutionStatus.completed,
+        createdAt: DateTime(2025, 7, 1),
+      );
+      final flowNotifier = _InMemoryTaskFlowExecutionNotifier()
+        ..state = _createFlowExecutionsAround(target);
+      await pumpPageWithBackground(tester, [], flowNotifier: flowNotifier);
+
+      final card = find.byKey(const ValueKey(targetId));
+      expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.expand_more)),
+          findsOneWidget);
+      final oldState = tester.state(card);
+      await tester
+          .tap(find.descendant(of: card, matching: find.text(targetId)));
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.expand_less)),
+          findsOneWidget);
+
+      final list = find.byKey(const Key('unified_task_list_scroll_view'));
+      await tester.drag(list, const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(card, findsNothing, reason: 'the target card must be evicted');
+
+      await tester.drag(list, const Offset(0, 5000));
+      await tester.pumpAndSettle();
+      expect(card, findsOneWidget);
+      expect(tester.state(card), isNot(same(oldState)),
+          reason: 'the ListView must recreate the evicted card State');
+      expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.expand_less)),
+          findsOneWidget,
+          reason: 'manual expansion should survive State recreation');
+    });
+
+    testWidgets('failed flow keeps manual collapse after lazy-list eviction',
+        (tester) async {
+      const targetId = 'manual-collapsed-flow';
+      final target = _createFlowExecution(
+        id: targetId,
+        status: FlowExecutionStatus.failed,
+        createdAt: DateTime(2025, 7, 1),
+      );
+      final flowNotifier = _InMemoryTaskFlowExecutionNotifier()
+        ..state = _createFlowExecutionsAround(target);
+      await pumpPageWithBackground(tester, [], flowNotifier: flowNotifier);
+
+      final card = find.byKey(const ValueKey(targetId));
+      expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.expand_less)),
+          findsOneWidget,
+          reason: 'restored failed flows should still start expanded');
+      final oldState = tester.state(card);
+      await tester
+          .tap(find.descendant(of: card, matching: find.text(targetId)));
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.expand_more)),
+          findsOneWidget);
+
+      final list = find.byKey(const Key('unified_task_list_scroll_view'));
+      await tester.drag(list, const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(card, findsNothing, reason: 'the target card must be evicted');
+
+      await tester.drag(list, const Offset(0, 5000));
+      await tester.pumpAndSettle();
+      expect(card, findsOneWidget);
+      expect(tester.state(card), isNot(same(oldState)),
+          reason: 'the ListView must recreate the evicted card State');
+      expect(
+          find.descendant(of: card, matching: find.byIcon(Icons.expand_more)),
+          findsOneWidget,
+          reason: 'manual collapse should survive State recreation');
     });
 
     testWidgets('clearing completed tasks requires confirmation',
