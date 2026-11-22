@@ -872,30 +872,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             left: _playerMargin + 8,
             right: _playerMargin + 8,
             bottom: _textBottomPadding + 4,
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AudioPlayerToolbarButton(
-                      icon: Icons.play_arrow,
-                      label: _l10n.audioPlayerPlaySelection,
-                      onPressed: _onPlaySelectedText,
-                    ),
-                    const SizedBox(width: 4),
-                    AudioPlayerToolbarButton(
-                      icon: Icons.auto_awesome,
-                      label: _l10n.audioPlayerGenerateSelection,
-                      onPressed: _onGenerateSelectedText,
-                    ),
-                  ],
-                ),
-              ),
+            child: AudioPlayerSelectionToolbar(
+              playLabel: _l10n.audioPlayerPlaySelection,
+              generateLabel: _l10n.audioPlayerGenerateSelection,
+              onPlay: _onPlaySelectedText,
+              onGenerate: _onGenerateSelectedText,
             ),
           ),
 
