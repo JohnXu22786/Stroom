@@ -36,11 +36,9 @@ void main() {
       await tester.pump();
       previewDom.constrainControlsViewportForTest(320);
 
-      for (
-        var attempt = 0;
-        attempt < 20 && previewDom.controlTitle() == null;
-        attempt++
-      ) {
+      for (var attempt = 0;
+          attempt < 20 && previewDom.controlTitle() == null;
+          attempt++) {
         await tester.pump(const Duration(milliseconds: 25));
       }
 
@@ -54,11 +52,14 @@ void main() {
       await tester.pump();
       expect(previewDom.titleMotionState(), anyOf('moving', 'paused'));
       expect(previewDom.titleTransform(), isNot(initialTransform));
-      expect(previewDom.controlLabels(), [
-        'Diminuir zoom',
-        'Aumentar zoom',
-        'Fechar pré-visualização',
-      ], reason: previewDom.controlsSnapshot());
+      expect(
+          previewDom.controlLabels(),
+          [
+            'Diminuir zoom',
+            'Aumentar zoom',
+            'Fechar pré-visualização',
+          ],
+          reason: previewDom.controlsSnapshot());
       previewDom.constrainControlsViewportForTest(700);
       expect(previewDom.titleMotionState(), 'stationary');
       expect(previewDom.titleTransform(), 'translateX(0px)');

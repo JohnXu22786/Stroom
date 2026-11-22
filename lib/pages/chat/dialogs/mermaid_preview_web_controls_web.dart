@@ -283,8 +283,8 @@ class _MermaidPreviewWebControlsState
       _phase == -1
           ? 'waiting'
           : (_phase == 0 || _phase == 2)
-          ? 'moving'
-          : 'paused',
+              ? 'moving'
+              : 'paused',
     );
     if (progress >= 1) {
       _phase = _phase == -1 ? 0 : (_phase + 1) % 4;
