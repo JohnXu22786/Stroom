@@ -548,13 +548,21 @@ class _FileManagerViewState<T extends FileRecord>
       backgroundColor: Theme.of(context).colorScheme.surface,
       scrolledUnderElevation: 0,
       title: _selectionMode
-          ? Text(
+          ? ConstrainedText(
               AppLocalizations.of(context)!
                   .fileManagerSelectedItems(_selectedIds.length),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             )
           : _currentFolder.isNotEmpty
               ? _buildFolderBreadcrumbTitle()
-              : Text(widget.config.title),
+              : ConstrainedText(
+                  widget.config.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
       centerTitle: true,
       leading: _selectionMode
           ? IconButton(
