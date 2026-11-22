@@ -81,11 +81,13 @@ class HttpToolService {
     String? bochaApiKey,
     String? queritApiKey,
   }) {
-    if (braveApiKey != null) _braveApiKey = braveApiKey;
-    if (searxngUrl != null) _searxngUrl = searxngUrl;
-    if (searxngApiKey != null) _searxngApiKey = searxngApiKey;
-    if (bochaApiKey != null) _bochaApiKey = bochaApiKey;
-    if (queritApiKey != null) _queritApiKey = queritApiKey;
+    // These arguments are a complete config snapshot: null means the
+    // provider was removed and must not leave its previous credentials active.
+    _braveApiKey = braveApiKey ?? '';
+    _searxngUrl = searxngUrl ?? 'http://localhost:8080';
+    _searxngApiKey = searxngApiKey ?? '';
+    _bochaApiKey = bochaApiKey ?? '';
+    _queritApiKey = queritApiKey ?? '';
   }
 
   // ======================================================================
