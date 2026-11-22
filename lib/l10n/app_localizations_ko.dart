@@ -5278,7 +5278,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get assistantSendFullResult => '전체 결과 전송(저장 한도 50KB 적용)';
+  String get assistantSendFullResult => '전체 결과 전송(모델 입력 잘라내기 없음)';
 
   @override
   String get assistantMaxCharacters => '최대 문자 수';
@@ -17022,7 +17022,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   }
 
   @override
-  String get assistantSendFullResult => '전체 결과 전송(저장 한도 50KB 적용)';
+  String get assistantSendFullResult => '전체 결과 전송(모델 입력 잘라내기 없음)';
 
   @override
   String get assistantMaxCharacters => '최대 문자 수';

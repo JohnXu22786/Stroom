@@ -5151,7 +5151,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get assistantSendFullResult => '完整发送（仍受 50 KB 存储上限约束）';
+  String get assistantSendFullResult => '完整发送（模型输入不截断）';
 
   @override
   String get assistantMaxCharacters => '最大字符数';
@@ -16580,7 +16580,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String get assistantSendFullResult => '完整发送（仍受 50 KB 存储上限约束）';
+  String get assistantSendFullResult => '完整发送（模型输入不截断）';
 
   @override
   String get assistantMaxCharacters => '最大字符数';

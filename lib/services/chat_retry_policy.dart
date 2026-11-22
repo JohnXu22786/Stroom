@@ -10,7 +10,7 @@ const String kAutoContinuationMessage = 'Continue if not finished.';
 /// Retry policy for actual HTTP 429 throttling responses.
 ///
 /// Five retries follow the initial request. The delay schedule is based on
-/// OpenCode CLI's 2/4/8/10/10 second backoff and adds approximately ±20%
+/// the 2/4/8/10/10 second backoff and adds approximately ±20%
 /// jitter. The ten-second cap applies to the nominal schedule before jitter.
 /// A valid Retry-After value is a minimum delay, bounded to fifteen minutes.
 class RateLimitRetryPolicy {

@@ -1709,7 +1709,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // 关闭后：副标题变为"不截断"，长度输入框隐藏
-      expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
+      expect(find.text('完整发送（模型输入不截断）'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
           (w) =>

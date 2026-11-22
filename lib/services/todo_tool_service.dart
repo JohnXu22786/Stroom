@@ -9,7 +9,7 @@ import '../models/tool_call.dart';
 // ============================================================================
 // Todo 工具服务层
 //
-// 参照 Anomalyco/OpenCode 的 todowrite 内置工具（todoread 已于上游移除，
+// 内置待办工具（todoread 已移除，
 // 读取能力并入同一工具），改为纯 Dart 实现，作为内置 MCP 工具供 LLM 调用。
 //
 // 功能（单一 todowrite 工具，读写一体）：

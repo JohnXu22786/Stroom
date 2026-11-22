@@ -2545,7 +2545,7 @@
       }
     }
   },
-  "assistantSendFullResult": "Vollständiges Ergebnis senden (unterliegt dem Speicherlimit von 50 KB)",
+  "assistantSendFullResult": "Vollständiges Ergebnis senden (ohne Kürzung der Modelleingabe)",
   "assistantMaxCharacters": "Maximale Zeichenanzahl",
   "assistantCharactersNotTokens": "Einheit: Zeichen (keine Token)",
   "assistantDefaultCharacterCount": "Standard: {count}",

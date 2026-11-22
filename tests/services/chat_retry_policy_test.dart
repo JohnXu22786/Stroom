@@ -50,7 +50,7 @@ void main() {
       );
     });
 
-    test('retries a throttled 429 five times with OpenCode-style waits',
+    test('retries a throttled 429 five times with jittered backoff',
         () async {
       var calls = 0;
       final delays = <Duration>[];

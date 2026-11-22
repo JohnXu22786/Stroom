@@ -2547,7 +2547,7 @@
       }
     }
   },
-  "assistantSendFullResult": "Enviar resultado completo (sujeito ao limite de armazenamento de 50 KB)",
+  "assistantSendFullResult": "Enviar resultado completo (sem truncar a entrada do modelo)",
   "assistantMaxCharacters": "Número máximo de caracteres",
   "assistantCharactersNotTokens": "Unidade: caracteres (não tokens)",
   "assistantDefaultCharacterCount": "Padrão: {count}",

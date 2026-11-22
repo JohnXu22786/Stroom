@@ -2545,7 +2545,7 @@
       }
     }
   },
-  "assistantSendFullResult": "Send full result (subject to the 50 KB storage limit)",
+  "assistantSendFullResult": "Send full result (no model-input truncation)",
   "assistantMaxCharacters": "Maximum characters",
   "assistantCharactersNotTokens": "Unit: characters (not tokens)",
   "assistantDefaultCharacterCount": "Default: {count}",

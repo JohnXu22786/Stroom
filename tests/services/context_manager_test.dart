@@ -94,7 +94,7 @@ void main() {
       // 新工具结果保护（最近 2 轮用户消息内）
       expect(result[3].toolCalls![0].compactedAt, isNull);
       expect(result[3].toolCalls![0].result, _bigResult(100));
-      // 旧工具结果标记 compacted——数据保留（opencode 软删除语义：
+      // 旧工具结果标记 compacted——数据保留（软删除语义：
       // 只标记，渲染时占位，UI/存储仍可查看完整结果）
       expect(result[0].toolCalls![0].compactedAt, isNotNull);
       expect(result[0].toolCalls![0].result, _bigResult(200000));
@@ -133,11 +133,11 @@ void main() {
       final calls = result[0].toolCalls!;
       // web_search 被 prune（信息性结果）
       expect(calls[1].compactedAt, isNotNull);
-      // todowrite 受保护（状态性工具，对齐 opencode PRUNE_PROTECTED_TOOLS）
+      // todowrite 受保护（状态性工具）
       expect(calls[0].compactedAt, isNull);
     });
 
-    test('压缩边界：扫描到尾部起点消息即停止（对齐 opencode summary break）', () {
+    test('压缩边界：扫描到尾部起点消息即停止', () {
       // 头部（压缩过的内容，早于 tail 起点）有超大工具结果
       final headMsg = ChatMessage(
         id: 'head_msg',
