@@ -67,6 +67,9 @@ void main() {
           '[0:0:0:0:0:0:0:1]',
           '[::ffff:127.0.0.1]',
           '[::ffff:172.16.0.1]',
+          '[fc00::1]',
+          '[fe80::1]',
+          '[0:0:0:0:0:ffff:7f00:1]',
           '[2001:db8::1]',
         ]) {
           await expectLater(
@@ -78,6 +81,26 @@ void main() {
         service.close();
       },
     );
+
+    test('allows a public IPv6 HTTPS host', () async {
+      final body = _assistantJson(version: '1.0.0');
+      final client = MockClient((request) async {
+        expect(
+          request.url.toString(),
+          'https://[2001:4860:4860::8888]/assistant.json',
+        );
+        return http.Response.bytes(utf8.encode(body), 200, request: request);
+      });
+      final service = AssistantCatalogService(client: client);
+
+      final result = await service.fetchDirectAssistant(
+        'https://[2001:4860:4860::8888]/assistant.json',
+      );
+      service.close();
+
+      expect(result.definition.id, 'stroom.test');
+      expect(result.definition.version, '1.0.0');
+    });
 
     test(
       'validates catalog file hash and metadata before returning it',
