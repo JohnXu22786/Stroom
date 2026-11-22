@@ -200,31 +200,29 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
                     ),
-                    items:
-                        supportedApiProtocolsForSupplier(
-                          widget.provider?.apiProtocol ??
-                              apiProtocolFromLegacyEndpointType(
-                                widget.provider?.endpointType,
-                              ),
-                          connectorType:
-                              widget.provider?.legacyFields['connectorType']
-                                  as String?,
-                        ).map((protocol) {
-                          final l10n = AppLocalizations.of(context)!;
-                          final label = switch (protocol) {
-                            'openai.responses' => l10n.endpointResponsesApi,
-                            'anthropic.messages' => l10n.llmEndpointAnthropic,
-                            _ => l10n.llmEndpointOpenAi,
-                          };
-                          return DropdownMenuItem(
-                            value: protocol,
-                            child: ConstrainedText(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }).toList(),
+                    items: supportedApiProtocolsForSupplier(
+                      widget.provider?.apiProtocol ??
+                          apiProtocolFromLegacyEndpointType(
+                            widget.provider?.endpointType,
+                          ),
+                      connectorType: widget
+                          .provider?.legacyFields['connectorType'] as String?,
+                    ).map((protocol) {
+                      final l10n = AppLocalizations.of(context)!;
+                      final label = switch (protocol) {
+                        'openai.responses' => l10n.endpointResponsesApi,
+                        'anthropic.messages' => l10n.llmEndpointAnthropic,
+                        _ => l10n.llmEndpointOpenAi,
+                      };
+                      return DropdownMenuItem(
+                        value: protocol,
+                        child: ConstrainedText(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => _apiProtocol = v);
                     },
@@ -371,8 +369,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         ...List.generate(_customParams.length, (i) {
           final param = _customParams[i];
           final name = param.paramName.trim();
-          final isDuplicate =
-              name.isNotEmpty &&
+          final isDuplicate = name.isNotEmpty &&
               (_customParams.indexWhere((p) => p.paramName.trim() == name) !=
                       i ||
                   // 与推理参数重名（含继承自供应商的）同样拦截：
@@ -404,12 +401,14 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             isDense: true,
                             errorText: hasInvalidName
                                 ? AppLocalizations.of(context)!
-                                      .assistantParameterNameInvalid
+                                    .assistantParameterNameInvalid
                                 : isDuplicate
-                                ? AppLocalizations.of(
-                                    context,
-                                  )!.modelParamDuplicate(param.paramName.trim())
-                                : null,
+                                    ? AppLocalizations.of(
+                                        context,
+                                      )!
+                                        .modelParamDuplicate(
+                                            param.paramName.trim())
+                                    : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
                           onChanged: (v) {
@@ -491,8 +490,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             size: 20,
                           ),
                           onPressed: () => _removeCustomParam(i),
-                          tooltip: AppLocalizations.of(context)!
-                              .modelParamDelete,
+                          tooltip:
+                              AppLocalizations.of(context)!.modelParamDelete,
                         ),
                     ],
                   ),
@@ -554,8 +553,8 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                         const SizedBox(width: 4),
                         IconButton(
                           icon: const Icon(Icons.fullscreen, size: 20),
-                          tooltip: AppLocalizations.of(context)!
-                              .chatFullscreenEdit,
+                          tooltip:
+                              AppLocalizations.of(context)!.chatFullscreenEdit,
                           onPressed: () {
                             showJsonValueEditorDialog(
                               context,

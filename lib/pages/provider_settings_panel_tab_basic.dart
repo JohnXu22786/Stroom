@@ -72,27 +72,26 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
-              items:
-                  supportedApiProtocolsForSupplier(
-                    _apiProtocol,
-                    connectorType:
-                        widget.config.legacyFields['connectorType'] as String?,
-                  ).map((protocol) {
-                    final l10n = AppLocalizations.of(context)!;
-                    final label = switch (protocol) {
-                      'openai.responses' => l10n.endpointResponsesApi,
-                      'anthropic.messages' => l10n.providerEndpointAnthropic,
-                      _ => l10n.providerEndpointOpenAi,
-                    };
-                    return DropdownMenuItem(
-                      value: protocol,
-                      child: ConstrainedText(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
+              items: supportedApiProtocolsForSupplier(
+                _apiProtocol,
+                connectorType:
+                    widget.config.legacyFields['connectorType'] as String?,
+              ).map((protocol) {
+                final l10n = AppLocalizations.of(context)!;
+                final label = switch (protocol) {
+                  'openai.responses' => l10n.endpointResponsesApi,
+                  'anthropic.messages' => l10n.providerEndpointAnthropic,
+                  _ => l10n.providerEndpointOpenAi,
+                };
+                return DropdownMenuItem(
+                  value: protocol,
+                  child: ConstrainedText(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
               onChanged: (v) {
                 if (v != null) setState(() => _apiProtocol = v);
               },
@@ -200,7 +199,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerUploadMethodHelp,
-        style: Theme.of(context).textTheme.bodyMedium
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
             ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
@@ -272,8 +273,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _uploadMethod == AudioUploadMethod.multipart
             ? AppLocalizations.of(context)!.providerUploadMultipartHelp
             : _uploadMethod == AudioUploadMethod.base64Json
-            ? AppLocalizations.of(context)!.providerUploadBase64Help
-            : AppLocalizations.of(context)!.providerUploadUrlHelp,
+                ? AppLocalizations.of(context)!.providerUploadBase64Help
+                : AppLocalizations.of(context)!.providerUploadUrlHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -350,7 +351,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerFallbackTriggerHelp,
-        style: Theme.of(context).textTheme.bodyMedium
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
             ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),
@@ -386,7 +389,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 _buildAsrSelectedDropdownText(
                   context,
                   AppLocalizations.of(context)!.providerFallbackAll,
-                  style: Theme.of(context).textTheme.labelLarge
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
@@ -422,7 +427,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   value: 'all',
                   child: ConstrainedText(
                     AppLocalizations.of(context)!.providerFallbackAll,
-                    style: Theme.of(context).textTheme.labelLarge
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelLarge
                         ?.copyWith(fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -441,10 +448,10 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         _fallbackMethod == 'specific'
             ? AppLocalizations.of(context)!.providerFallbackSpecificHelp
             : _fallbackMethod == 'generic'
-            ? AppLocalizations.of(context)!.providerFallbackGenericHelp
-            : _fallbackMethod == 'all'
-            ? AppLocalizations.of(context)!.providerFallbackAllHelp
-            : AppLocalizations.of(context)!.providerFallbackRejectHelp,
+                ? AppLocalizations.of(context)!.providerFallbackGenericHelp
+                : _fallbackMethod == 'all'
+                    ? AppLocalizations.of(context)!.providerFallbackAllHelp
+                    : AppLocalizations.of(context)!.providerFallbackRejectHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -468,7 +475,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerPreprocessingHelp,
-        style: Theme.of(context).textTheme.bodyMedium
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
             ?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
       ),
       const SizedBox(height: 16),

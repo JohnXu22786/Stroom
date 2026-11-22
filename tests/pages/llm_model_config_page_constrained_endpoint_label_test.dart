@@ -169,8 +169,8 @@ Future<AppLocalizations> _showEndpointSelector(
 }
 
 Finder _endpointLabel(AppLocalizations strings) => find.byWidgetPredicate(
-  (widget) =>
-      widget is ConstrainedText &&
-      widget.data == strings.providerEndpointTypeLabel,
-  description: 'localized endpoint field label',
-);
+      (widget) =>
+          widget is ConstrainedText &&
+          widget.data == strings.providerEndpointTypeLabel,
+      description: 'localized endpoint field label',
+    );
