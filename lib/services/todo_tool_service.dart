@@ -104,18 +104,23 @@ class TodoToolService {
   }) async {
     final todosRaw = args['todos'] as List<dynamic>? ?? [];
 
-    _todos.clear();
+    final replacement = <TodoItem>[];
     for (var i = 0; i < todosRaw.length; i++) {
       final item = todosRaw[i];
-      if (item is Map<String, dynamic>) {
-        _todos.add(TodoItem(
-          content: (item['content'] as String?) ?? '',
-          status: (item['status'] as String?) ?? 'pending',
-          priority: (item['priority'] as String?) ?? 'medium',
-          position: i,
-        ));
+      if (item is! Map<String, dynamic>) {
+        throw FormatException('Todo item at position $i must be an object.');
       }
+      replacement.add(TodoItem(
+        content: (item['content'] as String?) ?? '',
+        status: (item['status'] as String?) ?? 'pending',
+        priority: (item['priority'] as String?) ?? 'medium',
+        position: i,
+      ));
     }
+
+    _todos
+      ..clear()
+      ..addAll(replacement);
 
     final activeCount = _todos
         .where((t) => t.status != 'completed' && t.status != 'cancelled')
