@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_ar.dart';
+import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/unified_task_list/background_task_card.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
@@ -44,6 +46,67 @@ Future<void> _pumpCards(
 }
 
 void main() {
+  testWidgets('OCR page outcomes reflow without losing labels or errors', (
+    tester,
+  ) async {
+    const size = Size(320, 640);
+    final localizations = AppLocalizationsAr();
+    final errorDetail = localizations.bgTaskOcrRequestSizeExceeded(
+      123456,
+      1000,
+    );
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final task = BackgroundTask(
+      id: 'OCR results',
+      type: BackgroundTaskType.ocr,
+      title: 'OCR results',
+      status: TaskStatus.completed,
+      createdAt: DateTime(2025, 1, 1),
+      localizations: localizations,
+      ocrPageOutcomes: [
+        OcrPageOutcome(
+          imageIndex: 0,
+          status: OcrPageOutcomeStatus.failed,
+          error: errorDetail,
+        ),
+      ],
+    );
+    expect(task.ocrPageOutcomes.single.error, errorDetail);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('ar'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: size,
+              devicePixelRatio: 1,
+              textScaler: TextScaler.linear(2),
+            ),
+            child: Scaffold(
+              body: ListView(children: [BackgroundTaskCard(task: task)]),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(InkWell).first);
+    await tester.pumpAndSettle();
+
+    final strings = AppLocalizations.of(
+      tester.element(find.byType(BackgroundTaskCard)),
+    )!;
+    expect(find.text(strings.unifiedTaskOcrPageIndex(1)), findsOneWidget);
+    expect(find.text(strings.unifiedTaskOcrFailed), findsOneWidget);
+    expect(find.text(errorDetail), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('localizes generated task titles for display only', (
     tester,
   ) async {

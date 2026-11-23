@@ -474,22 +474,32 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ocrPageOutcomeIcon(outcome.status, cs),
                 const SizedBox(width: 8),
-                Text(
-                  strings.unifiedTaskOcrPageIndex(outcome.imageIndex + 1),
-                  style: TextStyle(fontSize: 12, color: cs.onSurface),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _ocrPageOutcomeLabel(outcome.status, strings),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: outcome.status == OcrPageOutcomeStatus.failed ||
-                            outcome.status == OcrPageOutcomeStatus.incomplete
-                        ? Colors.red
-                        : cs.onSurfaceVariant,
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 2,
+                    children: [
+                      Text(
+                        strings.unifiedTaskOcrPageIndex(outcome.imageIndex + 1),
+                        style: TextStyle(fontSize: 12, color: cs.onSurface),
+                      ),
+                      Text(
+                        _ocrPageOutcomeLabel(outcome.status, strings),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              outcome.status == OcrPageOutcomeStatus.failed ||
+                                      outcome.status ==
+                                          OcrPageOutcomeStatus.incomplete
+                                  ? Colors.red
+                                  : cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
