@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -19,6 +20,7 @@ import 'package:uuid/uuid.dart';
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/backup_operation_error_dialog.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
@@ -6340,6 +6342,7 @@ class BackupService {
   ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
+  /// [onError] 由调用方提供自定义错误提示时，替代默认错误对话框。
   ///
   /// 内存策略（与旧自动备份一致，避免大备份 OOM）：
   /// - Web：没有 dart:io，只能整体构建后在浏览器下载（内存构建）。
@@ -6352,6 +6355,7 @@ class BackupService {
     BuildContext context, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    void Function(String errorDetail)? onError,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     final operationClock = Stopwatch()..start();
@@ -6481,12 +6485,15 @@ class BackupService {
         final errorDetail = isMissingBackupFolderError
             ? l10n.backupServiceNoBackupFolderSelected
             : errorText;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.backupServiceExportFailed(errorDetail)),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (onError != null) {
+          onError(errorDetail);
+        } else {
+          unawaited(showBackupOperationErrorDialog(
+            context: context,
+            title: l10n.backupServiceExportFailed(''),
+            diagnostic: errorDetail,
+          ));
+        }
       }
       return false;
     }
@@ -6497,10 +6504,12 @@ class BackupService {
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
   /// 返回 `true` 表示恢复成功，`false` 表示用户取消选择文件；
   /// 恢复过程中出错时抛出异常（并已弹出错误提示）。
+  /// [onError] 由调用方提供自定义错误提示时，替代默认错误对话框。
   static Future<bool> importBackup(
     BuildContext context, {
     BackupSelection selection = BackupSelection.all,
     void Function(List<String> skippedCategories)? onSkippedCategories,
+    void Function(Object error)? onError,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     final operationClock = Stopwatch()..start();
@@ -6581,12 +6590,15 @@ class BackupService {
         s,
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.backupServiceRestoreFailed(e.toString())),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (onError != null) {
+          onError(e);
+        } else {
+          unawaited(showBackupOperationErrorDialog(
+            context: context,
+            title: l10n.backupServiceRestoreFailed(''),
+            diagnostic: e.toString(),
+          ));
+        }
       }
       // 重新抛出：让调用方区分"恢复失败"与"用户取消"
       // （失败时恢复可能已部分完成，需要提示用户重启应用）

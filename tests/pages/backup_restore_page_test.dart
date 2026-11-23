@@ -1,5 +1,6 @@
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,31 @@ class _CancelingFilePicker extends FilePickerPlatform {
   }) async {
     pickCallCount++;
     return null;
+  }
+}
+
+class _FailingBackupPicker extends FilePickerPlatform {
+  _FailingBackupPicker(this.failure);
+
+  final Object failure;
+  var pickCount = 0;
+
+  @override
+  Future<PlatformFile?> pickFile({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async {
+    pickCount++;
+    throw failure;
   }
 }
 
@@ -69,6 +95,147 @@ void main() {
     ManifestDatabase.enableTestMode();
     AppLogService.disableFileLogging();
   });
+
+  // Unit owner: vertical_backup_error.
+  // Functional suite mapping: files-data; the widget test runs in feature-ui.
+  testWidgets(
+    'restore failure keeps full fake diagnostic and restart actions in one scrollable dialog',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final originalPicker = FilePickerPlatform.instance;
+      final diagnostic =
+          'fake restore failure: ${List.filled(320, 'detail').join(' ')}';
+      final picker = _FailingBackupPicker(PlatformException(
+        code: 'fake_restore_failure',
+        message: diagnostic,
+      ));
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await tester.pumpWidget(createTestApp(locale: const Locale('de', 'DE')));
+      final strings = AppLocalizations.of(
+        tester.element(find.byType(BackupRestorePage)),
+      )!;
+      final restoreButton = find.text(strings.backupRestoreChooseBackup);
+      await tester.scrollUntilVisible(
+        restoreButton,
+        240,
+        scrollable: find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.ensureVisible(restoreButton);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.ancestor(of: restoreButton, matching: find.byType(OutlinedButton)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(strings.backupRestoreConfirmRestoreButton));
+      tester.view.physicalSize = const Size(320, 640);
+      await tester.pumpAndSettle();
+
+      expect(picker.pickCount, 1);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.textContaining(diagnostic), findsOneWidget);
+      expect(
+        find.text(strings.backupRestoreIncompleteMessage),
+        findsOneWidget,
+      );
+      expect(find.text(strings.backupRestoreExitApp), findsOneWidget);
+      expect(find.text(strings.backupRestoreRestartNow), findsOneWidget);
+      final dialog = find.byType(AlertDialog);
+      expect(tester.widget<AlertDialog>(dialog).scrollable, isTrue);
+      final contentScroll = find.descendant(
+        of: dialog,
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(contentScroll, findsOneWidget);
+      final warning = find.text(strings.backupRestoreIncompleteMessage);
+      await tester.scrollUntilVisible(
+        warning,
+        160,
+        scrollable: find
+            .descendant(
+              of: contentScroll,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final scrollBounds = tester.getRect(contentScroll);
+      final warningBounds = tester.getRect(warning);
+      expect(warningBounds.top, greaterThanOrEqualTo(scrollBounds.top));
+      expect(warningBounds.bottom, lessThanOrEqualTo(scrollBounds.bottom));
+      expect(
+        tester.getRect(find.text(strings.backupRestoreRestartNow)).bottom,
+        lessThanOrEqualTo(640),
+      );
+    },
+  );
+
+  // Unit owner: vertical_backup_error.
+  // Functional suite mapping: files-data; the widget test runs in feature-ui.
+  testWidgets(
+    'export failure replaces its progress dialog with the diagnostic dialog',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const selectorChannel = MethodChannel('plugins.flutter.io/file_selector');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const diagnostic = 'fake save-provider failure with a long local detail';
+      messenger.setMockMethodCallHandler(selectorChannel, (call) async {
+        throw PlatformException(
+            code: 'fake_export_failure', message: diagnostic);
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(selectorChannel, null),
+      );
+
+      await tester.pumpWidget(createTestApp(locale: const Locale('de', 'DE')));
+      final strings = AppLocalizations.of(
+        tester.element(find.byType(BackupRestorePage)),
+      )!;
+      final exportButton = find.widgetWithIcon(ElevatedButton, Icons.backup);
+      await tester.scrollUntilVisible(
+        exportButton,
+        240,
+        scrollable: find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.ensureVisible(exportButton);
+      await tester.pumpAndSettle();
+      final onExport = tester.widget<ElevatedButton>(exportButton).onPressed!;
+      await tester.runAsync(() async {
+        final result = Function.apply(onExport, const []);
+        if (result is Future<void>) await result;
+      });
+      tester.view.physicalSize = const Size(320, 640);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text(strings.backupRestoreExportingBackup), findsNothing);
+      expect(find.text(strings.backupServiceExportFailed('')), findsOneWidget);
+      expect(find.textContaining(diagnostic), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   group('BackupRestorePage - clear selected data', () {
     testWidgets('clear button opens confirmation dialog with categories',
