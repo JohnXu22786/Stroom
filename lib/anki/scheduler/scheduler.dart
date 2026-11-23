@@ -15,6 +15,8 @@ class AnkiScheduler {
   /// Gets the next card to study in a deck (learning → review → new).
   Future<Card?> getNextCard(ColDao col, CardDao cards, int did) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await col.load();
+    final today = col.dayOrdinalAt(now);
 
     // 1. Learning cards (time-sensitive)
     final learn = await cards.listByQueue(did, 1);
@@ -23,7 +25,7 @@ class AnkiScheduler {
     }
     final dayLearn = await cards.listByQueue(did, 3);
     for (final c in dayLearn) {
-      if (c.isDue(now)) return c;
+      if (c.isDue(now, dayOrdinal: today)) return c;
     }
 
     // 2. Review cards
@@ -64,13 +66,13 @@ class AnkiScheduler {
             graduatingIvl: _sm2.graduatingInterval);
         break;
       case 1: // learning
-      case 3: // day learning
         card.answerLearning(nowMs,
             steps: _sm2.learningSteps,
             answerIdx: (rating - 1).clamp(0, 3),
             graduatingIvl: _sm2.graduatingInterval);
         break;
       case 2: // review
+      case 3: // day learning
         card.answerReview(nowMs,
             rating: rating,
             hardMult: _sm2.hardMultiplier,
@@ -104,6 +106,7 @@ class AnkiScheduler {
 
   Future<int> countDue(ColDao col, CardDao cardDao, int did) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    return cardDao.countDue(did, now);
+    await col.load();
+    return cardDao.countDue(did, now, dayOrdinal: col.dayOrdinalAt(now));
   }
 }
