@@ -1032,7 +1032,11 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   FilledButton.tonalIcon(
                     onPressed: !_busy ? () => _upload(config) : null,
                     icon: const Icon(Icons.cloud_upload_outlined),
-                    label: Text(l10n.ankiSyncOverwriteServer),
+                    label: ConstrainedText(
+                      l10n.ankiSyncOverwriteServer,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   if (!_remoteMeta!.isEmpty)
                     OutlinedButton.icon(
