@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../l10n/app_localizations.dart';
@@ -410,7 +411,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
               const SizedBox(height: 8),
               TextField(
                 decoration: InputDecoration(
-                  hintText: l10n.voiceBatchCustomSeparatorHint,
+                  hint: ConstrainedText(
+                    l10n.voiceBatchCustomSeparatorHint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   border: OutlineInputBorder(),
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
