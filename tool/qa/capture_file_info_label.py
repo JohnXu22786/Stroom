@@ -21,6 +21,7 @@ WEB_BUILD = STATE / "web-build"
 FRAMES = STATE / "frames"
 OUTPUT = ROOT / "docs/ui-constrained-text-qa/vertical-file-info-label"
 SCREENSHOT = OUTPUT / "file-info-dialog-fr-320x640-scale1-light.png"
+RESPONSIVE_SCREENSHOT = OUTPUT / "file-info-close-de-320x640-scale1-light.png"
 PREVIEW = OUTPUT / "file-info-label-reveal-fr-320x640.webm"
 for directory in (TMP, FRAMES, OUTPUT):
     directory.mkdir(parents=True, exist_ok=True)
@@ -39,6 +40,8 @@ capture_entrypoint = ROOT / "tool/qa/file_info_label_capture.dart"
 if (
     not (WEB_BUILD / "index.html").exists()
     or capture_entrypoint.stat().st_mtime > (WEB_BUILD / "index.html").stat().st_mtime
+    or (ROOT / "lib/pages/chat/dialogs/file_info_dialog.dart").stat().st_mtime
+    > (WEB_BUILD / "index.html").stat().st_mtime
     or (ROOT / "lib/pages/chat/widgets/info_row.dart").stat().st_mtime
     > (WEB_BUILD / "index.html").stat().st_mtime
 ):
@@ -109,6 +112,23 @@ try:
         page.wait_for_timeout(250)
         page.screenshot(path=str(SCREENSHOT))
 
+        responsive_page = browser.new_page(
+            viewport={"width": 320, "height": 640},
+            device_scale_factor=1,
+            reduced_motion="no-preference",
+        )
+        responsive_page.on("pageerror", lambda error: errors.append(str(error)))
+        responsive_page.goto(
+            f"{base_url}?locale=de-DE&scale=1&theme=light",
+            wait_until="load",
+            timeout=120_000,
+        )
+        responsive_page.wait_for_timeout(4_000)
+        responsive_page.mouse.click(160, 320)
+        responsive_page.wait_for_timeout(250)
+        responsive_page.screenshot(path=str(RESPONSIVE_SCREENSHOT))
+        responsive_page.close()
+
         for frame in FRAMES.glob("frame-*.png"):
             frame.unlink()
         for index in range(40):
@@ -121,6 +141,11 @@ try:
     image = Image.open(BytesIO(SCREENSHOT.read_bytes())).convert("RGB")
     if image.size != (320, 640):
         raise RuntimeError(f"Unexpected screenshot size: {image.size}")
+    responsive_image = Image.open(BytesIO(RESPONSIVE_SCREENSHOT.read_bytes())).convert(
+        "RGB"
+    )
+    if responsive_image.size != (320, 640):
+        raise RuntimeError(f"Unexpected responsive screenshot size: {responsive_image.size}")
     if len(image.getcolors(320 * 640) or []) <= 10:
         raise RuntimeError("Flutter did not render the file info dialog")
     subprocess.run(
@@ -147,6 +172,7 @@ try:
     print(
         {
             "screenshot": str(SCREENSHOT.relative_to(ROOT)),
+            "responsive_close_screenshot": str(RESPONSIVE_SCREENSHOT.relative_to(ROOT)),
             "preview": str(PREVIEW.relative_to(ROOT)),
             "viewport_css_px": {"width": 320, "height": 640},
             "device_pixel_ratio": 1,

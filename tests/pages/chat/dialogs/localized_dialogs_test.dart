@@ -98,48 +98,51 @@ void main() {
     );
 
     for (final locale in const [Locale('fr'), Locale('de'), Locale('ar')]) {
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: locale,
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(1),
-            ),
-            child: child!,
-          ),
-          home: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => showFileInfoPreviewDialog(
-                context: context,
-                attachment: attachment,
+      for (final scale in const [1.0, 1.5]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
               ),
-              child: const Text('open'),
+              child: child!,
+            ),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showFileInfoPreviewDialog(
+                  context: context,
+                  attachment: attachment,
+                ),
+                child: const Text('open'),
+              ),
             ),
           ),
-        ),
-      );
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
 
-      expect(find.byType(ConstrainedText), findsNWidgets(4));
-      expect(
-        tester
-            .widgetList<ConstrainedText>(find.byType(ConstrainedText))
-            .every((text) => text.maxLines == 1),
-        isTrue,
-      );
-      expect(find.text('/local/fixture/sample.pdf'), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: '$locale at 1× scale');
-      await tester.ensureVisible(find.byIcon(Icons.close));
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
+        expect(find.byType(ConstrainedText), findsNWidgets(4));
+        expect(
+          tester
+              .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+              .every((text) => text.maxLines == 1),
+          isTrue,
+        );
+        expect(find.text('/local/fixture/sample.pdf'), findsOneWidget);
+        expect(tester.takeException(), isNull,
+            reason: '$locale at $scale× scale');
+        await tester.ensureVisible(find.byIcon(Icons.close));
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+      }
     }
   });
 

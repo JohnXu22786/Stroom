@@ -121,13 +121,15 @@ void showFileInfoPreviewDialog({
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      TextButton.icon(
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: ConstrainedText(
-                          AppLocalizations.of(context)!.actionClose,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      Flexible(
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close, size: 18),
+                          label: ConstrainedText(
+                            AppLocalizations.of(context)!.actionClose,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
                     ],

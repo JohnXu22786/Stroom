@@ -11,6 +11,7 @@ localized value using the shared one-second initial hold and endpoint pauses.
 ## Artifacts
 
 - [Production dialog screenshot](file-info-dialog-fr-320x640-scale1-light.png)
+- [Production dialog with responsive German Close action](file-info-close-de-320x640-scale1-light.png): 320 × 640 CSS pixels, DPR 1, `de-DE`, light theme, 1× text scale; no control is focused and the keyboard is closed.
 - [Live French label reveal](file-info-label-reveal-fr-320x640.webm)
 
 ## Capture
