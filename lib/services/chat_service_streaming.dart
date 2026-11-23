@@ -29,16 +29,22 @@ extension ChatServiceStreamingExt on ChatService {
     _isCancelledByUser = false;
     _reasoningBuffer.clear();
 
-    _controller = StreamController<String>(
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
+    late final StreamController<String> controller;
+    controller = StreamController<String>(
       onCancel: () {
         debugPrint('ChatService: stream cancelled');
-        _cancelToken?.cancel();
-        _cancelToken = null;
-        _streamSubscription?.cancel();
-        _streamSubscription = null;
-        _cleanUp();
+        cancelToken.cancel();
+        if (identical(_cancelToken, cancelToken)) {
+          _cancelToken = null;
+          _streamSubscription?.cancel();
+          _streamSubscription = null;
+        }
+        if (identical(_controller, controller)) _cleanUp();
       },
     );
+    _controller = controller;
 
     final extraParams = _buildExtraParams(
       reasoning: reasoning,
@@ -49,7 +55,7 @@ extension ChatServiceStreamingExt on ChatService {
 
     Future.microtask(() async {
       try {
-        if (_isCancelledByUser) return;
+        if (_isCancelledByUser || cancelToken.isCancelled) return;
         final req = await _protocol.buildRequest(
           history: history,
           assistantPrompt: _assistantPrompt,
@@ -58,6 +64,11 @@ extension ChatServiceStreamingExt on ChatService {
             _assistantSettings,
           ),
         );
+        if (cancelToken.isCancelled ||
+            !identical(_cancelToken, cancelToken) ||
+            !identical(_controller, controller)) {
+          return;
+        }
         final apiMessages = req.messages;
         _lastRequestBody = _protocol.name == 'responses'
             ? {
@@ -85,8 +96,6 @@ extension ChatServiceStreamingExt on ChatService {
                   'temperature': _effectiveTemperature,
                 ...extraParams,
               };
-        _cancelToken = CancelToken();
-        final cancelToken = _cancelToken!;
         _streamSubscription = retryRateLimitedStream<AIStreamEvent>(
           () => _provider!.chatStream(
             apiMessages,
@@ -113,39 +122,43 @@ extension ChatServiceStreamingExt on ChatService {
                 recordInput: true,
                 costIncrement: event.usageCostIncrement,
               );
-            } else if (!_controller!.isClosed) {
-              _controller!.add(event.text);
+            } else if (!controller.isClosed) {
+              controller.add(event.text);
             }
           },
           onDone: () {
-            _streamSubscription = null;
-            if (_controller != null && !_controller!.isClosed) {
-              _controller!.close();
+            if (identical(_cancelToken, cancelToken)) {
+              _streamSubscription = null;
+            }
+            if (!controller.isClosed) {
+              controller.close();
             }
             _lastResponseData = _provider?.lastResponseData;
-            _cleanUp();
+            if (identical(_controller, controller)) _cleanUp();
           },
           onError: (Object error) {
-            _streamSubscription = null;
+            if (identical(_cancelToken, cancelToken)) {
+              _streamSubscription = null;
+            }
             debugPrint('ChatService stream error: $error');
             _lastResponseData = _provider?.lastResponseData;
-            if (_controller != null && !_controller!.isClosed) {
-              _controller!.addError(error);
-              _controller!.close();
+            if (!controller.isClosed) {
+              controller.addError(error);
+              controller.close();
             }
-            _cleanUp();
+            if (identical(_controller, controller)) _cleanUp();
           },
         );
       } catch (e) {
         _lastResponseData = _provider?.lastResponseData;
-        if (!_controller!.isClosed) {
-          _controller!.addError(e);
-          _controller!.close();
+        if (!controller.isClosed) {
+          controller.addError(e);
+          controller.close();
         }
       }
     });
 
-    return _controller!.stream;
+    return controller.stream;
   }
 
   /// Stream a message WITH tool call support.
@@ -224,6 +237,10 @@ extension ChatServiceStreamingExt on ChatService {
           );
         } finally {
           contentCache?.clear();
+        }
+        if (controller.isClosed ||
+            !identical(_chatEventController, controller)) {
+          return;
         }
         var messages = req.messages;
         _lastRequestBody = _protocol.name == 'responses'
@@ -337,7 +354,11 @@ extension ChatServiceStreamingExt on ChatService {
                   costIncrement: event.usageCostIncrement,
                 );
               }
-              if (_isCancelledByUser) return;
+              if (_isCancelledByUser ||
+                  controller.isClosed ||
+                  !identical(_chatEventController, controller)) {
+                return;
+              }
               // Anthropic extended thinking 签名（协议续接用，静默透传）
               if (event.thinkingSignature != null &&
                   event.thinkingSignature!.isNotEmpty) {
