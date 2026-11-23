@@ -360,26 +360,20 @@ void main() {
       final lineSlot =
           find.ancestor(of: lineNumber, matching: find.byType(SizedBox)).first;
       final editorFinder = find.byType(TextField);
-      final editorWidth = tester.getRect(editorFinder).width - 16;
-      final wrappedMetrics = TextPainter(
-        text: TextSpan(
-          text: longLine,
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            height: 1.3,
-          ),
-        ),
-        textDirection: Directionality.of(tester.element(editorFinder)),
-        textScaler: TextScaler.linear(scale),
-      )..layout(maxWidth: editorWidth);
-      addTearDown(wrappedMetrics.dispose);
-      final wrappedLineMetrics = wrappedMetrics.computeLineMetrics();
-      expect(wrappedLineMetrics.length, greaterThan(1));
-      final expectedWrappedHeight = wrappedLineMetrics.fold<double>(
-        0,
-        (height, line) => height + line.height,
+      final wrappedRenderEditable = _findRenderEditable(
+        tester.renderObject(find.byType(EditableText)),
       );
+      final renderedBoxes = wrappedRenderEditable.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: longLine.length),
+      );
+      expect(renderedBoxes.length, greaterThan(1));
+      final firstLineTop = wrappedRenderEditable
+          .getLocalRectForCaret(const TextPosition(offset: 0))
+          .top;
+      final nextLineTop = wrappedRenderEditable
+          .getLocalRectForCaret(TextPosition(offset: longLine.length + 1))
+          .top;
+      final expectedWrappedHeight = nextLineTop - firstLineTop;
       expect(
         tester.getSize(lineSlot).height,
         closeTo(expectedWrappedHeight, 0.01),
@@ -430,6 +424,67 @@ void main() {
       );
       expect(editor.controller, same(controller));
       expect(tester.takeException(), isNull);
+    }
+
+    // Unit owner: vertical_gutter_width_scale.
+    final longCountController = TextEditingController(
+      text: List<String>.filled(1234, 'x').join('\n'),
+    );
+    addTearDown(longCountController.dispose);
+    double? normalGutterWidth;
+    for (final scale in [1.0, 2.0]) {
+      await tester.pumpWidget(
+        localizedApp(
+          Directionality(
+            textDirection: scale == 1 ? TextDirection.ltr : TextDirection.rtl,
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 120,
+                  child: CodeEditorField(controller: longCountController),
+                ),
+              ),
+            ),
+          ),
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final number = find.text('1234');
+      expect(number, findsOneWidget);
+      final gutter =
+          find.ancestor(of: number, matching: find.byType(OverflowBox)).first;
+      final gutterWidth = tester.getSize(gutter).width;
+      final actualNumber = TextPainter(
+        text: const TextSpan(
+          text: '1234',
+          style: TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.3),
+        ),
+        textDirection: scale == 1 ? TextDirection.ltr : TextDirection.rtl,
+        textScaler: TextScaler.linear(scale),
+      )..layout();
+      expect(
+        actualNumber.width,
+        lessThanOrEqualTo(gutterWidth - 12),
+        reason: 'the complete four-digit editor number must fit at ${scale}x',
+      );
+      if (scale == 1) {
+        normalGutterWidth = gutterWidth;
+        expect(
+          gutterWidth,
+          greaterThanOrEqualTo(52),
+          reason: 'the original 1x width remains the minimum',
+        );
+      } else {
+        expect(
+          gutterWidth,
+          greaterThan(normalGutterWidth!),
+          reason: 'the 2x gutter expands to fit the scaled number',
+        );
+      }
+      actualNumber.dispose();
     }
 
     const dialogValue = '''{

@@ -3,6 +3,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.request import urlopen
 
@@ -12,29 +13,42 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path(
-    '/workspace/.cloud-profile-state/stroom-guideline-confirmed/round17/'
+    '/workspace/.cloud-profile-state/stroom-guideline-confirmed/round18/'
     'vertical_editor_gutter_scale'
 )
-TMP = Path('/workspace/t')
-PUB_CACHE = STATE / 'pub-cache'
+TMP = Path('/workspace/.cloud-profile-state/r18_vgw/tmp')
+PUB_CACHE = Path(
+    '/workspace/.cloud-profile-state/stroom-guideline-confirmed/pub-cache'
+)
+XDG_CACHE = STATE / 'cache'
 WEB_BUILD = STATE / 'web-build'
 OUTPUT = ROOT / 'docs/ui-guidelines/images/ui-constrained-text-qa/vertical-editor-gutter-scale'
 OUTPUT.mkdir(parents=True, exist_ok=True)
 TMP.mkdir(parents=True, exist_ok=True)
+XDG_CACHE.mkdir(parents=True, exist_ok=True)
+os.environ['TMPDIR'] = str(TMP)
+os.environ['XDG_CACHE_HOME'] = str(XDG_CACHE)
+tempfile.tempdir = str(TMP)
 
 environment = os.environ.copy()
 environment['TMPDIR'] = str(TMP)
 environment['PUB_CACHE'] = str(PUB_CACHE)
+environment['XDG_CACHE_HOME'] = str(XDG_CACHE)
 fl_deps = Path('/workspace/toolchains/flutter-linux-deps/env')
 environment['PKG_CONFIG_PATH'] = f"{fl_deps}/lib/pkgconfig:{fl_deps}/share/pkgconfig"
 environment['PKG_CONFIG_LIBDIR'] = environment['PKG_CONFIG_PATH']
-environment['CC'] = str(fl_deps / 'bin/clang-23')
-environment['CXX'] = str(fl_deps / 'bin/clang++-23')
+environment['CC'] = str(fl_deps / 'bin/clang')
+environment['CXX'] = str(fl_deps / 'bin/clang++')
 environment['LD_LIBRARY_PATH'] = str(fl_deps / 'lib')
 environment['PATH'] = f"{fl_deps}/bin:{environment['PATH']}"
 
 entrypoint = ROOT / 'tool/qa/vertical_editor_gutter_scale_capture.dart'
-build_inputs = [entrypoint, ROOT / 'lib/widgets/code_editor_field.dart']
+build_inputs = [
+    entrypoint,
+    ROOT / 'lib/widgets/code_editor_field.dart',
+    ROOT / 'lib/widgets/code_block_source_widget.dart',
+    ROOT / 'lib/widgets/code_line_number_gutter.dart',
+]
 if not (WEB_BUILD / 'index.html').exists() or max(
     path.stat().st_mtime for path in build_inputs
 ) > (WEB_BUILD / 'index.html').stat().st_mtime:
@@ -98,25 +112,32 @@ try:
             reduced_motion='reduce',
         )
         page.on('pageerror', lambda error: errors.append(str(error)))
-        for scale, filename in (
-            ('1', 'editor-gutter-de-320x640-scale1-light.png'),
-            ('2', 'editor-gutter-de-320x640-scale2-light.png'),
-        ):
+        captures = (
+            ('editor', '1', 'editor-gutter-de-320x640-scale1-light.png'),
+            ('editor', '2', 'editor-gutter-de-320x640-scale2-light.png'),
+            ('block', '1', 'code-block-gutter-de-320x640-scale1-light.png'),
+            ('block', '2', 'code-block-gutter-de-320x640-scale2-light.png'),
+        )
+        for component, scale, filename in captures:
             page.goto(
-                f'{base_url}?locale=de-DE&scale={scale}&theme=light',
+                f'{base_url}?locale=de-DE&scale={scale}&theme=light'
+                f'&component={component}',
                 wait_until='load',
                 timeout=120_000,
             )
             page.wait_for_timeout(3_000)
-            page.mouse.click(160, 320)
+            if component == 'editor':
+                page.mouse.click(160, 320)
+                page.wait_for_timeout(1_000)
+                page.mouse.move(160, 350)
+            else:
+                page.mouse.move(160, 160)
+            page.mouse.wheel(0, 100_000)
             page.wait_for_timeout(1_000)
             page.screenshot(path=str(OUTPUT / filename))
         browser.close()
 
-    for filename in (
-        'editor-gutter-de-320x640-scale1-light.png',
-        'editor-gutter-de-320x640-scale2-light.png',
-    ):
+    for _, _, filename in captures:
         screenshot = Image.open(OUTPUT / filename)
         if screenshot.size != (320, 640):
             raise RuntimeError(f'Unexpected screenshot size: {screenshot.size}')
