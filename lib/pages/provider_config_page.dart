@@ -954,18 +954,19 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
               delegate: SliverChildListDelegate([
                 Row(
                   children: [
-                    Text(
-                      isBuiltinWebSearch
-                          ? AppLocalizations.of(context)!.providerBuiltinTools
-                          : AppLocalizations.of(context)!
-                              .providerConfigurationHeading,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: cs.primary,
+                    Expanded(
+                      child: Text(
+                        isBuiltinWebSearch
+                            ? AppLocalizations.of(context)!.providerBuiltinTools
+                            : AppLocalizations.of(context)!
+                                .providerConfigurationHeading,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: cs.primary,
+                        ),
                       ),
                     ),
-                    const Spacer(),
                     if (!isBuiltinWebSearch)
                       TextButton.icon(
                         icon: const Icon(Icons.add, size: 18),
