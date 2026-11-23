@@ -429,10 +429,12 @@ void main() {
     testWidgets(
       'vertical_background_service_buttons keeps localized service labels to one line',
       (tester) async {
-        final mock = registerMockPlatform();
+        registerMockPlatform();
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
         tester.view.physicalSize = const Size(320, 640);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
+          debugDefaultTargetPlatformOverride = null;
           tester.view.resetPhysicalSize();
           tester.view.resetDevicePixelRatio();
         });
@@ -444,6 +446,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        debugDefaultTargetPlatformOverride = null;
         await tester.drag(find.byType(ListView).first, const Offset(0, -500));
         await tester.pumpAndSettle();
 
@@ -454,12 +457,31 @@ void main() {
         expect(startLabel, findsOneWidget);
         expect(tester.widget<ConstrainedText>(startLabel).maxLines, 1);
         expect(tester.takeException(), isNull);
+      },
+    );
 
-        mock.setServiceRunning(true);
-        final strings = AppLocalizations.of(
-          tester.element(find.byType(BackgroundOptimizationPage)),
-        )!;
-        await tester.tap(find.text(strings.backgroundOptimizationRedetect));
+    testWidgets(
+      'vertical_background_service_buttons keeps the running service label to one line',
+      (tester) async {
+        registerMockPlatform().setServiceRunning(true);
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          debugDefaultTargetPlatformOverride = null;
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            locale: const Locale('fr', 'FR'),
+            disableAnimations: true,
+          ),
+        );
+        await tester.pumpAndSettle();
+        debugDefaultTargetPlatformOverride = null;
+        await tester.drag(find.byType(ListView).first, const Offset(0, -500));
         await tester.pumpAndSettle();
 
         final stopLabel = find.byWidgetPredicate(
