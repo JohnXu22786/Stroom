@@ -36,6 +36,7 @@ class _NotificationSettingsPageState
   bool _isCheckingPermission = true;
   PermissionStatus _permissionStatus = PermissionStatus.denied;
   bool _notificationsEnabled = false;
+  int _notificationSettingRevision = 0;
 
   @override
   void initState() {
@@ -101,9 +102,10 @@ class _NotificationSettingsPageState
   // ── Permission Check ─────────────────────────────────────────────────
 
   Future<void> _loadSettings() async {
+    final revision = _notificationSettingRevision;
     await _checkPermission();
     final enabled = await NotificationService().isEnabled;
-    if (mounted) {
+    if (mounted && revision == _notificationSettingRevision) {
       setState(() {
         _notificationsEnabled = enabled;
       });
@@ -149,6 +151,7 @@ class _NotificationSettingsPageState
     await _checkPermission();
     if (!mounted) return;
 
+    _notificationSettingRevision++;
     try {
       await ref.read(notificationSettingsProvider.notifier).setEnabled(granted);
     } catch (_) {
@@ -437,6 +440,7 @@ class _NotificationSettingsPageState
                     activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
+                            _notificationSettingRevision++;
                             try {
                               await ref
                                   .read(notificationSettingsProvider.notifier)

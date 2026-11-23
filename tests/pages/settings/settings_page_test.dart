@@ -6,6 +6,7 @@
 //   tests/pages/settings_page_ocr_test.dart
 //   tests/pages/settings_page_update_test.dart
 //   tests/pages/notification_settings_page_test.dart
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/notification_settings_page.dart';
 import 'package:stroom/pages/settings_page.dart';
@@ -68,6 +70,23 @@ class _FixedErrorUpdateNotifier extends UpdateNotifier {
 
   @override
   Future<void> checkForUpdate({bool silent = false}) async {}
+}
+
+class _BlockingInitialPrefsReadStore extends InMemorySharedPreferencesStore {
+  _BlockingInitialPrefsReadStore(Map<String, Object> values)
+      : super.withData(values);
+
+  final initialReadStarted = Completer<void>();
+  final releaseInitialRead = Completer<void>();
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    if (!initialReadStarted.isCompleted) {
+      initialReadStarted.complete();
+      await releaseInitialRead.future;
+    }
+    return super.getAll();
+  }
 }
 
 /// 构建只包含 TTS、LLM 和 OCR 的已保存数据（模拟旧版本用户升级，无 ASR）
@@ -247,6 +266,10 @@ void main() {
           .setMockMethodCallHandler(permissionsChannel, null);
     });
     SharedPreferences.setMockInitialValues({'notifications_enabled': false});
+    final prefsStore = _BlockingInitialPrefsReadStore(
+      {'flutter.notifications_enabled': false},
+    );
+    SharedPreferencesStorePlatform.instance = prefsStore;
 
     await tester.pumpWidget(
       ProviderScope(
@@ -263,13 +286,15 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await prefsStore.initialReadStarted.future;
+    await tester.pump();
 
     final toggle = tester.widget<Switch>(find.byType(Switch));
     expect(toggle.value, isFalse);
     expect(toggle.onChanged, isNotNull);
 
     await tester.tap(find.byType(Switch));
+    prefsStore.releaseInitialRead.complete();
     await tester.pumpAndSettle();
 
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
