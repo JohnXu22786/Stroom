@@ -31,24 +31,23 @@ environment['CXX'] = str(env / 'bin/clang++')
 environment['LD_LIBRARY_PATH'] = f"{env}/lib:{environment.get('LD_LIBRARY_PATH', '')}"
 environment['PATH'] = f"{env}/bin:{environment['PATH']}"
 
-if not (WEB_BUILD / 'index.html').exists() or ENTRYPOINT.stat().st_mtime > (
-    WEB_BUILD / 'index.html'
-).stat().st_mtime:
-    subprocess.run(
-        [
-            '/workspace/sdks/flutter/bin/flutter',
-            'build',
-            'web',
-            '--no-pub',
-            '--release',
-            '--no-wasm-dry-run',
-            f'--target={ENTRYPOINT}',
-            f'--output={WEB_BUILD}',
-        ],
-        cwd=ROOT,
-        env=environment,
-        check=True,
-    )
+# Imported production widgets can change without touching this entrypoint.
+# Always rebuild so a repeated capture cannot silently use a stale app bundle.
+subprocess.run(
+    [
+        '/workspace/sdks/flutter/bin/flutter',
+        'build',
+        'web',
+        '--no-pub',
+        '--release',
+        '--no-wasm-dry-run',
+        f'--target={ENTRYPOINT}',
+        f'--output={WEB_BUILD}',
+    ],
+    cwd=ROOT,
+    env=environment,
+    check=True,
+)
 
 with socket.socket() as listener:
     listener.bind(('127.0.0.1', 0))
