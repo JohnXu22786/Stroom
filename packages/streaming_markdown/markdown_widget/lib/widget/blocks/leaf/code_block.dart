@@ -179,16 +179,21 @@ class PreConfig implements LeafConfig {
     TextStyle? textStyle,
     TextStyle? styleNotMatched,
     CodeWrapper? wrapper,
+    CodeBuilder? builder,
     Map<String, TextStyle>? theme,
     String? language,
   }) {
+    // Supplying one rendering callback switches modes and clears the other.
+    final copiedBuilder = builder ?? (wrapper == null ? this.builder : null);
+    final copiedWrapper = wrapper ?? (builder == null ? this.wrapper : null);
     return PreConfig(
       padding: padding ?? this.padding,
       decoration: decoration ?? this.decoration,
       margin: margin ?? this.margin,
       textStyle: textStyle ?? this.textStyle,
       styleNotMatched: styleNotMatched ?? this.styleNotMatched,
-      wrapper: wrapper ?? this.wrapper,
+      wrapper: copiedWrapper,
+      builder: copiedBuilder,
       theme: theme ?? this.theme,
       language: language ?? this.language,
     );
