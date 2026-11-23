@@ -707,12 +707,13 @@ void main() {
         final numberSlot =
             find.ancestor(of: number, matching: find.byType(SizedBox)).first;
         final gutterWidth = tester.getSize(numberSlot).width;
+        const lineNumberStyle = TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          height: 1.5,
+        );
         final actualNumber = TextPainter(
-          text: const TextSpan(
-            text: '1234',
-            style:
-                TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5),
-          ),
+          text: const TextSpan(text: '1234', style: lineNumberStyle),
           textDirection: TextDirection.ltr,
           textScaler: TextScaler.linear(scale),
         )..layout();
