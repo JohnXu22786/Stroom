@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -38,6 +39,16 @@ TextEditingValue backspaceAt(
     selection: TextSelection.collapsed(offset: cursor - 1),
   );
   return formatter.formatEditUpdate(oldValue, newValue);
+}
+
+RenderEditable _findRenderEditable(RenderObject root) {
+  final pending = <RenderObject>[root];
+  while (pending.isNotEmpty) {
+    final current = pending.removeLast();
+    if (current is RenderEditable) return current;
+    current.visitChildren(pending.add);
+  }
+  throw StateError('EditableText does not contain a RenderEditable');
 }
 
 void main() {
@@ -304,6 +315,206 @@ void main() {
         ],
         home: home,
       );
+
+  testWidgets(
+      'line-number rows follow scaled and wrapped lines while editing and scrolling',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final longLine = 'long line ${List.filled(80, 'x').join()}';
+    final controller = TextEditingController(
+      text: [
+        longLine,
+        '',
+        '',
+        ...List.generate(497, (index) => 'line ${index + 4}'),
+      ].join('\n'),
+    );
+    addTearDown(controller.dispose);
+
+    for (final scale in [1.0, 2.0]) {
+      await tester.pumpWidget(
+        localizedApp(
+          Directionality(
+            textDirection: scale == 2 ? TextDirection.rtl : TextDirection.ltr,
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 120,
+                  child: CodeEditorField(controller: controller),
+                ),
+              ),
+            ),
+          ),
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final lineNumber = find.text('1');
+      final lineSlot =
+          find.ancestor(of: lineNumber, matching: find.byType(SizedBox)).first;
+      final editorFinder = find.byType(TextField);
+      final editorWidth = tester.getRect(editorFinder).width - 16;
+      final wrappedMetrics = TextPainter(
+        text: TextSpan(
+          text: longLine,
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.3,
+          ),
+        ),
+        textDirection: Directionality.of(tester.element(editorFinder)),
+        textScaler: TextScaler.linear(scale),
+      )..layout(maxWidth: editorWidth);
+      addTearDown(wrappedMetrics.dispose);
+      final wrappedLineMetrics = wrappedMetrics.computeLineMetrics();
+      expect(wrappedLineMetrics.length, greaterThan(1));
+      final expectedWrappedHeight = wrappedLineMetrics.fold<double>(
+        0,
+        (height, line) => height + line.height,
+      );
+      expect(
+        tester.getSize(lineSlot).height,
+        closeTo(expectedWrappedHeight, 0.01),
+        reason: 'the gutter row must include scaled soft-wrapped text lines',
+      );
+      expect(
+        tester.getRect(find.text('2')).top - tester.getRect(lineNumber).top,
+        closeTo(expectedWrappedHeight, 0.01),
+        reason:
+            'the next line number must start after all wrapped visual lines',
+      );
+
+      final updatedText = '${controller.text}\nnew line';
+      await tester.enterText(find.byType(EditableText), updatedText);
+      await tester.pumpAndSettle();
+      final updatedLineCount = updatedText.split('\n').length;
+      expect(controller.text, updatedText);
+      expect(find.text('$updatedLineCount'), findsOneWidget);
+
+      final editor = tester.widget<TextField>(editorFinder);
+      final scrollController = editor.scrollController!;
+      expect(scrollController.position.maxScrollExtent, greaterThan(0));
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+
+      final lastLineNumber = tester.getRect(find.text('$updatedLineCount'));
+      final editorRect = tester.getRect(find.byType(TextField));
+      expect(lastLineNumber.top, greaterThanOrEqualTo(editorRect.top));
+      expect(lastLineNumber.bottom, lessThanOrEqualTo(editorRect.bottom));
+      final renderEditable = _findRenderEditable(
+        tester.renderObject(find.byType(EditableText)),
+      );
+      final firstLineCaret = renderEditable.localToGlobal(
+        renderEditable
+            .getLocalRectForCaret(const TextPosition(offset: 0))
+            .topLeft,
+      );
+      final secondLineCaret = renderEditable.localToGlobal(
+        renderEditable
+            .getLocalRectForCaret(TextPosition(offset: longLine.length + 1))
+            .topLeft,
+      );
+      final firstLineNumber = tester.getTopLeft(find.text('1'));
+      final secondLineNumber = tester.getTopLeft(find.text('2'));
+      expect(
+        secondLineNumber.dy - firstLineNumber.dy,
+        closeTo(secondLineCaret.dy - firstLineCaret.dy, 1),
+      );
+      expect(editor.controller, same(controller));
+      expect(tester.takeException(), isNull);
+    }
+
+    const dialogValue = '''{
+  "name": "local example",
+  "enabled": true,
+  "count": 3,
+  "options": {
+    "first": "alpha",
+    "second": "beta"
+  }
+}''';
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: dialogValue,
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open dialog'),
+          ),
+        ),
+        locale: const Locale('de'),
+        theme: ThemeData(useMaterial3: true),
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.tap(find.text('open dialog'));
+    await tester.pumpAndSettle();
+
+    final dialogEditor = tester.widget<TextField>(find.byType(TextField));
+    final dialogText = dialogEditor.controller!.text;
+    final wrappedLineStart = dialogText.indexOf('"second"');
+    final nextLogicalLineStart =
+        dialogText.indexOf('\n  }', wrappedLineStart) + 1;
+    final dialogWrappedMetrics = TextPainter(
+      text: TextSpan(
+        text: dialogText.split('\n')[6],
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          height: 1.3,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: const TextScaler.linear(2),
+    )..layout(maxWidth: tester.getRect(find.byType(TextField)).width - 16);
+    addTearDown(dialogWrappedMetrics.dispose);
+    final dialogWrappedLines = dialogWrappedMetrics.computeLineMetrics();
+    expect(dialogWrappedLines.length, greaterThan(1));
+    final dialogRenderEditable = _findRenderEditable(
+      tester.renderObject(find.byType(EditableText)),
+    );
+    final wrappedLineTop = dialogRenderEditable.localToGlobal(
+      dialogRenderEditable
+          .getLocalRectForCaret(TextPosition(offset: wrappedLineStart))
+          .topLeft,
+    );
+    final nextLogicalLineTop = dialogRenderEditable.localToGlobal(
+      dialogRenderEditable
+          .getLocalRectForCaret(TextPosition(offset: nextLogicalLineStart))
+          .topLeft,
+    );
+    final wrappedNumberTop = tester.getTopLeft(find.text('7'));
+    final nextNumberTop = tester.getTopLeft(find.text('8'));
+    final editorLineDistance = nextLogicalLineTop.dy - wrappedLineTop.dy;
+    expect(
+      editorLineDistance,
+      closeTo(
+        dialogWrappedLines.fold<double>(
+          0,
+          (height, line) => height + line.height,
+        ),
+        1,
+      ),
+    );
+    expect(
+      nextNumberTop.dy - wrappedNumberTop.dy,
+      closeTo(editorLineDistance, 1),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('JSON editor title stays bounded beside dialog controls', (
     tester,

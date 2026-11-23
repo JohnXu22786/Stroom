@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
@@ -332,6 +333,9 @@ class CodeEditorField extends StatefulWidget {
 
 class _CodeEditorFieldState extends State<CodeEditorField> {
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _editorKey = GlobalKey();
+  List<double> _measuredLineHeights = const [];
+  Object? _lastMeasurementFingerprint;
   double _scrollOffset = 0;
 
   @override
@@ -354,6 +358,60 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
     if (mounted) setState(() {});
   }
 
+  void _measureLineHeightsAfterLayout(String text, Object fingerprint) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final editorContext = _editorKey.currentContext;
+      final root = editorContext?.findRenderObject();
+      if (root == null) return;
+      final renderEditable = _findRenderEditable(root);
+      if (renderEditable == null ||
+          fingerprint == _lastMeasurementFingerprint) {
+        return;
+      }
+
+      final lines = text.split('\n');
+      var offset = 0;
+      final lineStarts = <int>[];
+      for (final line in lines) {
+        lineStarts.add(offset);
+        offset += line.length + 1;
+      }
+      final lineTops = lineStarts
+          .map((start) => renderEditable
+              .getLocalRectForCaret(TextPosition(offset: start))
+              .top)
+          .toList();
+      final heights = <double>[];
+      for (var i = 0; i < lineTops.length - 1; i++) {
+        heights.add(lineTops[i + 1] - lineTops[i]);
+      }
+      final lastLineEnd = renderEditable
+          .getLocalRectForCaret(TextPosition(offset: text.length))
+          .top;
+      heights.add(
+        lastLineEnd - lineTops.last + renderEditable.preferredLineHeight,
+      );
+      _lastMeasurementFingerprint = fingerprint;
+      if (heights.length != _measuredLineHeights.length ||
+          List<int>.generate(heights.length, (i) => i).any(
+            (i) => (heights[i] - _measuredLineHeights[i]).abs() > 0.25,
+          )) {
+        setState(() => _measuredLineHeights = heights);
+      }
+    });
+  }
+
+  RenderEditable? _findRenderEditable(RenderObject root) {
+    final pending = <RenderObject>[root];
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (current is RenderEditable) return current;
+      current.visitChildren(pending.add);
+    }
+    return null;
+  }
+
   void _onScrolled() {
     if (!mounted) return;
     final offset =
@@ -369,15 +427,39 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
     final lineCount = widget.controller.text.split('\n').length;
     final digitCount = lineCount.toString().length;
     final lineNumWidth = (digitCount * 8.0 + 20.0).clamp(36.0, 80.0);
-    // 与文本区行高一致（fontSize 13 × height 1.3），行号与文本逐行对齐。
-    const lineHeight = 16.9;
-    const textTopPadding = 11.0; // 与 contentPadding 顶部一致
+    const editorTextStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 13,
+      height: 1.3,
+    );
+    const contentPadding = EdgeInsets.fromLTRB(8, 11, 8, 12);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         // 行号列与文本区同高，随滚动偏移平移，避免长内容滚动时行号
         // 溢出或与文本错位。
         final height = constraints.maxHeight;
+        final lineMetrics = TextPainter(
+          text: const TextSpan(text: '0', style: editorTextStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout();
+        final lineHeight = lineMetrics.preferredLineHeight;
+        lineMetrics.dispose();
+        final lineHeights = _measuredLineHeights.length == lineCount
+            ? _measuredLineHeights
+            : List<double>.filled(lineCount, lineHeight);
+        _measureLineHeightsAfterLayout(
+          widget.controller.text,
+          (
+            widget.controller.text,
+            constraints.maxWidth,
+            MediaQuery.textScalerOf(context),
+            Directionality.of(context),
+            Localizations.maybeLocaleOf(context),
+          ),
+        );
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -388,27 +470,35 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
               child: ClipRect(
                 child: Transform.translate(
                   offset: Offset(0, -_scrollOffset),
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      top: textTopPadding,
-                      right: 4,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(lineCount, (i) {
-                        return SizedBox(
-                          height: lineHeight,
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              color: colorScheme.onSurfaceVariant,
-                              height: 1.3,
+                  child: OverflowBox(
+                    alignment: Alignment.topRight,
+                    minWidth: lineNumWidth,
+                    maxWidth: lineNumWidth,
+                    minHeight: 0,
+                    maxHeight: double.infinity,
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: contentPadding.top,
+                        right: 4,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: List.generate(lineCount, (i) {
+                          return SizedBox(
+                            height: lineHeights[i],
+                            child: Text(
+                              '${i + 1}',
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant,
+                                height: 1.3,
+                              ),
                             ),
-                          ),
-                        );
-                      }),
+                          );
+                        }),
+                      ),
                     ),
                   ),
                 ),
@@ -421,17 +511,14 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
             // 可编辑文本区
             Expanded(
               child: TextField(
+                key: _editorKey,
                 controller: widget.controller,
                 scrollController: _scrollController,
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
                 autofocus: widget.autofocus,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  height: 1.3,
-                ),
+                style: editorTextStyle,
                 inputFormatters: const [CodeSmartInputFormatter()],
                 decoration: InputDecoration(
                   hintText: widget.hintText,
@@ -441,7 +528,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
                     color: colorScheme.onSurfaceVariant,
                   ),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.fromLTRB(8, 11, 8, 12),
+                  contentPadding: contentPadding,
                   isCollapsed: true,
                 ),
                 onChanged: widget.onChanged,
