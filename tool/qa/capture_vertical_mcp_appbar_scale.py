@@ -108,7 +108,8 @@ try:
                 timeout=120_000,
             )
             page.wait_for_timeout(2_000)
-            page.mouse.click(268, 76)
+            edit_button_x = 240 if locale == 'en-US' else 268
+            page.mouse.click(edit_button_x, 76)
             page.wait_for_timeout(800)
             page.screenshot(path=str(OUTPUT / filename))
         browser.close()
