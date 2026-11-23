@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,10 +20,17 @@ Widget _statsPageWithError(Object error) => ProviderScope(
       ),
     );
 
-Widget _statsPageWithQueryError(Object error) => ProviderScope(
+Widget _statsPageWithQueryError(
+  Object error, {
+  bool pendingRevlogCount = false,
+}) =>
+    ProviderScope(
       overrides: [
         ankiDatabaseProvider.overrideWith(
-          (_) async => _QueryFailingAnkiDatabase(error),
+          (_) async => _QueryFailingAnkiDatabase(
+            error,
+            pendingRevlogCount: pendingRevlogCount,
+          ),
         ),
       ],
       child: MaterialApp(
@@ -33,11 +42,14 @@ Widget _statsPageWithQueryError(Object error) => ProviderScope(
     );
 
 class _QueryFailingAnkiDatabase extends AnkiDatabase {
-  _QueryFailingAnkiDatabase(this.error);
+  _QueryFailingAnkiDatabase(this.error, {this.pendingRevlogCount = false});
+
+  final bool pendingRevlogCount;
 
   final Object error;
   late final CardDao _cards = _QueryFailingCardDao(error);
-  late final RevlogDao _revlog = _StubRevlogDao();
+  late final RevlogDao _revlog =
+      pendingRevlogCount ? _PendingRevlogDao() : _StubRevlogDao();
 
   @override
   CardDao get cards => _cards;
@@ -61,6 +73,14 @@ class _QueryFailingCardDao implements CardDao {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _PendingRevlogDao implements RevlogDao {
+  @override
+  Future<int> count() => Completer<int>().future;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _StubRevlogDao implements RevlogDao {
   @override
   Future<int> count() async => 0;
@@ -70,6 +90,22 @@ class _StubRevlogDao implements RevlogDao {
 }
 
 void main() {
+  testWidgets('shows a query error while another aggregate query is pending', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _statsPageWithQueryError(
+        StateError('stats query failed'),
+        pendingRevlogCount: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('stats query failed'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('shows a database query failure instead of loading forever', (
     tester,
   ) async {

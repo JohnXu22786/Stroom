@@ -61,7 +61,7 @@ class AnkiStatsPage extends ConsumerWidget {
         db.cards.countByQueueAll(1), // learning
         db.cards.countByQueueAll(2), // review
         db.revlog.count(),
-      ]),
+      ], eagerError: true),
       builder: (ctx, snap) {
         if (snap.hasError) {
           return LayoutBuilder(
