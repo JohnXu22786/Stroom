@@ -76,6 +76,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/context_management_settings_test.dart",
         "providers/provider_config*_test.dart",
         "providers/provider_entries_legacy_effort_migration_test.dart",
+        "pages/mcp_server_config_page_test.dart",
         "providers/temporary_conversation_test.dart",
         "utils/model_order_test.dart",
         "utils/attachment_preview_lifecycle_test.dart",
@@ -305,6 +306,7 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
 # These tests require a browser runtime and are executed by dedicated Chrome
 # steps in .github/workflows/ci.yml, not by the native Flutter test runner.
 BROWSER_ONLY_TESTS: dict[str, str] = {
+    "services/sse_client_web_connect_test.dart": "chat-taskflow-core",
     "utils/web_file_store_blob_web_test.dart": "built-in-components",
 }
 
