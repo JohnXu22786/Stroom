@@ -17,9 +17,8 @@ void main() {
       );
       final response = await source.request();
       final received = <List<int>>[];
-      final playbackDone = response.stream
-          .listen(received.add)
-          .asFuture<void>();
+      final playbackDone =
+          response.stream.listen(received.add).asFuture<void>();
 
       chunks.add(Uint8List.fromList([1, 2]));
       await Future<void>.delayed(Duration.zero);
