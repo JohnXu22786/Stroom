@@ -31,20 +31,26 @@ class CardDao {
     return rows.map(Card.fromMap).toList();
   }
 
-  Future<List<Card>> listDue(int deckId, int nowSec) async {
+  Future<List<Card>> listDue(int deckId, int nowSec, {int? dayOrdinal}) async {
     final rows = await _db.query(
       'cards',
-      where: 'did = ? AND queue >= 0 AND due <= ?',
-      whereArgs: [deckId, nowSec],
+      where:
+          'did = ? AND queue >= 0 AND ((queue != 3 AND due <= ?) OR (queue = 3 AND ? IS NOT NULL AND due <= ?))',
+      whereArgs: [deckId, nowSec, dayOrdinal, dayOrdinal],
     );
     return rows.map(Card.fromMap).toList();
   }
 
-  Future<List<Card>> listDueInDeck(int deckId, int nowSec) async {
+  Future<List<Card>> listDueInDeck(
+    int deckId,
+    int nowSec, {
+    int? dayOrdinal,
+  }) async {
     final rows = await _db.query(
       'cards',
-      where: 'did = ? AND ((queue = 0) OR (queue > 0 AND due <= ?))',
-      whereArgs: [deckId, nowSec],
+      where:
+          'did = ? AND (queue = 0 OR (queue > 0 AND queue != 3 AND due <= ?) OR (queue = 3 AND ? IS NOT NULL AND due <= ?))',
+      whereArgs: [deckId, nowSec, dayOrdinal, dayOrdinal],
     );
     return rows.map(Card.fromMap).toList();
   }
@@ -66,10 +72,10 @@ class CardDao {
     return result.first['cnt'] as int;
   }
 
-  Future<int> countDue(int deckId, int nowSec) async {
+  Future<int> countDue(int deckId, int nowSec, {int? dayOrdinal}) async {
     final result = await _db.rawQuery(
-      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND ((queue = 0) OR (queue > 0 AND due <= ?))',
-      [deckId, nowSec],
+      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND (queue = 0 OR (queue > 0 AND queue != 3 AND due <= ?) OR (queue = 3 AND ? IS NOT NULL AND due <= ?))',
+      [deckId, nowSec, dayOrdinal, dayOrdinal],
     );
     return result.first['cnt'] as int;
   }
