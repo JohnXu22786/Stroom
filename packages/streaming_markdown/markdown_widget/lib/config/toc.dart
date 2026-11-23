@@ -131,6 +131,7 @@ class _TocWidgetState extends State<TocWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       _detachController(oldWidget.controller);
+      currentIndex = 0;
       _attachController(widget.controller);
     }
   }

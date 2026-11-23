@@ -49,6 +49,15 @@ void main() {
     await tester.pump();
     expect(find.text('item:1,current:1'), findsOneWidget);
 
+    await tester.pumpWidget(build(nextController));
+    await tester.pump();
+    expect(nextController.tocList, hasLength(2));
+    expect(find.text('item:0,current:0'), findsOneWidget);
+
+    nextController.onIndexChanged(1);
+    await tester.pump();
+    expect(find.text('item:1,current:1'), findsOneWidget);
+
     await tester.pumpWidget(build(nextController, data: '# First heading'));
     await tester.pump();
     expect(nextController.tocList, hasLength(1));
