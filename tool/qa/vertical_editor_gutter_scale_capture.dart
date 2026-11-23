@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/code_editor_field.dart';
 
 void main() {
@@ -13,6 +14,12 @@ void main() {
   final textScale =
       double.tryParse(Uri.base.queryParameters['scale'] ?? '1') ?? 1;
   final dark = Uri.base.queryParameters['theme'] == 'dark';
+  final component = Uri.base.queryParameters['component'] ?? 'editor';
+  final editorFixture = '[\n${List.generate(
+    1234,
+    (index) => '  "Eintrag ${index + 1}"',
+  ).join(',\n')}\n]';
+  final codeBlockFixture = List<String>.generate(1234, (index) => 'entry');
 
   runApp(
     MaterialApp(
@@ -38,30 +45,29 @@ void main() {
         ),
         child: child!,
       ),
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: Center(
-            child: FilledButton(
-              onPressed: () => showJsonValueEditorDialog(
-                context,
-                initialValue: '''{
-  "name": "local example",
-  "enabled": true,
-  "count": 3,
-  "options": {
-    "first": "alpha",
-    "second": "beta"
-  }
-}''',
-                hintText: '',
-                type: 'json',
-                onSave: (_) {},
+      home: component == 'block'
+          ? Scaffold(
+              body: CodeBlockSourceView(
+                code: codeBlockFixture.join('\n'),
+                language: 'dart',
               ),
-              child: const Text('Open JSON editor'),
+            )
+          : Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () => showJsonValueEditorDialog(
+                      context,
+                      initialValue: editorFixture,
+                      hintText: '',
+                      type: 'json',
+                      onSave: (_) {},
+                    ),
+                    child: const Text('Open JSON editor'),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     ),
   );
 }

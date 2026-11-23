@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../l10n/app_localizations.dart';
 
 import 'constrained_text.dart';
+import 'code_line_number_gutter.dart';
 
 // ============================================================================
 // 代码编辑辅助（自定义参数 JSON 值编辑器共享组件）
@@ -426,13 +427,29 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
     final colorScheme = Theme.of(context).colorScheme;
     final lineCount = widget.controller.text.split('\n').length;
     final digitCount = lineCount.toString().length;
-    final lineNumWidth = (digitCount * 8.0 + 20.0).clamp(36.0, 80.0);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
     const editorTextStyle = TextStyle(
       fontFamily: 'monospace',
       fontSize: 13,
       height: 1.3,
     );
     const contentPadding = EdgeInsets.fromLTRB(8, 11, 8, 12);
+    final lineNumStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 12,
+      color: colorScheme.onSurfaceVariant,
+      height: 1.3,
+    );
+    final lineNumWidth = codeLineNumberGutterWidth(
+      lineNumber: lineCount.toString(),
+      textStyle: lineNumStyle,
+      textScaler: textScaler,
+      textDirection: textDirection,
+      locale: Localizations.maybeLocaleOf(context),
+      minimumWidth: (digitCount * 8.0 + 20.0).clamp(36.0, 80.0).toDouble(),
+      horizontalPadding: 12.0,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -442,7 +459,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
         final lineMetrics = TextPainter(
           text: const TextSpan(text: '0', style: editorTextStyle),
           textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
+          textScaler: textScaler,
           locale: Localizations.maybeLocaleOf(context),
         )..layout();
         final lineHeight = lineMetrics.preferredLineHeight;
@@ -455,8 +472,8 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
           (
             widget.controller.text,
             constraints.maxWidth,
-            MediaQuery.textScalerOf(context),
-            Directionality.of(context),
+            textScaler,
+            textDirection,
             Localizations.maybeLocaleOf(context),
           ),
         );
@@ -489,12 +506,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
                             height: lineHeights[i],
                             child: Text(
                               '${i + 1}',
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                                color: colorScheme.onSurfaceVariant,
-                                height: 1.3,
-                              ),
+                              style: lineNumStyle,
                             ),
                           );
                         }),
