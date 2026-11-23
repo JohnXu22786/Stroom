@@ -908,6 +908,49 @@ $$
     });
   });
 
+  group('PreConfig.copy builder', () {
+    test('preserves the original builder unless a replacement is supplied', () {
+      final original = PreConfig(
+        builder: (_, _) => const Text('original code builder'),
+      );
+      final copied = original.copy();
+      final replaced = original.copy(
+        builder: (_, _) => const Text('replacement code builder'),
+      );
+
+      List<Widget> render(PreConfig config) {
+        return _widgetsFromInlineSpans(
+          MarkdownGenerator().buildWidgets(
+            '```dart\nprint("hello")\n```',
+            config: MarkdownConfig(configs: [config]),
+          ),
+        );
+      }
+
+      expect(
+        render(copied),
+        contains(isA<Text>()
+            .having((widget) => widget.data, 'data', 'original code builder')),
+      );
+      expect(
+        render(replaced),
+        contains(isA<Text>().having(
+            (widget) => widget.data, 'data', 'replacement code builder')),
+      );
+
+      final wrapped = original.copy(wrapper: (child, _, _) => child);
+      expect(wrapped.builder, isNull,
+          reason: 'a supplied wrapper replaces the copied builder');
+
+      final wrapperConfig = PreConfig(wrapper: (child, _, _) => child);
+      final built = wrapperConfig.copy(
+        builder: (_, _) => const Text('replacement code builder'),
+      );
+      expect(built.wrapper, isNull,
+          reason: 'a supplied builder replaces the copied wrapper');
+    });
+  });
+
   group('buildMessageMarkdownConfig - per-message streaming', () {
     // Regression: when a new message starts streaming, previously rendered
     // mermaid diagrams in OLD messages must NOT show the "正在生成..."
