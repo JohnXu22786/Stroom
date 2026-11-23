@@ -12,6 +12,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/unified_task_list/media_preview_sheet.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
 
+// Functional suite mapping: media-processing; widget tests run in feature-ui.
 class _MockAudioPlayer extends Mock implements AudioPlayer {}
 
 const _captureKey = ValueKey('media-preview-scroll-capture');

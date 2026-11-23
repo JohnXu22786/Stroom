@@ -9,6 +9,7 @@ import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/unified_task_list/media_preview_sheet.dart';
 
+// Functional suite mapping: media-processing; widget tests run in feature-ui.
 class _MockAudioPlayer extends Mock implements AudioPlayer {}
 
 Widget _previewApp({
@@ -127,6 +128,75 @@ void main() {
       await errors.close();
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+    },
+  );
+
+  testWidgets(
+    'fitting unsupported-format error stays vertically centered',
+    (tester) async {
+      _setViewport(tester, const Size(320, 640), 1);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const resource = MediaResource(
+        url: 'https://example.invalid/file.xyz',
+        name: 'sample',
+        ext: 'xyz',
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showMediaPreview(
+                    context,
+                    resource,
+                    'Media preview',
+                  ),
+                  child: const Text('Open preview'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open preview'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final dividerRect = tester.getRect(find.byType(Divider));
+      final sheetColumn = find
+          .ancestor(
+            of: find.byType(Divider),
+            matching: find.byType(Column),
+          )
+          .first;
+      final sheetRect = tester.getRect(sheetColumn);
+      final iconRect = tester.getRect(find.byIcon(Icons.error_outline));
+      final messageRect = tester.getRect(
+        find.text('Preview is not supported for this format'),
+      );
+      final contentRect = Rect.fromLTRB(
+        iconRect.left,
+        iconRect.top,
+        iconRect.right,
+        messageRect.bottom,
+      );
+      final previewViewport = Rect.fromLTRB(
+        sheetRect.left,
+        dividerRect.bottom,
+        sheetRect.right,
+        sheetRect.bottom,
+      );
+      expect(sheetRect.height, closeTo(640 * 0.6, 1));
+      expect(
+        contentRect.center.dy,
+        closeTo(previewViewport.center.dy, 1),
+      );
     },
   );
 
