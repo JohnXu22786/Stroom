@@ -1044,32 +1044,24 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                     '${r.item.isFolder ? strings.batchDlgFolder : strings.batchDlgFile} · ${r.item.folder.isEmpty ? strings.batchDlgRoot : r.item.folder}',
                     style: Theme.of(context).textTheme.labelSmall,
                   ),
-                  Tooltip(
-                    message: r.oldDisplay,
-                    child: ConstrainedText(
-                      r.oldDisplay,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  Text(
+                    r.oldDisplay,
+                    key: Key('batch_rename_old_name_${r.item.key}'),
                   ),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('→ '),
                       Expanded(
-                        child: Tooltip(
-                          message: r.newDisplay,
-                          child: ConstrainedText(
-                            r.newDisplay,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: r.error != null
-                                  ? colors.error
-                                  : r.isChanged
-                                      ? colors.primary
-                                      : colors.onSurfaceVariant,
-                            ),
+                        child: Text(
+                          r.newDisplay,
+                          key: Key('batch_rename_new_name_${r.item.key}'),
+                          style: TextStyle(
+                            color: r.error != null
+                                ? colors.error
+                                : r.isChanged
+                                    ? colors.primary
+                                    : colors.onSurfaceVariant,
                           ),
                         ),
                       ),
