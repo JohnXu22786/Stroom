@@ -567,27 +567,35 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
     final strings = AppLocalizations.of(context)!;
     final previewError = _previewError;
     if (previewError != null) {
-      return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
-              const SizedBox(height: 16),
-              Text(
-                previewError.localizedMessage(strings),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
+      return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 64).clamp(0, double.infinity),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline,
+                      size: 48, color: Colors.red.shade300),
+                  const SizedBox(height: 16),
+                  Text(
+                    previewError.localizedMessage(strings),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       );
     }
 
     if (_isAudioFormat) {
-      return Padding(
+      return SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
