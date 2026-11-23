@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
 import 'package:stroom/widgets/constrained_text.dart';
@@ -104,6 +105,92 @@ void main() {
         url,
       );
     });
+
+    // Unit owner: vertical_floating_capture_button.
+    // Functional suite mapping: this widget suite covers the panel's 320x640
+    // 1x and scaled capture action layout and its complete accessible label.
+    testWidgets(
+      'capture action grows for large text while staying compact at 1x',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        Future<void> pumpAtTextScale(
+          double textScale, {
+          Brightness brightness = Brightness.light,
+        }) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.blue,
+                  brightness: brightness,
+                ),
+              ),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  disableAnimations: true,
+                  textScaler: TextScaler.linear(textScale),
+                ),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: DraggableFloatingPanel(
+                  detectedUrls: const ['https://cdn.example.com/video.mp4'],
+                  onConfirmCapture: (_) {},
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.textContaining('video.mp4'));
+          await tester.pump();
+        }
+
+        final actionFinder = find.widgetWithText(FilledButton, '确认捕获');
+        final labelFinder = find.text('确认捕获');
+        final panelTitleFinder = find.byWidgetPredicate(
+          (widget) => widget is ConstrainedText && widget.data == '猫抓嗅探',
+        );
+        final panelTitleTextFinder = find.descendant(
+          of: panelTitleFinder,
+          matching: find.byType(RichText),
+        );
+
+        await pumpAtTextScale(1);
+        expect(tester.getSize(actionFinder).height, 28);
+        expect(
+          tester
+              .renderObject<RenderParagraph>(panelTitleTextFinder)
+              .didExceedMaxLines,
+          isFalse,
+          reason: 'The panel title should stay fully visible at normal scale.',
+        );
+        expect(tester.takeException(), isNull);
+
+        await pumpAtTextScale(3, brightness: Brightness.dark);
+        final actionRect = tester.getRect(actionFinder);
+        final labelRect = tester.getRect(labelFinder);
+        expect(
+          actionRect.top <= labelRect.top &&
+              actionRect.bottom >= labelRect.bottom,
+          isTrue,
+          reason: 'The scaled label must remain inside the action vertically.',
+        );
+        expect(actionRect.height, greaterThan(28));
+        expect(
+          tester.getSemantics(actionFinder).label,
+          contains('确认捕获'),
+        );
+        expect(
+          tester.widget<ConstrainedText>(panelTitleFinder).semanticsLabel,
+          '猫抓嗅探',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('calls onConfirmCapture when capture button tapped',
         (tester) async {
