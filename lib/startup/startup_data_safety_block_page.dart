@@ -203,7 +203,13 @@ class _StartupDataSafetyBlockPageState
               ),
             ),
             SizedBox(width: 12),
-            Text(l10n.startupSafetyCheckingUpdates),
+            Expanded(
+              child: ConstrainedText(
+                l10n.startupSafetyCheckingUpdates,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         duration: Duration(days: 1),
