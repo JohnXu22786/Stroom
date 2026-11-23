@@ -329,6 +329,36 @@ void main() {
         Navigator.of(frenchContext, rootNavigator: true).pop();
         await tester.pump();
         await frenchDialogResult;
+
+        tester.view.physicalSize = const Size(360, 640);
+        await tester.pumpWidget(
+          _buildTestApp(
+            locale: const Locale('en', 'US'),
+            home: const SizedBox(key: Key('mcp-en-test-host')),
+          ),
+        );
+        await tester.pump();
+        final englishContext =
+            tester.element(find.byKey(const Key('mcp-en-test-host')));
+        final englishDialogResult = showMcpServerConfigDialog(
+          context: englishContext,
+          entryId: 'missing-mcp-entry',
+          configIndex: -1,
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull);
+        final englishAppBar = tester.getRect(find.byType(AppBar).last);
+        expect(englishAppBar.height, lessThan(80));
+        for (final label in ['Save', 'Discard']) {
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(englishAppBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(englishAppBar.right));
+          expect(labelRect.top, greaterThanOrEqualTo(englishAppBar.top));
+          expect(labelRect.bottom, lessThanOrEqualTo(englishAppBar.bottom));
+        }
+        Navigator.of(englishContext, rootNavigator: true).pop();
+        await tester.pump();
+        await englishDialogResult;
       },
     );
 

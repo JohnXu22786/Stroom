@@ -3,9 +3,10 @@
 The production `showMcpServerConfigDialog` was rendered at 320 × 640 CSS px,
 device pixel ratio 1, Material 3 light theme. The primary 1× capture uses
 English (United States); Save and Discard keep their existing horizontal
-AppBar row. The German (`de-DE`) 1× capture also keeps the original horizontal
-row. The supplemental 2× German capture moves Save and Discard below the title
-when the complete labels and icons no longer fit, and both remain operable.
+AppBar row. The German (`de-DE`) 1× capture also stays horizontal; the dialog
+uses narrower side padding only if the default button padding would exceed the
+available row. The supplemental 2× German capture moves Save and Discard below
+the title when the complete labels and icons still do not fit.
 Neither capture has a focused control or an open keyboard. The in-memory MCP
 fixture uses an `example.invalid` endpoint and makes no provider or network
 request.
@@ -16,10 +17,11 @@ request.
 
 Before the fix, the focused 320 × 640 German widget run produced horizontal
 RenderFlex overflows of 94 px at 1× and 298 px at 2×. The regression test now
-checks those narrow states, covers French at 360 × 640/1× and the wide 1×
-layout, verifies both action bounds, native field focus and keyboard visibility,
-and Discard returning to read-only mode. The production captures show the
-horizontal German 1× row and the reflow at 2×. Run the test with:
+checks those narrow states, French at 360 × 640/1×, the horizontal English row
+at 360 × 640/1×, and the wide 1× layout. It verifies action bounds, native field
+focus and keyboard visibility, and Discard returning to read-only mode. The
+production captures show the horizontal German 1× row and the reflow at 2×.
+Run the test with:
 
 ```sh
 flutter test --reporter expanded --plain-name \
