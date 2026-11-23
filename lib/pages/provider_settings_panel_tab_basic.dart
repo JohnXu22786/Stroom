@@ -219,7 +219,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       _buildResponsiveSettingsRow(
         context,
         label: AppLocalizations.of(context)!.providerUploadMethod,
-        control: Container(
+        controlBuilder: (isExpanded) => Container(
           decoration: BoxDecoration(
             border: Border.all(color: cs.outlineVariant),
             borderRadius: BorderRadius.circular(8),
@@ -231,7 +231,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _uploadMethod,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              isExpanded: isExpanded,
               selectedItemBuilder: (context) => [
                 _buildAsrSelectedDropdownText(
                   context,
@@ -300,7 +300,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             _buildResponsiveSettingsRow(
               context,
               label: AppLocalizations.of(context)!.providerMaxUploadSize,
-              control: SizedBox(
+              minimumControlWidth: 90,
+              controlBuilder: (_) => SizedBox(
                 width: 90,
                 child: TextField(
                   controller: _maxFileSizeController,
@@ -371,7 +372,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       _buildResponsiveSettingsRow(
         context,
         label: AppLocalizations.of(context)!.providerFallbackMethod,
-        control: Container(
+        controlBuilder: (isExpanded) => Container(
           decoration: BoxDecoration(
             border: Border.all(color: cs.outlineVariant),
             borderRadius: BorderRadius.circular(8),
@@ -383,7 +384,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _fallbackMethod,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              isExpanded: isExpanded,
               selectedItemBuilder: (context) => [
                 _buildAsrSelectedDropdownText(
                   context,
@@ -495,7 +496,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       _buildResponsiveSettingsRow(
         context,
         label: AppLocalizations.of(context)!.providerPreprocessingMethod,
-        control: Container(
+        controlBuilder: (isExpanded) => Container(
           decoration: BoxDecoration(
             border: Border.all(color: cs.outlineVariant),
             borderRadius: BorderRadius.circular(8),
@@ -507,7 +508,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _preprocessing,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              isExpanded: isExpanded,
               selectedItemBuilder: (context) => [
                 _buildAsrSelectedDropdownText(
                   context,
