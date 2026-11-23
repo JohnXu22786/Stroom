@@ -81,6 +81,68 @@ void main() {
     expect(find.text('关闭'), findsOneWidget);
   });
 
+  testWidgets('file information labels stay bounded in narrow locales',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final attachment = Attachment(
+      fileName: 'sample.pdf',
+      mimeType: 'application/pdf',
+      fileType: 'document',
+      hash: 'fixture-hash',
+      storagePath: '/local/fixture/sample.pdf',
+      fileSize: 2048,
+    );
+
+    for (final locale in const [Locale('fr'), Locale('de'), Locale('ar')]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(1),
+            ),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showFileInfoPreviewDialog(
+                context: context,
+                attachment: attachment,
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ConstrainedText), findsNWidgets(4));
+      expect(
+        tester
+            .widgetList<ConstrainedText>(find.byType(ConstrainedText))
+            .every((text) => text.maxLines == 1),
+        isTrue,
+      );
+      expect(find.text('/local/fixture/sample.pdf'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$locale at 1× scale');
+      await tester.ensureVisible(find.byIcon(Icons.close));
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+    }
+  });
+
   testWidgets('keeps fitting Arabic file names unchanged for native shaping',
       (tester) async {
     const fileName = 'تقرير.pdf';
