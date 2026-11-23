@@ -547,7 +547,15 @@ class _McpServerConfigDialogState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final compactAppBar = _shouldUseCompactAppBar();
+    final actionWidths = _measureAppBarActionWidths();
+    final appBarActionSpace = _appBarActionSpace;
+    final hasActions = actionWidths.normalWidth > 0;
+    final compactAppBar = hasActions &&
+        actionWidths.normalWidth > appBarActionSpace &&
+        actionWidths.condensedWidth > appBarActionSpace;
+    final condensedAppBarActions = hasActions &&
+        actionWidths.normalWidth > appBarActionSpace &&
+        actionWidths.condensedWidth <= appBarActionSpace;
     final title = _isExistingConfig
         ? (_nameController.text.isNotEmpty
             ? _nameController.text
@@ -611,7 +619,9 @@ class _McpServerConfigDialogState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              actions: compactAppBar ? const [] : _buildAppBarActions(),
+              actions: compactAppBar
+                  ? const []
+                  : _buildAppBarActions(condensed: condensedAppBarActions),
               bottom: compactAppBar
                   ? PreferredSize(
                       preferredSize: Size.fromHeight(
@@ -947,7 +957,13 @@ class _McpServerConfigDialogState
   double get _compactActionHeight =>
       MediaQuery.textScalerOf(context).scale(1) >= 1.5 ? 72 : 48;
 
-  bool _shouldUseCompactAppBar() {
+  double get _appBarActionSpace {
+    final dialogWidth =
+        (MediaQuery.sizeOf(context).width - 48).clamp(0.0, 560.0).toDouble();
+    return dialogWidth - kToolbarHeight;
+  }
+
+  ({double normalWidth, double condensedWidth}) _measureAppBarActionWidths() {
     final labels = _isEditMode
         ? [
             _isSaving
@@ -958,10 +974,11 @@ class _McpServerConfigDialogState
         : _isExistingConfig
             ? [AppLocalizations.of(context)!.imagePreviewEdit]
             : const <String>[];
-    if (labels.isEmpty) return false;
+    if (labels.isEmpty) return (normalWidth: 0, condensedWidth: 0);
 
     final textScaler = MediaQuery.textScalerOf(context);
-    final actionsWidth = labels.fold<double>(0, (width, label) {
+    return labels.fold<({double normalWidth, double condensedWidth})>(
+        (normalWidth: 0, condensedWidth: 0), (widths, label) {
       final button = TextButton.icon(
         onPressed: null,
         icon: const Icon(Icons.save, size: 20),
@@ -969,6 +986,11 @@ class _McpServerConfigDialogState
       );
       final themeStyle = button.themeStyleOf(context);
       final defaultStyle = button.defaultStyleOf(context);
+      final buttonPadding = (button.style?.padding?.resolve(const {}) ??
+              themeStyle?.padding?.resolve(const {}) ??
+              defaultStyle.padding?.resolve(const {}) ??
+              EdgeInsets.zero)
+          .resolve(Directionality.of(context));
       final labelStyle = button.style?.textStyle?.resolve(const {}) ??
           themeStyle?.textStyle?.resolve(const {}) ??
           defaultStyle.textStyle?.resolve(const {}) ??
@@ -985,16 +1007,22 @@ class _McpServerConfigDialogState
           _isSaving && label == AppLocalizations.of(context)!.mcpSaving
               ? 16.0
               : 20.0;
-      // Reflow only when the complete label, icon, gap, and minimum button
-      // width do not fit. Use the active TextButton theme and text scale.
-      final intrinsicWidth = painter.width + iconWidth + iconGap;
-      return width + intrinsicWidth.clamp(64.0, double.infinity).toDouble();
+      final contentWidth = painter.width + iconWidth + iconGap;
+      final minimumWidth =
+          (button.style?.minimumSize?.resolve(const {})?.width ??
+                  themeStyle?.minimumSize?.resolve(const {})?.width ??
+                  defaultStyle.minimumSize?.resolve(const {})?.width ??
+                  64.0)
+              .toDouble();
+      return (
+        normalWidth: widths.normalWidth +
+            (contentWidth + buttonPadding.horizontal)
+                .clamp(minimumWidth, double.infinity)
+                .toDouble(),
+        condensedWidth: widths.condensedWidth +
+            (contentWidth + 16).clamp(minimumWidth, double.infinity).toDouble(),
+      );
     });
-    // Preserve the current AppBar row until the localized action buttons, using
-    // the active TextButton.icon theme, exceed the room beside the leading icon.
-    final dialogWidth =
-        (MediaQuery.sizeOf(context).width - 48).clamp(0.0, 560.0).toDouble();
-    return actionsWidth > dialogWidth - kToolbarHeight;
   }
 
   List<Widget> _buildCompactAppBarActions() {
@@ -1033,7 +1061,12 @@ class _McpServerConfigDialogState
     return const [];
   }
 
-  List<Widget> _buildAppBarActions() {
+  List<Widget> _buildAppBarActions({required bool condensed}) {
+    final actionStyle = condensed
+        ? TextButton.styleFrom(
+            padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 8, 8),
+          )
+        : null;
     if (_isEditMode) {
       final saveLabel = _isSaving
           ? AppLocalizations.of(context)!.mcpSaving
@@ -1042,6 +1075,7 @@ class _McpServerConfigDialogState
       return [
         TextButton.icon(
           onPressed: _isSaving ? null : _save,
+          style: actionStyle,
           icon: _isSaving
               ? const SizedBox(
                   width: 16,
@@ -1057,6 +1091,7 @@ class _McpServerConfigDialogState
         ),
         TextButton.icon(
           onPressed: _isSaving ? null : _discardChanges,
+          style: actionStyle,
           icon: const Icon(Icons.close, size: 20),
           label: ConstrainedText(
             discardLabel,
@@ -1069,6 +1104,7 @@ class _McpServerConfigDialogState
     return [
       if (_isExistingConfig)
         TextButton.icon(
+          style: actionStyle,
           icon: const Icon(Icons.edit, size: 20),
           label: ConstrainedText(
             AppLocalizations.of(context)!.imagePreviewEdit,
