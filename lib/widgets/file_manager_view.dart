@@ -2863,6 +2863,7 @@ class _FileManagerViewState<T extends FileRecord>
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_folder_dialog'),
+        scrollable: true,
         title: ConstrainedText(
           AppLocalizations.of(context)!.fileManagerDeleteFolderTitle,
           maxLines: 1,
