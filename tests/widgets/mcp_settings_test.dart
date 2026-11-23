@@ -15,7 +15,11 @@ import 'package:stroom/providers/update_provider.dart';
 
 /// Builds the test app with all required provider overrides.
 /// Uses a large screen size to avoid needing to scroll.
-Widget _buildTestApp({Future<void>? updateGate}) {
+Widget _buildTestApp({
+  Future<void>? updateGate,
+  Widget? home,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
@@ -30,10 +34,10 @@ Widget _buildTestApp({Future<void>? updateGate}) {
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: const SettingsPage(),
+      home: home ?? const SettingsPage(),
     ),
   );
 }
@@ -176,6 +180,112 @@ void main() {
     setUp(() {
       registerBuiltinProviderTypes();
     });
+
+    testWidgets(
+      'MCP edit actions fit a narrow 2x text layout',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': jsonEncode([
+            {
+              'id': 'builtin_mcp',
+              'type': 'mcp',
+              'name': 'MCP供应商',
+              'configs': [
+                {
+                  'providerName': 'Custom MCP',
+                  'host': 'https://mcp.example.com/sse',
+                  'key': '',
+                  'models': [
+                    {
+                      'name': 'Custom MCP',
+                      'modelId': 'sse',
+                      'typeConfig': {
+                        'transport': 'sse',
+                        'url': 'https://mcp.example.com/sse',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ]),
+        });
+        await tester.pumpWidget(
+          _buildTestApp(
+            locale: const Locale('de'),
+            home: const SizedBox(key: Key('mcp-test-host')),
+          ),
+        );
+        await tester.pump();
+        final context = tester.element(find.byKey(const Key('mcp-test-host')));
+        final dialogResult = showMcpServerConfigDialog(
+          context: context,
+          entryId: 'builtin_mcp',
+          configIndex: 0,
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.tap(find.text('Bearbeiten'));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Speichern'), findsOneWidget);
+        expect(find.text('Verwerfen'), findsOneWidget);
+        final appBar = tester.getRect(find.byType(AppBar).last);
+        for (final label in ['Speichern', 'Verwerfen']) {
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(appBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(appBar.right));
+          expect(labelRect.top, greaterThanOrEqualTo(appBar.top));
+          expect(labelRect.bottom, lessThanOrEqualTo(appBar.bottom));
+        }
+        await tester.drag(find.byType(ListView).last, const Offset(0, -240));
+        await tester.pump(const Duration(milliseconds: 100));
+        final nameField = find.byType(TextField).first;
+        await tester.tap(nameField);
+        await tester.pump();
+        expect(tester.testTextInput.isVisible, isTrue);
+        await tester.enterText(nameField, 'Unsaved server name');
+        await tester.tap(find.text('Verwerfen'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.testTextInput.isVisible, isFalse);
+        expect(find.text('Bearbeiten'), findsOneWidget);
+        await tester.tap(find.text('Bearbeiten'));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        tester.platformDispatcher.textScaleFactorTestValue = 1.0;
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull);
+        for (final label in ['Speichern', 'Verwerfen']) {
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(appBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(appBar.right));
+        }
+        tester.view.physicalSize = const Size(1080, 1200);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull);
+        final wideAppBar = tester.getRect(find.byType(AppBar).last);
+        expect(wideAppBar.height, lessThan(80));
+        for (final label in ['Speichern', 'Verwerfen']) {
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(wideAppBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(wideAppBar.right));
+        }
+        await tester.tap(find.text('Verwerfen'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Bearbeiten'), findsOneWidget);
+        Navigator.of(context, rootNavigator: true).pop();
+        await tester.pump();
+        await dialogResult;
+      },
+    );
 
     testWidgets(
       'updating a header-backed API key replaces credential sources',
