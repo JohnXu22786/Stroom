@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/anki/database/card_dao.dart';
+import 'package:stroom/anki/database/note_dao.dart';
 import 'package:stroom/anki/models/card.dart' as anki;
+import 'package:stroom/anki/models/note.dart';
 import 'package:stroom/anki/pages/card_browser.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -41,6 +43,25 @@ class _FailingCardDao implements CardDao {
   @override
   Future<List<anki.Card>> listByDeck(int deckId) async =>
       throw StateError('query failed');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _StaticNoteDao implements NoteDao {
+  final Note note;
+  _StaticNoteDao(this.note);
+
+  @override
+  Future<Note?> get(int id) async => note.id == id ? note : null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FailingNoteDao implements NoteDao {
+  @override
+  Future<Note?> get(int id) async => throw StateError('note query failed');
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -128,6 +149,69 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ListTile), findsOneWidget);
+  });
+
+  testWidgets('waits for the note DAO before rendering card content', (
+    tester,
+  ) async {
+    final noteDaoCompleter = Completer<NoteDao>();
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWith((_) => noteDaoCompleter.future),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    noteDaoCompleter.complete(
+      _StaticNoteDao(Note(id: 1, notetype_id: 1, fields: ['Card front'])),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Card front'), findsOneWidget);
+  });
+
+  testWidgets('shows a localized error when loading a card note fails', (
+    tester,
+  ) async {
+    final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiCardDaoProvider.overrideWithValue(
+            AsyncData(_StaticCardDao([card])),
+          ),
+          ankiNoteDaoProvider.overrideWithValue(AsyncData(_FailingNoteDao())),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const AnkiCardBrowser(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Failed to load cards: Bad state: note query failed'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('shows a visible error when loading the card query fails', (

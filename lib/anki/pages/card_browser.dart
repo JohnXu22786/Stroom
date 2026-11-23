@@ -75,8 +75,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   }
 
   Future<Note?> _loadNote(int nid) async {
-    final noteDao = ref.read(ankiNoteDaoProvider).value;
-    if (noteDao == null) return null;
+    final noteDao = await ref.read(ankiNoteDaoProvider.future);
     return noteDao.get(nid);
   }
 
@@ -149,11 +148,20 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                                       : l10n.ankiNoCardContent;
                                   return ListTile(
                                     leading: _queueIcon(card.queue.value),
-                                    title: ConstrainedText(
-                                      front,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    title: snap.hasError
+                                        ? Text(
+                                            l10n.ankiCardBrowserLoadError(
+                                              snap.error.toString(),
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(color: cs.error),
+                                          )
+                                        : ConstrainedText(
+                                            front,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                     subtitle: Text(
                                       'ivl=${card.interval}d  factor=${(card.ease_factor / 10).round()}%  reps=${card.reps}',
                                       style: TextStyle(
