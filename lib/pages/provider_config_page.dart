@@ -1255,6 +1255,106 @@ class _McpConfigCard extends StatelessWidget {
     // Keep provider rows neutral and consistent with the rest of settings.
     final Color backgroundColor =
         isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+    final l10n = AppLocalizations.of(context)!;
+    final inheritedTextStyle = DefaultTextStyle.of(context).style;
+    double measureLabel(String value, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: value, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.localeOf(context),
+      )..layout();
+      return painter.width;
+    }
+
+    final titleGroupWidth = measureLabel(
+          providerName,
+          inheritedTextStyle.copyWith(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ) +
+        (isVendor
+            ? 6 +
+                measureLabel(
+                  l10n.providerBuiltinBadge,
+                  inheritedTextStyle.copyWith(fontSize: 11),
+                )
+            : 0) +
+        (integrationType.isNotEmpty
+            ? 6 +
+                measureLabel(
+                  integrationType,
+                  inheritedTextStyle.copyWith(fontSize: 11),
+                )
+            : 0);
+    final iconButtonExtent = kMinInteractiveDimension;
+    final inlineActionsWidth = (onSettings == null ? 0 : iconButtonExtent) +
+        (enabled == null || onEnabledChanged == null ? 0 : 60) +
+        (onTest == null ? 0 : iconButtonExtent) +
+        (onMove == null ? 0 : 8 + iconButtonExtent) +
+        (onDelete == null ? 0 : 4 + iconButtonExtent) +
+        4 +
+        24;
+    final leadingWidth = 24 + 8 + (isMcp ? 0 : 22 + 14);
+    final minimumReadableTitleWidth = 48.0;
+    final trailingActions = <Widget>[
+      if (onSettings != null)
+        IconButton(
+          icon: Icon(
+            settingsIcon,
+            size: 20,
+            color: cs.onSurfaceVariant,
+          ),
+          onPressed: onSettings,
+          tooltip: settingsTooltip ?? AppLocalizations.of(context)!.appSettings,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      if (enabled != null && onEnabledChanged != null)
+        Switch.adaptive(
+          value: enabled!,
+          onChanged: onEnabledChanged,
+        ),
+      if (onTest != null)
+        IconButton(
+          icon: const Icon(Icons.network_check, size: 20),
+          onPressed: onTest,
+          tooltip: AppLocalizations.of(context)!.providerConnectivityTest,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      if (onMove != null) ...[
+        const SizedBox(width: 8),
+        IconButton(
+          icon: Icon(
+            Icons.drive_file_move_outline,
+            size: 20,
+            color: cs.onSurfaceVariant,
+          ),
+          onPressed: onMove,
+          tooltip: AppLocalizations.of(context)!.providerMoveGroupTooltip,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      ],
+      if (onDelete != null) ...[
+        const SizedBox(width: 4),
+        IconButton(
+          icon: Icon(
+            Icons.delete_outline,
+            size: 20,
+            color: cs.error,
+          ),
+          onPressed: onDelete,
+          tooltip: AppLocalizations.of(context)!.providerDeleteTooltip,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      ],
+      const SizedBox(width: 4),
+      Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+    ];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1273,154 +1373,125 @@ class _McpConfigCard extends StatelessWidget {
                 horizontal: isMcp ? 14 : 12,
                 vertical: isMcp ? 12 : 10,
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  dragHandle,
-                  const SizedBox(width: 8),
-                  if (!isMcp) ...[
-                    Icon(leadIcon, color: iconColor, size: 22),
-                    const SizedBox(width: 14),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableInlineTextWidth =
+                      constraints.maxWidth - leadingWidth - inlineActionsWidth;
+                  // Only move controls after the measured label group is
+                  // constrained and the remaining title slot is unreadable.
+                  final compact = titleGroupWidth > availableInlineTextWidth &&
+                      availableInlineTextWidth < minimumReadableTitleWidth;
+                  final contentRow = Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      dragHandle,
+                      const SizedBox(width: 8),
+                      if (!isMcp) ...[
+                        Icon(leadIcon, color: iconColor, size: 22),
+                        const SizedBox(width: 14),
+                      ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Flexible(
-                              child: ConstrainedText(
-                                providerName,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.onSurface,
-                                  fontSize: 14,
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 2,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                ConstrainedText(
+                                  providerName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurface,
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                                if (isVendor) ...[
+                                  ConstrainedText(
+                                    AppLocalizations.of(context)!
+                                        .providerBuiltinBadge,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                                if (integrationType.isNotEmpty) ...[
+                                  ConstrainedText(
+                                    integrationType,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
                             ),
-                            if (isVendor) ...[
-                              const SizedBox(width: 6),
+                            const SizedBox(height: 4),
+                            ConstrainedText(
+                              subtitle,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (apiKeyHint != null &&
+                                apiKeyHint!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
                               Text(
                                 AppLocalizations.of(context)!
-                                    .providerBuiltinBadge,
+                                    .providerApiKeyHint(apiKeyHint!),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: cs.onSurfaceVariant,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
+                                  fontStyle: FontStyle.italic,
                                 ),
                               ),
                             ],
-                            if (integrationType.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                integrationType,
+                            if (mcpDescription != null &&
+                                mcpDescription!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              ConstrainedText(
+                                mcpDescription!,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: cs.onSurfaceVariant,
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        ConstrainedText(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!compact) ...trailingActions,
+                    ],
+                  );
+                  if (!compact) return contentRow;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      contentRow,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: trailingActions,
                         ),
-                        if (apiKeyHint != null && apiKeyHint!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            AppLocalizations.of(context)!
-                                .providerApiKeyHint(apiKeyHint!),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                        if (mcpDescription != null &&
-                            mcpDescription!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          ConstrainedText(
-                            mcpDescription!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: cs.onSurfaceVariant,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (onSettings != null)
-                    IconButton(
-                      icon: Icon(
-                        settingsIcon,
-                        size: 20,
-                        color: cs.onSurfaceVariant,
                       ),
-                      onPressed: onSettings,
-                      tooltip: settingsTooltip ??
-                          AppLocalizations.of(context)!.appSettings,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (enabled != null && onEnabledChanged != null)
-                    Switch.adaptive(
-                      value: enabled!,
-                      onChanged: onEnabledChanged,
-                    ),
-                  if (onTest != null)
-                    IconButton(
-                      icon: const Icon(Icons.network_check, size: 20),
-                      onPressed: onTest,
-                      tooltip: AppLocalizations.of(context)!
-                          .providerConnectivityTest,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (onMove != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(
-                        Icons.drive_file_move_outline,
-                        size: 20,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      onPressed: onMove,
-                      tooltip: AppLocalizations.of(context)!
-                          .providerMoveGroupTooltip,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                  if (onDelete != null) ...[
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        size: 20,
-                        color: cs.error,
-                      ),
-                      onPressed: onDelete,
-                      tooltip:
-                          AppLocalizations.of(context)!.providerDeleteTooltip,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -1472,30 +1543,32 @@ class _McpGroupHeaderCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Flexible(
-                        child: ConstrainedText(
-                          mcpGroupDisplayName(
-                            group,
-                            AppLocalizations.of(context)!,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      ConstrainedText(
+                        mcpGroupDisplayName(
+                          group,
+                          AppLocalizations.of(context)!,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       if (group.isBuiltin) ...[
-                        const SizedBox(width: 6),
-                        Text(
+                        ConstrainedText(
                           AppLocalizations.of(context)!.providerBuiltinBadge,
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ],
