@@ -255,6 +255,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "utils/system_pick_utils_test.dart",
         "widgets/connectivity_test_dialog_test.dart",
         "widgets/constrained_text_test.dart",
+        "widgets/background_service_control_buttons_test.dart",
         "widgets/modal_bottom_sheet_constraints_test.dart",
         "widgets/quit_confirmation_dialog_test.dart",
         "widgets/tap_outside_unfocus_test.dart",
