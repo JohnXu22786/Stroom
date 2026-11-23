@@ -3,11 +3,11 @@
 The production `showMcpServerConfigDialog` was rendered at 320 × 640 CSS px,
 device pixel ratio 1, Material 3 light theme. The primary 1× capture uses
 English (United States); Save and Discard keep their existing horizontal
-AppBar row. The German (`de-DE`) 1× capture also stays horizontal; the dialog
-uses narrower side padding only if the default button padding would exceed the
-available row. The supplemental 2× German capture moves Save and Discard below
+AppBar row. The German (`de-DE`) 1× capture also stays horizontal; button side
+padding contracts to 8 dp, then to 0 dp only if needed to fit the complete
+labels, icons, and minimum button widths. The supplemental 2× German capture moves Save and Discard below
 the title when the complete labels and icons still do not fit.
-Neither capture has a focused control or an open keyboard. The in-memory MCP
+No capture has a focused control or an open keyboard. The in-memory MCP
 fixture uses an `example.invalid` endpoint and makes no provider or network
 request.
 

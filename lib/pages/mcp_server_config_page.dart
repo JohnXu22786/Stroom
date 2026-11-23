@@ -552,10 +552,15 @@ class _McpServerConfigDialogState
     final hasActions = actionWidths.normalWidth > 0;
     final compactAppBar = hasActions &&
         actionWidths.normalWidth > appBarActionSpace &&
-        actionWidths.condensedWidth > appBarActionSpace;
+        actionWidths.condensedWidth > appBarActionSpace &&
+        actionWidths.minimalWidth > appBarActionSpace;
     final condensedAppBarActions = hasActions &&
         actionWidths.normalWidth > appBarActionSpace &&
         actionWidths.condensedWidth <= appBarActionSpace;
+    final minimalPaddingAppBarActions = hasActions &&
+        actionWidths.normalWidth > appBarActionSpace &&
+        actionWidths.condensedWidth > appBarActionSpace &&
+        actionWidths.minimalWidth <= appBarActionSpace;
     final title = _isExistingConfig
         ? (_nameController.text.isNotEmpty
             ? _nameController.text
@@ -621,7 +626,13 @@ class _McpServerConfigDialogState
               ),
               actions: compactAppBar
                   ? const []
-                  : _buildAppBarActions(condensed: condensedAppBarActions),
+                  : _buildAppBarActions(
+                      horizontalPadding: condensedAppBarActions
+                          ? 8
+                          : minimalPaddingAppBarActions
+                              ? 0
+                              : null,
+                    ),
               bottom: compactAppBar
                   ? PreferredSize(
                       preferredSize: Size.fromHeight(
@@ -963,7 +974,8 @@ class _McpServerConfigDialogState
     return dialogWidth - kToolbarHeight;
   }
 
-  ({double normalWidth, double condensedWidth}) _measureAppBarActionWidths() {
+  ({double normalWidth, double condensedWidth, double minimalWidth})
+      _measureAppBarActionWidths() {
     final labels = _isEditMode
         ? [
             _isSaving
@@ -974,11 +986,14 @@ class _McpServerConfigDialogState
         : _isExistingConfig
             ? [AppLocalizations.of(context)!.imagePreviewEdit]
             : const <String>[];
-    if (labels.isEmpty) return (normalWidth: 0, condensedWidth: 0);
+    if (labels.isEmpty) {
+      return (normalWidth: 0, condensedWidth: 0, minimalWidth: 0);
+    }
 
     final textScaler = MediaQuery.textScalerOf(context);
-    return labels.fold<({double normalWidth, double condensedWidth})>(
-        (normalWidth: 0, condensedWidth: 0), (widths, label) {
+    return labels.fold<
+            ({double normalWidth, double condensedWidth, double minimalWidth})>(
+        (normalWidth: 0, condensedWidth: 0, minimalWidth: 0), (widths, label) {
       final button = TextButton.icon(
         onPressed: null,
         icon: const Icon(Icons.save, size: 20),
@@ -1021,6 +1036,8 @@ class _McpServerConfigDialogState
                 .toDouble(),
         condensedWidth: widths.condensedWidth +
             (contentWidth + 16).clamp(minimumWidth, double.infinity).toDouble(),
+        minimalWidth: widths.minimalWidth +
+            contentWidth.clamp(minimumWidth, double.infinity).toDouble(),
       );
     });
   }
@@ -1061,10 +1078,15 @@ class _McpServerConfigDialogState
     return const [];
   }
 
-  List<Widget> _buildAppBarActions({required bool condensed}) {
-    final actionStyle = condensed
+  List<Widget> _buildAppBarActions({required double? horizontalPadding}) {
+    final actionStyle = horizontalPadding != null
         ? TextButton.styleFrom(
-            padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 8, 8),
+            padding: EdgeInsetsDirectional.fromSTEB(
+              horizontalPadding,
+              8,
+              horizontalPadding,
+              8,
+            ),
           )
         : null;
     if (_isEditMode) {
