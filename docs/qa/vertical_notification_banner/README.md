@@ -4,4 +4,4 @@ These artifacts show the production `InAppNotificationBanner` with a safe local 
 
 - [Light theme screenshot](in-app-notification-en-US-320x640-scale1-light.png)
 - [Dark theme screenshot](in-app-notification-en-US-320x640-scale1-dark.png)
-- [Title reveal motion preview](in-app-notification-title-reveal.webm)
+- [Full forward-and-return title reveal preview](in-app-notification-title-reveal.webm) (real-time capture)
