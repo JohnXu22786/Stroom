@@ -42,6 +42,7 @@ subprocess.run(
         'web',
         '--no-pub',
         '--release',
+        '--no-wasm-dry-run',
         f'--target={entrypoint}',
         f'--output={WEB_BUILD}',
     ],
@@ -85,6 +86,7 @@ try:
     errors = []
     captures = [
         ('en-US', '1', 'mcp-edit-en-320x640-scale1-light.png'),
+        ('de-DE', '1', 'mcp-edit-de-320x640-scale1-light.png'),
         ('de-DE', '2', 'mcp-edit-de-320x640-scale2-light.png'),
     ]
     with sync_playwright() as playwright:
@@ -106,7 +108,7 @@ try:
                 timeout=120_000,
             )
             page.wait_for_timeout(2_000)
-            page.mouse.click(240, 76)
+            page.mouse.click(268, 76)
             page.wait_for_timeout(800)
             page.screenshot(path=str(OUTPUT / filename))
         browser.close()

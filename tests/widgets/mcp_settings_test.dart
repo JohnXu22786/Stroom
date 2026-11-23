@@ -182,7 +182,7 @@ void main() {
     });
 
     testWidgets(
-      'MCP edit actions fit a narrow 2x text layout',
+      'MCP AppBar actions adapt to localized width and text scale',
       (tester) async {
         tester.view.physicalSize = const Size(320, 640);
         tester.view.devicePixelRatio = 1.0;
@@ -263,10 +263,20 @@ void main() {
         tester.platformDispatcher.textScaleFactorTestValue = 1.0;
         await tester.pump(const Duration(milliseconds: 100));
         expect(tester.takeException(), isNull);
+        final germanOneXAppBar = tester.getRect(find.byType(AppBar).last);
         for (final label in ['Speichern', 'Verwerfen']) {
           final labelRect = tester.getRect(find.text(label));
-          expect(labelRect.left, greaterThanOrEqualTo(appBar.left));
-          expect(labelRect.right, lessThanOrEqualTo(appBar.right));
+          expect(labelRect.left, greaterThanOrEqualTo(germanOneXAppBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(germanOneXAppBar.right));
+        }
+        tester.view.physicalSize = const Size(360, 640);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull);
+        final mediumAppBar = tester.getRect(find.byType(AppBar).last);
+        for (final label in ['Speichern', 'Verwerfen']) {
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(mediumAppBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(mediumAppBar.right));
         }
         tester.view.physicalSize = const Size(1080, 1200);
         await tester.pump(const Duration(milliseconds: 100));
@@ -284,6 +294,41 @@ void main() {
         Navigator.of(context, rootNavigator: true).pop();
         await tester.pump();
         await dialogResult;
+
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = const Size(360, 640);
+        await tester.pumpWidget(
+          _buildTestApp(
+            locale: const Locale('fr'),
+            home: const SizedBox(key: Key('mcp-fr-test-host')),
+          ),
+        );
+        await tester.pump();
+        final frenchContext =
+            tester.element(find.byKey(const Key('mcp-fr-test-host')));
+        final frenchDialogResult = showMcpServerConfigDialog(
+          context: frenchContext,
+          entryId: 'missing-mcp-entry',
+          configIndex: -1,
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull);
+        final frenchStrings = AppLocalizations.of(frenchContext)!;
+        final frenchAppBar = tester.getRect(find.byType(AppBar).last);
+        for (final label in [
+          frenchStrings.mermaidSaveButton,
+          frenchStrings.taskFlowUiDiscard,
+        ]) {
+          expect(find.text(label), findsOneWidget);
+          final labelRect = tester.getRect(find.text(label));
+          expect(labelRect.left, greaterThanOrEqualTo(frenchAppBar.left));
+          expect(labelRect.right, lessThanOrEqualTo(frenchAppBar.right));
+          expect(labelRect.top, greaterThanOrEqualTo(frenchAppBar.top));
+          expect(labelRect.bottom, lessThanOrEqualTo(frenchAppBar.bottom));
+        }
+        Navigator.of(frenchContext, rootNavigator: true).pop();
+        await tester.pump();
+        await frenchDialogResult;
       },
     );
 
