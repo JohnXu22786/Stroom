@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -852,22 +853,93 @@ class _FileManagerViewState<T extends FileRecord>
 
     final allItems = <dynamic>[for (final f in subFolders) f, ...currentFiles];
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 130,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
-        childAspectRatio: 1.0,
-      ),
-      itemCount: allItems.length,
-      itemBuilder: (context, index) {
-        final item = allItems[index];
-        if (item is String) {
-          return _buildGridFolderItem(item, grouped[item]?.length ?? 0);
-        } else {
-          return _buildGridFileItem(item as T);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const maxCrossAxisExtent = 130.0;
+        const spacing = 4.0;
+        const padding = 8.0;
+        final availableWidth = constraints.maxWidth - padding * 2;
+        final columnCount = math.max(
+          1,
+          (availableWidth / (maxCrossAxisExtent + spacing)).ceil(),
+        );
+        final tileWidth =
+            (availableWidth - spacing * (columnCount - 1)) / columnCount;
+        final contentWidth = math.max(0.0, tileWidth - 10);
+        final textScaler = MediaQuery.textScalerOf(context);
+        final textDirection = Directionality.of(context);
+        final locale = Localizations.localeOf(context);
+        final defaultTextStyle = DefaultTextStyle.of(context).style;
+
+        double textHeight(
+          String text,
+          TextStyle style, {
+          int? maxLines,
+          double? maxWidth,
+        }) {
+          final painter = TextPainter(
+            text: TextSpan(text: text, style: style),
+            textDirection: textDirection,
+            textScaler: textScaler,
+            locale: locale,
+            maxLines: maxLines,
+            ellipsis: maxLines == null ? null : '…',
+          )..layout(maxWidth: maxWidth ?? contentWidth);
+          return painter.height;
         }
+
+        var tileHeight = tileWidth;
+        for (final folder in subFolders) {
+          final folderName = widget.manifestBridge.getFolderBaseName(folder);
+          final folderLabelHeight = textHeight(
+            folderName,
+            defaultTextStyle.merge(
+              const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
+            maxLines: 2,
+          );
+          final fileCount = grouped[folder]?.length ?? 0;
+          final countHeight = fileCount > 0
+              ? textHeight(
+                  '$fileCount',
+                  defaultTextStyle.merge(const TextStyle(fontSize: 10)),
+                  maxWidth: math.max(0.0, tileWidth - 2),
+                )
+              : 0.0;
+          tileHeight = math.max(
+            tileHeight,
+            2 + 40 + 4 + folderLabelHeight + countHeight,
+          );
+        }
+
+        // Keep the file footer and its selection checkbox inside the grid row
+        // when the active text scale makes them taller than a square cell.
+        final fileLabelHeight = textHeight(
+          'file.format',
+          defaultTextStyle.merge(const TextStyle(fontSize: 10)),
+          maxLines: 1,
+        );
+        tileHeight =
+            math.max(tileHeight, math.max(20.0, fileLabelHeight) + 4 + 2);
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(padding),
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: maxCrossAxisExtent,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            mainAxisExtent: tileHeight,
+          ),
+          itemCount: allItems.length,
+          itemBuilder: (context, index) {
+            final item = allItems[index];
+            if (item is String) {
+              return _buildGridFolderItem(item, grouped[item]?.length ?? 0);
+            } else {
+              return _buildGridFileItem(item as T);
+            }
+          },
+        );
       },
     );
   }
