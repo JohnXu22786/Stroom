@@ -305,6 +305,7 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
 # These tests require a browser runtime and are executed by dedicated Chrome
 # steps in .github/workflows/ci.yml, not by the native Flutter test runner.
 BROWSER_ONLY_TESTS: dict[str, str] = {
+    "services/sse_client_web_connect_test.dart": "chat-taskflow-core",
     "utils/web_file_store_blob_web_test.dart": "built-in-components",
 }
 
