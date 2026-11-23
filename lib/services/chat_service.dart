@@ -279,16 +279,18 @@ class ChatService {
     bool accumulateUsage = true,
     bool recordInputTokens = true,
   }) async {
-    final req = await _protocol.buildRequest(
-      history: history,
-      assistantPrompt: systemPrompt,
-      contextSummary: contextSummary,
-      toolOutputMaxChars: getEffectiveToolOutputMaxChars(_assistantSettings),
-    );
     final token = CancelToken();
     _internalTaskTokens.add(token);
-    final chunks = <String>[];
     try {
+      final req = await _protocol.buildRequest(
+        history: history,
+        assistantPrompt: systemPrompt,
+        contextSummary: contextSummary,
+        toolOutputMaxChars: getEffectiveToolOutputMaxChars(_assistantSettings),
+      );
+      if (token.isCancelled) return '';
+
+      final chunks = <String>[];
       await for (final event in _provider!.chatStream(
         req.messages,
         model: _modelConfig!.modelId,
@@ -299,19 +301,21 @@ class ChatService {
         if (event.isReasoning || event.isToolCallEvent) continue;
         // usage 计量事件（provider 流末尾产出，per-request 隔离）
         if (event.usage != null && accumulateUsage) {
-          onUsageEvent?.call(event.usage!,
-              recordInput: recordInputTokens,
-              costIncrement: event.usageCostIncrement);
+          onUsageEvent?.call(
+            event.usage!,
+            recordInput: recordInputTokens,
+            costIncrement: event.usageCostIncrement,
+          );
         }
         if (event.text.isNotEmpty) chunks.add(event.text);
       }
+      return chunks.join('').trim();
     } catch (e) {
       debugPrint('ChatService sendPrompt stream error: $e');
       rethrow;
     } finally {
       _internalTaskTokens.remove(token);
     }
-    return chunks.join('').trim();
   }
 
   // ── Tool execution ────────────────────────────────────────────────

@@ -6834,6 +6834,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get ankiBrowserEmpty => 'لا توجد بطاقات';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'تعذّر تحميل البطاقات: $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'المزامنة مع AnkiWeb';
 
   @override
@@ -19045,6 +19050,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get ankiBrowserEmpty => 'لا توجد بطاقات';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'تعذّر تحميل البطاقات: $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'المزامنة مع AnkiWeb';

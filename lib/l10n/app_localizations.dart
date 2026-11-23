@@ -11529,6 +11529,12 @@ abstract class AppLocalizations {
   /// **'No cards'**
   String get ankiBrowserEmpty;
 
+  /// No description provided for @ankiCardBrowserLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load cards: {error}'**
+  String ankiCardBrowserLoadError(String error);
+
   /// No description provided for @ankiSyncTooltip.
   ///
   /// In en, this message translates to:

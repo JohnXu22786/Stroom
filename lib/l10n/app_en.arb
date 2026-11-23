@@ -3716,6 +3716,14 @@
   "ankiStatsReviewRate": "Review rate",
   "ankiBrowserSearchHint": "Search cards...",
   "ankiBrowserEmpty": "No cards",
+  "ankiCardBrowserLoadError": "Failed to load cards: {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "AnkiWeb sync",
   "ankiNewDeckTooltip": "New deck",
   "ankiDeckLoadError": "Failed to load decks: {error}",
