@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
 
 import 'audio_source_uri.dart';
+import 'tts_stream_audio_source.dart';
 
 // ===========================================================================
 // AudioPlayerAdapter — 用于 AudioPlayerPage 的跨平台播放器
@@ -13,6 +14,10 @@ import 'audio_source_uri.dart';
 /// Native 平台播放器适配器
 /// 内部使用 just_audio 的 AudioPlayer
 class AudioPlayerAdapter {
+  AudioPlayerAdapter({AudioPlayer Function()? createPlayer})
+      : _createPlayer = createPlayer ?? AudioPlayer.new;
+
+  final AudioPlayer Function() _createPlayer;
   AudioPlayer? _player;
 
   final StreamController<Duration> _positionCtrl =
@@ -24,6 +29,8 @@ class AudioPlayerAdapter {
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration?>? _durSub;
   StreamSubscription<PlayerState>? _stateSub;
+  Completer<void>? _streamPlaybackDone;
+  int _streamPlaybackGeneration = 0;
 
   /// 当前播放状态
   bool get playing => _player?.playing ?? false;
@@ -49,8 +56,10 @@ class AudioPlayerAdapter {
 
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
+    _streamPlaybackGeneration++;
+    _finishStreamPlayback();
     await _disposePlayer();
-    _player = AudioPlayer();
+    _player = _createPlayer();
     _setupListeners();
 
     try {
@@ -59,6 +68,39 @@ class AudioPlayerAdapter {
     } catch (e) {
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下
       rethrow;
+    }
+  }
+
+  /// Plays TTS chunks through just_audio as they are synthesized.
+  Future<bool> playStream(
+    Stream<Uint8List> chunks, {
+    required String contentType,
+  }) async {
+    final generation = ++_streamPlaybackGeneration;
+    _finishStreamPlayback();
+    await _disposePlayer();
+    if (generation != _streamPlaybackGeneration) return false;
+
+    _player = _createPlayer();
+    _setupListeners();
+    final source = TtsStreamAudioSource(chunks, contentType: contentType);
+    final playbackDone = Completer<void>();
+    _streamPlaybackDone = playbackDone;
+
+    try {
+      await Future.any([_player!.setAudioSource(source), playbackDone.future]);
+      if (generation != _streamPlaybackGeneration) return false;
+
+      final playback = _player!.play();
+      await Future.any([
+        Future.wait([source.completed, playback]),
+        playbackDone.future,
+      ]);
+      return false;
+    } finally {
+      if (identical(_streamPlaybackDone, playbackDone)) {
+        _streamPlaybackDone = null;
+      }
     }
   }
 
@@ -74,6 +116,8 @@ class AudioPlayerAdapter {
 
   /// 停止
   void stop() {
+    _streamPlaybackGeneration++;
+    _finishStreamPlayback();
     _player?.stop();
     _positionCtrl.add(Duration.zero);
     _stateCtrl.add(null);
@@ -97,7 +141,17 @@ class AudioPlayerAdapter {
 
   /// 释放资源
   Future<void> dispose() async {
+    _streamPlaybackGeneration++;
+    _finishStreamPlayback();
     await _disposePlayer();
+  }
+
+  void _finishStreamPlayback() {
+    final playbackDone = _streamPlaybackDone;
+    if (playbackDone != null && !playbackDone.isCompleted) {
+      playbackDone.complete();
+    }
+    _streamPlaybackDone = null;
   }
 
   void _setupListeners() {
