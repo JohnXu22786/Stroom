@@ -218,6 +218,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: ConstrainedText(
           _strings.backupRestoreConfirmRestore,
           maxLines: 1,
