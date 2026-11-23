@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/utils/audio_utils.dart';
 import 'package:stroom/utils/tts_audio_stream.dart';
 import 'package:stroom/utils/tts_stream_audio_source.dart';
 
@@ -72,19 +71,42 @@ void main() {
     await completionError;
   });
 
-  test('converts raw PCM chunks to WAV at the requested sample rate', () async {
-    final pcm = Uint8List.fromList([1, 2, 3, 4]);
-    final prepared = await prepareTtsPlaybackStream(
-      Stream<Uint8List>.fromIterable([
-        Uint8List.fromList([1, 2]),
-        Uint8List.fromList([3, 4]),
-      ]),
+  test('streams raw PCM as WAV at the requested sample rate', () async {
+    final chunks = StreamController<Uint8List>();
+    final preparedFuture = prepareTtsPlaybackStream(
+      chunks.stream,
       requestedFormat: 'mp3',
       sampleRate: 16000,
     );
-    final chunks = await prepared.chunks.toList();
+    final firstPcmChunk = Uint8List.fromList(List<int>.generate(12, (i) => i));
+    chunks.add(firstPcmChunk);
+    final prepared = await preparedFuture;
+    final output = StreamIterator<Uint8List>(prepared.chunks);
 
     expect(prepared.format, 'wav');
-    expect(chunks, [pcmToWav(pcm, sampleRate: 16000)]);
+    try {
+      expect(
+        await output.moveNext().timeout(const Duration(milliseconds: 50)),
+        isTrue,
+      );
+      final header = output.current;
+      final headerData = ByteData.sublistView(header);
+      expect(headerData.getUint32(4, Endian.little), 0xffffffff);
+      expect(headerData.getUint32(40, Endian.little), 0xffffffff);
+      expect(await output.moveNext(), isTrue);
+      expect(output.current, firstPcmChunk);
+
+      final nextOutput = output.moveNext();
+      final secondPcmChunk = Uint8List.fromList([12, 13]);
+      chunks.add(secondPcmChunk);
+      expect(await nextOutput, isTrue);
+      expect(output.current, secondPcmChunk);
+      final streamDone = output.moveNext();
+      await chunks.close();
+      expect(await streamDone, isFalse);
+    } finally {
+      await chunks.close();
+      await output.cancel();
+    }
   });
 }

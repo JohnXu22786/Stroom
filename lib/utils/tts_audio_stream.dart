@@ -96,16 +96,21 @@ Stream<Uint8List> _convertPcmToWav(
   List<Uint8List> buffered,
   int sampleRate,
 ) async* {
-  final bytes = BytesBuilder(copy: false);
   try {
+    // RIFF's unknown-length sentinel lets native playback begin while the PCM
+    // stream is still arriving. The browser buffers the same chunks into Blob.
+    final header = pcmToWav(Uint8List(0), sampleRate: sampleRate);
+    final headerData = ByteData.sublistView(header);
+    headerData.setUint32(4, 0xffffffff, Endian.little);
+    headerData.setUint32(40, 0xffffffff, Endian.little);
+    yield header;
+
     for (final chunk in buffered) {
-      bytes.add(chunk);
+      if (chunk.isNotEmpty) yield chunk;
     }
     while (await iterator.moveNext()) {
-      bytes.add(iterator.current);
+      if (iterator.current.isNotEmpty) yield iterator.current;
     }
-    final pcm = bytes.takeBytes();
-    if (pcm.isNotEmpty) yield pcmToWav(pcm, sampleRate: sampleRate);
   } finally {
     await iterator.cancel();
   }
