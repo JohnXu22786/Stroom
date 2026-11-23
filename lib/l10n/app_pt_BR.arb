@@ -3716,6 +3716,14 @@
   "ankiStatsReviewRate": "Taxa de revisão",
   "ankiBrowserSearchHint": "Pesquisar cartões...",
   "ankiBrowserEmpty": "Nenhum cartão",
+  "ankiCardBrowserLoadError": "Não foi possível carregar os cartões: {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "Sincronização com AnkiWeb",
   "ankiNewDeckTooltip": "Novo baralho",
   "ankiDeckLoadError": "Falha ao carregar os baralhos: {error}",
