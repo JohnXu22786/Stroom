@@ -136,6 +136,59 @@ Widget _wrap(
 
 void main() {
   group('DragSortArea pills (wrap)', () {
+    testWidgets('large text scale grows pill geometry around text and actions',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 190,
+                  child: DragSortArea(
+                    wrap: true,
+                    values: const ['del-one', 'del-two', 'del-three'],
+                    deletable: (_) => true,
+                    onDelete: (_) {},
+                    onReorder: (from, to) => reorders.add((from, to)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final firstPill =
+          tester.getRect(find.byKey(const ValueKey('pill-del-one')));
+      expect(firstPill.height, greaterThan(34));
+      final label = tester.getRect(find.text('del-one'));
+      expect(label.top, greaterThanOrEqualTo(firstPill.top));
+      expect(label.bottom, lessThanOrEqualTo(firstPill.bottom));
+      final delete = tester.getRect(find.byIcon(Icons.close).first);
+      expect(delete.top, greaterThanOrEqualTo(firstPill.top));
+      expect(delete.bottom, lessThanOrEqualTo(firstPill.bottom));
+
+      final pillRects = [
+        for (final value in const ['del-one', 'del-two', 'del-three'])
+          tester.getRect(find.byKey(ValueKey('pill-$value'))),
+      ];
+      for (var i = 1; i < pillRects.length; i++) {
+        if (pillRects[i].top > pillRects[i - 1].top) {
+          expect(
+              pillRects[i].top, greaterThanOrEqualTo(pillRects[i - 1].bottom));
+        }
+      }
+
+      final start = tester.getCenter(find.text('del-one'));
+      final target = tester.getCenter(find.text('del-three'));
+      await _longPressDrag(tester, find.text('del-one'), target - start);
+      expect(reorders, [(0, 2)]);
+    });
+
     testWidgets('deletable pills show an inline close button that deletes',
         (tester) async {
       final deleted = <String>[];
