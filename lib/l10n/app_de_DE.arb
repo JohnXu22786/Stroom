@@ -3714,6 +3714,14 @@
   "ankiStatsReviewRate": "Wiederholungsquote",
   "ankiBrowserSearchHint": "Karten suchen …",
   "ankiBrowserEmpty": "Keine Karten",
+  "ankiCardBrowserLoadError": "Karten konnten nicht geladen werden: {error}",
+  "@ankiCardBrowserLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ankiSyncTooltip": "Mit AnkiWeb synchronisieren",
   "ankiNewDeckTooltip": "Neuen Stapel erstellen",
   "ankiDeckLoadError": "Stapel konnten nicht geladen werden: {error}",

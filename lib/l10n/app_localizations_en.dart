@@ -6795,6 +6795,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ankiBrowserEmpty => 'No cards';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Failed to load cards: $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'AnkiWeb sync';
 
   @override
@@ -18893,6 +18898,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ankiBrowserEmpty => 'No cards';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Failed to load cards: $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb sync';

@@ -6625,6 +6625,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get ankiBrowserEmpty => '카드가 없습니다';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return '카드를 불러오지 못했습니다: $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'AnkiWeb 동기화';
 
   @override
@@ -18399,6 +18404,11 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get ankiBrowserEmpty => '카드가 없습니다';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return '카드를 불러오지 못했습니다: $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb 동기화';

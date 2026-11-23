@@ -24,6 +24,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   List<Card> _allCards = [];
   List<Card> _filtered = [];
   bool _loaded = false;
+  String? _loadError;
 
   @override
   void initState() {
@@ -32,36 +33,49 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   }
 
   Future<void> _load() async {
-    final cardDao = ref.read(ankiCardDaoProvider).value;
-    if (cardDao == null) return;
-    List<Card> cards;
-    if (widget.deckId != null) {
-      cards = await cardDao.listByDeck(widget.deckId!);
-    } else {
-      cards = await cardDao.all();
+    if (mounted) {
+      setState(() {
+        _loaded = false;
+        _loadError = null;
+      });
     }
-    if (mounted)
+    try {
+      final cardDao = await ref.read(ankiCardDaoProvider.future);
+      final cards = widget.deckId != null
+          ? await cardDao.listByDeck(widget.deckId!)
+          : await cardDao.all();
+      if (!mounted) return;
       setState(() {
         _allCards = cards;
-        _filtered = cards;
+        _filtered = _filterCards(cards, _searchCtl.text);
         _loaded = true;
       });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error.toString();
+        _loaded = true;
+      });
+    }
   }
 
   void _search(String q) {
-    final query = q.toLowerCase();
     setState(() {
-      _filtered = _allCards.where((c) {
-        if (c.id.toString().contains(query)) return true;
-        // We could also search note text but that requires joining
-        return false;
-      }).toList();
+      _filtered = _filterCards(_allCards, q);
     });
   }
 
+  List<Card> _filterCards(List<Card> cards, String query) {
+    final normalizedQuery = query.toLowerCase();
+    return cards.where((card) {
+      if (card.id.toString().contains(normalizedQuery)) return true;
+      // We could also search note text but that requires joining
+      return false;
+    }).toList();
+  }
+
   Future<Note?> _loadNote(int nid) async {
-    final noteDao = ref.read(ankiNoteDaoProvider).value;
-    if (noteDao == null) return null;
+    final noteDao = await ref.read(ankiNoteDaoProvider.future);
     return noteDao.get(nid);
   }
 
@@ -106,53 +120,70 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
           Expanded(
             child: !_loaded
                 ? const Center(child: CircularProgressIndicator())
-                : _filtered.isEmpty
+                : _loadError != null
                     ? Center(
-                        child: Text(
-                          l10n.ankiBrowserEmpty,
-                          style: TextStyle(color: cs.onSurfaceVariant),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child:
+                              Text(l10n.ankiCardBrowserLoadError(_loadError!)),
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: _filtered.length,
-                        itemBuilder: (ctx, i) {
-                          final card = _filtered[i];
-                          return FutureBuilder<Note?>(
-                            future: _loadNote(card.note_id),
-                            builder: (ctx, snap) {
-                              final note = snap.data;
-                              final front = note?.fields.isNotEmpty == true
-                                  ? note!.fields[0]
-                                  : l10n.ankiNoCardContent;
-                              return ListTile(
-                                leading: _queueIcon(card.queue.value),
-                                title: ConstrainedText(
-                                  front,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(
-                                  'ivl=${card.interval}d  factor=${(card.ease_factor / 10).round()}%  reps=${card.reps}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                                trailing: IconButton(
-                                  icon: Icon(Icons.delete_outline,
-                                      color: cs.error),
-                                  onPressed: () {
-                                    ref
-                                        .read(ankiActionsProvider)
-                                        .removeNote(card.note_id);
-                                    _load();
-                                  },
-                                ),
+                    : _filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              l10n.ankiBrowserEmpty,
+                              style: TextStyle(color: cs.onSurfaceVariant),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _filtered.length,
+                            itemBuilder: (ctx, i) {
+                              final card = _filtered[i];
+                              return FutureBuilder<Note?>(
+                                future: _loadNote(card.note_id),
+                                builder: (ctx, snap) {
+                                  final note = snap.data;
+                                  final front = note?.fields.isNotEmpty == true
+                                      ? note!.fields[0]
+                                      : l10n.ankiNoCardContent;
+                                  return ListTile(
+                                    leading: _queueIcon(card.queue.value),
+                                    title: snap.hasError
+                                        ? Text(
+                                            l10n.ankiCardBrowserLoadError(
+                                              snap.error.toString(),
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(color: cs.error),
+                                          )
+                                        : ConstrainedText(
+                                            front,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                    subtitle: Text(
+                                      'ivl=${card.interval}d  factor=${(card.ease_factor / 10).round()}%  reps=${card.reps}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: Icon(Icons.delete_outline,
+                                          color: cs.error),
+                                      onPressed: () {
+                                        ref
+                                            .read(ankiActionsProvider)
+                                            .removeNote(card.note_id);
+                                        _load();
+                                      },
+                                    ),
+                                  );
+                                },
                               );
                             },
-                          );
-                        },
-                      ),
+                          ),
           ),
         ],
       ),
