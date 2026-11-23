@@ -93,19 +93,31 @@ List<(int, int)> caseInsensitiveMatchOffsets(String text, String query) {
   }
 
   int sourceStart(int offset) {
-    var mappedOffset = 0;
-    for (final boundary in boundaries) {
-      if (boundary.$1 > offset) break;
-      mappedOffset = boundary.$2;
+    var low = 0;
+    var high = boundaries.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (boundaries[middle].$1 <= offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
     }
-    return mappedOffset;
+    return boundaries[low - 1].$2;
   }
 
   int sourceEnd(int offset) {
-    for (final boundary in boundaries) {
-      if (boundary.$1 >= offset) return boundary.$2;
+    var low = 0;
+    var high = boundaries.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (boundaries[middle].$1 < offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
     }
-    return text.length;
+    return low < boundaries.length ? boundaries[low].$2 : text.length;
   }
 
   final matches = <(int, int)>[];

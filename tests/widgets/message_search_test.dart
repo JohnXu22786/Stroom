@@ -416,6 +416,12 @@ void main() {
 
       final ordinaryMatches = caseInsensitiveMatchOffsets('Hi hi', 'HI');
       expect(ordinaryMatches, [(0, 2), (3, 5)]);
+
+      final repeatedText = List.filled(2000, '\u0130x').join();
+      final repeatedMatches = caseInsensitiveMatchOffsets(repeatedText, 'x');
+      expect(repeatedMatches, hasLength(2000));
+      expect(repeatedMatches.first, (1, 2));
+      expect(repeatedMatches.last, (3999, 4000));
     });
   });
 }
