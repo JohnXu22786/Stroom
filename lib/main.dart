@@ -25,6 +25,7 @@ import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 import 'providers/locale_provider.dart';
 import 'widgets/startup_initialization_error_screen.dart';
+import 'widgets/release_error_widget.dart';
 
 String _sanitizeDiagnosticText(String value) {
   return value
@@ -155,33 +156,9 @@ void _initGlobalErrorHandling() {
     final strings = appLocalizationsForLocale(null);
     if (kReleaseMode) {
       // 生产环境：显示友好提示，不暴露详细信息
-      return Material(
-        color: Color(0xFF1E1E2E),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
-                SizedBox(height: 16),
-                Text(
-                  strings.renderErrorTitle,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  strings.renderErrorRestartMessage,
-                  style: const TextStyle(color: Colors.white38, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ),
+      return ReleaseErrorWidget(
+        title: strings.renderErrorTitle,
+        message: strings.renderErrorRestartMessage,
       );
     }
     // 开发环境：保留完整错误信息
