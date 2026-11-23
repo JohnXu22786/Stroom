@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/services/notification_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// 记录插件 show 调用时使用的通知 ID。
 final shownIds = <int>[];
@@ -315,6 +316,115 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(minutes: 2));
     expect(dismissed, isFalse);
+  });
+
+  // Unit owner: vertical_banner_return.
+  // Functional suite mapping: application-shared includes this service test.
+  testWidgets(
+      'clipped in-app title completes both reveal passes and endpoint pauses before dismissal',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title =
+        'Completed audio separation for the selected recording and saved the generated tracks';
+    var dismissed = false;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'full-reveal-cycle',
+            type: NotificationType.taskCompleted,
+            title: title,
+            typeLabel: 'Audio separation',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+
+    final width = tester.getSize(find.byType(ConstrainedText)).width;
+    final naturalText = TextPainter(
+      text: const TextSpan(
+        text: title,
+        style: TextStyle(fontSize: 12),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final overflow = naturalText.width - width;
+    expect(overflow, greaterThan(0), reason: 'fixture title must be clipped');
+    final travel = Duration(milliseconds: (overflow / 24 * 1000).round());
+    final revealCycle = const Duration(seconds: 5) + travel * 2;
+    final oldSinglePassTimeout = Duration(
+      milliseconds: 3400 + (overflow / 24 * 1000).ceil(),
+    );
+
+    // The former one-pass timeout elapses here, but the title is still on its
+    // return trip or endpoint pause and must remain available.
+    await tester.pump(oldSinglePassTimeout + const Duration(milliseconds: 500));
+    expect(dismissed, isFalse);
+
+    final timeUntilFinalPauseEnds =
+        revealCycle - oldSinglePassTimeout - const Duration(milliseconds: 500);
+    await tester
+        .pump(timeUntilFinalPauseEnds - const Duration(milliseconds: 100));
+    expect(dismissed, isFalse);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('a narrower banner viewport extends the clipped-title cycle',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title =
+        'Completed audio separation for the selected recording and saved the generated tracks';
+    var dismissed = false;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'resized-reveal-cycle',
+            type: NotificationType.taskCompleted,
+            title: title,
+            typeLabel: 'Audio separation',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    tester.view.physicalSize = const Size(280, 640);
+    await tester.pump();
+    final width = tester.getSize(find.byType(ConstrainedText)).width;
+    final naturalText = TextPainter(
+      text: const TextSpan(
+        text: title,
+        style: TextStyle(fontSize: 12),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final overflow = naturalText.width - width;
+    expect(overflow, greaterThan(0), reason: 'fixture title must stay clipped');
+    final travel = Duration(milliseconds: (overflow / 24 * 1000).round());
+    final revealCycle = const Duration(seconds: 5) + travel * 2;
+
+    await tester.pump(revealCycle - const Duration(milliseconds: 100));
+    expect(dismissed, isFalse);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
   });
 
   testWidgets('manual banner dismissal wins an auto-dismiss race',

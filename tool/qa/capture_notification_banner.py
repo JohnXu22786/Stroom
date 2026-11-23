@@ -37,7 +37,8 @@ with sync_playwright() as playwright:
 
     with tempfile.TemporaryDirectory(prefix="notification-banner-") as tmp:
         frames = Path(tmp)
-        for index in range(120):
+        # Include the full outbound and return reveal on the production speed.
+        for index in range(400):
             page.screenshot(path=str(frames / f"frame-{index:03d}.png"))
             time.sleep(0.1)
         subprocess.run(

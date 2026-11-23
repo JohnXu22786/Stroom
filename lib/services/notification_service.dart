@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart'
@@ -477,11 +478,13 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
       _pauseDismissalTimer();
       return;
     }
+    // ConstrainedText waits 1s before motion, traverses each way at 24 px/s,
+    // and pauses 2s at both endpoints. The banner entrance runs concurrently
+    // with the initial wait, so it does not add to the reveal cycle.
+    final travelMilliseconds = math.max(1, (overflow / 24 * 1000).round());
     final duration = overflow <= 0
         ? const Duration(seconds: 4)
-        : Duration(
-            milliseconds: 3400 + (overflow / 24 * 1000).ceil(),
-          );
+        : Duration(milliseconds: 5000 + 2 * travelMilliseconds);
     if (_dismissStarted) return;
     if (duration == _scheduledDismissal && _dismissTimer != null) return;
     if (duration != _scheduledDismissal) {
