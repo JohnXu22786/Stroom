@@ -547,6 +547,7 @@ class _McpServerConfigDialogState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final compactAppBar = _shouldUseCompactAppBar();
     final title = _isExistingConfig
         ? (_nameController.text.isNotEmpty
             ? _nameController.text
@@ -610,7 +611,19 @@ class _McpServerConfigDialogState
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              actions: _buildAppBarActions(),
+              actions: compactAppBar ? const [] : _buildAppBarActions(),
+              bottom: compactAppBar
+                  ? PreferredSize(
+                      preferredSize: Size.fromHeight(
+                        _compactActionHeight *
+                            _buildCompactAppBarActions().length,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: _buildCompactAppBarActions(),
+                      ),
+                    )
+                  : null,
             ),
             body: ListView(
               padding: const EdgeInsets.all(16),
@@ -931,8 +944,82 @@ class _McpServerConfigDialogState
     );
   }
 
+  double get _compactActionHeight =>
+      MediaQuery.textScalerOf(context).scale(1) >= 1.5 ? 72 : 48;
+
+  bool _shouldUseCompactAppBar() {
+    final labels = _isEditMode
+        ? [
+            _isSaving
+                ? AppLocalizations.of(context)!.mcpSaving
+                : AppLocalizations.of(context)!.mermaidSaveButton,
+            AppLocalizations.of(context)!.taskFlowUiDiscard,
+          ]
+        : _isExistingConfig
+            ? [AppLocalizations.of(context)!.imagePreviewEdit]
+            : const <String>[];
+    if (labels.isEmpty) return false;
+
+    final labelStyle = Theme.of(context).textTheme.labelLarge;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final labelsWidth = labels.fold<double>(0, (width, label) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textDirection: Directionality.of(context),
+        textScaler: textScaler,
+      )..layout();
+      return width + painter.width;
+    });
+    // TextButton.icon reserves 16 dp on each side, a 20 dp icon, and an 8 dp
+    // icon-to-label gap. AppBar's leading back button reserves 56 dp.
+    final requiredWidth = labelsWidth + labels.length * 60;
+    final dialogWidth =
+        (MediaQuery.sizeOf(context).width - 48).clamp(0.0, 560.0).toDouble();
+    return requiredWidth > dialogWidth - kToolbarHeight;
+  }
+
+  List<Widget> _buildCompactAppBarActions() {
+    if (_isEditMode) {
+      final saveLabel = _isSaving
+          ? AppLocalizations.of(context)!.mcpSaving
+          : AppLocalizations.of(context)!.mermaidSaveButton;
+      return [
+        _buildCompactAppBarAction(
+          onPressed: _isSaving ? null : _save,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save, size: 20),
+          label: saveLabel,
+        ),
+        _buildCompactAppBarAction(
+          onPressed: _isSaving ? null : _discardChanges,
+          icon: const Icon(Icons.close, size: 20),
+          label: AppLocalizations.of(context)!.taskFlowUiDiscard,
+        ),
+      ];
+    }
+    if (_isExistingConfig) {
+      return [
+        _buildCompactAppBarAction(
+          onPressed: _enterEditMode,
+          icon: const Icon(Icons.edit, size: 20),
+          label: AppLocalizations.of(context)!.imagePreviewEdit,
+        ),
+      ];
+    }
+    return const [];
+  }
+
   List<Widget> _buildAppBarActions() {
     if (_isEditMode) {
+      final saveLabel = _isSaving
+          ? AppLocalizations.of(context)!.mcpSaving
+          : AppLocalizations.of(context)!.mermaidSaveButton;
+      final discardLabel = AppLocalizations.of(context)!.taskFlowUiDiscard;
       return [
         TextButton.icon(
           onPressed: _isSaving ? null : _save,
@@ -944,9 +1031,7 @@ class _McpServerConfigDialogState
                 )
               : const Icon(Icons.save, size: 20),
           label: ConstrainedText(
-            _isSaving
-                ? AppLocalizations.of(context)!.mcpSaving
-                : AppLocalizations.of(context)!.mermaidSaveButton,
+            saveLabel,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -955,7 +1040,7 @@ class _McpServerConfigDialogState
           onPressed: _isSaving ? null : _discardChanges,
           icon: const Icon(Icons.close, size: 20),
           label: ConstrainedText(
-            AppLocalizations.of(context)!.taskFlowUiDiscard,
+            discardLabel,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -974,5 +1059,31 @@ class _McpServerConfigDialogState
           onPressed: _enterEditMode,
         ),
     ];
+  }
+
+  Widget _buildCompactAppBarAction({
+    required VoidCallback? onPressed,
+    required Widget icon,
+    required String label,
+  }) {
+    return SizedBox(
+      height: _compactActionHeight,
+      width: double.infinity,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: Size.zero,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            icon,
+            const SizedBox(width: 8),
+            Flexible(child: Text(label, textAlign: TextAlign.center)),
+          ],
+        ),
+      ),
+    );
   }
 }
