@@ -597,126 +597,166 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
     }
 
-    return PopScope(
-      canPop: true,
-      child: SafeArea(
-        child: Container(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          child: Column(
-            children: [
-              // ── Top bar ──
-              _buildTopBar(title: title, conversation: currentConversation),
-              // ── 上下文统计行（标题栏下方悬挂，简洁风格）──
-              if (activeId != null) _buildContextStatusLine(activeId),
-              // ── Search bar ──
-              if (_isSearching) _buildSearchBar(),
-              // ── Unconfigured banner ──
-              if (!adapterConfigured) _buildUnconfiguredBanner(),
-              // ── 上下文已压缩 banner（可展开查看摘要） ──
-              if (activeId != null) _buildCompactionBanner(activeId),
-              // ── Chat widget ──
-              Expanded(
-                child: controller == null
-                    ? TickerMode(
-                        enabled: TickerMode.of(context) &&
-                            ChatTabVisibility.of(context),
-                        child: const ChatConversationStateView(
-                          state: ChatConversationState.loading,
-                        ),
-                      )
-                    : Stack(
-                        children: [
-                          Visibility(
-                            // While the initial positioning pass runs the list is
-                            // kept mounted and laid out (message positions are
-                            // measured from render boxes) but hidden, so the
-                            // pass itself is never visible to the user.
-                            visible: !_pendingInitialScrollAdjustment,
-                            maintainState: true,
-                            // The message list is part of the composer's tap
-                            // region group ([chatComposerTapRegionGroupId]): with
-                            // the app-wide tap-outside blur, touching the list to
-                            // scroll while composing must NOT unfocus the
-                            // composer — the keyboard stays up while the user
-                            // reads/scrolls (dismissed via the keyboard's own
-                            // close key or the page's keyboard-dismiss button).
-                            child: TextFieldTapRegion(
-                              groupId: chatComposerTapRegionGroupId,
-                              child: Stack(
-                                children: [
-                                  _buildChatWidget(
-                                    isDark: isDark,
-                                    isStreaming: isStreaming,
-                                    streamingMsgId: streamingMsgId,
-                                    activeId: activeId,
-                                    controller: controller,
-                                  ),
-                                  // ── Overlay buttons (scroll-to-bottom +
-                                  // keyboard-dismiss) ──
-                                  // A self-contained widget: it owns BOTH
-                                  // buttons' visibility state (keyboard state
-                                  // via its own WidgetsBindingObserver reading
-                                  // the view insets; scroll-button state
-                                  // recomputed from the current list metrics).
-                                  // Keyboard transitions and at-bottom flips
-                                  // therefore rebuild ONLY this small overlay
-                                  // — never the message list (whose markdown
-                                  // messages re-parse on every rebuild, which
-                                  // dropped frames during the keyboard
-                                  // animation).
-                                  Positioned.fill(
-                                    child: ChatOverlayButtons(
-                                      scrollController: _chatScrollController,
-                                      metricsTick: _overlayMetricsTick,
-                                      isDark: isDark,
-                                      onScrollToBottomTap: _onScrollToBottomTap,
-                                      onKeyboardDismissTap: () =>
-                                          FocusScope.of(context).unfocus(),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+    Widget buildPageLayout(bool shortKeyboardViewport) {
+      return Container(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        child: Column(
+          children: [
+            // ── Top bar ──
+            _buildTopBar(title: title, conversation: currentConversation),
+            // ── 上下文统计行（标题栏下方悬挂，简洁风格）──
+            if (activeId != null &&
+                !(shortKeyboardViewport && _editingMessageId != null))
+              _buildContextStatusLine(activeId),
+            // ── Search bar ──
+            if (_isSearching) _buildSearchBar(),
+            // ── Unconfigured banner ──
+            if (!adapterConfigured) _buildUnconfiguredBanner(),
+            // ── 上下文已压缩 banner（可展开查看摘要） ──
+            if (activeId != null) _buildCompactionBanner(activeId),
+            // ── Chat widget ──
+            Flexible(
+              flex: shortKeyboardViewport && _editingMessageId != null
+                  ? 0
+                  : shortKeyboardViewport
+                      ? 2
+                      : 1,
+              fit: shortKeyboardViewport && _editingMessageId != null
+                  ? FlexFit.loose
+                  : FlexFit.tight,
+              child: Visibility(
+                visible: !(shortKeyboardViewport && _editingMessageId != null),
+                maintainState: true,
+                child: SizedBox(
+                  height: shortKeyboardViewport && _editingMessageId != null
+                      ? 0
+                      : null,
+                  child: controller == null
+                      ? TickerMode(
+                          enabled: TickerMode.of(context) &&
+                              ChatTabVisibility.of(context),
+                          child: const ChatConversationStateView(
+                            state: ChatConversationState.loading,
                           ),
-                          if (_isInitialChatLoadPending ||
-                              _pendingInitialScrollAdjustment)
-                            Positioned.fill(
-                              child: TickerMode(
-                                enabled: TickerMode.of(context) &&
-                                    ChatTabVisibility.of(context),
-                                child: const ChatConversationStateView(
-                                  state: ChatConversationState.loading,
+                        )
+                      : Stack(
+                          children: [
+                            Visibility(
+                              // While the initial positioning pass runs the list is
+                              // kept mounted and laid out (message positions are
+                              // measured from render boxes) but hidden, so the
+                              // pass itself is never visible to the user.
+                              visible: !_pendingInitialScrollAdjustment,
+                              maintainState: true,
+                              // The message list is part of the composer's tap
+                              // region group ([chatComposerTapRegionGroupId]): with
+                              // the app-wide tap-outside blur, touching the list to
+                              // scroll while composing must NOT unfocus the
+                              // composer — the keyboard stays up while the user
+                              // reads/scrolls (dismissed via the keyboard's own
+                              // close key or the page's keyboard-dismiss button).
+                              child: TextFieldTapRegion(
+                                groupId: chatComposerTapRegionGroupId,
+                                child: Stack(
+                                  children: [
+                                    _buildChatWidget(
+                                      isDark: isDark,
+                                      isStreaming: isStreaming,
+                                      streamingMsgId: streamingMsgId,
+                                      activeId: activeId,
+                                      controller: controller,
+                                    ),
+                                    // ── Overlay buttons (scroll-to-bottom +
+                                    // keyboard-dismiss) ──
+                                    // A self-contained widget: it owns BOTH
+                                    // buttons' visibility state (keyboard state
+                                    // via its own WidgetsBindingObserver reading
+                                    // the view insets; scroll-button state
+                                    // recomputed from the current list metrics).
+                                    // Keyboard transitions and at-bottom flips
+                                    // therefore rebuild ONLY this small overlay
+                                    // — never the message list (whose markdown
+                                    // messages re-parse on every rebuild, which
+                                    // dropped frames during the keyboard
+                                    // animation).
+                                    Positioned.fill(
+                                      child: ChatOverlayButtons(
+                                        scrollController: _chatScrollController,
+                                        metricsTick: _overlayMetricsTick,
+                                        isDark: isDark,
+                                        onScrollToBottomTap:
+                                            _onScrollToBottomTap,
+                                        onKeyboardDismissTap: () =>
+                                            FocusScope.of(context).unfocus(),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            )
-                          else if (_initialMessageLoadFailed &&
-                              _history.isEmpty)
-                            Positioned.fill(
-                              child: ChatConversationStateView(
-                                state: ChatConversationState.loadFailed,
-                                onRetry: _retryConversationLoad,
-                              ),
-                            )
-                          else if (_history.isEmpty && !isStreaming)
-                            Positioned.fill(
-                              child: ChatConversationStateView(
-                                state: currentConversation == null
-                                    ? ChatConversationState.noConversation
-                                    : ChatConversationState.empty,
-                              ),
                             ),
-                        ],
-                      ),
+                            if (_isInitialChatLoadPending ||
+                                _pendingInitialScrollAdjustment)
+                              Positioned.fill(
+                                child: TickerMode(
+                                  enabled: TickerMode.of(context) &&
+                                      ChatTabVisibility.of(context),
+                                  child: const ChatConversationStateView(
+                                    state: ChatConversationState.loading,
+                                  ),
+                                ),
+                              )
+                            else if (_initialMessageLoadFailed &&
+                                _history.isEmpty)
+                              Positioned.fill(
+                                child: ChatConversationStateView(
+                                  state: ChatConversationState.loadFailed,
+                                  onRetry: _retryConversationLoad,
+                                ),
+                              )
+                            else if (_history.isEmpty && !isStreaming)
+                              Positioned.fill(
+                                child: ChatConversationStateView(
+                                  state: currentConversation == null
+                                      ? ChatConversationState.noConversation
+                                      : ChatConversationState.empty,
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
               ),
-              // ── Chat composer (below chat, in Column flow) ──
+            ),
+            // ── Chat composer (below chat, in Column flow) ──
+            if (shortKeyboardViewport)
+              Expanded(
+                child: _buildComposer(
+                  activeId: activeId,
+                  currentDraftText: currentDraftText,
+                  currentDraftAttachments: currentDraftAttachments,
+                ),
+              )
+            else
               _buildComposer(
                 activeId: activeId,
                 currentDraftText: currentDraftText,
                 currentDraftAttachments: currentDraftAttachments,
               ),
-            ],
-          ),
+          ],
         ),
+      );
+    }
+
+    final pageLayout = _editingMessageId == null
+        ? buildPageLayout(false)
+        : LayoutBuilder(
+            builder: (context, constraints) =>
+                buildPageLayout(constraints.maxHeight < 450),
+          );
+
+    return PopScope(
+      canPop: true,
+      child: SafeArea(
+        child: pageLayout,
       ),
     );
   }

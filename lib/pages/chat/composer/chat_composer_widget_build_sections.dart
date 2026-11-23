@@ -288,83 +288,142 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
   Widget _buildEditWarningPill({
     required ColorScheme cs,
     required bool fadingOut,
+    double? maxTextHeight,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 12, right: 12, top: 6, bottom: 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // While fading out the pill must not receive taps (or hover
-          // tooltips) at partial/zero opacity.
-          IgnorePointer(
-            ignoring: fadingOut,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: fadingOut ? 1 : 0, end: fadingOut ? 0 : 1),
-              duration: fadingOut
-                  ? ChatComposerWidgetState._editWarningFadeOutDuration
-                  : ChatComposerWidgetState._editWarningFadeInDuration,
-              builder: (context, value, child) =>
-                  Opacity(opacity: value, child: child),
-              child: Container(
-                key: const Key('editWarningPill'),
-                decoration: BoxDecoration(
-                  color: cs.errorContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: cs.error.withValues(alpha: 0.3),
-                    width: 1,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (maxTextHeight != null) {
+          final textPainter = TextPainter(
+            text: TextSpan(
+              text: AppLocalizations.of(context)!.chatEditWarning,
+              style: DefaultTextStyle.of(context).style.merge(
+                    TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onErrorContainer,
+                    ),
                   ),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 16,
-                      color: cs.error,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: ConstrainedText(
-                        AppLocalizations.of(context)!.chatEditWarning,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: cs.onErrorContainer,
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout(
+              maxWidth:
+                  (constraints.maxWidth - 96).clamp(1.0, double.infinity));
+          _updateEditWarningScrollableText(textPainter.height > maxTextHeight);
+        }
+        return Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+            child: Padding(
+              padding: const EdgeInsets.only(
+                left: 12,
+                right: 12,
+                top: 6,
+                bottom: 0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: IgnorePointer(
+                      ignoring: fadingOut,
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(
+                          begin: fadingOut ? 1 : 0,
+                          end: fadingOut ? 0 : 1,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: AppLocalizations.of(context)!.actionClose,
-                      child: GestureDetector(
-                        onTap: _dismissEditWarning,
-                        // Small padding around the close icon (see the
-                        // capsule's comment).
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.close,
-                            key: const Key('editWarningCloseButton'),
-                            size: 16,
-                            color: cs.onSurfaceVariant,
+                        duration: fadingOut
+                            ? ChatComposerWidgetState
+                                ._editWarningFadeOutDuration
+                            : ChatComposerWidgetState
+                                ._editWarningFadeInDuration,
+                        builder: (context, value, child) =>
+                            Opacity(opacity: value, child: child),
+                        child: Container(
+                          key: const Key('editWarningPill'),
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: cs.error.withValues(alpha: 0.3),
+                              width: 1,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 16,
+                                color: cs.error,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: maxTextHeight == null
+                                    ? Text(
+                                        AppLocalizations.of(context)!
+                                            .chatEditWarning,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: cs.onErrorContainer,
+                                        ),
+                                      )
+                                    : ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxHeight: maxTextHeight,
+                                        ),
+                                        child: SingleChildScrollView(
+                                          key: const Key(
+                                            'editWarningTextScrollView',
+                                          ),
+                                          child: Text(
+                                            AppLocalizations.of(context)!
+                                                .chatEditWarning,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: cs.onErrorContainer,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message:
+                                    AppLocalizations.of(context)!.actionClose,
+                                child: GestureDetector(
+                                  onTap: _dismissEditWarning,
+                                  // Small padding around the close icon (see the
+                                  // capsule's comment).
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Icon(
+                                      Icons.close,
+                                      key: const Key('editWarningCloseButton'),
+                                      size: 16,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

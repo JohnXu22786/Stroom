@@ -204,14 +204,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// row. While visible it replaces the edit capsule.
   bool _editWarningVisible = false;
 
+  final ScrollController _shortHeightScrollController = ScrollController();
+
   /// Whether the warning pill is in its fade-out phase: dismissed (auto-
   /// hide or close) but still in the tree until the fade completes, so the
   /// edit capsule fades back in only after the pill is gone.
   bool _editWarningFadingOut = false;
+  bool _editWarningTimerPausedForScrollableText = false;
 
-  /// Timer that auto-hides the warning pill: fires once the fade-in has
-  /// completed and the pill has been fully visible for
-  /// [_editWarningAutoHideDelay].
+  /// Timer that auto-hides the warning pill after the fade-in and hold period.
+  /// It pauses while constrained warning text needs vertical scrolling.
   Timer? _editWarningTimer;
 
   /// Timer that removes the pill from the tree once its fade-out finished.
@@ -222,9 +224,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     milliseconds: 300,
   );
 
-  /// How long the warning stays fully visible before auto-hiding. The
-  /// countdown starts only after the fade-in completes, so the pill is
-  /// readable for a full 2 seconds.
+  /// How long the warning stays fully visible before auto-hiding when all
+  /// warning text fits without scrolling. The countdown starts after fade-in.
   static const Duration _editWarningAutoHideDelay = Duration(seconds: 2);
 
   /// How long the pill's fade-out (and the capsule's fade-in) lasts.
@@ -504,8 +505,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// Arms the edit data-loss warning for the current edit session: the
   /// warning pill replaces the edit capsule immediately on the next build
   /// (the fade-in is handled by the pill's own TweenAnimationBuilder) and
-  /// auto-hides after the fade-in plus [_editWarningAutoHideDelay] — the
-  /// pill stays fully visible for a full 2 seconds.
+  /// auto-hides after the fade-in plus [_editWarningAutoHideDelay] when its
+  /// text fits; the countdown pauses while constrained text needs scrolling.
   ///
   /// No-op unless the page says re-sending the edit can delete messages
   /// below ([ChatComposerWidget.showEditWarningOnEntry]) — but the pill
@@ -516,6 +517,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   void _armEditWarning() {
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
+    _editWarningTimerPausedForScrollableText = false;
     _editWarningVisible = false;
     _editWarningFadingOut = false;
     if (!widget.showEditWarningOnEntry) return;
@@ -524,6 +526,26 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _editWarningFadeInDuration + _editWarningAutoHideDelay,
       _dismissEditWarning,
     );
+  }
+
+  /// Keeps the decision-critical warning available while its text needs
+  /// vertical scrolling. Once the warning fits again, restart its two-second
+  /// hold period; the fade-in has already completed by then.
+  void _updateEditWarningScrollableText(bool needsScrolling) {
+    if (!_editWarningVisible || _editWarningFadingOut) return;
+    if (needsScrolling) {
+      if (!_editWarningTimerPausedForScrollableText) {
+        _editWarningTimer?.cancel();
+        _editWarningTimer = null;
+        _editWarningTimerPausedForScrollableText = true;
+      }
+    } else if (_editWarningTimerPausedForScrollableText) {
+      _editWarningTimerPausedForScrollableText = false;
+      _editWarningTimer = Timer(
+        _editWarningAutoHideDelay,
+        _dismissEditWarning,
+      );
+    }
   }
 
   /// Dismisses the warning pill (close button or auto-hide). Dismissing
@@ -536,6 +558,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// (sequential, not a cross-fade).
   void _dismissEditWarning() {
     _editWarningTimer?.cancel();
+    _editWarningTimerPausedForScrollableText = false;
     if (!mounted || !_editWarningVisible || _editWarningFadingOut) return;
     setState(() => _editWarningFadingOut = true);
     _editWarningFadeOutTimer = Timer(_editWarningFadeOutRemovalDelay, () {
@@ -551,6 +574,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// from [didUpdateWidget] when edit mode ends or the conversation
   /// changes; the build that follows renders the capsule again).
   void _disarmEditWarning() {
+    _editWarningTimerPausedForScrollableText = false;
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
     _editWarningVisible = false;
@@ -563,6 +587,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
     _editWarningFadeOutTimer?.cancel();
+    _shortHeightScrollController.dispose();
     if (widget.editingMessageId != null) {
       _discardPendingEditReplacements(
         widget.editingMessageAttachments,
@@ -607,54 +632,95 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;
 
-    return Material(
-      type: MaterialType.transparency,
-      // The whole composer is part of the composer's tap region group
-      // ([chatComposerTapRegionGroupId], shared with the message list): with
-      // the app-wide tap-outside blur, tapping the composer's OWN controls
-      // (attach / model chip / send / edit capsule) must not unfocus the
-      // input — the keyboard stays up while the user adjusts the composer,
-      // exactly like it stays up while reading/scrolls the list.
-      child: TextFieldTapRegion(
-        groupId: chatComposerTapRegionGroupId,
-        child: Container(
-          key: _composerKey,
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-            border: Border(
-              top: BorderSide(color: cs.outlineVariant, width: 0.5),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final shortHeightViewport =
+            constraints.hasBoundedHeight && constraints.maxHeight < 700;
+        final pinEditWarning = shortHeightViewport &&
+            widget.editingMessageId != null &&
+            _editWarningVisible;
+        final warningTextMaxHeight = pinEditWarning
+            ? (constraints.maxHeight - 96).clamp(20.0, double.infinity)
+            : null;
+        if (!pinEditWarning && _editWarningTimerPausedForScrollableText) {
+          _updateEditWarningScrollableText(false);
+        }
+        final composerContent = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Pending attachments row (reorderable) ──
+            if (hasAttachments) _buildPendingAttachmentsRow(),
+            // ── Settings row (model, tools, reasoning) ──
+            _buildChipsSettingsRow(cs: cs, hasAttachments: hasAttachments),
+            // ── Edit mode capsule / data-loss warning pill ──
+            // The warning replaces the capsule in its row while visible;
+            // dismissal fades the pill out before the capsule fades back in.
+            if (widget.editingMessageId != null && !pinEditWarning)
+              _editWarningVisible
+                  ? _buildEditWarningPill(
+                      cs: cs,
+                      fadingOut: _editWarningFadingOut,
+                    )
+                  : _buildEditModeCapsule(cs: cs),
+            // ── Input row ──
+            _buildInputRow(
+              cs: cs,
+              isStreaming: isStreaming,
+              hasText: hasText,
+              hasAttachments: hasAttachments,
+            ),
+          ],
+        );
+
+        final composerContentViewport = shortHeightViewport
+            ? SingleChildScrollView(
+                controller: _shortHeightScrollController,
+                child: composerContent,
+              )
+            : composerContent;
+
+        return SizedBox(
+          width: constraints.hasBoundedWidth ? constraints.maxWidth : null,
+          child: Material(
+            type: MaterialType.transparency,
+            // The whole composer is part of the composer's tap region group
+            // ([chatComposerTapRegionGroupId], shared with the message list): with
+            // the app-wide tap-outside blur, tapping the composer's OWN controls
+            // (attach / model chip / send / edit capsule) must not unfocus the
+            // input — the keyboard stays up while the user adjusts the composer,
+            // exactly like it stays up while reading/scrolls the list.
+            child: TextFieldTapRegion(
+              groupId: chatComposerTapRegionGroupId,
+              child: Container(
+                key: _composerKey,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  border: Border(
+                    top: BorderSide(color: cs.outlineVariant, width: 0.5),
+                  ),
+                ),
+                child: pinEditWarning
+                    ? Column(
+                        mainAxisSize: MainAxisSize.max,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Keep the decision-critical text in the visible area
+                          // while keyboard focus scrolls the editable controls.
+                          _buildEditWarningPill(
+                            cs: cs,
+                            fadingOut: _editWarningFadingOut,
+                            maxTextHeight: warningTextMaxHeight,
+                          ),
+                          Expanded(child: composerContentViewport),
+                        ],
+                      )
+                    : composerContentViewport,
+              ),
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Pending attachments row (reorderable) ──
-              if (hasAttachments) _buildPendingAttachmentsRow(),
-              // ── Settings row (model, tools, reasoning) ──
-              _buildChipsSettingsRow(cs: cs, hasAttachments: hasAttachments),
-              // ── Edit mode capsule / data-loss warning pill ──
-              // The warning replaces the capsule in its row while visible;
-              // dismissal fades the pill out before the capsule fades back
-              // in.
-              if (widget.editingMessageId != null)
-                _editWarningVisible
-                    ? _buildEditWarningPill(
-                        cs: cs,
-                        fadingOut: _editWarningFadingOut,
-                      )
-                    : _buildEditModeCapsule(cs: cs),
-              // ── Input row ──
-              _buildInputRow(
-                cs: cs,
-                isStreaming: isStreaming,
-                hasText: hasText,
-                hasAttachments: hasAttachments,
-              ),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
