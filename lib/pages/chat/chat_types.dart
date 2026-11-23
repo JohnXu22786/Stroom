@@ -74,6 +74,51 @@ class SearchMatch {
   SearchMatch(this.messageId, this.matchStart, this.matchEnd);
 }
 
+/// Finds matches in lowercased text and maps their ranges back to [text].
+/// Lowercasing can expand a character into multiple UTF-16 code units, so
+/// offsets in the transformed string are not always valid source offsets.
+List<(int, int)> caseInsensitiveMatchOffsets(String text, String query) {
+  if (query.isEmpty) return [];
+
+  final lowerText = text.toLowerCase();
+  final lowerQuery = query.toLowerCase();
+  final boundaries = <(int, int)>[(0, 0)];
+  var sourceOffset = 0;
+  var lowerOffset = 0;
+  for (final rune in text.runes) {
+    final sourceCharacter = String.fromCharCode(rune);
+    sourceOffset += sourceCharacter.length;
+    lowerOffset += sourceCharacter.toLowerCase().length;
+    boundaries.add((lowerOffset, sourceOffset));
+  }
+
+  int sourceStart(int offset) {
+    var mappedOffset = 0;
+    for (final boundary in boundaries) {
+      if (boundary.$1 > offset) break;
+      mappedOffset = boundary.$2;
+    }
+    return mappedOffset;
+  }
+
+  int sourceEnd(int offset) {
+    for (final boundary in boundaries) {
+      if (boundary.$1 >= offset) return boundary.$2;
+    }
+    return text.length;
+  }
+
+  final matches = <(int, int)>[];
+  var searchOffset = 0;
+  while (true) {
+    final index = lowerText.indexOf(lowerQuery, searchOffset);
+    if (index == -1) break;
+    matches.add((sourceStart(index), sourceEnd(index + lowerQuery.length)));
+    searchOffset = index + lowerQuery.length;
+  }
+  return matches;
+}
+
 /// Search mode: within current conversation or across all conversations.
 enum SearchMode { current, global }
 
