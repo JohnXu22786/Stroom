@@ -1,18 +1,18 @@
 from io import BytesIO
 from pathlib import Path
+import subprocess
+import tempfile
 import time
 
 from PIL import Image, ImageStat
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = (
-    ROOT
-    / "docs/qa/voice_batch_separator_hint/"
-    "voice-batch-separator-hint-de-320x640-1x-light.png"
-)
+OUTPUT_DIR = ROOT / "docs/qa/voice_batch_separator_hint"
+SCREENSHOT = OUTPUT_DIR / "voice-batch-separator-hint-de-320x640-1x-light.png"
+PREVIEW = OUTPUT_DIR / "voice-batch-separator-hint-reveal-de-320x640-1x-light.webm"
 URL = "http://127.0.0.1:8875/?theme=light"
-OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -61,10 +61,58 @@ with sync_playwright() as playwright:
     image = Image.open(BytesIO(screenshot)).convert("RGB")
     if image.size != (320, 640) or max(ImageStat.Stat(image).stddev) < 1:
         raise RuntimeError("Flutter Web produced an invalid or blank capture")
-    OUTPUT.write_bytes(screenshot)
+    SCREENSHOT.write_bytes(screenshot)
+
+    frame_rate = 10
+    preview_duration = 9
+    with tempfile.TemporaryDirectory(
+        prefix="voice-separator-reveal-frames-", dir=OUTPUT_DIR
+    ) as frame_directory:
+        frame_directory = Path(frame_directory)
+        frame_deadline = time.monotonic() + preview_duration
+        frame_number = 0
+        next_frame = time.monotonic()
+        while time.monotonic() < frame_deadline:
+            (frame_directory / f"frame-{frame_number:04d}.png").write_bytes(
+                page.screenshot()
+            )
+            frame_number += 1
+            next_frame += 1 / frame_rate
+            page.wait_for_timeout(
+                max(0, round((next_frame - time.monotonic()) * 1000))
+            )
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-framerate",
+                str(frame_rate),
+                "-i",
+                str(frame_directory / "frame-%04d.png"),
+                "-c:v",
+                "libvpx-vp9",
+                "-deadline",
+                "good",
+                "-cpu-used",
+                "4",
+                "-b:v",
+                "0",
+                "-crf",
+                "32",
+                "-pix_fmt",
+                "yuv420p",
+                "-an",
+                str(PREVIEW),
+            ],
+            check=True,
+        )
+
     print(
         {
-            "output": str(OUTPUT.relative_to(ROOT)),
+            "screenshot": str(SCREENSHOT.relative_to(ROOT)),
+            "preview": str(PREVIEW.relative_to(ROOT)),
             "viewport_css_px": page.viewport_size,
             "device_pixel_ratio": page.evaluate("devicePixelRatio"),
             "locale": "de_DE",
@@ -73,6 +121,8 @@ with sync_playwright() as playwright:
             "focus": "empty custom separator TextField",
             "keyboard": "closed (headless desktop Chromium)",
             "active_element": active,
+            "preview_duration_seconds": preview_duration,
+            "preview_frames_per_second": frame_rate,
             "page_errors": errors,
         }
     )
