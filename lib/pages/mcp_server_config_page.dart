@@ -688,8 +688,13 @@ class _McpServerConfigDialogState
                       controller: _argsController,
                       enabled: !_isSaving,
                       decoration: InputDecoration(
-                        hintText:
-                            AppLocalizations.of(context)!.mcpArgumentsHint,
+                        helper: Text(
+                          AppLocalizations.of(context)!.mcpArgumentsHint,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.list, color: Colors.purple),
                       ),
