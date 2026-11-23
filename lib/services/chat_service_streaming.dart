@@ -238,6 +238,10 @@ extension ChatServiceStreamingExt on ChatService {
         } finally {
           contentCache?.clear();
         }
+        if (controller.isClosed ||
+            !identical(_chatEventController, controller)) {
+          return;
+        }
         var messages = req.messages;
         _lastRequestBody = _protocol.name == 'responses'
             ? {
@@ -350,7 +354,11 @@ extension ChatServiceStreamingExt on ChatService {
                   costIncrement: event.usageCostIncrement,
                 );
               }
-              if (_isCancelledByUser) return;
+              if (_isCancelledByUser ||
+                  controller.isClosed ||
+                  !identical(_chatEventController, controller)) {
+                return;
+              }
               // Anthropic extended thinking 签名（协议续接用，静默透传）
               if (event.thinkingSignature != null &&
                   event.thinkingSignature!.isNotEmpty) {

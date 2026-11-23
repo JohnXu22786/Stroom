@@ -41,6 +41,36 @@ void main() {
     );
 
     test(
+      'sendStreamWithTools does not start a cancelled build after a replacement starts',
+      () async {
+        final protocol = _DelayedFirstBuildProtocol();
+        final provider = _CountingProvider();
+        final service = ChatService(
+          provider: provider,
+          modelConfig: _modelConfig,
+          protocol: protocol,
+        );
+
+        final cancelledStream = service
+            .sendStreamWithTools('cancelled', history: []);
+        final cancelledDone = cancelledStream.drain<void>();
+        await protocol.firstBuildStarted.future;
+
+        service.cancel();
+        final replacementDone = service
+            .sendStreamWithTools('replacement', history: [])
+            .drain<void>();
+        await provider.firstCall.future;
+
+        protocol.firstBuild.complete(_request);
+        await cancelledDone;
+        await replacementDone;
+
+        expect(provider.callCount, 1);
+      },
+    );
+
+    test(
       'sendPrompt does not start a request when canceled during protocol build',
       () async {
         final protocol = _DelayedFirstBuildProtocol();
