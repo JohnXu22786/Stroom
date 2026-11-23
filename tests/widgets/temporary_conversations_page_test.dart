@@ -39,17 +39,50 @@ Widget _testApp(List<Conversation> conversations) {
   );
 }
 
+void _expectCountdownAtExpiration(
+  WidgetTester tester,
+  DateTime expiresAt,
+  DateTime startedAt,
+) {
+  final capsule = find.byType(TemporaryCountdownCapsule);
+  final countdownText = tester.widget<Text>(
+    find.descendant(of: capsule, matching: find.byType(Text)),
+  );
+  final parts = countdownText.data!.split(':');
+  final displayedSeconds = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  final secondsRemaining = expiresAt.difference(DateTime.now()).inSeconds;
+  final secondsAtStart = formatTemporaryCountdown(
+    expiresAt.difference(startedAt),
+  );
+  final startParts = secondsAtStart.split(':');
+  final maximumDisplayedSeconds =
+      int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+
+  // Bound the display to the measured test interval. Exact rounding is
+  // covered by the formatter test below.
+  expect(
+    displayedSeconds,
+    inInclusiveRange(secondsRemaining, maximumDisplayedSeconds),
+  );
+}
+
 void main() {
   testWidgets(
       'temporary conversation shows countdown capsule and '
       'checked-bubble leading icon', (tester) async {
+    final countdownStartedAt = DateTime.now();
+    final temporaryConversation = _conv('temp-1', isTemporary: true);
     await tester.pumpWidget(
-      _testApp([_conv('temp-1', isTemporary: true), _conv('normal-1')]),
+      _testApp([temporaryConversation, _conv('normal-1')]),
     );
     await tester.pump();
 
     // 倒计时胶囊（MM:SS）出现在临时对话条目前。
-    expect(find.text('60:00'), findsOneWidget);
+    _expectCountdownAtExpiration(
+      tester,
+      temporaryConversation.temporaryExpiresAt!,
+      countdownStartedAt,
+    );
     expect(find.text('临时'), findsNothing);
     // 临时对话左侧图标变为"气泡 + 打勾"（非 drag handle）。
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
@@ -98,13 +131,24 @@ void main() {
     await tester.tap(find.text('设为临时对话'));
     await tester.pumpAndSettle();
     expect(find.textContaining('一小时后删除'), findsOneWidget);
+    final countdownStartedAt = DateTime.now();
     await tester.tap(find.text('开启临时模式').last);
     // 菜单关闭动画 + 状态变更重建。
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     // 胶囊与气泡+打勾图标出现。
-    expect(find.text('60:00'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ConversationsPage)),
+    );
+    final enabledConversation = container
+        .read(conversationsProvider)
+        .firstWhere((conversation) => conversation.id == 'target-1');
+    _expectCountdownAtExpiration(
+      tester,
+      enabledConversation.temporaryExpiresAt!,
+      countdownStartedAt,
+    );
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
     expect(find.byIcon(Icons.drag_handle), findsOneWidget);
 
