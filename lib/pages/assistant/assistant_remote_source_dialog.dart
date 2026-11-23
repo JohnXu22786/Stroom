@@ -18,21 +18,28 @@ void showAssistantRemoteSourceDialog(
   BuildContext context,
   WidgetRef ref, {
   String initialUrl = '',
+  AssistantCatalogService Function()? serviceFactory,
 }) {
   showDialog<void>(
     context: context,
     builder: (context) =>
-        _AssistantRemoteSourceDialog(ref: ref, initialUrl: initialUrl),
+        _AssistantRemoteSourceDialog(
+          ref: ref,
+          initialUrl: initialUrl,
+          serviceFactory: serviceFactory,
+        ),
   );
 }
 
 class _AssistantRemoteSourceDialog extends StatefulWidget {
   final WidgetRef ref;
   final String initialUrl;
+  final AssistantCatalogService Function()? serviceFactory;
 
   const _AssistantRemoteSourceDialog({
     required this.ref,
     required this.initialUrl,
+    required this.serviceFactory,
   });
 
   @override
@@ -47,6 +54,7 @@ class _AssistantRemoteSourceDialogState
   bool _busy = false;
   bool _autoUpdate = false;
   bool _reviewSafety = false;
+  bool _dismissed = false;
   String? _error;
 
   @override
@@ -62,6 +70,8 @@ class _AssistantRemoteSourceDialogState
 
   bool get _isZh => Localizations.localeOf(context).languageCode == 'zh';
 
+  bool get _canContinueImport => mounted && !_dismissed;
+
   @override
   void dispose() {
     _urlController.dispose();
@@ -74,7 +84,7 @@ class _AssistantRemoteSourceDialogState
       _error = null;
       _catalog = null;
     });
-    final service = AssistantCatalogService();
+    final service = widget.serviceFactory?.call() ?? AssistantCatalogService();
     try {
       final catalog = await service.fetchCatalog(_urlController.text);
       if (!mounted) return;
@@ -89,7 +99,8 @@ class _AssistantRemoteSourceDialogState
 
   Future<void> _importDirectFile() async {
     await _performImport(() async {
-      final service = AssistantCatalogService();
+      final service =
+          widget.serviceFactory?.call() ?? AssistantCatalogService();
       try {
         return await service.fetchDirectAssistant(_urlController.text);
       } finally {
@@ -101,7 +112,8 @@ class _AssistantRemoteSourceDialogState
   Future<void> _importEntry(RemoteAssistantCatalogEntry entry) async {
     final catalogUrl = _urlController.text.trim();
     await _performImport(() async {
-      final service = AssistantCatalogService();
+      final service =
+          widget.serviceFactory?.call() ?? AssistantCatalogService();
       try {
         return await service.fetchCatalogEntry(
           catalogUrl: catalogUrl,
@@ -125,6 +137,7 @@ class _AssistantRemoteSourceDialogState
     var imported = false;
     try {
       final remote = await download();
+      if (!_canContinueImport) return;
       final definition = remote.definition;
 
       final refs = widget.ref.read(providerEntriesProvider);
@@ -152,6 +165,7 @@ class _AssistantRemoteSourceDialogState
           prompt: definition.prompt,
           settings: definition.settings.toMap(),
         );
+        if (!_canContinueImport) return;
         if (!review.approved) {
           throw FormatException(
             '${_isZh ? '安全审查未通过' : 'Safety review rejected this assistant'}: ${review.reason}',
@@ -221,10 +235,15 @@ class _AssistantRemoteSourceDialogState
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: ConstrainedText(
-        _isZh ? '接入远程助手' : 'Connect remote assistants',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      title: PopScope<void>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) _dismissed = true;
+        },
+        child: ConstrainedText(
+          _isZh ? '接入远程助手' : 'Connect remote assistants',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       content: SizedBox(
         width: 560,
