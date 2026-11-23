@@ -377,6 +377,66 @@ void main() {
     _expectRemoteMessageWraps(tester);
   });
 
+  testWidgets('constrains the localized overwrite button on a narrow screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final requests = await _loginUntilSyncPrompt(
+      tester,
+      locale: const Locale('de', 'DE'),
+      serviceLoginLabel: 'Bei AnkiWeb anmelden',
+      dialogLoginLabel: 'Anmelden',
+      successPromptContinueLabel: 'Fortfahren',
+    );
+    await tester.tap(find.text('Fortfahren'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final label = find.text('Serverdaten durch lokale Daten ersetzen');
+    await tester.scrollUntilVisible(
+      label,
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    final overwriteButton = find.ancestor(
+      of: label,
+      matching: find.byType(FilledButton),
+    );
+    expect(overwriteButton, findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(overwriteButton).onPressed,
+      isNotNull,
+    );
+    expect(
+      find.descendant(
+        of: overwriteButton,
+        matching: find.byIcon(Icons.cloud_upload_outlined),
+      ),
+      findsOneWidget,
+    );
+    final constrainedLabel = find.ancestor(
+      of: label,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(constrainedLabel, findsOneWidget);
+    expect(
+      tester.widget<ConstrainedText>(constrainedLabel).maxLines,
+      1,
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(
+      find.descendant(of: constrainedLabel, matching: find.byType(Transform)),
+      findsOneWidget,
+    );
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('offers sync after login and keeps the sync button available', (
     tester,
   ) async {
@@ -973,6 +1033,10 @@ void _expectRemoteMessageWraps(WidgetTester tester) {
 Future<List<Uri>> _loginUntilSyncPrompt(
   WidgetTester tester, {
   List<dynamic> additionalOverrides = const [],
+  Locale locale = const Locale('zh', 'CN'),
+  String serviceLoginLabel = '登录AnkiWeb',
+  String dialogLoginLabel = '登录',
+  String successPromptContinueLabel = '继续使用',
 }) async {
   SharedPreferences.setMockInitialValues({});
   final requests = <Uri>[];
@@ -990,16 +1054,28 @@ Future<List<Uri>> _loginUntilSyncPrompt(
         ),
         ...additionalOverrides,
       ],
-      child: _localizedApp(home: const AnkiSyncSettingsPage()),
+      child: _localizedApp(
+        home: const AnkiSyncSettingsPage(),
+        locale: locale,
+      ),
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.text('登录AnkiWeb'));
+  await tester.scrollUntilVisible(
+    find.text(serviceLoginLabel),
+    160,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.text(serviceLoginLabel));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
   await tester.enterText(find.byType(TextFormField).at(1), 'password');
-  await tester.tap(find.text('登录').last);
-  await tester.pumpAndSettle();
+  await tester.tap(find.text(dialogLoginLabel).last);
+  for (var frame = 0;
+      frame < 20 && find.text(successPromptContinueLabel).evaluate().isEmpty;
+      frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
   return requests;
 }
 
