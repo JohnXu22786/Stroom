@@ -347,7 +347,7 @@ void main() {
 
   group('Domain cookie deletion', () {
     // Unit owner: vertical_result_dialog_scroll.
-    // Functional suite mapping: files-data; the widget test runs in feature-ui.
+    // Functional suite mapping: component-integrations; the CI test owner is component-integrations.
     testWidgets(
       'long domain confirmation scrolls while cancel and clear remain reachable',
       (tester) async {

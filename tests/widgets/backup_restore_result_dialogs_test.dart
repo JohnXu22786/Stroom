@@ -39,7 +39,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // Unit owner: vertical_result_dialog_scroll.
-  // Functional suite mapping: files-data; the widget test runs in feature-ui.
+  // Functional suite mapping: files-data; the CI test owner is feature-ui.
   testWidgets(
     'restart result scrolls long restore details and keeps both actions reachable',
     (tester) async {
@@ -96,7 +96,7 @@ void main() {
   );
 
   // Unit owner: vertical_result_dialog_scroll.
-  // Functional suite mapping: files-data; the widget test runs in feature-ui.
+  // Functional suite mapping: files-data; the CI test owner is feature-ui.
   testWidgets(
     'skipped categories scroll while acknowledgement remains reachable',
     (tester) async {
