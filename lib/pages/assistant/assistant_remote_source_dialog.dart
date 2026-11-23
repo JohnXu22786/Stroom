@@ -22,12 +22,11 @@ void showAssistantRemoteSourceDialog(
 }) {
   showDialog<void>(
     context: context,
-    builder: (context) =>
-        _AssistantRemoteSourceDialog(
-          ref: ref,
-          initialUrl: initialUrl,
-          serviceFactory: serviceFactory,
-        ),
+    builder: (context) => _AssistantRemoteSourceDialog(
+      ref: ref,
+      initialUrl: initialUrl,
+      serviceFactory: serviceFactory,
+    ),
   );
 }
 
