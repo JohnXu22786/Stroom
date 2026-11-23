@@ -13,6 +13,7 @@ import '../utils/folder_membership_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/file_manifest.dart';
 import '../utils/tts_audio_saver.dart';
+import '../utils/tts_audio_stream.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import 'tts_state_shared.dart';
@@ -728,6 +729,8 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
     required ProviderConfigItem providerConfig,
     required ModelConfig modelConfig,
     Map<String, String>? customParams,
+    required Future<void> Function(Stream<Uint8List> chunks, String format)
+        playAudioStream,
   }) async {
     if (state.isStreaming) {
       return;
@@ -738,18 +741,18 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       return;
     }
 
-    final provider = tts_provider_base.createProviderFromConfig(
-      providerConfig,
-      locale: ref.read(localeProvider),
-    );
-    final synthConfig = ref.read(synthesisConfigProvider);
-
     try {
       state = state.copyWith(
         isStreaming: true,
         currentText: text,
         clearError: true,
       );
+
+      final provider = tts_provider_base.createProviderFromConfig(
+        providerConfig,
+        locale: ref.read(localeProvider),
+      );
+      final synthConfig = ref.read(synthesisConfigProvider);
 
       // 构建参数：通用参数 + 模型ID + 自定义参数
       final params = <String, dynamic>{
@@ -772,9 +775,16 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
         params: params,
       );
 
-      await for (final _ in stream) {
-        // 流式数据已由 streamSynthesize 内部处理
-      }
+      final sampleRateValue = params['sample_rate'];
+      final sampleRate = sampleRateValue is num
+          ? sampleRateValue.toInt()
+          : int.tryParse('$sampleRateValue') ?? 24000;
+      final preparedStream = await prepareTtsPlaybackStream(
+        stream,
+        requestedFormat: (params['format'] ?? synthConfig.format).toString(),
+        sampleRate: sampleRate,
+      );
+      await playAudioStream(preparedStream.chunks, preparedStream.format);
 
       state = state.copyWith(isStreaming: false);
     } catch (e) {

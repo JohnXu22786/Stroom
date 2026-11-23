@@ -612,12 +612,39 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   }
 
   void _startStreamingPlayback(String text, StreamModelOption opt) {
-    // 使用 TTSStateNotifier 的 startStreaming 方法
-    ref.read(ttsStateProvider.notifier).startStreaming(
-          text,
-          providerConfig: opt.configItem,
-          modelConfig: opt.model,
-        );
+    final notifier = ref.read(ttsStateProvider.notifier);
+    unawaited(
+      notifier.startStreaming(
+        text,
+        providerConfig: opt.configItem,
+        modelConfig: opt.model,
+        playAudioStream: (chunks, format) async {
+          final player = _player;
+          if (player == null) {
+            throw StateError('Audio player is not initialized');
+          }
+          final needsUserGesture = await player.playStream(
+            chunks,
+            contentType: getMimeType(format),
+          );
+          if (needsUserGesture && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(_l10n.audioPlayerStartStreaming(opt.model.name)),
+                action: SnackBarAction(
+                  label: _l10n.ttsPlay,
+                  onPressed: () => unawaited(player.play()),
+                ),
+              ),
+            );
+          }
+        },
+      ).then((_) {
+        if (!mounted) return;
+        final error = ref.read(ttsStateProvider).error;
+        if (error != null) _showSnackBar(error);
+      }),
+    );
     _showSnackBar(_l10n.audioPlayerStartStreaming(opt.model.name));
   }
 
