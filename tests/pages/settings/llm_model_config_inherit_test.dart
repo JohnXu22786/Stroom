@@ -1177,6 +1177,50 @@ void main() {
       );
     });
 
+    testWidgets('resetting a newly added reasoning param clears its values', (
+      tester,
+    ) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: LlmModelConfigPage(model: model),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _scrollToReasoning(tester, find.text('添加推理参数'));
+      await tester.tap(find.text('添加推理参数'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).last, 'new_mode');
+      await tester.pumpAndSettle();
+      await _addAdditionalParamOption(tester, 'new_mode', 'pending');
+      final card = find
+          .ancestor(of: find.text('new_mode'), matching: find.byType(Card))
+          .first;
+      await tester.tap(
+        find.descendant(of: card, matching: find.byIcon(Icons.refresh)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('pending'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'json value matching an existing option does not duplicate it',
       (tester) async {

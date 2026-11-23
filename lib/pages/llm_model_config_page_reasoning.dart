@@ -112,6 +112,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       _additionalBlockValues[param] = [];
       _additionalSelectedValues[param] = {};
       _providerAdditionalValues[param] = [];
+      _initialParamSnapshots[param] = param.copy();
     });
   }
 
@@ -134,6 +135,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       // 仅附加推理参数可删除（推理开关/推理力度是固定结构，删除按钮
       // 已被启用开关替代）——删除附加参数时清理其勾选块状态。
       final removed = _reasoningParams.removeAt(index);
+      _initialParamSnapshots.remove(removed);
       _additionalBlockValues.remove(removed);
       _additionalSelectedValues.remove(removed);
       _providerAdditionalValues.remove(removed);
