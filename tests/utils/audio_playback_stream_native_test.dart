@@ -21,6 +21,7 @@ void main() {
       final player = _MockAudioPlayer();
       final setupStarted = Completer<void>();
       final setup = Completer<Duration?>();
+      final disposeStarted = Completer<void>();
       when(() => player.positionStream).thenAnswer((_) => const Stream.empty());
       when(() => player.durationStream).thenAnswer((_) => const Stream.empty());
       when(() => player.playerStateStream)
@@ -30,7 +31,10 @@ void main() {
         return setup.future;
       });
       when(() => player.stop()).thenAnswer((_) async {});
-      when(() => player.dispose()).thenAnswer((_) async {});
+      when(() => player.dispose()).thenAnswer((_) {
+        if (!disposeStarted.isCompleted) disposeStarted.complete();
+        return Future<void>.value();
+      });
 
       final adapter = AudioPlayerAdapter(createPlayer: () => player);
       final playback = adapter.playStream(
@@ -41,6 +45,8 @@ void main() {
 
       adapter.stop();
       await playback;
+      await disposeStarted.future;
+      verify(() => player.dispose()).called(1);
       setup.complete(null);
       await Future<void>.delayed(Duration.zero);
 

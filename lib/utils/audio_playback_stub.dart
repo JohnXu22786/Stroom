@@ -31,6 +31,8 @@ class AudioPlayerAdapter {
   StreamSubscription<PlayerState>? _stateSub;
   Completer<void>? _streamPlaybackDone;
   int _streamPlaybackGeneration = 0;
+  int? _streamSourceSetupGeneration;
+  Future<void>? _playerDisposal;
 
   /// 当前播放状态
   bool get playing => _player?.playing ?? false;
@@ -57,6 +59,7 @@ class AudioPlayerAdapter {
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
     _streamPlaybackGeneration++;
+    _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
     await _disposePlayer();
     _player = _createPlayer();
@@ -77,6 +80,7 @@ class AudioPlayerAdapter {
     required String contentType,
   }) async {
     final generation = ++_streamPlaybackGeneration;
+    _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
     await _disposePlayer();
     if (generation != _streamPlaybackGeneration) return false;
@@ -88,7 +92,17 @@ class AudioPlayerAdapter {
     _streamPlaybackDone = playbackDone;
 
     try {
-      await Future.any([_player!.setAudioSource(source), playbackDone.future]);
+      _streamSourceSetupGeneration = generation;
+      try {
+        await Future.any([
+          _player!.setAudioSource(source),
+          playbackDone.future,
+        ]);
+      } finally {
+        if (_streamSourceSetupGeneration == generation) {
+          _streamSourceSetupGeneration = null;
+        }
+      }
       if (generation != _streamPlaybackGeneration) return false;
 
       final playback = _player!.play();
@@ -116,9 +130,15 @@ class AudioPlayerAdapter {
 
   /// 停止
   void stop() {
+    final cancelSourceSetup = _streamSourceSetupGeneration != null;
     _streamPlaybackGeneration++;
+    _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
-    _player?.stop();
+    if (cancelSourceSetup) {
+      unawaited(_disposePlayer());
+    } else {
+      _player?.stop();
+    }
     _positionCtrl.add(Duration.zero);
     _stateCtrl.add(null);
   }
@@ -142,6 +162,7 @@ class AudioPlayerAdapter {
   /// 释放资源
   Future<void> dispose() async {
     _streamPlaybackGeneration++;
+    _streamSourceSetupGeneration = null;
     _finishStreamPlayback();
     await _disposePlayer();
   }
@@ -166,15 +187,25 @@ class AudioPlayerAdapter {
     });
   }
 
-  Future<void> _disposePlayer() async {
-    await _posSub?.cancel();
-    await _durSub?.cancel();
-    await _stateSub?.cancel();
+  Future<void> _disposePlayer() {
+    return _playerDisposal ??= _disposePlayerResources().whenComplete(() {
+      _playerDisposal = null;
+    });
+  }
+
+  Future<void> _disposePlayerResources() async {
+    final posSub = _posSub;
+    final durSub = _durSub;
+    final stateSub = _stateSub;
+    final player = _player;
     _posSub = null;
     _durSub = null;
     _stateSub = null;
-    await _player?.dispose();
     _player = null;
+    await posSub?.cancel();
+    await durSub?.cancel();
+    await stateSub?.cancel();
+    await player?.dispose();
   }
 }
 
