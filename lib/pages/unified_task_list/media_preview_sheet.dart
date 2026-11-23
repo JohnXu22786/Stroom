@@ -567,7 +567,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
     final strings = AppLocalizations.of(context)!;
     final previewError = _previewError;
     if (previewError != null) {
-      return Padding(
+      return SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Center(
           child: Column(
@@ -587,7 +587,7 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet>
     }
 
     if (_isAudioFormat) {
-      return Padding(
+      return SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
