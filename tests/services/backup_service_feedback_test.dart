@@ -83,6 +83,8 @@ void main() {
     TextManifest.invalidateCache();
   });
 
+  // Unit owner: vertical_backup_error.
+  // Functional suite mapping: files-data; widget feedback runs in feature-ui.
   testWidgets('backup service restore failures follow the app locale', (
     tester,
   ) async {
@@ -102,19 +104,28 @@ void main() {
         BackupService.importBackup(navigatorKey.currentContext!),
         throwsA(isA<BackupValidationException>()),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.textContaining(expectedPrefix), findsOneWidget);
       expect(
         find.textContaining('/missing-backup-service-feedback.zip'),
         findsOneWidget,
       );
+      expect(tester.widget<AlertDialog>(find.byType(AlertDialog)).scrollable,
+          isTrue);
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextButton),
+      ));
+      await tester.pumpAndSettle();
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
     }
   });
 
+  // Unit owner: vertical_backup_error.
+  // Functional suite mapping: files-data; widget feedback runs in feature-ui.
   testWidgets('backup service export success and errors follow the app locale',
       (tester) async {
     // testWidgets uses FakeAsync, which does not complete real dart:io work.
@@ -209,11 +220,16 @@ void main() {
         ),
         isFalse,
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.textContaining(failedPrefix), findsOneWidget);
       expect(find.textContaining('export picker detail'), findsOneWidget);
-      ScaffoldMessenger.of(navigatorKey.currentContext!).clearSnackBars();
-      await tester.pump();
+      expect(tester.widget<AlertDialog>(find.byType(AlertDialog)).scrollable,
+          isTrue);
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextButton),
+      ));
+      await tester.pumpAndSettle();
 
       const providerDetail = 'provider detail: SAF URI 未配置，无法写入备份文件';
       pickerFailure = PlatformException(code: 'test', message: providerDetail);
@@ -226,10 +242,13 @@ void main() {
         ),
         isFalse,
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.textContaining(providerDetail), findsOneWidget);
-      ScaffoldMessenger.of(navigatorKey.currentContext!).clearSnackBars();
-      await tester.pump();
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextButton),
+      ));
+      await tester.pumpAndSettle();
 
       pickerFailure = Exception(
         BackupLocationManager.noBackupDirectoryWriteErrorMessage,
@@ -243,17 +262,20 @@ void main() {
         ),
         isFalse,
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(
-        find.text(
-          l10n.backupServiceExportFailed(
-            l10n.backupServiceNoBackupFolderSelected,
-          ),
-        ),
+        find.text(l10n.backupServiceExportFailed('')),
         findsOneWidget,
       );
-      ScaffoldMessenger.of(navigatorKey.currentContext!).clearSnackBars();
-      await tester.pump();
+      expect(
+        find.text(l10n.backupServiceNoBackupFolderSelected),
+        findsOneWidget,
+      );
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextButton),
+      ));
+      await tester.pumpAndSettle();
 
       pickerFailure = PlatformException(
         code: 'error',
@@ -269,15 +291,20 @@ void main() {
         ),
         isFalse,
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(
-        find.text(
-          l10n.backupServiceExportFailed(
-            l10n.backupServiceNoBackupFolderSelected,
-          ),
-        ),
+        find.text(l10n.backupServiceExportFailed('')),
         findsOneWidget,
       );
+      expect(
+        find.text(l10n.backupServiceNoBackupFolderSelected),
+        findsOneWidget,
+      );
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextButton),
+      ));
+      await tester.pumpAndSettle();
       pickerFailure = null;
 
       await tester.pumpWidget(const SizedBox());
