@@ -256,6 +256,73 @@ class _HomeStylePopScopeWrapper extends ConsumerWidget {
 }
 
 void main() {
+  testWidgets(
+      'grid tile grows for scaled folder labels without breaking file taps',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    var openedFile = false;
+    const folder =
+        'a folder name with enough words to wrap across several visible lines';
+    await tester.pumpWidget(
+      _buildFileManagerApp(
+        config: FileManagerConfig<_TestFileRecord>(
+          title: 'Files',
+          initialGridView: true,
+          fileThumbnailBuilder: (_) => const ColoredBox(
+            color: Colors.amber,
+            child: SizedBox.expand(),
+          ),
+          fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
+          onFileTap: (_) => openedFile = true,
+        ),
+        folders: const {folder},
+        manifestBridge: testManifestBridge,
+        records: [
+          _TestFileRecord(
+            id: 'grid-height-file',
+            name: 'sample',
+            format: 'txt',
+          ),
+        ],
+        locale: const Locale('en'),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final folderTile = find.byKey(const Key('fm_grid_folder_$folder'));
+    final folderLabel =
+        find.descendant(of: folderTile, matching: find.byType(ConstrainedText));
+    final tileSize = tester.getSize(folderTile);
+    expect(tileSize.height, greaterThan(tileSize.width));
+    expect(
+      tileSize.height,
+      closeTo(46 + tester.getSize(folderLabel).height, 0.5),
+      reason: 'the row reserves the visible two-line label without extra space',
+    );
+    expect(
+      find.byKey(const Key('fm_grid_file_grid-height-file')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('fm_grid_file_grid-height-file')));
+    await tester.pump();
+    expect(openedFile, isTrue);
+    expect(tester.takeException(), isNull);
+
+    await tester.longPress(folderTile);
+    await tester.pump();
+    expect(
+      find.descendant(of: folderTile, matching: find.byType(Checkbox)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   group('FileManagerView file menu', () {
     testWidgets('uses Open for the file action', (tester) async {
       var openedFile = false;
