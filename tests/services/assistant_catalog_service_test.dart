@@ -47,10 +47,50 @@ void main() {
           service.fetchCatalog('https://127.0.0.1/catalog.json'),
           throwsA(isA<FormatException>()),
         );
+        for (final host in [
+          'service.local.',
+          '[::]',
+          '[0:0:0:0:0:0:0:0]',
+          '[::1]',
+          '[0:0:0:0:0:0:0:1]',
+          '[fc00::1]',
+          '[fd12:3456:789a::1]',
+          '[fe80::1]',
+          '[fe80:0:0:0:0:0:0:1]',
+          '[::ffff:127.0.0.1]',
+          '[::ffff:172.16.0.1]',
+          '[0:0:0:0:0:ffff:7f00:1]',
+          '[0:0:0:0:0:ffff:ac10:1]',
+        ]) {
+          await expectLater(
+            service.fetchCatalog('https://$host/catalog.json'),
+            throwsA(isA<FormatException>()),
+          );
+        }
         expect(requestCount, 0);
         service.close();
       },
     );
+
+    test('allows a public IPv6 HTTPS host', () async {
+      final body = _assistantJson(version: '1.0.0');
+      final client = MockClient((request) async {
+        expect(
+          request.url.toString(),
+          'https://[2001:4860:4860::8888]/assistant.json',
+        );
+        return http.Response.bytes(utf8.encode(body), 200, request: request);
+      });
+      final service = AssistantCatalogService(client: client);
+
+      final result = await service.fetchDirectAssistant(
+        'https://[2001:4860:4860::8888]/assistant.json',
+      );
+      service.close();
+
+      expect(result.definition.id, 'stroom.test');
+      expect(result.definition.version, '1.0.0');
+    });
 
     test(
       'validates catalog file hash and metadata before returning it',
