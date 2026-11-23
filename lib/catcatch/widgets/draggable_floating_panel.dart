@@ -231,15 +231,19 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      '猫抓嗅探',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onPrimaryContainer,
+                    Expanded(
+                      child: ConstrainedText(
+                        '猫抓嗅探',
+                        semanticsLabel: '猫抓嗅探',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(),
                     // Count badge
                     if (widget.detectedUrls.isNotEmpty)
                       Container(
@@ -453,8 +457,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
             ),
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            height: 28,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 28),
             child: FilledButton.icon(
               onPressed: hasSelection && widget.confirmEnabled
                   ? () {
@@ -473,6 +477,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
           ),
