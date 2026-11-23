@@ -48,6 +48,7 @@ void main() {
           throwsA(isA<FormatException>()),
         );
         for (final host in [
+          'service.local.',
           '[::]',
           '[0:0:0:0:0:0:0:0]',
           '[::1]',

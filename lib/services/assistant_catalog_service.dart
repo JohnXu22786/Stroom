@@ -134,7 +134,10 @@ class AssistantCatalogService {
   }
 
   static bool _isLocalHost(String rawHost) {
-    final host = rawHost.toLowerCase().replaceAll('[', '').replaceAll(']', '');
+    var host = rawHost.toLowerCase().replaceAll('[', '').replaceAll(']', '');
+    if (host.endsWith('.')) {
+      host = host.substring(0, host.length - 1);
+    }
     if (host == 'localhost' ||
         host.endsWith('.localhost') ||
         host.endsWith('.local') ||
