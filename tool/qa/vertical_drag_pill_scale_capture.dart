@@ -3,12 +3,18 @@ import 'package:stroom/widgets/drag_sort_area.dart';
 
 void main() {
   final scale = double.tryParse(Uri.base.queryParameters['scale'] ?? '') ?? 1;
+  final brightness = Uri.base.queryParameters['theme'] == 'dark'
+      ? Brightness.dark
+      : Brightness.light;
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: brightness,
+        ),
       ),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(

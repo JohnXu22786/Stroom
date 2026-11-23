@@ -41,6 +41,7 @@ if not (WEB_BUILD / 'index.html').exists() or ENTRYPOINT.stat().st_mtime > (
             'web',
             '--no-pub',
             '--release',
+            '--no-wasm-dry-run',
             f'--target={ENTRYPOINT}',
             f'--output={WEB_BUILD}',
         ],
@@ -94,10 +95,19 @@ try:
             reduced_motion='reduce',
         )
         page.on('pageerror', lambda error: errors.append(str(error)))
-        for scale, suffix in [(1, 'scale1'), (2, 'scale2')]:
-            page.goto(f'{base_url}?scale={scale}', wait_until='load', timeout=120_000)
-            page.wait_for_timeout(1_500)
-            screenshot = OUTPUT / f'pills-320x640-{suffix}-light.png'
+        captures = [
+            (1, 'scale1-light', 'light'),
+            (2, 'scale2-light', 'light'),
+            (1, 'scale1-dark', 'dark'),
+        ]
+        for scale, suffix, theme in captures:
+            page.goto(
+                f'{base_url}?scale={scale}&theme={theme}',
+                wait_until='load',
+                timeout=120_000,
+            )
+            page.wait_for_timeout(3_000)
+            screenshot = OUTPUT / f'pills-320x640-{suffix}.png'
             page.screenshot(path=str(screenshot))
             image = Image.open(screenshot)
             if image.size != (320, 640):
@@ -111,13 +121,13 @@ try:
     print(
         {
             'screenshots': [
-                str((OUTPUT / f'pills-320x640-{suffix}-light.png').relative_to(ROOT))
-                for suffix in ('scale1', 'scale2')
+                str((OUTPUT / f'pills-320x640-{suffix}.png').relative_to(ROOT))
+                for _, suffix, _ in captures
             ],
             'viewport_css_px': {'width': 320, 'height': 640},
             'device_pixel_ratio': 1,
             'locale': 'en-US',
-            'theme': 'light',
+            'themes': {'light': [1, 2], 'dark': [1]},
             'text_scales': [1, 2],
             'focus': 'none',
             'keyboard': 'closed (headless browser)',
