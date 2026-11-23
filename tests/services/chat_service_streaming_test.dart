@@ -32,9 +32,6 @@ part 'chat_service_streaming_test_p4.dart';
 /// (Originally from chat_service_reasoning_test.dart)
 class CapturingChatProvider extends BaseChatProvider {
   Map<String, dynamic>? capturedBody;
-  List<Attachment>? mediaAttachments;
-  String? inputTranscript;
-  String? reasoningText;
   bool throwError = false;
 
   @override
@@ -91,15 +88,8 @@ class CapturingChatProvider extends BaseChatProvider {
       'tools': tools,
       'extraParams': extraParams,
     };
-    if (reasoningText?.isNotEmpty == true) {
-      yield AIStreamEvent(reasoningText!, isReasoning: true);
-    }
     // Yield a minimal event so the stream doesn't hang
-    yield AIStreamEvent(
-      '',
-      inputTranscript: inputTranscript,
-      mediaAttachments: mediaAttachments,
-    );
+    yield AIStreamEvent('');
   }
 }
 

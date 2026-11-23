@@ -94,7 +94,9 @@ Future<void> _writeMigratedPreference(
 /// 旧 chat_configs 迁移辅助（同库可见，外部仍通过
 /// DataMigrationService 的私有静态委托调用）。
 class DataMigrationOldConfigs {
-  static StartupMigrationPreferences _migrationPreferences(Object preferences) {
+  static StartupMigrationPreferences _migrationPreferences(
+    Object preferences,
+  ) {
     if (preferences is StartupMigrationPreferences) return preferences;
     if (preferences is SharedPreferences) {
       return StartupMigrationPreferences.forLegacyPreferences(preferences);
@@ -107,7 +109,9 @@ class DataMigrationOldConfigs {
   }
 
   /// 迁移旧版 chat_configs（被重构删除的格式）到 provider_entries。
-  static Future<void> migrateOldChatConfigs(Object preferences) async {
+  static Future<void> migrateOldChatConfigs(
+    Object preferences,
+  ) async {
     final prefs = _migrationPreferences(preferences);
     final oldJson = await prefs.getString('chat_configs');
     if (oldJson == null || oldJson.isEmpty) return;
@@ -116,21 +120,17 @@ class DataMigrationOldConfigs {
       final prepared = await _prepareLegacyChatConfigs(oldJson);
       final status = prepared['status'];
       if (status == 'parseError') {
-        debugPrint(
-          '[DataMigrationService] Failed to migrate old chat configs: '
-          '${prepared['error']}',
-        );
-        await _quarantineCorruptData(prefs, 'provider_entries', oldJson);
+        debugPrint('[DataMigrationService] Failed to migrate old chat configs: '
+            '${prepared['error']}');
+        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
         await _removeMigratedPreference(prefs, 'chat_selected_config_id');
         await _removeMigratedPreference(prefs, 'chat_configs');
         return;
       }
       if (status == 'notList') {
-        debugPrint(
-          '[DataMigrationService] chat_configs 不是合法数组，'
-          '隔离后清理旧配置',
-        );
-        await _quarantineCorruptData(prefs, 'provider_entries', oldJson);
+        debugPrint('[DataMigrationService] chat_configs 不是合法数组，'
+            '隔离后清理旧配置');
+        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
         await _removeMigratedPreference(prefs, 'chat_selected_config_id');
         await _removeMigratedPreference(prefs, 'chat_configs');
         return;
@@ -158,10 +158,8 @@ class DataMigrationOldConfigs {
         existingJson,
       );
       if (merged['corruptExisting'] == true) {
-        debugPrint(
-          '[DataMigrationService] 现有 provider_entries 不是'
-          '合法数组，开始隔离',
-        );
+        debugPrint('[DataMigrationService] 现有 provider_entries 不是'
+            '合法数组，开始隔离');
         await _quarantineCorruptData(prefs, 'provider_entries', existingJson!);
       }
       if (merged['status'] == 'write') {
@@ -175,14 +173,6 @@ class DataMigrationOldConfigs {
         debugPrint(
           '[DataMigrationService] Migrated ${prepared['legacyConfigCount']} old chat config(s) to provider_entries',
         );
-      } else if (merged['status'] == 'conflict') {
-        // Conflicting credentials are left in their original locations for
-        // account-level recovery. Continue loading provider_entries without
-        // quarantining or deleting the legacy source.
-        debugPrint(
-          '[DataMigrationService] Conflicting legacy provider credentials were preserved.',
-        );
-        return;
       } else if (merged['status'] != 'alreadyMigrated') {
         throw StartupDataValidationUnavailable.isolate(
           StateError('Invalid legacy chat config merge result.'),
@@ -193,8 +183,7 @@ class DataMigrationOldConfigs {
       await _removeMigratedPreference(prefs, 'chat_configs');
     } catch (error, stackTrace) {
       debugPrint(
-        '[DataMigrationService] Failed to migrate old chat configs: $error',
-      );
+          '[DataMigrationService] Failed to migrate old chat configs: $error');
       if (error is StartupPreferencesUnavailable ||
           error is StartupDataValidationUnavailable) {
         Error.throwWithStackTrace(error, stackTrace);
@@ -210,7 +199,9 @@ class DataMigrationOldConfigs {
   ///
   /// 旧版数据中某些条目的 id 可能为 null，导致 ProviderEntry.fromMap()
   /// 在 `map['id'] as String` 处抛出 TypeError，进而引发闪退。
-  static Future<void> fixNullIdsInProviderEntries(Object preferences) async {
+  static Future<void> fixNullIdsInProviderEntries(
+    Object preferences,
+  ) async {
     final prefs = _migrationPreferences(preferences);
     final json = await prefs.getString('provider_entries');
     if (json == null || json.isEmpty) return;
@@ -218,19 +209,15 @@ class DataMigrationOldConfigs {
     try {
       final migrated = await _fixProviderEntries(json);
       if (migrated['status'] == 'parseError') {
-        debugPrint(
-          '[DataMigrationService] Failed to fix provider entries: '
-          '${migrated['error']}',
-        );
+        debugPrint('[DataMigrationService] Failed to fix provider entries: '
+            '${migrated['error']}');
         await _quarantineCorruptData(prefs, 'provider_entries', json);
         await _writeMigratedPreference(prefs, 'provider_entries', '[]');
         return;
       }
       if (migrated['status'] == 'notList') {
-        debugPrint(
-          '[DataMigrationService] provider_entries 不是合法数组，'
-          '已隔离并重置为空列表',
-        );
+        debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
+            '已隔离并重置为空列表');
         await _quarantineCorruptData(prefs, 'provider_entries', json);
         await _writeMigratedPreference(prefs, 'provider_entries', '[]');
         return;
@@ -249,14 +236,11 @@ class DataMigrationOldConfigs {
         }
         await _writeMigratedPreference(prefs, 'provider_entries', payload);
         debugPrint(
-          '[DataMigrationService] Fixed null IDs/types in provider_entries',
-        );
+            '[DataMigrationService] Fixed null IDs/types in provider_entries');
       }
     } catch (error, stackTrace) {
-      debugPrint(
-        '[DataMigrationService] Failed to fix provider entries: '
-        '$error',
-      );
+      debugPrint('[DataMigrationService] Failed to fix provider entries: '
+          '$error');
       if (error is StartupPreferencesUnavailable ||
           error is StartupDataValidationUnavailable) {
         Error.throwWithStackTrace(error, stackTrace);
@@ -344,40 +328,22 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
       final context = model['maxTokens'] ?? model['context'];
       if (context != null) typeConfig['context'] = context;
       final modelId = model['modelId'];
-      final modelName = model['name'];
-      final stableModelId = modelId is String && modelId.trim().isNotEmpty
-          ? modelId
-          : (modelName is String && modelName.trim().isNotEmpty
-              ? modelName
-              : '');
       return <String, dynamic>{
-        'name': modelName is String && modelName.trim().isNotEmpty
-            ? modelName
-            : stableModelId,
-        'modelId': stableModelId,
+        'name': modelId is String ? modelId : '',
+        'modelId': modelId is String ? modelId : '',
         'supportStream': model['supportStream'] is bool
             ? model['supportStream'] as bool
             : true,
         'typeConfig': typeConfig,
       };
     }).toList();
-    final migratedConfig = <String, dynamic>{
+    migratedConfigs.add(<String, dynamic>{
       'providerName':
           oldItem['providerName'] is String ? oldItem['providerName'] : '',
       'host': oldItem['host'] is String ? oldItem['host'] : '',
       'key': oldItem['key'] is String ? oldItem['key'] : '',
       'models': models,
-    };
-    for (final field in const ['credentialRef', 'publicKey']) {
-      final value = oldItem[field];
-      if (value != null) {
-        if (value is! String || value.trim().isEmpty) {
-          throw const FormatException('Invalid safe legacy metadata.');
-        }
-        migratedConfig[field] = value;
-      }
-    }
-    migratedConfigs.add(migratedConfig);
+    });
   }
 
   return {
@@ -416,61 +382,11 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
     }
   }
 
-  for (var i = 0; i < migratedConfigs.length; i++) {
-    for (var j = i + 1; j < migratedConfigs.length; j++) {
-      final first = migratedConfigs[i];
-      final second = migratedConfigs[j];
-      if (_sameLegacyProviderConfig(first, second) &&
-          _mergeLegacySafeMetadata(Map<String, dynamic>.from(first), second) ==
-              null) {
-        return {'status': 'conflict', 'corruptExisting': corruptExisting};
-      }
-    }
-  }
-  for (final entry in existingEntries.where(
-    (entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm',
-  )) {
-    try {
-      final parsed = ProviderEntry.fromMap(entry);
-      if (parsed.configs.isEmpty) continue;
-      jsonEncode(parsed.toMap());
-    } catch (_) {
-      // A malformed row cannot represent an existing credential. Treat it as
-      // corrupt so valid legacy rows can be recovered alongside it.
-      continue;
-    }
-    final rawConfigs = entry['configs'];
-    if (rawConfigs is! List) continue;
-    for (final rawConfig in rawConfigs.whereType<Map>()) {
-      final existingConfig = Map<String, dynamic>.from(rawConfig);
-      for (final legacyConfig in migratedConfigs) {
-        if (_sameLegacyProviderConfig(existingConfig, legacyConfig) &&
-            _mergeLegacySafeMetadata(
-                  Map<String, dynamic>.from(existingConfig),
-                  legacyConfig,
-                ) ==
-                null) {
-          return {'status': 'conflict', 'corruptExisting': corruptExisting};
-        }
-      }
-    }
-  }
-
   final usableLlmEntryIndex = existingEntries.indexWhere((entry) {
     if (entry['type'] != 'llm' || entry['id'] == 'builtin_llm') return false;
     try {
       final parsed = ProviderEntry.fromMap(entry);
-      final rawConfigs = entry['configs'];
-      if (parsed.configs.isEmpty && rawConfigs is List) return false;
-      if (parsed.configs.isEmpty && rawConfigs == null) {
-        final prepared = _prepareLegacyChatConfigsSync(jsonEncode([entry]));
-        if (prepared['status'] != 'ready' || prepared['payload'] is! String) {
-          return false;
-        }
-        if ((jsonDecode(prepared['payload']! as String) as List).isEmpty) {
-          return false;
-        }
-      }
+      if (parsed.configs.isEmpty) return false;
       jsonEncode(parsed.toMap());
       return true;
     } catch (_) {
@@ -485,36 +401,11 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
         ? rawConfigs.whereType<Map<String, dynamic>>().toList()
         : (jsonDecode(
             _prepareLegacyChatConfigsSync(
-              jsonEncode([existingEntry]),
-            )['payload']! as String,
+                jsonEncode([existingEntry]))['payload']! as String,
           ) as List)
             .whereType<Map<String, dynamic>>()
             .toList();
     final representedConfigs = rawConfigs is List ? configs : [existingEntry];
-    final metadataMatchedConfigs = <Map<String, dynamic>>{};
-    var metadataChanged = false;
-    for (final represented in representedConfigs) {
-      if (represented is! Map) continue;
-      final existingConfig = Map<String, dynamic>.from(represented);
-      for (final legacyConfig in migratedConfigs) {
-        if (!_sameLegacyProviderConfig(existingConfig, legacyConfig)) continue;
-        final merged = _mergeLegacySafeMetadata(existingConfig, legacyConfig);
-        if (merged == null) {
-          return {'status': 'conflict', 'corruptExisting': corruptExisting};
-        }
-        metadataChanged = metadataChanged || merged;
-        if (legacyConfig.containsKey('credentialRef') ||
-            legacyConfig.containsKey('publicKey')) {
-          metadataMatchedConfigs.add(legacyConfig);
-        }
-        if (merged && rawConfigs is List) {
-          final target = represented as Map;
-          target
-            ..clear()
-            ..addAll(existingConfig);
-        }
-      }
-    }
     final representedIdentities = representedConfigs
         .map(
           (config) => _legacyChatConfigIdentity(
@@ -525,19 +416,12 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
         .toSet();
     final unrepresentedConfigs = migratedConfigs
         .where(
-          (config) =>
-              !metadataMatchedConfigs.contains(config) &&
-              representedIdentities.add(_legacyChatConfigIdentity(config)),
+          (config) => representedIdentities.add(
+            _legacyChatConfigIdentity(config),
+          ),
         )
         .toList();
     if (unrepresentedConfigs.isEmpty) {
-      if (metadataChanged) {
-        return {
-          'status': 'write',
-          'corruptExisting': corruptExisting,
-          'payload': jsonEncode(existingEntries),
-        };
-      }
       return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
     }
     configs.addAll(unrepresentedConfigs);
@@ -602,93 +486,6 @@ Object? _canonicalLegacyChatIdentityValue(Object? value) {
     return value.map(_canonicalLegacyChatIdentityValue).toList();
   }
   return value;
-}
-
-bool _sameLegacyProviderConfig(
-  Map<String, dynamic> existing,
-  Map<String, dynamic> legacy,
-) {
-  if ((existing['providerName'] is String ? existing['providerName'] : '') !=
-          (legacy['providerName'] is String ? legacy['providerName'] : '') ||
-      (existing['host'] is String ? existing['host'] : '') !=
-          (legacy['host'] is String ? legacy['host'] : '')) {
-    return false;
-  }
-  List<String>? modelIds(Object? value) {
-    if (value is! List) return null;
-    if (value.isEmpty) return null;
-    final result = <String>[];
-    for (final item in value) {
-      if (item is! Map) return null;
-      final modelId = item['modelId'];
-      final name = item['name'];
-      final id = modelId is String && modelId.trim().isNotEmpty
-          ? modelId
-          : (name is String && name.trim().isNotEmpty ? name : '');
-      if (id.isEmpty) return null;
-      result.add(id);
-    }
-    return result;
-  }
-
-  final existingModels = modelIds(existing['models']);
-  final legacyModels = modelIds(legacy['models']);
-  return existingModels != null &&
-      legacyModels != null &&
-      jsonEncode(existingModels) == jsonEncode(legacyModels);
-}
-
-bool? _mergeLegacySafeMetadata(
-  Map<String, dynamic> existing,
-  Map<String, dynamic> legacy,
-) {
-  final existingKey = existing['key'];
-  final legacyKey = legacy['key'];
-  if (existingKey != null && existingKey is! String ||
-      legacyKey != null && legacyKey is! String) {
-    return null;
-  }
-  if (existingKey is String &&
-      existingKey.isNotEmpty &&
-      legacyKey is String &&
-      legacyKey.isNotEmpty &&
-      existingKey != legacyKey) {
-    return null;
-  }
-  final existingReference = existing['credentialRef'];
-  if (existingReference is String &&
-      existingReference.isNotEmpty &&
-      (existingKey == null || existingKey == '') &&
-      legacyKey is String &&
-      legacyKey.isNotEmpty) {
-    // A legacy source cannot safely rotate a reference already used by the
-    // provider entry. Keep both preferences intact for recovery or explicit
-    // account-level rotation after migration.
-    return null;
-  }
-  var changed = false;
-  if ((existingKey == null || existingKey == '') &&
-      legacyKey is String &&
-      legacyKey.isNotEmpty) {
-    existing['key'] = legacyKey;
-    changed = true;
-  }
-  for (final field in const ['credentialRef', 'publicKey']) {
-    final current = existing[field];
-    final incoming = legacy[field];
-    if (current != null && (current is! String || current.trim().isEmpty) ||
-        incoming != null && (incoming is! String || incoming.trim().isEmpty)) {
-      return null;
-    }
-    if (current != null && incoming != null && current != incoming) {
-      return null;
-    }
-    if (current == null && incoming != null) {
-      existing[field] = incoming;
-      changed = true;
-    }
-  }
-  return changed;
 }
 
 Map<String, Object?> _fixProviderEntriesSync(String raw) {

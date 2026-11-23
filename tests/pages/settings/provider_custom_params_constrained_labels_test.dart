@@ -6,6 +6,87 @@ import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
+  testWidgets(
+    'custom parameter header fits its dialog at wide viewport and large text scale',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData(
+            dialogTheme: const DialogThemeData(
+              constraints: BoxConstraints(maxWidth: 340),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.5)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showProviderSettingsPanel(
+                  context: context,
+                  providerType: 'llm',
+                  config: ProviderConfigItem(
+                    providerName: 'Provider',
+                    host: 'https://example.test',
+                    customParams: [
+                      CustomParam(
+                        paramName: 'response_mode',
+                        type: 'string',
+                        options: ['concise', 'detailed'],
+                      ),
+                    ],
+                  ),
+                ),
+                child: const Text('Open settings'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open settings'));
+      await tester.pumpAndSettle();
+      final tabs = tester.widget<TabBar>(find.byType(TabBar));
+      await tester.tap(find.byWidget(tabs.tabs[1]));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final strings = AppLocalizations.of(tester.element(find.byType(Dialog)))!;
+      final heading = find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedText &&
+            widget.data == strings.chatCustomParameters,
+      );
+      final addButton =
+          find.widgetWithText(TextButton, strings.providerAddCustomParam);
+      final headingRect = tester.getRect(heading);
+      final buttonRect = tester.getRect(addButton);
+      final dialogRect = tester.getRect(find.byType(Dialog));
+      expect(headingRect.left, greaterThanOrEqualTo(dialogRect.left));
+      expect(headingRect.right, lessThanOrEqualTo(dialogRect.right));
+      expect(buttonRect.left, greaterThanOrEqualTo(dialogRect.left));
+      expect(buttonRect.right, lessThanOrEqualTo(dialogRect.right));
+      expect(
+        buttonRect.top >= headingRect.bottom ||
+            buttonRect.left >= headingRect.right,
+        isTrue,
+        reason: 'The title and add action must reflow or fit without overlap.',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('provider custom parameter field labels use measured slots', (
     tester,
   ) async {

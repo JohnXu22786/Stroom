@@ -675,6 +675,70 @@ void main() {
 
       expectGutterAlignsWithRender(tester, code);
     });
+
+    // Unit owner: vertical_gutter_width_scale.
+    testWidgets('gutter fits scaled line numbers without changing 1x width', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final code = List<String>.filled(1234, 'x').join('\n');
+      double? normalGutterWidth;
+      for (final scale in [1.0, 2.0]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('de', 'DE'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+              ),
+              child: child!,
+            ),
+            home: Scaffold(body: CodeBlockSourceView(code: code)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final number = find.text('1234');
+        expect(number, findsOneWidget);
+        final numberSlot =
+            find.ancestor(of: number, matching: find.byType(SizedBox)).first;
+        final gutterWidth = tester.getSize(numberSlot).width;
+        const lineNumberStyle = TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          height: 1.5,
+        );
+        final actualNumber = TextPainter(
+          text: const TextSpan(text: '1234', style: lineNumberStyle),
+          textDirection: TextDirection.ltr,
+          textScaler: TextScaler.linear(scale),
+        )..layout();
+        expect(
+          actualNumber.width,
+          lessThanOrEqualTo(gutterWidth),
+          reason: 'the complete four-digit line number must fit at ${scale}x',
+        );
+        if (scale == 1) {
+          normalGutterWidth = gutterWidth;
+          expect(
+            gutterWidth,
+            greaterThanOrEqualTo(44),
+            reason: 'the original 1x width remains the minimum',
+          );
+        } else {
+          expect(
+            gutterWidth,
+            greaterThan(normalGutterWidth!),
+            reason: 'the 2x gutter expands to fit the scaled number',
+          );
+        }
+        actualNumber.dispose();
+      }
+    });
   });
 
   group('CodeBlockSourceView - height behavior', () {

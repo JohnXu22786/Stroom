@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/pages/audio_player_page.dart'
+    show buildAudioTextPickerSubtitle;
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
 
 // ============================================================================
@@ -48,6 +50,7 @@ MediaPickerConfig<_TestRecord> _createTestConfig({
   List<_TestRecord> records = const [],
   Set<String> folders = const {},
   Uint8List? fileData,
+  Widget Function(_TestRecord record)? subtitleBuilder,
 }) {
   return MediaPickerConfig<_TestRecord>(
     title: '测试选择器',
@@ -60,10 +63,11 @@ MediaPickerConfig<_TestRecord> _createTestConfig({
     loadFolders: () async => folders,
     readFile: (record) async => fileData ?? Uint8List.fromList([1, 2, 3]),
     displayName: (record) => record.name,
-    subtitleBuilder: (record) => Text(
-      '${record.format.toUpperCase()}  ${_formatSize(record.size)}',
-      style: const TextStyle(fontSize: 12),
-    ),
+    subtitleBuilder: subtitleBuilder ??
+        (record) => Text(
+              '${record.format.toUpperCase()}  ${_formatSize(record.size)}',
+              style: const TextStyle(fontSize: 12),
+            ),
   );
 }
 
@@ -79,6 +83,56 @@ String _formatSize(int bytes) {
 
 void main() {
   group('UnifiedMediaPickerDialog', () {
+    testWidgets('wraps long metadata subtitles at narrow widths',
+        (tester) async {
+      const characterCount = '1.234.567 Zeichen im gespeicherten Text';
+      const fileSize = '12,34 MB auf dem Gerät';
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showMediaPickerDialog(
+                context,
+                _createTestConfig(
+                  records: const [
+                    _TestRecord(id: 'long-metadata', name: 'fixture.txt'),
+                  ],
+                  subtitleBuilder: (_) => buildAudioTextPickerSubtitle(
+                    context,
+                    characterCount: characterCount,
+                    fileSize: fileSize,
+                  ),
+                ),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(characterCount), findsOneWidget);
+      expect(find.text(fileSize), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final subtitle = tester.widget<Wrap>(find.byType(Wrap).first);
+      expect(subtitle.spacing, 8);
+      expect(tester.getSize(find.byType(Wrap).first).height, greaterThan(14));
+
+      tester.view.physicalSize = const Size(1200, 800);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text(characterCount), findsOneWidget);
+      expect(find.text(fileSize), findsOneWidget);
+      expect(tester.getSize(find.byType(Wrap).first).height, lessThan(20));
+    });
+
     testWidgets('shows loading state momentarily before data resolves',
         (tester) async {
       // Use a delayed future to keep loading visible

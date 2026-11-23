@@ -399,8 +399,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
     final task = state[index];
     final updated = task.copyWith(
-      providerConfig:
-          providerConfig ?? _latestProviderConfig(task.providerConfig),
+      providerConfig: providerConfig,
       modelConfig: modelConfig,
       status: TaskStatus.running,
       error: null,
@@ -424,7 +423,6 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
     // 更新状态为运行中
     final updated = oldTask.copyWith(
-      providerConfig: _latestProviderConfig(oldTask.providerConfig),
       status: TaskStatus.running,
       error: null,
       completedAt: null,
@@ -436,19 +434,6 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
     // 确保合成使用已成功保存的模型 voice ID。
     _executeTask(updated, syncVoiceFromModel: true);
-  }
-
-  /// Restored tasks intentionally omit credentials from their persisted
-  /// provider snapshot. Resolve the current config by its stable local ID when
-  /// the user resumes or retries the task so it uses the latest saved secret.
-  ProviderConfigItem _latestProviderConfig(ProviderConfigItem snapshot) {
-    final configured = ref
-        .read(providerEntriesProvider)
-        .entries
-        .expand((entry) => entry.configs)
-        .where((config) => config.id == snapshot.id)
-        .firstOrNull;
-    return configured?.copy() ?? snapshot;
   }
 
   /// 从模型配置中同步 voice ID 到 SynthesisConfig（防止过期的 voice name 被发送）

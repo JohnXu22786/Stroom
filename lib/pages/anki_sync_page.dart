@@ -825,12 +825,15 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               ButtonSegment(
                 value: AnkiSyncMode.ankiWeb,
                 icon: Icon(Icons.cloud_outlined),
-                label: Text('AnkiWeb'),
+                label: ConstrainedText('AnkiWeb', maxLines: 1),
               ),
               ButtonSegment(
                 value: AnkiSyncMode.selfHosted,
                 icon: Icon(Icons.dns_outlined),
-                label: Text(l10n.ankiSyncSelfHostedMode),
+                label: ConstrainedText(
+                  l10n.ankiSyncSelfHostedMode,
+                  maxLines: 1,
+                ),
               ),
             ],
             selected: {config.mode},

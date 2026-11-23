@@ -214,6 +214,22 @@ class _DragSortAreaState extends State<DragSortArea> {
   /// 行之间的纵向间隙（网格用行间距，其余 8）。
   double get _rowGap => widget.grid ? widget.gridMainAxisSpacing : 8;
 
+  /// 胶囊随系统文字缩放增高，保证文本和操作控件都留在布局矩形内。
+  /// 基准比例仍使用原来的 34dp 高度，保留现有视觉与行间距。
+  double get _pillHeight {
+    final style =
+        DefaultTextStyle.of(context).style.merge(const TextStyle(fontSize: 13));
+    final text = TextPainter(
+      text: TextSpan(style: style, text: 'Mg'),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    // 6dp vertical inset on each side and the largest (selected) border.
+    return math.max(_kPillHeight, text.height + 12 + 3);
+  }
+
   void dragStarted(int index) {
     setState(() {
       _dragIndex = index;
@@ -439,7 +455,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     final itemHeight = widget.grid
         ? _gridCellHeight
         : widget.wrap
-            ? _kPillHeight
+            ? _pillHeight
             : widget.rowExtent;
     for (var i = 0; i < widths.length; i++) {
       var w = widths[i];
@@ -586,7 +602,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     return LongPressDraggable<String>(
       data: value,
       delay: widget.dragDelay,
-      feedbackOffset: Offset(-_widthOf(k) / 2, -_kPillHeight / 2),
+      feedbackOffset: Offset(-_widthOf(k) / 2, -_pillHeight / 2),
       // 反馈浮层不接收指针：拖拽中误点浮层不应触发勾选/删除
       ignoringFeedbackPointer: true,
       onDragStarted: () => dragStarted(k),
@@ -658,7 +674,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       behavior: HitTestBehavior.opaque,
       child: Container(
         width: _kPillDeleteWidth,
-        height: _kPillHeight - 12 - 3,
+        height: _pillHeight - 12 - 3,
         alignment: Alignment.center,
         child: Icon(Icons.edit, size: 14, color: cs.onSurfaceVariant),
       ),
@@ -674,7 +690,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       child: Container(
         width: _kPillDeleteWidth,
         // 内容区高度 = 胶囊高 - 纵向 padding 12 - 选中边框 3（最紧情形）
-        height: _kPillHeight - 12 - 3,
+        height: _pillHeight - 12 - 3,
         alignment: Alignment.center,
         child: Icon(Icons.close, size: 16, color: cs.onSurfaceVariant),
       ),

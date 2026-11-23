@@ -92,13 +92,8 @@ class AttachmentStorage {
   @visibleForTesting
   static void resetNowForTesting() => _now = DateTime.now;
 
-  static String _createStorageName(
-    String hash,
-    String extension, {
-    String? stableId,
-  }) {
-    final uniqueId =
-        stableId ?? '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
+  static String _createStorageName(String hash, String extension) {
+    final uniqueId = '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
     return '${hash}_$uniqueId.$extension';
   }
 
@@ -161,11 +156,7 @@ class AttachmentStorage {
     }
   }
 
-  static Future<String> saveFile(
-    String fileName,
-    Uint8List bytes, {
-    String? stableId,
-  }) async {
+  static Future<String> saveFile(String fileName, Uint8List bytes) async {
     final override = saveFileOverrideForTesting;
     if (override != null) return override(fileName, bytes);
 
@@ -174,7 +165,7 @@ class AttachmentStorage {
     try {
       final ext = _extractExtension(fileName);
       final hash = computeHash(bytes);
-      final storageName = _createStorageName(hash, ext, stableId: stableId);
+      final storageName = _createStorageName(hash, ext);
       final storagePath = '$_storageDirName/$storageName';
 
       if (kIsWeb) {

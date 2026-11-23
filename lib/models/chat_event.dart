@@ -1,5 +1,4 @@
 import 'tool_call.dart';
-import 'chat_message.dart';
 
 sealed class ChatEvent {
   const ChatEvent();
@@ -7,21 +6,8 @@ sealed class ChatEvent {
 
 class TextEvent extends ChatEvent {
   final String text;
-  final int? contentOrder;
   final bool alreadyAccumulated;
-  TextEvent(this.text, {this.contentOrder, this.alreadyAccumulated = false});
-}
-
-/// Provider transcription of the audio on the current user turn.
-class InputTranscriptEvent extends ChatEvent {
-  final String text;
-  const InputTranscriptEvent(this.text);
-}
-
-class MediaAttachmentsEvent extends ChatEvent {
-  final List<Attachment> attachments;
-  final int? contentOrder;
-  const MediaAttachmentsEvent(this.attachments, {this.contentOrder});
+  TextEvent(this.text, {this.alreadyAccumulated = false});
 }
 
 class ToolCallStartEvent extends ChatEvent {

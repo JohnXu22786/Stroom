@@ -1,5 +1,4 @@
 part of 'conversation_provider.dart';
-
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -174,15 +173,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       _markLatestAssistantMessageRead(previousActive);
     }
     state = pinnedFirstStable([conv, ...state]);
-    unawaited(
-      _appendJournalBarrier({
-        'kind': 'conversationCreated',
-        'conversationId': conv.id,
-        'createdAt': now.toIso8601String(),
-      }).catchError((Object error) {
-        debugPrint('Failed to record conversation creation: $error');
-      }),
-    );
+    unawaited(_appendJournalBarrier({
+      'kind': 'conversationCreated',
+      'conversationId': conv.id,
+      'createdAt': now.toIso8601String(),
+    }).catchError((Object error) {
+      debugPrint('Failed to record conversation creation: $error');
+    }));
     if (activate) {
       _ref.read(activeConversationIdProvider.notifier).state = conv.id;
       _persistActiveId();
@@ -196,33 +193,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
-  Future<bool> deleteConversation(
-    String id, {
-    bool cleanupFiles = true,
-  }) async {
+  Future<bool> deleteConversation(String id) async {
     final original = List<Conversation>.from(state);
     final deleted = state.where((c) => c.id == id).toList();
     if (deleted.isEmpty) return false;
-    if (_repositoryReady) {
-      try {
-        final allMessages = <String, ChatMessage>{
-          for (final message in await _readAllRepositoryMessages(id))
-            message.id: message,
-        };
-        // The notifier may already hold a newer in-memory window than the
-        // repository snapshot. Keep those records too, while hydrating older
-        // messages so the caller can clean every attachment after the delete
-        // journal is durable.
-        for (final message in deleted.single.messages) {
-          allMessages[message.id] = message;
-        }
-        deleted.single.messages = allMessages.values.toList();
-      } catch (error) {
-        debugPrint('Failed to read deleted conversation history: $error');
-        return false;
-      }
-    }
-    final previousActiveId = _ref.read(activeConversationIdProvider);
     final deletedAt = _nextConversationCheckpointTime([id]);
     state = state.where((c) => c.id != id).toList();
     try {
@@ -245,28 +219,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
-    final persisted = await _persistNowChecked();
-    if (!persisted) {
-      if (mounted) {
-        state = _restoreDeletedConversationOrder(original, deleted);
-        if (_ref.read(activeConversationIdProvider) == null &&
-            previousActiveId == id) {
-          _ref.read(activeConversationIdProvider.notifier).state = id;
-        }
-        _syncTemporaryTimer();
-        await restoreDeletedConversations(
-          deleted,
-          originalOrder: original,
-          previousActiveConversationId: previousActiveId == id ? id : null,
-        );
-      }
-      return false;
-    }
+    await _persist();
     await _persistActiveId();
-    if (!cleanupFiles) return true;
-    for (final conversation in deleted) {
-      await _cleanupConversationFiles(conversation);
-    }
     return true;
   }
 
@@ -311,10 +265,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     }
 
     final missing = conversations
-        .where(
-          (conversation) =>
-              !state.any((current) => current.id == conversation.id),
-        )
+        .where((conversation) =>
+            !state.any((current) => current.id == conversation.id))
         .toList();
     if (missing.isEmpty) return;
 
@@ -392,14 +344,6 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final original = List<Conversation>.from(state);
     final old = state.where((c) => c.id == id).toList();
     if (old.isEmpty) return true;
-    if (_repositoryReady) {
-      try {
-        old.single.messages = await _readAllRepositoryMessages(id);
-      } catch (error) {
-        debugPrint('Failed to read flow conversation attachments: $error');
-        return false;
-      }
-    }
     state = state.where((c) => c.id != id).toList();
     _syncTemporaryTimer();
     bool saved;
@@ -643,27 +587,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Deletes multiple conversations by [ids]. Also clears active if included.
-  Future<bool> batchDelete(
-    List<String> ids, {
-    bool cleanupFiles = true,
-  }) async {
+  Future<bool> batchDelete(List<String> ids) async {
     final original = List<Conversation>.from(state);
     final idSet = ids.toSet();
     final deleted = state.where((c) => idSet.contains(c.id)).toList();
     if (deleted.isEmpty) return false;
-    if (_repositoryReady) {
-      try {
-        for (final conversation in deleted) {
-          conversation.messages = await _readAllRepositoryMessages(
-            conversation.id,
-          );
-        }
-      } catch (error) {
-        debugPrint('Failed to read batch-deleted conversation history: $error');
-        return false;
-      }
-    }
-    final previousActiveId = _ref.read(activeConversationIdProvider);
     final deletedAt = _nextConversationCheckpointTime(
       deleted.map((conversation) => conversation.id),
     );
@@ -691,30 +619,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
-    final persisted = await _persistNowChecked();
-    if (!persisted) {
-      if (mounted) {
-        state = _restoreDeletedConversationOrder(original, deleted);
-        if (_ref.read(activeConversationIdProvider) == null &&
-            idSet.contains(previousActiveId)) {
-          _ref.read(activeConversationIdProvider.notifier).state =
-              previousActiveId;
-        }
-        _syncTemporaryTimer();
-        await restoreDeletedConversations(
-          deleted,
-          originalOrder: original,
-          previousActiveConversationId:
-              idSet.contains(previousActiveId) ? previousActiveId : null,
-        );
-      }
-      return false;
-    }
+    await _persist();
     await _persistActiveId();
-    if (!cleanupFiles) return true;
-    for (final conversation in deleted) {
-      await _cleanupConversationFiles(conversation);
-    }
     return true;
   }
 
@@ -755,16 +661,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   ///
   Future<bool> updateMessages(
     String conversationId,
-    List<ChatMessage> messages, {
-    bool resetTemporaryCountdown = false,
-    bool completeHistorySnapshot = false,
-  }) async {
+    List<ChatMessage> messages,
+  ) async {
     if (!mounted) return false;
-    if (_repositoryReady && completeHistorySnapshot) {
-      _completeMessageSnapshotGenerations[conversationId] =
-          ++_completeMessageSnapshotGeneration;
-    }
-    if (_repositoryReady) _messageLoadedConversationIds.add(conversationId);
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
       List<String> removedMessageIds() {
@@ -793,11 +692,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
               .intersection(removedIds.toSet());
 
       final previousMessages = List<ChatMessage>.from(current.messages);
-      _replaceMessages(
-        conversationId,
-        messages,
-        resetTemporaryCountdown: resetTemporaryCountdown,
-      );
+      _replaceMessages(conversationId, messages);
       if (removedIds.isNotEmpty) {
         _addPendingMessageDeletions(conversationId, removedIds);
         try {
@@ -819,9 +714,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
               restoredDuringDelete,
             );
           }
-          final restorationsToClear = supersededRestorations.difference(
-            restoredDuringDelete.toSet(),
-          );
+          final restorationsToClear =
+              supersededRestorations.difference(restoredDuringDelete.toSet());
           if (restorationsToClear.isNotEmpty) {
             _removePendingMessageRestorations(
               conversationId,
@@ -843,9 +737,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           if (mounted &&
               latest != null &&
               identical(latest.messages, messages) &&
-              (_pendingMessageDeletionIds[conversationId]?.containsAll(
-                    removedIds,
-                  ) ??
+              (_pendingMessageDeletionIds[conversationId]
+                      ?.containsAll(removedIds) ??
                   false)) {
             _replaceMessages(conversationId, previousMessages);
             try {
@@ -944,28 +837,17 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Confirm flow messages reached disk before sending or completing a step.
   Future<bool> updateFlowMessagesChecked(
-    String conversationId,
-    List<ChatMessage> messages,
-  ) async {
+      String conversationId, List<ChatMessage> messages) async {
     if (!mounted || !state.any((c) => c.id == conversationId)) return false;
     _replaceMessages(conversationId, messages);
     return _persistNowChecked();
   }
 
-  void _replaceMessages(
-    String conversationId,
-    List<ChatMessage> messages, {
-    bool resetTemporaryCountdown = false,
-  }) {
-    _invalidateRepositoryMessageLoads(conversationId);
-    if (_repositoryReady) _messageLoadedConversationIds.add(conversationId);
+  void _replaceMessages(String conversationId, List<ChatMessage> messages) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
       c.updatedAt = DateTime.now();
-      if (resetTemporaryCountdown && c.isTemporary) {
-        c.resetTemporaryExpiry(c.updatedAt);
-      }
       // Derive title from the conversation overview if title is empty.
       if (c.title.isEmpty && messages.isNotEmpty) {
         final firstUser = messages.firstWhere(
@@ -1007,7 +889,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }) {
     final key = (conversationId: conversationId, hash: hash);
     if (waitFor == null) {
-      _pendingDraftAttachmentCacheDeletes.putIfAbsent(key, Future<void>.value);
+      _pendingDraftAttachmentCacheDeletes.putIfAbsent(
+        key,
+        Future<void>.value,
+      );
       return;
     }
 
@@ -1021,10 +906,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     required String conversationId,
     required String hash,
   }) {
-    _pendingDraftAttachmentCacheDeletes.remove((
-      conversationId: conversationId,
-      hash: hash,
-    ));
+    _pendingDraftAttachmentCacheDeletes.remove(
+      (conversationId: conversationId, hash: hash),
+    );
   }
 
   void saveDraft(
@@ -1145,11 +1029,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Updates the context compaction summary for a conversation.
-  Future<void> updateContextSummary(
-    String conversationId,
-    String summary, {
-    String? tailStartId,
-  }) async {
+  Future<void> updateContextSummary(String conversationId, String summary,
+      {String? tailStartId}) async {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.contextSummary = summary;

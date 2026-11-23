@@ -155,10 +155,12 @@ Widget _disableTestAnimations(BuildContext context, Widget? child) =>
 Widget _buildTestApp(
   Widget body, {
   Locale locale = const Locale('zh', 'CN'),
+  ThemeData? theme,
 }) {
   return MaterialApp(
     builder: _disableTestAnimations,
     locale: locale,
+    theme: theme,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -256,6 +258,73 @@ class _HomeStylePopScopeWrapper extends ConsumerWidget {
 }
 
 void main() {
+  testWidgets(
+      'grid tile grows for scaled folder labels without breaking file taps',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    var openedFile = false;
+    const folder =
+        'a folder name with enough words to wrap across several visible lines';
+    await tester.pumpWidget(
+      _buildFileManagerApp(
+        config: FileManagerConfig<_TestFileRecord>(
+          title: 'Files',
+          initialGridView: true,
+          fileThumbnailBuilder: (_) => const ColoredBox(
+            color: Colors.amber,
+            child: SizedBox.expand(),
+          ),
+          fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
+          onFileTap: (_) => openedFile = true,
+        ),
+        folders: const {folder},
+        manifestBridge: testManifestBridge,
+        records: [
+          _TestFileRecord(
+            id: 'grid-height-file',
+            name: 'sample',
+            format: 'txt',
+          ),
+        ],
+        locale: const Locale('en'),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final folderTile = find.byKey(const Key('fm_grid_folder_$folder'));
+    final folderLabel =
+        find.descendant(of: folderTile, matching: find.byType(ConstrainedText));
+    final tileSize = tester.getSize(folderTile);
+    expect(tileSize.height, greaterThan(tileSize.width));
+    expect(
+      tileSize.height,
+      closeTo(46 + tester.getSize(folderLabel).height, 0.5),
+      reason: 'the row reserves the visible two-line label without extra space',
+    );
+    expect(
+      find.byKey(const Key('fm_grid_file_grid-height-file')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('fm_grid_file_grid-height-file')));
+    await tester.pump();
+    expect(openedFile, isTrue);
+    expect(tester.takeException(), isNull);
+
+    await tester.longPress(folderTile);
+    await tester.pump();
+    expect(
+      find.descendant(of: folderTile, matching: find.byType(Checkbox)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   group('FileManagerView file menu', () {
     testWidgets('uses Open for the file action', (tester) async {
       var openedFile = false;
@@ -1636,6 +1705,109 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(deletedFolders, ['a']);
+      },
+    );
+
+    testWidgets(
+      'long nested folder delete confirmation scrolls and preserves actions',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const folder =
+            'top-level-folder-with-a-long-name/second-level-folder-with-a-long-name/'
+            'third-level-folder-with-a-long-name/fourth-level-folder-with-a-long-name/'
+            'fifth-level-folder-with-a-long-name/sixth-level-folder-with-a-long-name/'
+            'seventh-level-folder-with-a-long-name/eighth-level-folder-with-a-long-name';
+        final folderSegments = folder.split('/');
+        final folders = <String>{};
+        var folderPrefix = '';
+        for (final segment in folderSegments) {
+          folderPrefix =
+              folderPrefix.isEmpty ? segment : '$folderPrefix/$segment';
+          folders.add(folderPrefix);
+        }
+        final deletedFolders = <String>[];
+
+        Future<void> openDeleteMenu() async {
+          var parentPath = '';
+          for (final segment
+              in folderSegments.take(folderSegments.length - 1)) {
+            parentPath = parentPath.isEmpty ? segment : '$parentPath/$segment';
+            await tester.tap(find.byKey(Key('fm_folder_$parentPath')));
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.byKey(Key('fm_folder_popup_$folder')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+          await tester.pumpAndSettle();
+        }
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: folders,
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+            locale: const Locale('en', 'US'),
+          ),
+        );
+
+        await openDeleteMenu();
+
+        expect(tester.takeException(), isNull);
+        expect(
+            find.byKey(const Key('fm_delete_folder_dialog')), findsOneWidget);
+        expect(
+          find.byKey(const Key('fm_delete_folder_cancel_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('fm_delete_folder_confirm_btn')),
+          findsOneWidget,
+        );
+        expect(find.textContaining(folder), findsOneWidget);
+        final dialogScrollable = find.descendant(
+          of: find.byKey(const Key('fm_delete_folder_dialog')),
+          matching: find.byType(Scrollable),
+        );
+        expect(dialogScrollable, findsOneWidget);
+        await tester.drag(
+          dialogScrollable,
+          const Offset(0, -400),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(deletedFolders, isEmpty);
+
+        await tester.tap(find.byKey(const Key('fm_delete_folder_cancel_btn')));
+        await tester.pumpAndSettle();
+        expect(deletedFolders, isEmpty);
+        for (final _ in folderSegments.take(folderSegments.length - 1)) {
+          await tester.tap(find.byKey(const Key('fm_back_btn')));
+          await tester.pumpAndSettle();
+        }
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: folders,
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+            locale: const Locale('fr', 'FR'),
+            theme: ThemeData.dark(useMaterial3: true),
+          ),
+        );
+        await openDeleteMenu();
+        expect(find.textContaining(folder), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(const Key('fm_delete_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+        expect(deletedFolders, [folder]);
       },
     );
 

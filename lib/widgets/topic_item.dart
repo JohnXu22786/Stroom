@@ -309,12 +309,14 @@ class TopicItem extends StatelessWidget {
                         if (onTemporaryToggle != null)
                           PopupMenuItem(
                             value: 'toggle_temporary',
-                            child: Text(
+                            child: ConstrainedText(
                               topic.isTemporary
                                   ? AppLocalizations.of(context)!
                                       .conversationKeep
                                   : AppLocalizations.of(context)!
                                       .conversationSetTemporary,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         const PopupMenuDivider(),

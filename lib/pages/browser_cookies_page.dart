@@ -120,6 +120,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: ConstrainedText(
           l10n.browserCookiesConfirmClear,
           maxLines: 1,

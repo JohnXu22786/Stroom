@@ -346,6 +346,76 @@ void main() {
   // ====================================================================
 
   group('Domain cookie deletion', () {
+    // Unit owner: vertical_result_dialog_scroll.
+    // Functional suite mapping: component-integrations; the CI test owner is component-integrations.
+    testWidgets(
+      'long domain confirmation scrolls while cancel and clear remain reachable',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(320, 640);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final domain = '${'very-long-subdomain.' * 35}example.com';
+        await BrowserCookieService.persistCookiesRawForTest([
+          {
+            'domain': domain,
+            'name': 'session',
+            'value': 'safe-fixture',
+            'path': '/',
+          },
+        ]);
+
+        await tester.pumpWidget(_chineseApp(const BrowserCookiesPage()));
+        await tester.pumpAndSettle();
+        final deleteDomain = find.descendant(
+          of: find.ancestor(
+            of: find.text(domain),
+            matching: find.byType(Card),
+          ),
+          matching: find.byTooltip('清除此域名下的所有 Cookie'),
+        );
+        for (var i = 0;
+            i < 8 && deleteDomain.hitTestable().evaluate().isEmpty;
+            i++) {
+          await tester.drag(find.byType(ListView), const Offset(0, -300));
+          await tester.pumpAndSettle();
+        }
+        await tester.tap(deleteDomain);
+        await tester.pumpAndSettle();
+
+        final dialog = find.byType(AlertDialog);
+        expect(tester.widget<AlertDialog>(dialog).scrollable, isTrue);
+        final content = find.descendant(
+          of: dialog,
+          matching: find.byType(SingleChildScrollView),
+        );
+        expect(content, findsOneWidget);
+        expect(
+          tester
+              .state<ScrollableState>(find
+                  .descendant(
+                    of: content,
+                    matching: find.byType(Scrollable),
+                  )
+                  .first)
+              .position
+              .maxScrollExtent,
+          greaterThan(0),
+        );
+        expect(
+          find.descendant(of: dialog, matching: find.textContaining(domain)),
+          findsOneWidget,
+        );
+        expect(find.text('取消'), findsOneWidget);
+        expect(find.text('清除'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        expect(await BrowserCookieService.getCookiesFromFile(), isNotEmpty);
+      },
+    );
+
     testWidgets('delete domain cookies removes the domain card',
         (tester) async {
       await BrowserCookieService.persistCookiesRawForTest([

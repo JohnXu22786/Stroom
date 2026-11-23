@@ -10,7 +10,6 @@ import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
-import 'package:stroom/services/llm_credential_store.dart';
 
 /// 预设一个含两个供应商三个模型的 LLM 配置。
 String _llmEntriesJson() => jsonEncode([
@@ -46,20 +45,13 @@ String _llmEntriesJson() => jsonEncode([
 Finder _inSheet(String text) =>
     find.descendant(of: find.byType(BottomSheet), matching: find.text(text));
 
-ProviderEntriesNotifier? _providerEntriesNotifier;
-bool _providerEntriesLoadFinished = false;
-
 Widget _buildSettingsTestApp() {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        final notifier = ProviderEntriesNotifier(
-          credentialStore: _TestLlmCredentialStore(),
-        );
-        _providerEntriesNotifier = notifier;
-        _providerEntriesLoadFinished = false;
-        notifier.load().whenComplete(() => _providerEntriesLoadFinished = true);
+        final notifier = ProviderEntriesNotifier();
+        notifier.load();
         return notifier;
       }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
@@ -73,35 +65,6 @@ Widget _buildSettingsTestApp() {
   );
 }
 
-class _TestLlmCredentialStore implements LlmCredentialStore {
-  final Map<String, String> _values = {};
-
-  @override
-  Future<String?> read(String reference) async => _values[reference];
-
-  @override
-  Future<void> write(String reference, String secret) async {
-    _values[reference] = secret;
-  }
-
-  @override
-  Future<void> delete(String reference) async {
-    _values.remove(reference);
-  }
-}
-
-Future<void> _pumpSettingsTestApp(WidgetTester tester) async {
-  await tester.pumpWidget(_buildSettingsTestApp());
-  for (var attempt = 0;
-      attempt < 1000 && !_providerEntriesLoadFinished;
-      attempt++) {
-    await tester.pump(const Duration(milliseconds: 10));
-  }
-  expect(_providerEntriesLoadFinished, isTrue);
-  expect(_providerEntriesNotifier?.state.isLoaded, isTrue);
-  await tester.pumpAndSettle();
-}
-
 void _setLargeView(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 3200);
   tester.view.devicePixelRatio = 1.0;
@@ -113,11 +76,8 @@ void _setLargeView(WidgetTester tester) {
 
 Future<void> _openTitlePanel(WidgetTester tester) async {
   final tile = find.text('标题生成助手').first;
-  await tester.scrollUntilVisible(
-    tile,
-    300,
-    scrollable: find.byType(Scrollable).first,
-  );
+  await tester.scrollUntilVisible(tile, 300,
+      scrollable: find.byType(Scrollable).first);
   await tester.tap(tile);
   await tester.pumpAndSettle();
 }
@@ -143,7 +103,8 @@ void main() {
         'provider_entries': _llmEntriesJson(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await _openTitlePanel(tester);
 
       // 面板元素：使用的模型、提示词、重置为默认提示词、保存
@@ -167,7 +128,8 @@ void main() {
         'provider_entries': _llmEntriesJson(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await _openTitlePanel(tester);
 
       await tester.enterText(find.byType(TextField), '我的标题提示词');
@@ -190,8 +152,7 @@ void main() {
       await tester.tap(_inSheet('保存'));
       await tester.pumpAndSettle();
       await _waitForPrefs(
-        (prefs) => prefs.getString('system_title_prompt') == '我的标题提示词',
-      );
+          (prefs) => prefs.getString('system_title_prompt') == '我的标题提示词');
       expect(await _prefsValue('system_title_prompt'), '我的标题提示词');
     });
 
@@ -202,7 +163,8 @@ void main() {
         'system_title_prompt': '自定义提示词A',
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await _openTitlePanel(tester);
 
       // 预置自定义提示词 → 面板显示它且重置按钮可用
@@ -214,24 +176,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.widgetWithText(AlertDialog, '重置为默认提示词'), findsOneWidget);
       // 对话框内的「取消」（面板底部也有取消按钮，需按对话框内查找）
-      await tester.tap(
-        find.descendant(
-          of: find.byType(AlertDialog),
-          matching: find.text('取消'),
-        ),
-      );
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('取消'),
+      ));
       await tester.pumpAndSettle();
       expect(_inSheet('自定义提示词A'), findsOneWidget, reason: '取消后自定义提示词不应被重置');
 
       // 第二次重置：确认 → 恢复为内置默认提示词
       await tester.tap(_inSheet('重置为默认提示词'));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byType(AlertDialog),
-          matching: find.text('重置'),
-        ),
-      );
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('重置'),
+      ));
       await tester.pumpAndSettle();
       final defaultPrompt = localizedBuiltInSystemAssistantById(
         kBuiltInTitleAssistantId,
@@ -249,8 +207,7 @@ void main() {
       await tester.tap(_inSheet('保存'));
       await tester.pumpAndSettle();
       await _waitForPrefs(
-        (prefs) => prefs.getString('system_title_prompt') == null,
-      );
+          (prefs) => prefs.getString('system_title_prompt') == null);
       expect(await _prefsValue('system_title_prompt'), isNull);
     });
 
@@ -260,14 +217,12 @@ void main() {
         'provider_entries': _llmEntriesJson(),
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       // 滚动到 tile 可见后：未配置时副标题为跟随提示
       final tile = find.text('标题生成助手').first;
-      await tester.scrollUntilVisible(
-        tile,
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
+      await tester.scrollUntilVisible(tile, 300,
+          scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
       expect(
         find.descendant(
@@ -295,11 +250,13 @@ void main() {
       await tester.tap(_inSheet('保存'));
       await tester.pumpAndSettle();
       await _waitForPrefs(
-        (prefs) => prefs.getString('system_title_model_id') == 'gpt-4o',
-      );
+          (prefs) => prefs.getString('system_title_model_id') == 'gpt-4o');
       expect(await _prefsValue('system_title_model_id'), 'gpt-4o');
       expect(await _prefsValue('system_title_model_provider'), 'OpenAI');
-      expect(await _prefsValue('system_title_model_name'), 'GPT-4o | OpenAI');
+      expect(
+        await _prefsValue('system_title_model_name'),
+        'GPT-4o | OpenAI',
+      );
       // tile 副标题显示所选模型（对话页同款格式）
       await tester.pumpAndSettle();
       expect(find.text('GPT-4o | OpenAI'), findsOneWidget);
@@ -314,7 +271,8 @@ void main() {
         'system_title_model_name': 'GPT-4o | OpenAI',
       });
 
-      await _pumpSettingsTestApp(tester);
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
       await _openTitlePanel(tester);
       // 面板内模型行显示已配置模型
       expect(_inSheet('GPT-4o | OpenAI'), findsOneWidget);
@@ -332,8 +290,7 @@ void main() {
       await tester.tap(_inSheet('保存'));
       await tester.pumpAndSettle();
       await _waitForPrefs(
-        (prefs) => prefs.getString('system_title_model_id') == null,
-      );
+          (prefs) => prefs.getString('system_title_model_id') == null);
       expect(await _prefsValue('system_title_model_id'), isNull);
       expect(await _prefsValue('system_title_model_name'), isNull);
     });

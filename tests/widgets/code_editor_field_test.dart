@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -38,6 +39,16 @@ TextEditingValue backspaceAt(
     selection: TextSelection.collapsed(offset: cursor - 1),
   );
   return formatter.formatEditUpdate(oldValue, newValue);
+}
+
+RenderEditable _findRenderEditable(RenderObject root) {
+  final pending = <RenderObject>[root];
+  while (pending.isNotEmpty) {
+    final current = pending.removeLast();
+    if (current is RenderEditable) return current;
+    current.visitChildren(pending.add);
+  }
+  throw StateError('EditableText does not contain a RenderEditable');
 }
 
 void main() {
@@ -282,10 +293,19 @@ void main() {
     Widget home, {
     Locale locale = const Locale('de'),
     ThemeData? theme,
+    TextScaler? textScaler,
   }) =>
       MaterialApp(
         locale: locale,
         theme: theme,
+        builder: textScaler == null
+            ? null
+            : (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: textScaler,
+                  ),
+                  child: child!,
+                ),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -295,6 +315,261 @@ void main() {
         ],
         home: home,
       );
+
+  testWidgets(
+      'line-number rows follow scaled and wrapped lines while editing and scrolling',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final longLine = 'long line ${List.filled(80, 'x').join()}';
+    final controller = TextEditingController(
+      text: [
+        longLine,
+        '',
+        '',
+        ...List.generate(497, (index) => 'line ${index + 4}'),
+      ].join('\n'),
+    );
+    addTearDown(controller.dispose);
+
+    for (final scale in [1.0, 2.0]) {
+      await tester.pumpWidget(
+        localizedApp(
+          Directionality(
+            textDirection: scale == 2 ? TextDirection.rtl : TextDirection.ltr,
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 120,
+                  child: CodeEditorField(controller: controller),
+                ),
+              ),
+            ),
+          ),
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final lineNumber = find.text('1');
+      final lineSlot =
+          find.ancestor(of: lineNumber, matching: find.byType(SizedBox)).first;
+      final editorFinder = find.byType(TextField);
+      final wrappedRenderEditable = _findRenderEditable(
+        tester.renderObject(find.byType(EditableText)),
+      );
+      final renderedBoxes = wrappedRenderEditable.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: longLine.length),
+      );
+      expect(renderedBoxes.length, greaterThan(1));
+      final firstLineTop = wrappedRenderEditable
+          .getLocalRectForCaret(const TextPosition(offset: 0))
+          .top;
+      final nextLineTop = wrappedRenderEditable
+          .getLocalRectForCaret(TextPosition(offset: longLine.length + 1))
+          .top;
+      final expectedWrappedHeight = nextLineTop - firstLineTop;
+      expect(
+        tester.getSize(lineSlot).height,
+        closeTo(expectedWrappedHeight, 0.01),
+        reason: 'the gutter row must include scaled soft-wrapped text lines',
+      );
+      expect(
+        tester.getRect(find.text('2')).top - tester.getRect(lineNumber).top,
+        closeTo(expectedWrappedHeight, 0.01),
+        reason:
+            'the next line number must start after all wrapped visual lines',
+      );
+
+      final updatedText = '${controller.text}\nnew line';
+      await tester.enterText(find.byType(EditableText), updatedText);
+      await tester.pumpAndSettle();
+      final updatedLineCount = updatedText.split('\n').length;
+      expect(controller.text, updatedText);
+      expect(find.text('$updatedLineCount'), findsOneWidget);
+
+      final editor = tester.widget<TextField>(editorFinder);
+      final scrollController = editor.scrollController!;
+      expect(scrollController.position.maxScrollExtent, greaterThan(0));
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+
+      final lastLineNumber = tester.getRect(find.text('$updatedLineCount'));
+      final editorRect = tester.getRect(find.byType(TextField));
+      expect(lastLineNumber.top, greaterThanOrEqualTo(editorRect.top));
+      expect(lastLineNumber.bottom, lessThanOrEqualTo(editorRect.bottom));
+      final renderEditable = _findRenderEditable(
+        tester.renderObject(find.byType(EditableText)),
+      );
+      final firstLineCaret = renderEditable.localToGlobal(
+        renderEditable
+            .getLocalRectForCaret(const TextPosition(offset: 0))
+            .topLeft,
+      );
+      final secondLineCaret = renderEditable.localToGlobal(
+        renderEditable
+            .getLocalRectForCaret(TextPosition(offset: longLine.length + 1))
+            .topLeft,
+      );
+      final firstLineNumber = tester.getTopLeft(find.text('1'));
+      final secondLineNumber = tester.getTopLeft(find.text('2'));
+      expect(
+        secondLineNumber.dy - firstLineNumber.dy,
+        closeTo(secondLineCaret.dy - firstLineCaret.dy, 1),
+      );
+      expect(editor.controller, same(controller));
+      expect(tester.takeException(), isNull);
+    }
+
+    // Unit owner: vertical_gutter_width_scale.
+    final longCountController = TextEditingController(
+      text: List<String>.filled(1234, 'x').join('\n'),
+    );
+    addTearDown(longCountController.dispose);
+    double? normalGutterWidth;
+    for (final scale in [1.0, 2.0]) {
+      await tester.pumpWidget(
+        localizedApp(
+          Directionality(
+            textDirection: scale == 1 ? TextDirection.ltr : TextDirection.rtl,
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 120,
+                  child: CodeEditorField(controller: longCountController),
+                ),
+              ),
+            ),
+          ),
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final number = find.text('1234');
+      expect(number, findsOneWidget);
+      final gutter =
+          find.ancestor(of: number, matching: find.byType(OverflowBox)).first;
+      final gutterWidth = tester.getSize(gutter).width;
+      final actualNumber = TextPainter(
+        text: const TextSpan(
+          text: '1234',
+          style: TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.3),
+        ),
+        textDirection: scale == 1 ? TextDirection.ltr : TextDirection.rtl,
+        textScaler: TextScaler.linear(scale),
+      )..layout();
+      expect(
+        actualNumber.width,
+        lessThanOrEqualTo(gutterWidth - 12),
+        reason: 'the complete four-digit editor number must fit at ${scale}x',
+      );
+      if (scale == 1) {
+        normalGutterWidth = gutterWidth;
+        expect(
+          gutterWidth,
+          greaterThanOrEqualTo(52),
+          reason: 'the original 1x width remains the minimum',
+        );
+      } else {
+        expect(
+          gutterWidth,
+          greaterThan(normalGutterWidth!),
+          reason: 'the 2x gutter expands to fit the scaled number',
+        );
+      }
+      actualNumber.dispose();
+    }
+
+    const dialogValue = '''{
+  "name": "local example",
+  "enabled": true,
+  "count": 3,
+  "options": {
+    "first": "alpha",
+    "second": "beta"
+  }
+}''';
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: dialogValue,
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open dialog'),
+          ),
+        ),
+        locale: const Locale('de'),
+        theme: ThemeData(useMaterial3: true),
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.tap(find.text('open dialog'));
+    await tester.pumpAndSettle();
+
+    final dialogEditor = tester.widget<TextField>(find.byType(TextField));
+    final dialogText = dialogEditor.controller!.text;
+    final wrappedLineStart = dialogText.indexOf('"second"');
+    final nextLogicalLineStart =
+        dialogText.indexOf('\n  }', wrappedLineStart) + 1;
+    final dialogWrappedMetrics = TextPainter(
+      text: TextSpan(
+        text: dialogText.split('\n')[6],
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          height: 1.3,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: const TextScaler.linear(2),
+    )..layout(maxWidth: tester.getRect(find.byType(TextField)).width - 16);
+    addTearDown(dialogWrappedMetrics.dispose);
+    final dialogWrappedLines = dialogWrappedMetrics.computeLineMetrics();
+    expect(dialogWrappedLines.length, greaterThan(1));
+    final dialogRenderEditable = _findRenderEditable(
+      tester.renderObject(find.byType(EditableText)),
+    );
+    final wrappedLineTop = dialogRenderEditable.localToGlobal(
+      dialogRenderEditable
+          .getLocalRectForCaret(TextPosition(offset: wrappedLineStart))
+          .topLeft,
+    );
+    final nextLogicalLineTop = dialogRenderEditable.localToGlobal(
+      dialogRenderEditable
+          .getLocalRectForCaret(TextPosition(offset: nextLogicalLineStart))
+          .topLeft,
+    );
+    final wrappedNumberTop = tester.getTopLeft(find.text('7'));
+    final nextNumberTop = tester.getTopLeft(find.text('8'));
+    final editorLineDistance = nextLogicalLineTop.dy - wrappedLineTop.dy;
+    expect(
+      editorLineDistance,
+      closeTo(
+        dialogWrappedLines.fold<double>(
+          0,
+          (height, line) => height + line.height,
+        ),
+        1,
+      ),
+    );
+    expect(
+      nextNumberTop.dy - wrappedNumberTop.dy,
+      closeTo(editorLineDistance, 1),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('JSON editor title stays bounded beside dialog controls', (
     tester,
@@ -394,6 +669,134 @@ void main() {
     expect(find.text('JSON'), findsOneWidget);
     expect(find.byIcon(Icons.format_align_left), findsOneWidget);
     expect(find.byTooltip('Abbrechen'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('invalid JSON status wraps beside actions in a narrow layout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{ invalid',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        locale: const Locale('fr'),
+        theme: ThemeData(useMaterial3: true),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Dialog)))!
+          .codeEditorInvalidJson),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '{ invalid');
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(find.byTooltip('Annuler'), findsOneWidget);
+    final dialogFinder = find.byType(Dialog);
+    final dialogSurface = find
+        .descendant(of: dialogFinder, matching: find.byType(Material))
+        .first;
+    final statusText = AppLocalizations.of(tester.element(dialogFinder))!
+        .codeEditorInvalidJson;
+    final statusFinder = find.text(statusText);
+    final dialogRect = tester.getRect(dialogSurface);
+    final statusRect = tester.getRect(statusFinder);
+    expect(tester.widget<Text>(statusFinder).maxLines, isNull);
+    expect(tester.widget<Text>(statusFinder).overflow, isNull);
+    expect(statusRect.top, greaterThanOrEqualTo(dialogRect.top));
+    expect(statusRect.bottom, lessThanOrEqualTo(dialogRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('invalid JSON status stays visible with large text and keyboard',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(() => tester.view.viewInsets = FakeViewPadding.zero);
+
+    await tester.pumpWidget(
+      localizedApp(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showJsonValueEditorDialog(
+              context,
+              initialValue: '{ invalid',
+              hintText: '',
+              type: 'json',
+              onSave: (_) {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        locale: const Locale('fr'),
+        theme: ThemeData(useMaterial3: true),
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final dialogFinder = find.byType(Dialog);
+    final dialogSurfaceFinder = find
+        .descendant(
+          of: dialogFinder,
+          matching: find.byType(Material),
+        )
+        .first;
+    final status = AppLocalizations.of(tester.element(dialogFinder))!
+        .codeEditorInvalidJson;
+    final statusFinder = find.text(status);
+    await tester.ensureVisible(statusFinder);
+    await tester.pumpAndSettle();
+    final statusRect = tester.getRect(statusFinder);
+    final dialogSurfaceRect = tester.getRect(dialogSurfaceFinder);
+    expect(statusRect.top, greaterThanOrEqualTo(dialogSurfaceRect.top));
+    expect(statusRect.bottom, lessThanOrEqualTo(dialogSurfaceRect.bottom));
+    expect(dialogSurfaceRect.bottom, lessThanOrEqualTo(640 - 240));
+    final cancelButton = find.widgetWithText(
+      TextButton,
+      AppLocalizations.of(tester.element(dialogFinder))!.codeEditorCancel,
+    );
+    await tester.ensureVisible(cancelButton);
+    await tester.pumpAndSettle();
+    final cancelRect = tester.getRect(cancelButton);
+    expect(cancelRect.top, greaterThanOrEqualTo(dialogSurfaceRect.top));
+    expect(cancelRect.bottom, lessThanOrEqualTo(dialogSurfaceRect.bottom));
+    final confirmFinder = find.byType(FilledButton);
+    await tester.ensureVisible(confirmFinder);
+    await tester.pumpAndSettle();
+    final confirmRect = tester.getRect(confirmFinder);
+    expect(confirmRect.top, greaterThanOrEqualTo(dialogSurfaceRect.top));
+    expect(confirmRect.bottom, lessThanOrEqualTo(dialogSurfaceRect.bottom));
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '{ invalid');
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(find.byTooltip('Annuler'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

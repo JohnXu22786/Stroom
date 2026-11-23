@@ -167,46 +167,27 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
 
   List<Widget> _buildCustomParamsSection(ColorScheme cs) {
     return [
-      if (MediaQuery.sizeOf(context).width < 800)
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              AppLocalizations.of(context)!.chatCustomParameters,
-              style: TextStyle(fontWeight: FontWeight.w600),
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        children: [
+          ConstrainedText(
+            AppLocalizations.of(context)!.chatCustomParameters,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.add, size: 18),
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.providerAddCustomParam,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              label: ConstrainedText(
-                AppLocalizations.of(context)!.providerAddCustomParam,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onPressed: _addCustomParam,
-            ),
-          ],
-        )
-      else
-        Row(
-          children: [
-            Flexible(
-              child: Text(
-                AppLocalizations.of(context)!.chatCustomParameters,
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(width: 8),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              label: ConstrainedText(
-                AppLocalizations.of(context)!.providerAddCustomParam,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onPressed: _addCustomParam,
-            ),
-          ],
-        ),
+            onPressed: _addCustomParam,
+          ),
+        ],
+      ),
       const SizedBox(height: 8),
       if (_customParams.isEmpty)
         Padding(

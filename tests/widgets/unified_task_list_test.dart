@@ -21,6 +21,7 @@ import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 // =============================================================================
 // CatCatch task helpers (from unified_task_list_page_test.dart)
@@ -56,6 +57,7 @@ catcatch.CatCatchTask _createRunningTask({required String id}) {
 catcatch.CatCatchTask _createResourceSelectionTask({
   required String id,
   required DateTime createdAt,
+  List<MediaResource>? resources,
 }) {
   return catcatch.CatCatchTask(
     id: id,
@@ -67,13 +69,14 @@ catcatch.CatCatchTask _createResourceSelectionTask({
     steps: [
       catcatch.StepStatus.running(catcatch.StepType.userSelecting),
     ],
-    detectedMedia: const [
-      MediaResource(
-        url: 'https://example.com/selected.mp4',
-        name: 'selected',
-        ext: 'mp4',
-      ),
-    ],
+    detectedMedia: resources ??
+        const [
+          MediaResource(
+            url: 'https://example.com/selected.mp4',
+            name: 'selected',
+            ext: 'mp4',
+          ),
+        ],
   );
 }
 
@@ -413,6 +416,131 @@ SynthesisTask _createCompletedSynthTask({
 // Tests
 // =============================================================================
 void main() {
+  testWidgets('CatCatch resource badges reflow without hiding filenames', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const segment = MediaResource(
+      url: 'https://example.com/segment.ts',
+      name: 'very-long-segment-filename-0123456789',
+      ext: 'ts',
+      initiator: 'https://example.com/master.m3u8',
+    );
+    const playlist = MediaResource(
+      url: 'https://example.com/playlist.m3u8',
+      name: 'very-long-playlist-filename-0123456789',
+      ext: 'm3u8',
+      isPlaylist: true,
+    );
+    const fullVideo = MediaResource(
+      url: 'https://example.com/video.mp4',
+      name: 'very-long-video-filename-0123456789',
+      ext: 'mp4',
+    );
+    final task = _createResourceSelectionTask(
+      id: 'resource-badge-layout',
+      createdAt: DateTime(2025, 1, 1),
+      resources: const [segment, playlist, fullVideo],
+    );
+
+    Future<void> pumpResourceCard(Locale locale) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: ListView(
+                children: [
+                  CatCatchTaskCard(
+                    key: ValueKey('resource-card-$locale'),
+                    task: task,
+                    isFlowManaged: true,
+                    taskListViewportHeight: 1200,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await pumpResourceCard(const Locale('fr', 'FR'));
+    await tester.tap(find.byKey(const Key('m3u8_segments_toggle')));
+    await tester.pump();
+
+    final localizations = AppLocalizations.of(
+      tester.element(find.byType(CatCatchTaskCard)),
+    )!;
+    expect(find.text(localizations.catcatchSegment), findsOneWidget);
+    expect(find.text(localizations.catcatchPlaylist), findsOneWidget);
+    expect(find.text(localizations.catcatchFullVideo), findsOneWidget);
+    expect(
+        find.text('very-long-video-filename-0123456789.mp4'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.text('very-long-video-filename-0123456789.mp4'))
+          .width,
+      greaterThan(100),
+    );
+
+    final badge = find.byWidgetPredicate(
+      (widget) =>
+          widget is ConstrainedText &&
+          widget.data == localizations.catcatchPlaylist,
+    );
+    expect(badge, findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(badge).label,
+      contains(localizations.catcatchPlaylist),
+    );
+    semantics.dispose();
+
+    await tester.ensureVisible(
+      find.text('very-long-video-filename-0123456789.mp4'),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(
+      find
+          .ancestor(
+            of: find.text('very-long-video-filename-0123456789.mp4'),
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    await tester.pump();
+    expect(find.byIcon(Icons.check_box), findsOneWidget);
+
+    tester.view.physicalSize = const Size(400, 640);
+    await pumpResourceCard(const Locale('fr', 'FR'));
+    expect(
+      tester
+          .getSize(find.text('very-long-video-filename-0123456789.mp4'))
+          .width,
+      greaterThan(100),
+    );
+
+    tester.view.physicalSize = const Size(900, 900);
+    await pumpResourceCard(const Locale('en', 'US'));
+    expect(find.text('Playlist'), findsOneWidget);
+    expect(find.text('Full video'), findsOneWidget);
+    expect(
+      tester
+          .getSize(find.text('very-long-video-filename-0123456789.mp4'))
+          .width,
+      greaterThan(200),
+    );
+  });
+
   testWidgets(
     'CatCatch picker selection survives task card eviction and re-entry',
     (tester) async {

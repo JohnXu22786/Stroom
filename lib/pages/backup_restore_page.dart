@@ -1,12 +1,8 @@
+import 'dart:async' show unawaited;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
-    show
-        debugPrint,
-        defaultTargetPlatform,
-        TargetPlatform,
-        kIsWeb,
-        visibleForTesting;
+    show debugPrint, defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,13 +17,12 @@ import '../anki/apkg/apkg_importer.dart';
 import '../utils/system_pick_utils.dart';
 
 import '../widgets/clear_selected_data_confirmation_dialog.dart';
+import '../widgets/backup_operation_error_dialog.dart';
+import '../widgets/backup_restore_result_dialogs.dart';
 import '../widgets/constrained_text.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
-  const BackupRestorePage({super.key, this.clearDataForTest});
-
-  @visibleForTesting
-  final Future<bool> Function(BackupSelection selection)? clearDataForTest;
+  const BackupRestorePage({super.key});
 
   @override
   ConsumerState<BackupRestorePage> createState() => _BackupRestorePageState();
@@ -93,6 +88,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     final selection = _selection;
     setState(() => _isExporting = true);
+    var progressDialogShown = false;
     try {
       // 显示不可关闭的进度弹窗
       final progressValue = ValueNotifier<double?>(null);
@@ -147,6 +143,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           ),
         ),
       );
+      progressDialogShown = true;
 
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
@@ -157,10 +154,23 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           progressValue.value = progress;
         },
         selection: selection,
+        onError: (errorDetail) {
+          if (!mounted) return;
+          if (progressDialogShown) {
+            Navigator.of(context, rootNavigator: true).pop();
+            progressDialogShown = false;
+          }
+          unawaited(showBackupOperationErrorDialog(
+            context: context,
+            title: _strings.backupServiceExportFailed(''),
+            diagnostic: errorDetail,
+          ));
+        },
       );
     } finally {
-      if (mounted) {
+      if (mounted && progressDialogShown) {
         Navigator.of(context, rootNavigator: true).pop();
+        progressDialogShown = false;
       }
       if (mounted) setState(() => _isExporting = false);
     }
@@ -226,6 +236,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: ConstrainedText(
           _strings.backupRestoreConfirmRestore,
           maxLines: 1,
@@ -326,6 +337,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         context,
         selection: selection,
         onSkippedCategories: (categories) => skippedCategories = categories,
+        onError: _showImportError,
       );
       if (success && mounted) {
         // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
@@ -340,26 +352,48 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           await _showRestartPrompt(message: message);
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isImporting = false);
-      if (e is BackupValidationException ||
-          e is DataManagementPreflightException) {
-        // 恢复开始前就失败：未删除任何数据，
-        // 错误提示已由 importBackup 弹出，无需重启。
-        return;
-      }
-      // 恢复失败时恢复可能已部分完成（选中类别的文件已被清除但恢复中断），
-      // 提示重启以恢复干净状态（失败详情已由 importBackup 弹出）。
-      await _showRestartPrompt(
-        title: _strings.backupRestoreIncompleteTitle,
-        message: _strings.backupRestoreIncompleteMessage,
-        icon: Icons.warning_amber_rounded,
-        iconColor: Colors.orange,
-      );
+      // importBackup's error callback already showed the diagnostic and any
+      // partial-restore actions in a single dialog.
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
+  }
+
+  void _showImportError(Object error) {
+    final restoreFailedBeforeChanges = error is BackupValidationException ||
+        error is DataManagementPreflightException;
+    final mayBePartiallyRestored = !restoreFailedBeforeChanges;
+    unawaited(showBackupOperationErrorDialog(
+      context: context,
+      title: mayBePartiallyRestored
+          ? _strings.backupRestoreIncompleteTitle
+          : _strings.backupServiceRestoreFailed(''),
+      diagnostic: error.toString(),
+      additionalMessage: mayBePartiallyRestored
+          ? _strings.backupRestoreIncompleteMessage
+          : null,
+      actionsBuilder: mayBePartiallyRestored
+          ? (dialogContext) => [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _exitApp();
+                  },
+                  child: Text(_strings.backupRestoreExitApp),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    restartApp();
+                  },
+                  child: Text(_strings.backupRestoreRestartNow),
+                ),
+              ]
+          : null,
+    ));
   }
 
   // ── 清除所选数据 ──────────────────────────────────────
@@ -434,8 +468,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
-      final browserWebsiteDataCleared = await (widget.clearDataForTest ??
-          BackupService.clearSelectedData)(selection);
+      final browserWebsiteDataCleared = await BackupService.clearSelectedData(
+        selection,
+      );
       // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
       if (mounted && progressShown) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -593,45 +628,21 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
         canPop: false,
-        child: AlertDialog(
-          title: Row(
-            children: [
-              Icon(icon, color: iconColor, size: 24),
-              const SizedBox(width: 8),
-              Flexible(
-                child: ConstrainedText(
-                  title ?? _strings.backupRestoreRestoreSuccessTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          content: Text(message ?? _strings.backupRestoreRestoredMessage),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _exitApp();
-              },
-              child: ConstrainedText(
-                _strings.backupRestoreExitApp,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                restartApp();
-              },
-              child: ConstrainedText(
-                _strings.backupRestoreRestartNow,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        child: BackupRestoreRestartDialog(
+          title: title ?? _strings.backupRestoreRestoreSuccessTitle,
+          message: message ?? _strings.backupRestoreRestoredMessage,
+          exitLabel: _strings.backupRestoreExitApp,
+          restartLabel: _strings.backupRestoreRestartNow,
+          icon: icon,
+          iconColor: iconColor,
+          onExit: () {
+            Navigator.of(dialogContext).pop();
+            _exitApp();
+          },
+          onRestart: () {
+            Navigator.of(dialogContext).pop();
+            restartApp();
+          },
         ),
       ),
     );
@@ -641,25 +652,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: ConstrainedText(
-          categories.every((category) => category == '内置浏览器网站存储')
-              ? _strings.backupRestoreSkippedTitle
-              : _strings.backupRestoreNothingRestoredTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: Text(_skippedCategoriesMessage(categories)),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: ConstrainedText(
-              _strings.backupRestoreGotIt,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      builder: (dialogContext) => BackupRestoreSkippedDialog(
+        title: categories.every((category) => category == '内置浏览器网站存储')
+            ? _strings.backupRestoreSkippedTitle
+            : _strings.backupRestoreNothingRestoredTitle,
+        message: _skippedCategoriesMessage(categories),
+        acknowledgeLabel: _strings.backupRestoreGotIt,
+        onAcknowledge: () => Navigator.of(dialogContext).pop(),
       ),
     );
   }

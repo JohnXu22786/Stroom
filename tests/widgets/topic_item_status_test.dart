@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/conversation_provider.dart';
@@ -17,6 +21,7 @@ Widget _app({
   TextScaler? textScaler,
   double? topicWidth,
   bool scrollableTopic = false,
+  Key? captureKey,
 }) {
   return MaterialApp(
     locale: locale,
@@ -28,7 +33,7 @@ Widget _app({
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-      child: child!,
+      child: RepaintBoundary(key: captureKey, child: child!),
     ),
     home: Scaffold(
       body: scrollableTopic
@@ -70,7 +75,12 @@ Widget _topicItem({
   VoidCallback? onTemporaryToggle,
 }) {
   return TopicItem(
-    topic: Conversation(id: 'topic', title: 'Topic', isTemporary: isTemporary),
+    topic: Conversation(
+      id: 'topic',
+      title: 'Topic',
+      updatedAt: DateTime(2024, 1, 2, 3, 4),
+      isTemporary: isTemporary,
+    ),
     selectionMode: false,
     isSelected: false,
     isActive: false,
@@ -89,6 +99,21 @@ Widget _topicItem({
 }
 
 void main() {
+  setUpAll(() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(family)
+            ..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  });
+
   testWidgets(
     'narrow scaled localized read-state label keeps its row geometry',
     (tester) async {
@@ -197,6 +222,116 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  testWidgets(
+      'temporary menu label stays static when it fits and reveals when clipped',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_app(isTemporary: true));
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    const englishLabel = 'Keep conversation';
+    final englishText = find.text(englishLabel);
+    final englishConstrainedText = find.ancestor(
+      of: englishText,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(englishConstrainedText, findsOneWidget);
+    expect(
+      find.descendant(
+        of: englishConstrainedText,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsNothing,
+    );
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+
+    const captureKey = ValueKey('topic-menu-capture');
+    tester.view.physicalSize = const Size(320, 640);
+    await tester.pumpWidget(
+      _app(
+        locale: const Locale('de'),
+        textScaler: const TextScaler.linear(1),
+        captureKey: captureKey,
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    const germanLabel = 'Als temporäres Gespräch festlegen';
+    final germanText = find.text(germanLabel);
+    final fittingGermanConstrainedText = find.ancestor(
+      of: germanText,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(fittingGermanConstrainedText, findsOneWidget);
+    expect(
+      find.descendant(
+        of: fittingGermanConstrainedText,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsNothing,
+    );
+    final fittingSemantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(fittingGermanConstrainedText).label,
+      germanLabel,
+    );
+    fittingSemantics.dispose();
+    expect(find.text('2024-01-02 03:04'), findsOneWidget);
+    await expectLater(
+      find.byKey(captureKey),
+      matchesGoldenFile('goldens/topic_item_temporary_menu_de_320x640.png'),
+    );
+
+    await tester.tap(find.text('Umbenennen'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      _app(
+        locale: const Locale('de'),
+        textScaler: const TextScaler.linear(2),
+        captureKey: captureKey,
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    final clippedGermanConstrainedText = find.ancestor(
+      of: germanText,
+      matching: find.byType(ConstrainedText),
+    );
+    expect(clippedGermanConstrainedText, findsOneWidget);
+    expect(
+      find.descendant(
+        of: clippedGermanConstrainedText,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsOneWidget,
+    );
+    final clippedSemantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(clippedGermanConstrainedText).label,
+      germanLabel,
+    );
+    clippedSemantics.dispose();
+    expect(find.text('2024-01-02 03:04'), findsOneWidget);
+    await expectLater(
+      find.byKey(captureKey),
+      matchesGoldenFile(
+        'goldens/topic_item_temporary_menu_de_320x640_scale2.png',
+      ),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('narrow scaled topic date stays within metadata slot', (

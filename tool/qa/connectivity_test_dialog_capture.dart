@@ -5,6 +5,9 @@ import 'package:stroom/pages/connectivity_test_dialog.dart';
 import 'package:stroom/services/connectivity_test_service.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding.instance.ensureSemantics();
+
   final dark = Uri.base.queryParameters['theme'] == 'dark';
   final scale = double.tryParse(Uri.base.queryParameters['scale'] ?? '1') ?? 1;
 
@@ -35,6 +38,21 @@ void main() {
         builder: (context) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) return;
+            final localizations = AppLocalizations.of(context)!;
+            final toolNames = List.generate(
+              15,
+              (index) => 'local_tool_${index + 1}',
+            );
+            final result = ConnectivityTestResult(
+              succeeded: true,
+              summary: localizations.connectivityTestMcpSuccess,
+              details: localizations.connectivityTestMcpSuccessDetails(
+                toolNames.length,
+                localizations.connectivityTestToolNames(toolNames.join(', ')),
+                '',
+              ),
+              elapsed: const Duration(milliseconds: 184),
+            );
             showDialog<void>(
               context: context,
               builder: (dialogContext) {
@@ -44,25 +62,14 @@ void main() {
                   }
                 });
                 return ConnectivityTestDialog(
-                  title: 'Proxy',
+                  title: 'MCP tools/list',
                   initialContent:
-                      '{\n  "endpoint": "https://example.invalid"\n}',
+                      '{\n  "method": "tools/list",\n  "params": {}\n}',
                   note:
-                      'Lokaler Vorschaudialog. Es wird keine Verbindung gestartet.',
+                      'Lokaler Vorschauwert. Es wird keine Verbindung gestartet.',
+                  initialResult: result,
                   onSave: (_) async {},
-                  onRun: (_) async => ConnectivityTestResult(
-                    succeeded: false,
-                    summary: 'Lokaler Diagnosetest fehlgeschlagen',
-                    details: [
-                      ...List.generate(
-                        160,
-                        (index) =>
-                            'Diagnosezeile ${index + 1}: Lokaler Vorschautext ohne Netzwerk- oder Kontodaten.',
-                      ),
-                      'ENDE DER VOLLSTÄNDIGEN LOKALEN DIAGNOSE',
-                    ].join('\n'),
-                    elapsed: const Duration(milliseconds: 184),
-                  ),
+                  onRun: (_) async => result,
                 );
               },
             );

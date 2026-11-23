@@ -129,9 +129,32 @@ class FlowBlockCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header: icon + label + index
-                  Row(
-                    children: [
-                      Container(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrow = constraints.maxWidth < 480;
+                      final title = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ConstrainedText(
+                            '$index. $localizedBlockLabel',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          Text(
+                            def.typeKey.name,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      );
+                      final icon = Container(
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
@@ -139,95 +162,104 @@ class FlowBlockCard extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(def.icon, size: 18, color: def.color),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      );
+                      final leading = Row(
+                        children: [
+                          icon,
+                          const SizedBox(width: 10),
+                          Expanded(child: title),
+                        ],
+                      );
+                      final actions = Wrap(
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (!readOnly &&
+                              !isLast &&
+                              hasFileOutput(block) &&
+                              onTemporaryOutputChanged != null)
+                            Tooltip(
+                              message: AppLocalizations.of(context)!
+                                  .taskFlowUiTemporaryFileHint,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Checkbox(
+                                    value: temporaryOutput,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        onTemporaryOutputChanged!(value);
+                                      }
+                                    },
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  Text(
+                                    AppLocalizations.of(context)!
+                                        .taskFlowUiTemporary,
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (!readOnly)
+                            IconButton(
+                              icon: Icon(
+                                Icons.settings,
+                                size: 16,
+                                color: cs.primary,
+                              ),
+                              onPressed: onSettings ?? onTap,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              tooltip: AppLocalizations.of(context)!
+                                  .taskFlowUiSetParameters,
+                            ),
+                          if (!readOnly)
+                            IconButton(
+                              icon: Icon(
+                                Icons.swap_horiz,
+                                size: 16,
+                                color: cs.primary,
+                              ),
+                              onPressed: onReplace,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              tooltip: AppLocalizations.of(context)!
+                                  .taskFlowUiReplaceBlock,
+                            ),
+                          if (!readOnly) _buildMenu(context),
+                        ],
+                      );
+
+                      if (narrow) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(
-                              '$index. $localizedBlockLabel',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            Text(
-                              def.typeKey.name,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!readOnly &&
-                          !isLast &&
-                          hasFileOutput(block) &&
-                          onTemporaryOutputChanged != null)
-                        Tooltip(
-                          message: AppLocalizations.of(context)!
-                              .taskFlowUiTemporaryFileHint,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Checkbox(
-                                value: temporaryOutput,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    onTemporaryOutputChanged!(value);
-                                  }
-                                },
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              Text(
-                                AppLocalizations.of(context)!
-                                    .taskFlowUiTemporary,
-                                style: TextStyle(fontSize: 10),
-                              ),
+                            leading,
+                            if (!readOnly) ...[
+                              const SizedBox(height: 4),
+                              actions,
                             ],
-                          ),
-                        ),
-                      // Settings button (hidden in readOnly)
-                      if (!readOnly)
-                        IconButton(
-                          icon: Icon(
-                            Icons.settings,
-                            size: 16,
-                            color: cs.primary,
-                          ),
-                          onPressed: onSettings ?? onTap,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          tooltip: AppLocalizations.of(context)!
-                              .taskFlowUiSetParameters,
-                        ),
-                      // Replace button (hidden in readOnly)
-                      if (!readOnly)
-                        IconButton(
-                          icon: Icon(
-                            Icons.swap_horiz,
-                            size: 16,
-                            color: cs.primary,
-                          ),
-                          onPressed: onReplace,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          tooltip: AppLocalizations.of(context)!
-                              .taskFlowUiReplaceBlock,
-                        ),
-                      if (!readOnly) _buildMenu(context),
-                    ],
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          icon,
+                          const SizedBox(width: 10),
+                          Expanded(child: title),
+                          if (!readOnly) actions,
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
 

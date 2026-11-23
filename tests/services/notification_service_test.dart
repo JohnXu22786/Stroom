@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/services/notification_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 /// 记录插件 show 调用时使用的通知 ID。
 final shownIds = <int>[];
@@ -260,5 +261,350 @@ void main() {
 
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
+  });
+  testWidgets('fitting in-app banner title still dismisses after four seconds',
+      (tester) async {
+    var dismissed = false;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'fitting-title',
+            type: NotificationType.taskCompleted,
+            title: 'Done',
+            typeLabel: 'Task',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 3599));
+    expect(dismissed, isFalse);
+    await tester.pump(const Duration(milliseconds: 401));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('clipped in-app title remains visible for the complete reveal',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var dismissed = false;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: NotificationPayload(
+            taskId: 'clipped-title',
+            type: NotificationType.taskCompleted,
+            title: List.filled(100, 'long task title').join(' '),
+            typeLabel: 'Task',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 5));
+    expect(dismissed, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(minutes: 2));
+    expect(dismissed, isFalse);
+  });
+
+  // Unit owner: vertical_banner_return.
+  // Functional suite mapping: application-shared includes this service test.
+  testWidgets(
+      'clipped in-app title completes both reveal passes and endpoint pauses before dismissal',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title =
+        'Completed audio separation for the selected recording and saved the generated tracks';
+    var dismissed = false;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'full-reveal-cycle',
+            type: NotificationType.taskCompleted,
+            title: title,
+            typeLabel: 'Audio separation',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+
+    final width = tester.getSize(find.byType(ConstrainedText)).width;
+    final naturalText = TextPainter(
+      text: const TextSpan(
+        text: title,
+        style: TextStyle(fontSize: 12),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final overflow = naturalText.width - width;
+    expect(overflow, greaterThan(0), reason: 'fixture title must be clipped');
+    final travel = Duration(milliseconds: (overflow / 24 * 1000).round());
+    final revealCycle = const Duration(seconds: 5) + travel * 2;
+    final oldSinglePassTimeout = Duration(
+      milliseconds: 3400 + (overflow / 24 * 1000).ceil(),
+    );
+
+    // The former one-pass timeout elapses here, but the title is still on its
+    // return trip or endpoint pause and must remain available.
+    await tester.pump(oldSinglePassTimeout + const Duration(milliseconds: 500));
+    expect(dismissed, isFalse);
+
+    final timeUntilFinalPauseEnds =
+        revealCycle - oldSinglePassTimeout - const Duration(milliseconds: 500);
+    await tester
+        .pump(timeUntilFinalPauseEnds - const Duration(milliseconds: 100));
+    expect(dismissed, isFalse);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('a narrower banner viewport extends the clipped-title cycle',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const title =
+        'Completed audio separation for the selected recording and saved the generated tracks';
+    var dismissed = false;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'resized-reveal-cycle',
+            type: NotificationType.taskCompleted,
+            title: title,
+            typeLabel: 'Audio separation',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    tester.view.physicalSize = const Size(280, 640);
+    await tester.pump();
+    final width = tester.getSize(find.byType(ConstrainedText)).width;
+    final naturalText = TextPainter(
+      text: const TextSpan(
+        text: title,
+        style: TextStyle(fontSize: 12),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final overflow = naturalText.width - width;
+    expect(overflow, greaterThan(0), reason: 'fixture title must stay clipped');
+    final travel = Duration(milliseconds: (overflow / 24 * 1000).round());
+    final revealCycle = const Duration(seconds: 5) + travel * 2;
+
+    await tester.pump(revealCycle - const Duration(milliseconds: 100));
+    expect(dismissed, isFalse);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('manual banner dismissal wins an auto-dismiss race',
+      (tester) async {
+    var dismissals = 0;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'manual-dismiss',
+            type: NotificationType.taskCompleted,
+            title: 'Done',
+            typeLabel: 'Task',
+          ),
+          isDark: false,
+          onDismiss: () => dismissals++,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(dismissals, 1);
+    await tester.pump(const Duration(seconds: 5));
+    expect(dismissals, 1);
+  });
+
+  testWidgets('banner auto dismissal pauses while the app is hidden',
+      (tester) async {
+    var dismissed = false;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'hidden-banner',
+            type: NotificationType.taskCompleted,
+            title: 'Done',
+            typeLabel: 'Task',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 3));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(seconds: 10));
+    expect(dismissed, isFalse);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(dismissed, isFalse);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump(const Duration(seconds: 10));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 450));
+    expect(dismissed, isFalse);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('reduced motion wraps a clipped in-app banner title',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final title = List.filled(20, 'long task title').join(' ');
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: InAppNotificationBanner(
+            payload: NotificationPayload(
+              taskId: 'reduced-motion-title',
+              type: NotificationType.taskCompleted,
+              title: title,
+              typeLabel: 'Task',
+            ),
+            isDark: false,
+            onDismiss: () {},
+          ),
+        ),
+      ),
+    );
+    final titleWidget = tester.widget<Text>(find.text(title));
+    expect(titleWidget.maxLines, isNull);
+  });
+
+  testWidgets('updated banner title cancels a stale slide-out dismissal',
+      (tester) async {
+    var dismissals = 0;
+    Widget banner(String title) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: InAppNotificationBanner(
+            key: const ValueKey('updated-banner'),
+            payload: NotificationPayload(
+              taskId: 'same-task',
+              type: NotificationType.taskCompleted,
+              title: title,
+              typeLabel: 'Task',
+            ),
+            isDark: false,
+            onDismiss: () => dismissals++,
+          ),
+        );
+
+    await tester.pumpWidget(banner('Original title'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpWidget(banner('Updated title'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Updated title'), findsOneWidget);
+    expect(dismissals, 0);
+  });
+
+  testWidgets('updated banner status cancels a stale slide-out dismissal',
+      (tester) async {
+    var dismissals = 0;
+    Widget banner(NotificationType type) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: InAppNotificationBanner(
+            key: const ValueKey('updated-status-banner'),
+            payload: NotificationPayload(
+              taskId: 'same-task',
+              type: type,
+              title: 'Same title',
+              typeLabel: 'Task',
+            ),
+            isDark: false,
+            onDismiss: () => dismissals++,
+          ),
+        );
+
+    await tester.pumpWidget(banner(NotificationType.taskFailed));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byIcon(Icons.close).last);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpWidget(banner(NotificationType.taskCompleted));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    expect(dismissals, 0);
+  });
+
+  testWidgets('banner does not schedule dismissal after becoming hidden',
+      (tester) async {
+    var dismissed = false;
+    tester.binding.addPostFrameCallback((_) {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    });
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: InAppNotificationBanner(
+          payload: const NotificationPayload(
+            taskId: 'hidden-before-layout',
+            type: NotificationType.taskCompleted,
+            title: 'Done',
+            typeLabel: 'Task',
+          ),
+          isDark: false,
+          onDismiss: () => dismissed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 5));
+    expect(dismissed, isFalse);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(dismissed, isTrue);
   });
 }
