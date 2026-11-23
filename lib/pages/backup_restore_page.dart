@@ -18,6 +18,7 @@ import '../utils/system_pick_utils.dart';
 
 import '../widgets/clear_selected_data_confirmation_dialog.dart';
 import '../widgets/backup_operation_error_dialog.dart';
+import '../widgets/backup_restore_result_dialogs.dart';
 import '../widgets/constrained_text.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
@@ -627,45 +628,21 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
         canPop: false,
-        child: AlertDialog(
-          title: Row(
-            children: [
-              Icon(icon, color: iconColor, size: 24),
-              const SizedBox(width: 8),
-              Flexible(
-                child: ConstrainedText(
-                  title ?? _strings.backupRestoreRestoreSuccessTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          content: Text(message ?? _strings.backupRestoreRestoredMessage),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _exitApp();
-              },
-              child: ConstrainedText(
-                _strings.backupRestoreExitApp,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                restartApp();
-              },
-              child: ConstrainedText(
-                _strings.backupRestoreRestartNow,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        child: BackupRestoreRestartDialog(
+          title: title ?? _strings.backupRestoreRestoreSuccessTitle,
+          message: message ?? _strings.backupRestoreRestoredMessage,
+          exitLabel: _strings.backupRestoreExitApp,
+          restartLabel: _strings.backupRestoreRestartNow,
+          icon: icon,
+          iconColor: iconColor,
+          onExit: () {
+            Navigator.of(dialogContext).pop();
+            _exitApp();
+          },
+          onRestart: () {
+            Navigator.of(dialogContext).pop();
+            restartApp();
+          },
         ),
       ),
     );
@@ -675,25 +652,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: ConstrainedText(
-          categories.every((category) => category == '内置浏览器网站存储')
-              ? _strings.backupRestoreSkippedTitle
-              : _strings.backupRestoreNothingRestoredTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        content: Text(_skippedCategoriesMessage(categories)),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: ConstrainedText(
-              _strings.backupRestoreGotIt,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      builder: (dialogContext) => BackupRestoreSkippedDialog(
+        title: categories.every((category) => category == '内置浏览器网站存储')
+            ? _strings.backupRestoreSkippedTitle
+            : _strings.backupRestoreNothingRestoredTitle,
+        message: _skippedCategoriesMessage(categories),
+        acknowledgeLabel: _strings.backupRestoreGotIt,
+        onAcknowledge: () => Navigator.of(dialogContext).pop(),
       ),
     );
   }

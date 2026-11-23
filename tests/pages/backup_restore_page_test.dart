@@ -281,6 +281,10 @@ void main() {
 
     testWidgets('clear flow unlocks confirmation after the countdown',
         (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 640);
       await tester.pumpWidget(createTestApp());
       await tester.pump();
 
@@ -305,6 +309,10 @@ void main() {
       expect(find.text('部分数据已清除'), findsOneWidget);
       expect(find.text('立即重启'), findsOneWidget);
       expect(find.text('退出应用'), findsOneWidget);
+      expect(
+        tester.widget<AlertDialog>(find.byType(AlertDialog)).scrollable,
+        isTrue,
+      );
       expect(find.text('5'), findsNothing,
           reason: 'Restart prompt must not use a countdown');
     });
