@@ -1,4 +1,3 @@
-import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,14 +10,12 @@ import '../../widgets/constrained_text.dart';
 // 识别指令管理对话框 — 在 OCR 页面统一设置通用识别指令
 // ============================================================================
 
-/// Display label for an instruction: its name, or the first line of the
-/// content when unnamed (truncated to 20 chars).
+/// Display label for an instruction: its name, or the complete first line of
+/// the content when unnamed. Callers constrain the label to their display slot.
 String ocrInstructionLabel(OcrInstruction instruction) {
   final name = instruction.name;
   if (name.isNotEmpty) return name;
-  final firstLine = instruction.content.trim().split('\n').first.trim();
-  final graphemes = firstLine.characters;
-  return graphemes.length > 20 ? '${graphemes.take(20)}…' : firstLine;
+  return instruction.content.trim().split('\n').first.trim();
 }
 
 /// Dialog for managing the generic OCR instructions (add / edit / delete).
