@@ -135,6 +135,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       // 仅附加推理参数可删除（推理开关/推理力度是固定结构，删除按钮
       // 已被启用开关替代）——删除附加参数时清理其勾选块状态。
       final removed = _reasoningParams.removeAt(index);
+      _initialReasoningParams.remove(removed);
       _initialParamSnapshots.remove(removed);
       _additionalBlockValues.remove(removed);
       _additionalSelectedValues.remove(removed);
@@ -581,6 +582,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   /// 自定义，可删除。与 [_paramSourceLabel] 的「当前：供应商」判定
   /// 共用同一逻辑。
   bool _isReasoningParamInherited(ReasoningParam param) {
+    if (!_initialReasoningParams.contains(param)) return false;
     final snapshot = _initialParamSnapshots[param];
     if (snapshot == null) {
       // 本会话新建的参数（添加按钮创建，无初始快照）

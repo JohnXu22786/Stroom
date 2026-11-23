@@ -1222,6 +1222,66 @@ void main() {
     });
 
     testWidgets(
+      'new reasoning param matching provider definition remains deletable',
+      (tester) async {
+        final provider = ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+            ReasoningParam(paramName: 'shared_mode', options: ['provider']),
+          ],
+        );
+        final model = ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+          ],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: LlmModelConfigPage(model: model, provider: provider),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await _scrollToReasoning(tester, find.text('添加推理参数'));
+        await tester.tap(find.text('添加推理参数'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextFormField).last, 'shared_mode');
+        await tester.pumpAndSettle();
+
+        final newCard = find
+            .ancestor(
+              of: find.text('shared_mode').last,
+              matching: find.byType(Card),
+            )
+            .first;
+        expect(
+          find.descendant(of: newCard, matching: find.byIcon(Icons.delete)),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
       'json value matching an existing option does not duplicate it',
       (tester) async {
         final model = ModelConfig(
