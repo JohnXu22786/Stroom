@@ -93,4 +93,32 @@ void main() {
     expect(textFinder, findsOneWidget);
     expect(tester.widget<Text>(textFinder).data, value);
   });
+
+  testWidgets('constrains a long localized label at large text scale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: child!,
+        ),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 240,
+            child: InfoRow(label: 'Chemin d’accès', value: '/local/sample.pdf'),
+          ),
+        ),
+      ),
+    );
+
+    final label = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.data == 'Chemin d’accès',
+    );
+    expect(label, findsOneWidget);
+    expect(tester.widget<Text>(label).maxLines, 1);
+    expect(tester.takeException(), isNull);
+  });
 }

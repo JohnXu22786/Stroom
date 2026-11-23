@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
@@ -53,8 +54,8 @@ final class FakePlatformFile extends PlatformFile {
       return;
     }
     if (localPath != null) {
-      await for (final chunk in XFile(localPath!).openRead()) {
-        yield chunk;
+      await for (final chunk in File(localPath!).openRead()) {
+        yield Uint8List.fromList(chunk);
       }
     }
   }

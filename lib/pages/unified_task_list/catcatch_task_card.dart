@@ -1362,6 +1362,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     final identity = media.selectionIdentity;
     final isSelected = _isSelected(task.id, identity);
     final isAudioType = isAudioPreviewResource(media);
+    final previewUnavailableLabel = media.isPlaylistSegment
+        ? AppLocalizations.of(context)!.catcatchPreviewPlaylistOnly
+        : AppLocalizations.of(context)!.catcatchPreviewUnsupported;
 
     return Card(
       elevation: 0,
@@ -1380,119 +1383,156 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             : () => _toggleSelection(task.id, identity),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                isAudioType ? Icons.audiotrack : Icons.videocam,
-                size: 18,
-                color: isAudioType ? Colors.purple : Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(
-                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                  color: isSelected ? colorScheme.primary : Colors.grey,
-                  size: 20,
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 420;
+              return Row(
+                children: [
+                  Icon(
+                    isAudioType ? Icons.audiotrack : Icons.videocam,
+                    size: 18,
+                    color: isAudioType ? Colors.purple : Colors.blue,
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      isSelected
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      color: isSelected ? colorScheme.primary : Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _ResourceKindBadge(
-                          label: media.isPlaylistSegment
-                              ? AppLocalizations.of(context)!.catcatchSegment
-                              : media.isPlaylist
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final badge = _ResourceKindBadge(
+                              label: media.isPlaylistSegment
                                   ? AppLocalizations.of(context)!
-                                      .catcatchPlaylist
-                                  : AppLocalizations.of(context)!
-                                      .catcatchFullVideo,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: ConstrainedText(
-                            '${media.name}.${media.ext}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    ConstrainedText(
-                      '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: colorScheme.onSurfaceVariant),
-                    ),
-                    if (media.isLikelySplitTrack) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.call_split,
-                            size: 12,
-                            color: Colors.amber.shade600,
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: ConstrainedText(
-                              AppLocalizations.of(context)!
-                                  .catcatchSeparateTracks,
+                                      .catcatchSegment
+                                  : media.isPlaylist
+                                      ? AppLocalizations.of(context)!
+                                          .catcatchPlaylist
+                                      : AppLocalizations.of(context)!
+                                          .catcatchFullVideo,
+                            );
+                            final filename = ConstrainedText(
+                              '${media.name}.${media.ext}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.amber.shade600,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
+                            );
+
+                            if (constraints.maxWidth < 240) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  badge,
+                                  const SizedBox(height: 2),
+                                  filename,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              children: [
+                                badge,
+                                const SizedBox(width: 6),
+                                Expanded(child: filename),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 2),
+                        ConstrainedText(
+                          '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                        if (!media.canPreview && compact) ...[
+                          const SizedBox(height: 2),
+                          ConstrainedText(
+                            previewUnavailableLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade400,
                             ),
                           ),
                         ],
+                        if (media.isLikelySplitTrack) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.call_split,
+                                size: 12,
+                                color: Colors.amber.shade600,
+                              ),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: ConstrainedText(
+                                  AppLocalizations.of(context)!
+                                      .catcatchSeparateTracks,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.amber.shade600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (media.canPreview)
+                    IconButton(
+                      icon: Icon(
+                        Icons.play_circle_filled,
+                        color: colorScheme.primary,
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              if (media.canPreview)
-                IconButton(
-                  icon: Icon(
-                    Icons.play_circle_filled,
-                    color: colorScheme.primary,
-                  ),
-                  tooltip: isAudioType
-                      ? AppLocalizations.of(context)!.catcatchPreviewAudio
-                      : AppLocalizations.of(context)!.catcatchPreviewVideo,
-                  onPressed: () {
-                    showMediaPreview(
-                      context,
-                      media,
-                      task.title.isNotEmpty ? task.title : task.url,
-                    );
-                  },
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    media.isPlaylistSegment
-                        ? AppLocalizations.of(context)!
-                            .catcatchPreviewPlaylistOnly
-                        : AppLocalizations.of(context)!
-                            .catcatchPreviewUnsupported,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                  ),
-                ),
-            ],
+                      tooltip: isAudioType
+                          ? AppLocalizations.of(context)!.catcatchPreviewAudio
+                          : AppLocalizations.of(context)!.catcatchPreviewVideo,
+                      onPressed: () {
+                        showMediaPreview(
+                          context,
+                          media,
+                          task.title.isNotEmpty ? task.title : task.url,
+                        );
+                      },
+                    )
+                  else if (!compact)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: ConstrainedText(
+                        previewUnavailableLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -1820,12 +1860,18 @@ class _ResourceKindBadge extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          color: color.shade700,
-          fontWeight: FontWeight.w600,
+      child: Semantics(
+        label: label,
+        excludeSemantics: true,
+        child: ConstrainedText(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 10,
+            color: color.shade700,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );

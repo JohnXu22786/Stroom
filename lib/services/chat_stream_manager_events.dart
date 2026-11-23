@@ -9,60 +9,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
     String convId,
   ) {
     switch (event) {
-      case InputTranscriptEvent _:
-        // The chat service records the transcript in its request history,
-        // but the manager owns the persisted stream history. Mirror it there
-        // so recognized speech remains on the user message.
-        final transcript = event.text.trim();
-        final userMessageIndex = state.history.lastIndexWhere(
-          (message) => message.role == 'user',
-        );
-        if (transcript.isNotEmpty && userMessageIndex >= 0) {
-          final userMessage = state.history[userMessageIndex];
-          final content = userMessage.content.trim();
-          if (content != transcript && !content.endsWith(transcript)) {
-            state.history[userMessageIndex] = userMessage.copyWith(
-              content: content.isEmpty ? transcript : '$content\n$transcript',
-            );
-          }
-        }
-        break;
-      case MediaAttachmentsEvent e:
-        final eventOrder = e.contentOrder;
-        for (var index = 0; index < e.attachments.length; index++) {
-          final attachment = e.attachments[index];
-          final storedOrder = attachment.extraFields['stroom.contentOrder'];
-          final attachmentOrder = storedOrder is int
-              ? storedOrder + state.contentOrderOffset
-              : eventOrder == null
-                  ? state.nextContentOrder
-                  : eventOrder + state.contentOrderOffset + index;
-          final owned = attachment.copyWith(conversationId: convId);
-          state.mediaAttachments.add(owned);
-          state.orderedContentParts.add({
-            'type': 'attachment',
-            'attachmentId': owned.id,
-            'contentOrder': attachmentOrder,
-          });
-          if (state.nextContentOrder <= attachmentOrder) {
-            state.nextContentOrder = attachmentOrder + 1;
-          }
-        }
-        break;
       case TextEvent e:
-        if (e.text.isNotEmpty) {
-          final order = e.contentOrder == null
-              ? state.nextContentOrder
-              : e.contentOrder! + state.contentOrderOffset;
-          state.orderedContentParts.add({
-            'type': 'text',
-            'text': e.text,
-            'contentOrder': order,
-          });
-          if (state.nextContentOrder <= order) {
-            state.nextContentOrder = order + 1;
-          }
-        }
         if (!state.hasReceivedFirstToken) {
           state.hasReceivedFirstToken = true;
           _pushToProvider(convId, streamingHasFirstTokenProvider, true);
@@ -106,10 +53,6 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         }
 
       case ReasoningSectionEndEvent e:
-        // Each provider request restarts contentOrder at zero. A follow-up
-        // tool request belongs to the same assistant reply, so offset its
-        // visible content after the completed rounds.
-        state.contentOrderOffset = state.nextContentOrder;
         // Drain the last visible text delta before sealing this round. The
         // service waits for this event before building the tool-chain message
         // or requesting the next round.

@@ -4845,14 +4845,12 @@ class BackgroundTask {
 final backgroundTasksProvider =
     StateNotifierProvider<BackgroundTaskNotifier, List<BackgroundTask>>(
   (ref) {
-    var currentLocale = ref.read(localeProvider);
     final notifier = BackgroundTaskNotifier(
-      localizationsResolver: () => appLocalizationsForLocale(currentLocale),
+      localizationsResolver: () => appLocalizationsForLocale(
+        ref.read(localeProvider),
+      ),
     );
-    ref.listen(localeProvider, (_, next) {
-      currentLocale = next;
-      notifier.refreshLocalizations();
-    });
+    ref.listen(localeProvider, (_, _) => notifier.refreshLocalizations());
     return notifier;
   },
 );

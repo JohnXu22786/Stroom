@@ -298,59 +298,68 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                         children: [
                                           Row(
                                             children: [
-                                              Container(
-                                                margin: const EdgeInsets.only(
-                                                  right: 6,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 5,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: media.isPlaylistSegment
-                                                      ? Colors.orange
-                                                          .withValues(
-                                                          alpha: 0.12,
-                                                        )
-                                                      : media.isPlaylist
-                                                          ? Colors.blue
-                                                              .withValues(
-                                                              alpha: 0.12,
-                                                            )
-                                                          : Colors.teal
-                                                              .withValues(
-                                                              alpha: 0.12,
-                                                            ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child: Text(
-                                                  media.isPlaylistSegment
-                                                      ? AppLocalizations.of(
-                                                          ctx,
-                                                        )!
-                                                          .mediaSegment
-                                                      : media.isPlaylist
-                                                          ? AppLocalizations.of(
-                                                              ctx,
-                                                            )!
-                                                              .mediaPlaylist
-                                                          : AppLocalizations.of(
-                                                              ctx,
-                                                            )!
-                                                              .mediaFullVideo,
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: media
-                                                            .isPlaylistSegment
-                                                        ? Colors.orange.shade800
+                                              Flexible(
+                                                fit: FlexFit.loose,
+                                                child: Container(
+                                                  margin: const EdgeInsets.only(
+                                                    right: 6,
+                                                  ),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 5,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        media.isPlaylistSegment
+                                                            ? Colors.orange
+                                                                .withValues(
+                                                                alpha: 0.12,
+                                                              )
+                                                            : media.isPlaylist
+                                                                ? Colors.blue
+                                                                    .withValues(
+                                                                    alpha: 0.12,
+                                                                  )
+                                                                : Colors.teal
+                                                                    .withValues(
+                                                                    alpha: 0.12,
+                                                                  ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      8,
+                                                    ),
+                                                  ),
+                                                  child: ConstrainedText(
+                                                    media.isPlaylistSegment
+                                                        ? AppLocalizations.of(
+                                                            ctx,
+                                                          )!
+                                                            .mediaSegment
                                                         : media.isPlaylist
-                                                            ? Colors
-                                                                .blue.shade800
-                                                            : Colors
-                                                                .teal.shade800,
-                                                    fontWeight: FontWeight.w600,
+                                                            ? AppLocalizations
+                                                                    .of(ctx)!
+                                                                .mediaPlaylist
+                                                            : AppLocalizations
+                                                                    .of(ctx)!
+                                                                .mediaFullVideo,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: media
+                                                              .isPlaylistSegment
+                                                          ? Colors
+                                                              .orange.shade800
+                                                          : media.isPlaylist
+                                                              ? Colors
+                                                                  .blue.shade800
+                                                              : Colors.teal
+                                                                  .shade800,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                                   ),
                                                 ),
                                               ),

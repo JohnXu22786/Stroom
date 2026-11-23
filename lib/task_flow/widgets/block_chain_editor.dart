@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:stroom/widgets/modal_bottom_sheet_constraints.dart';
@@ -148,7 +150,11 @@ class BlockChainEditor extends StatelessWidget {
     );
   }
 
-  Widget _buildTemporaryOutputControl(BuildContext context, bool? value) {
+  Widget _buildTemporaryOutputControl(
+    BuildContext context,
+    bool? value, {
+    bool allowLabelWrap = false,
+  }) {
     return Tooltip(
       message: AppLocalizations.of(context)!.taskFlowUiTemporaryCleanupTooltip,
       child: Row(
@@ -164,10 +170,18 @@ class BlockChainEditor extends StatelessWidget {
                 : (_) =>
                     onTemporaryOutputsChanged!(value == true ? false : true),
           ),
-          Text(
-            AppLocalizations.of(context)!.taskFlowUiTemporaryFiles,
-            style: TextStyle(fontSize: 11),
-          ),
+          if (allowLabelWrap)
+            Expanded(
+              child: Text(
+                AppLocalizations.of(context)!.taskFlowUiTemporaryFiles,
+                style: const TextStyle(fontSize: 11),
+              ),
+            )
+          else
+            Text(
+              AppLocalizations.of(context)!.taskFlowUiTemporaryFiles,
+              style: const TextStyle(fontSize: 11),
+            ),
         ],
       ),
     );
@@ -309,6 +323,7 @@ class BlockChainEditor extends StatelessWidget {
     required bool showTemporaryOutputControl,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     return SafeArea(
       top: false,
@@ -319,36 +334,93 @@ class BlockChainEditor extends StatelessWidget {
           color: cs.surface,
           border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
-        child: Row(
-          children: [
-            if (showTemporaryOutputControl) ...[
-              _buildTemporaryOutputControl(context, allTemporary),
-              const SizedBox(width: 4),
-            ],
-            Expanded(
-              child: SizedBox(
-                height: 44,
-                child: OutlinedButton.icon(
-                  onPressed: () => _showAddBlockSheet(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: ConstrainedText(
-                    AppLocalizations.of(context)!.taskFlowUiAddBlock,
-                    style: TextStyle(fontSize: 14),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final temporaryTextWidth = _measureTextWidth(
+              context,
+              strings.taskFlowUiTemporaryFiles,
+              DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
+            );
+            final addBlockTextWidth = _measureTextWidth(
+              context,
+              strings.taskFlowUiAddBlock,
+              const TextStyle(fontSize: 14),
+            );
+            // Checkbox uses compact density and a shrink-wrapped tap target.
+            // OutlinedButton.icon has 12/16 px horizontal padding and an 8 px
+            // icon gap under Material 3; reserve its 64 px minimum as well.
+            final temporaryControlWidth = 40 + temporaryTextWidth;
+            final addButtonWidth = math.max(
+              64,
+              addBlockTextWidth + 18 + 8 + 12 + 16,
+            );
+            final stackControls = showTemporaryOutputControl &&
+                constraints.maxWidth <
+                    temporaryControlWidth + 4 + addButtonWidth;
+            final addButton = SizedBox(
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: () => _showAddBlockSheet(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: ConstrainedText(
+                  strings.taskFlowUiAddBlock,
+                  style: const TextStyle(fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
-            ),
-          ],
+            );
+
+            if (stackControls) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTemporaryOutputControl(
+                    context,
+                    allTemporary,
+                    allowLabelWrap: true,
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(width: double.infinity, child: addButton),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                if (showTemporaryOutputControl) ...[
+                  _buildTemporaryOutputControl(context, allTemporary),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(child: addButton),
+              ],
+            );
+          },
         ),
       ),
     );
+  }
+
+  double _measureTextWidth(
+    BuildContext context,
+    String text,
+    TextStyle style,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.localeOf(context),
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
   }
 
   Widget _buildInsertControl(BuildContext context, int index) {

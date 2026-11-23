@@ -438,7 +438,6 @@ Future<String> _fetchUserscript(String sourceUrl) async {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
-  final Uri? oauthCallbackUri;
   final bool recoveryMode;
 
   /// Builds a test body with the real capture callback, without a native WebView.
@@ -448,7 +447,6 @@ class BrowserPage extends StatefulWidget {
   const BrowserPage({
     super.key,
     this.initialUrl = 'https://www.google.com',
-    this.oauthCallbackUri,
     this.recoveryMode = false,
     this.testBodyBuilder,
   });
@@ -497,16 +495,6 @@ class _BrowserPageState extends State<BrowserPage> {
   final Set<String> _scriptInjectionsPendingAfterManagerChange = {};
   final Map<String, String> _scriptInjectionsByPage = {};
   int _userscriptNavigationGeneration = 0;
-
-  bool _isOAuthCallbackUrl(Uri? candidate) {
-    final expected = widget.oauthCallbackUri;
-    return expected != null &&
-        candidate != null &&
-        candidate.scheme == expected.scheme &&
-        candidate.host == expected.host &&
-        candidate.port == expected.port &&
-        candidate.path == expected.path;
-  }
 
   /// Whether to use desktop user agent.
   bool _isDesktopMode = false;
@@ -1294,10 +1282,6 @@ class _BrowserPageState extends State<BrowserPage> {
                           // Track the host so cookies can be persisted/displayed
                           // even on platforms without CookieManager.getAllCookies.
                           noteBrowserPageNavigationUrl(url.toString());
-                          if (_isOAuthCallbackUrl(url)) {
-                            Navigator.of(context).pop(true);
-                            return;
-                          }
                           _injectScripts();
                           // Re-inject cat-catch hook if somehow missed or if an
                           // earlier injection was for a previous page

@@ -12,6 +12,7 @@ import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 class _TaskFlowServiceMock extends Mock implements TaskFlowExecutionService {}
 
@@ -69,6 +70,8 @@ Future<void> _pumpFlowSelection(
   List<MediaResource> media, {
   List<MediaResource>? candidates,
   TaskFlowExecutionService? service,
+  Locale locale = const Locale('en'),
+  double textScaleFactor = 1,
 }) async {
   final container = ProviderContainer(
     overrides: [
@@ -85,10 +88,19 @@ Future<void> _pumpFlowSelection(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: locale,
+        theme: ThemeData.light(),
+        themeMode: ThemeMode.light,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: HomePage(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScaleFactor),
+          ),
+          child: child!,
+        ),
+        home: const HomePage(),
       ),
     ),
   );
@@ -127,6 +139,58 @@ void main() {
       ),
     );
     expect(confirm.onPressed, isNotNull);
+  });
+
+  testWidgets('localized media badge stays within a narrow scaled row', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const playlist = MediaResource(
+      url: 'https://example.com/list.m3u8',
+      name: 'playlist',
+      ext: 'm3u8',
+      isPlaylist: true,
+    );
+    await _pumpFlowSelection(
+      tester,
+      [playlist],
+      locale: const Locale('de'),
+    );
+
+    final badge = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == 'Wiedergabeliste',
+    );
+    expect(badge, findsOneWidget);
+    expect(
+      find.descendant(of: badge, matching: find.byType(AnimatedBuilder)),
+      findsOneWidget,
+    );
+    final semantics = tester.ensureSemantics();
+    expect(tester.getSemantics(badge).label, contains('Wiedergabeliste'));
+    semantics.dispose();
+    expect(tester.takeException(), isNull);
+
+    await _pumpFlowSelection(
+      tester,
+      [playlist],
+      locale: const Locale('de'),
+      textScaleFactor: 3,
+    );
+    final scaledBadge = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == 'Wiedergabeliste',
+    );
+    expect(
+      find.descendant(
+        of: scaledBadge,
+        matching: find.byType(AnimatedBuilder),
+      ),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('multiple Task Flow resources require an explicit choice', (

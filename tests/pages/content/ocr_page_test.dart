@@ -991,6 +991,67 @@ void main() {
 
   group('OcrPage - model selector', () {
     testWidgets(
+      'reflows selectors at narrow width and large text scale in LTR and RTL',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        for (final locale in const [Locale('de', 'DE'), Locale('ar')]) {
+          await tester.pumpWidget(
+            _buildTestApp(
+              entries: [_createOcrEntry(withModels: true)],
+              ocrInstructions: const [
+                OcrInstruction(
+                  name: 'Long saved OCR instruction',
+                  content: 'Use local text',
+                ),
+              ],
+              locale: locale,
+              textScaler: TextScaler.linear(2),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final dropdowns = find.byType(DropdownButton<int>);
+          expect(dropdowns, findsNWidgets(2));
+          for (var index = 0; index < dropdowns.evaluate().length; index++) {
+            expect(
+              tester.widget<DropdownButton<int>>(dropdowns.at(index)).onChanged,
+              isNotNull,
+            );
+            expect(
+              tester.getRect(dropdowns.at(index)).right,
+              lessThanOrEqualTo(320),
+            );
+          }
+          final manageButton = find.byKey(
+            const Key('ocr_instruction_manage_btn'),
+          );
+          expect(manageButton, findsOneWidget);
+          expect(tester.getRect(manageButton).right, lessThanOrEqualTo(320));
+
+          if (Directionality.of(tester.element(dropdowns.first)) ==
+              TextDirection.rtl) {
+            expect(
+              tester.getRect(dropdowns.first).right,
+              lessThanOrEqualTo(
+                tester.getRect(find.byIcon(Icons.smart_toy_outlined)).left,
+              ),
+            );
+            expect(
+              tester.getRect(dropdowns.last).right,
+              lessThanOrEqualTo(
+                  tester.getRect(find.byIcon(Icons.edit_note)).left),
+            );
+          }
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+
+    testWidgets(
       'model-selection hint uses a one-line constrained label at narrow width and large text scale',
       (tester) async {
         tester.view.physicalSize = const Size(390, 844);

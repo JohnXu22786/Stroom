@@ -110,6 +110,7 @@ void _resetDesktopAppServiceForTest() {
 Widget _buildTestApp({
   BackgroundTaskNotifier? taskNotifier,
   Locale locale = const Locale('zh', 'CN'),
+  bool disableAnimations = false,
 }) {
   return ProviderScope(
     overrides: taskNotifier == null
@@ -124,6 +125,12 @@ Widget _buildTestApp({
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          disableAnimations: disableAnimations,
+        ),
+        child: child!,
+      ),
       home: BackgroundOptimizationPage(),
     ),
   );
@@ -419,6 +426,76 @@ void main() {
   });
 
   group('BackgroundOptimizationPage - service controls', () {
+    testWidgets(
+      'vertical_background_service_buttons keeps localized service labels to one line',
+      (tester) async {
+        registerMockPlatform();
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          debugDefaultTargetPlatformOverride = null;
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            locale: const Locale('fr', 'FR'),
+            disableAnimations: true,
+          ),
+        );
+        await tester.pumpAndSettle();
+        debugDefaultTargetPlatformOverride = null;
+        await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+        await tester.pumpAndSettle();
+
+        final startLabel = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText && widget.data == 'Démarrer le service',
+        );
+        expect(startLabel, findsOneWidget);
+        expect(tester.widget<ConstrainedText>(startLabel).maxLines, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'vertical_background_service_buttons keeps the running service label to one line',
+      (tester) async {
+        registerMockPlatform().setServiceRunning(true);
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          debugDefaultTargetPlatformOverride = null;
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            locale: const Locale('fr', 'FR'),
+            disableAnimations: true,
+          ),
+        );
+        await tester.pumpAndSettle();
+        debugDefaultTargetPlatformOverride = null;
+        await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+        await tester.pumpAndSettle();
+
+        final stopLabel = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedText && widget.data == 'Arrêter le service',
+        );
+        expect(stopLabel, findsOneWidget);
+        expect(tester.widget<ConstrainedText>(stopLabel).maxLines, 1);
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(stopLabel);
+        await tester.pumpAndSettle();
+      },
+    );
+
     testWidgets('shows loading indicator while checking service', (
       tester,
     ) async {

@@ -97,13 +97,7 @@ dependencies:
   tray_manager: ^0.8.0
   flutter_math_fork: ^0.7.4
   markdown: ^7.3.1
-  function_tree: ^0.9.1
   protobuf: ^6.1.0
-  http2: ^3.1.0
-  googleapis_auth: ^2.3.4
-  jose: ^0.3.5+2
-  pointycastle: ^4.0.0
-  web_socket_channel: ^3.0.3
   web: ^1.1.2
 
 dev_dependencies:
@@ -156,8 +150,6 @@ flutter:
   assets:
     - assets/images/
     - assets/vendor/
-    - assets/vendor/mathlive/
-    - assets/vendor/mathlive/fonts/
     - assets/vendor/native/
     - assets/vendor/mermaid/
     - web/data_integrity_json_worker.js

@@ -351,7 +351,6 @@ void main() {
       expect(preview.webView.controller.evaluatedScripts, [
         'window.applyZoomDeltasAfterFit([0.1])',
       ]);
-      expect(preview.webView.controller.zoomInputQueueReady, isTrue);
       expect(preview.webView.controller.zoomLevel, closeTo(0.55, 0.0001));
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -748,7 +747,6 @@ class _ZoomTrackingWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
   double zoomLevel = 1.0;
   bool zoomHelperAvailable = false;
-  bool zoomInputQueueReady = false;
   bool failNextZoomEvaluation = false;
   Completer<bool>? nextReadinessProbe;
 
@@ -791,10 +789,6 @@ class _ZoomTrackingWebViewController extends PlatformInAppWebViewController {
     required String source,
     ContentWorld? contentWorld,
   }) async {
-    if (source == 'window.applyZoomOperationsAfterFit([])') {
-      zoomInputQueueReady = true;
-      return null;
-    }
     if (source == "typeof window.applyZoomDeltasAfterFit === 'function'") {
       final pendingProbe = nextReadinessProbe;
       nextReadinessProbe = null;

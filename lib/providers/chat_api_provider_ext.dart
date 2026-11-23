@@ -19,140 +19,28 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     bool reasoning = false,
     String reasoningEffort = 'medium',
   }) {
-    final body = <String, dynamic>{
+    if (endpointType == 'responses') {
+      return {
+        'model': model ?? defaultParams['model'],
+        'input': messages,
+        if (system != null && system.isNotEmpty) 'instructions': system,
+        if (maxTokens != null) 'max_output_tokens': maxTokens,
+        if (temperature != null) 'temperature': temperature,
+        'stream': stream,
+        if (tools != null && tools.isNotEmpty) 'tools': tools,
+        if (reasoning)
+          'reasoning': {'effort': reasoningEffort, 'summary': 'auto'},
+        if (extraParams != null) ...extraParams,
+      };
+    }
+    return {
       'model': model ?? defaultParams['model'],
       'messages': messages,
-      'stream': stream,
-    };
-    if (maxTokens != null) body['max_tokens'] = maxTokens;
-    if (temperature != null) body['temperature'] = temperature;
-    if (tools?.isNotEmpty == true) body['tools'] = tools;
-    if (extraParams != null) body.addAll(extraParams);
-    if (endpointType != 'responses') return body;
-
-    final normalizedMessages =
-        body.remove('messages') as List<Map<String, dynamic>>;
-    final instructions = <String>[];
-    if (system != null && system.isNotEmpty) instructions.add(system);
-    final input = <Map<String, dynamic>>[];
-    final requiresTypedContent = normalizedMessages.any((message) =>
-        message['content'] is List ||
-        message['role'] == 'tool' ||
-        message['tool_calls'] is List);
-    for (final message in normalizedMessages) {
-      final role = message['role'];
-      if (role == 'system' || role == 'developer') {
-        final text = message['content'];
-        if (text is String && text.isNotEmpty) instructions.add(text);
-        continue;
-      }
-      final toolCalls = message['tool_calls'];
-      if (toolCalls is List) {
-        for (final call in toolCalls.whereType<Map>()) {
-          final function = call['function'];
-          if (function is! Map) continue;
-          input.add({
-            'type': 'function_call',
-            'call_id': call['id'] ?? '',
-            'name': function['name'] ?? '',
-            'arguments': function['arguments'] ?? '{}',
-          });
-        }
-      }
-      if (role == 'tool') {
-        input.add({
-          'type': 'function_call_output',
-          'call_id': message['tool_call_id'] ?? '',
-          'output': message['content'] ?? '',
-        });
-        continue;
-      }
-      final content = message['content'];
-      final parts = content is List
-          ? content.whereType<Map>().map((part) {
-              if (part['type'] == 'image_url') {
-                final imageUrl = part['image_url'];
-                final url = imageUrl is Map ? imageUrl['url'] : imageUrl;
-                return <String, dynamic>{
-                  'type': role == 'assistant' ? 'output_image' : 'input_image',
-                  if (url != null) 'image_url': url,
-                };
-              }
-              if (part['type'] == 'file' && role != 'assistant') {
-                final file = part['file'];
-                if (file is Map) {
-                  final fileData = file['file_data'];
-                  final fileId = file['file_id'];
-                  if (fileData is String && fileData.isNotEmpty) {
-                    return <String, dynamic>{
-                      'type': 'input_file',
-                      'file_data': fileData,
-                      if (file['filename'] is String)
-                        'filename': file['filename'],
-                    };
-                  }
-                  if (fileId is String && fileId.isNotEmpty) {
-                    return <String, dynamic>{
-                      'type': 'input_file',
-                      'file_id': fileId,
-                      if (file['filename'] is String)
-                        'filename': file['filename'],
-                    };
-                  }
-                }
-              }
-              return <String, dynamic>{
-                'type': role == 'assistant' ? 'output_text' : 'input_text',
-                'text': part['text'] ?? '',
-              };
-            }).toList()
-          : [
-              {
-                'type': role == 'assistant' ? 'output_text' : 'input_text',
-                'text': content ?? '',
-              },
-            ];
-      if (parts.isNotEmpty && content != null) {
-        final messageContent = !requiresTypedContent &&
-                parts.length == 1 &&
-                parts.single['type'] ==
-                    (role == 'assistant' ? 'output_text' : 'input_text')
-            ? parts.single['text']
-            : parts;
-        input.add({
-          'type': 'message',
-          'role': role,
-          'content': messageContent,
-        });
-      }
-    }
-    final responseTools = body.remove('tools');
-    return {
-      'model': body.remove('model'),
-      'input': input,
-      'stream': stream,
-      if (instructions.isNotEmpty) 'instructions': instructions.join('\n'),
-      if (body.containsKey('max_tokens'))
-        'max_output_tokens': body.remove('max_tokens'),
+      if (maxTokens != null) 'max_tokens': maxTokens,
       if (temperature != null) 'temperature': temperature,
-      if (reasoning)
-        'reasoning': {'effort': reasoningEffort, 'summary': 'auto'},
-      ...body,
-      if (responseTools is List)
-        'tools': [
-          for (final tool in responseTools.whereType<Map>())
-            if (tool['function'] is Map)
-              {
-                'type': 'function',
-                'name': (tool['function'] as Map)['name'],
-                'description': (tool['function'] as Map)['description'],
-                'parameters': (tool['function'] as Map)['parameters'],
-                if ((tool['function'] as Map).containsKey('strict'))
-                  'strict': (tool['function'] as Map)['strict'],
-              }
-            else
-              Map<String, dynamic>.from(tool),
-        ],
+      'stream': stream,
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
+      if (extraParams != null) ...extraParams,
     };
   }
 

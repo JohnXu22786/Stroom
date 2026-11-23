@@ -30,7 +30,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       _buildResponsiveSettingsRow(
         context,
         label: AppLocalizations.of(context)!.providerChunkingMode,
-        control: Container(
+        controlBuilder: (isExpanded) => Container(
           decoration: BoxDecoration(
             border: Border.all(color: cs.outlineVariant),
             borderRadius: BorderRadius.circular(8),
@@ -42,7 +42,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _chunking,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              isExpanded: isExpanded,
               selectedItemBuilder: (context) => [
                 _buildAsrSelectedDropdownText(
                   context,
@@ -148,7 +148,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       _buildResponsiveSettingsRow(
         context,
         label: AppLocalizations.of(context)!.providerCompressionMode,
-        control: Container(
+        controlBuilder: (isExpanded) => Container(
           decoration: BoxDecoration(
             border: Border.all(color: cs.outlineVariant),
             borderRadius: BorderRadius.circular(8),
@@ -160,7 +160,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _compression,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              isExpanded: isExpanded,
               selectedItemBuilder: (context) => [
                 _buildAsrSelectedDropdownText(
                   context,

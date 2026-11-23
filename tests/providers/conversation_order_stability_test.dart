@@ -15,7 +15,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/conversation_provider.dart';
-import 'package:stroom/services/conversation_repository_memory.dart';
 
 /// Helper: create a ProviderContainer with a ConversationsNotifier that has
 /// state pre-set (bypassing async _load from SharedPreferences).
@@ -208,17 +207,14 @@ void main() {
         'conversations': jsonEncode(convs.map((c) => c.toMap()).toList()),
       });
 
-      final container = ProviderContainer(
-        overrides: [
-          conversationRepositoryProvider.overrideWithValue(
-            MemoryConversationRepository(),
-          ),
-        ],
-      );
+      final container = ProviderContainer();
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
 
-      await notifier.ready;
+      // 等待异步 _load 完成。
+      for (var i = 0; i < 100 && notifier.state.isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
 
       expect(notifier.state.map((c) => c.id).toList(),
           ['p1', 'p2', 'c0', 'c1', 'c2', 'c3']);
@@ -236,13 +232,7 @@ void main() {
         'conversations': jsonEncode(diskConvs.map((c) => c.toMap()).toList()),
       });
 
-      final container = ProviderContainer(
-        overrides: [
-          conversationRepositoryProvider.overrideWithValue(
-            MemoryConversationRepository(),
-          ),
-        ],
-      );
+      final container = ProviderContainer();
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
 

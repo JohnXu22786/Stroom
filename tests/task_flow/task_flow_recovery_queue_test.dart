@@ -811,8 +811,7 @@ void main() {
     await container
         .read(taskFlowExecutionServiceProvider)
         .resumeExecution(saved.id);
-    await waitForDispatchCount(1);
-    await _waitForStatus(container, saved.id, FlowExecutionStatus.completed);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(dispatches, ['null:checkpoint']);
     expect(notifier.execution(saved.id)?.status, FlowExecutionStatus.completed);
     expect(notifier.execution(saved.id)?.subTasks.first.result?.value,

@@ -61,27 +61,39 @@ Widget _buildProviderInputLabel(String label) => ConstrainedText(
 Widget _buildResponsiveSettingsRow(
   BuildContext context, {
   required String label,
-  required Widget control,
+  required Widget Function(bool isExpanded) controlBuilder,
+  double minimumControlWidth = 160,
 }) {
   final colorScheme = Theme.of(context).colorScheme;
-  final labelWidget = Text(
-    label,
-    style: TextStyle(
-      fontWeight: FontWeight.w600,
-      fontSize: 14,
-      color: colorScheme.onSurface,
-    ),
+  final labelStyle = TextStyle(
+    fontWeight: FontWeight.w600,
+    fontSize: 14,
+    color: colorScheme.onSurface,
   );
+  final labelWidget = Text(label, style: labelStyle);
 
   return LayoutBuilder(
     builder: (context, constraints) {
-      if (MediaQuery.sizeOf(context).width < 800) {
+      final labelPainter = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      const rowGap = 16.0;
+      final fitsSideBySide = constraints.hasBoundedWidth &&
+          constraints.maxWidth >=
+              labelPainter.width + rowGap + minimumControlWidth;
+      if (!fitsSideBySide) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             labelWidget,
             const SizedBox(height: 8),
-            SizedBox(width: constraints.maxWidth, child: control),
+            SizedBox(
+              width: constraints.maxWidth,
+              child: controlBuilder(true),
+            ),
           ],
         );
       }
@@ -90,8 +102,10 @@ Widget _buildResponsiveSettingsRow(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           labelWidget,
-          const SizedBox(width: 16),
-          Flexible(child: control),
+          const SizedBox(width: rowGap),
+          Flexible(
+            child: controlBuilder(constraints.maxWidth < 1100),
+          ),
         ],
       );
     },
@@ -133,7 +147,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late final TextEditingController _hostController;
   late final TextEditingController _keyController;
   bool _obscureKey = true;
-  late String _apiProtocol;
+  late String _endpointType;
 
   // Provider-level params (same structure as model params)
   late double _temperature;
@@ -185,8 +199,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _nameController = TextEditingController(text: c.providerName);
     _hostController = TextEditingController(text: c.host);
     _keyController = TextEditingController(text: c.key);
-    _apiProtocol =
-        c.apiProtocol ?? apiProtocolFromLegacyEndpointType(c.endpointType);
+    _endpointType = c.endpointType;
 
     _temperature = (c.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
     _topP = (c.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;

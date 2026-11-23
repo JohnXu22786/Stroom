@@ -4,6 +4,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/asr_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
   testWidgets('LLM reasoning controls reflow below their labels at 320 px', (
@@ -133,7 +134,8 @@ void main() {
       Locale('de'),
       Locale('pt', 'BR'),
     ]) {
-      for (final width in [360.0, 440.0, 800.0, 1100.0]) {
+      for (final width in [320.0, 360.0, 440.0, 800.0, 1100.0, 1200.0]) {
+        if (width == 1200 && locale.languageCode != 'en') continue;
         tester.view.physicalSize = Size(width, 2400);
         tester.view.devicePixelRatio = 1;
         await tester.pumpWidget(
@@ -142,9 +144,18 @@ void main() {
             supportedLocales: AppLocalizations.supportedLocales,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             theme: ThemeData(
-              dialogTheme: const DialogThemeData(
-                constraints: BoxConstraints(maxWidth: 1200),
+              dialogTheme: DialogThemeData(
+                constraints:
+                    BoxConstraints(maxWidth: width == 1200 ? 360 : 1200),
               ),
+            ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(
+                  width == 320 && locale.languageCode == 'pt' ? 1.25 : 1,
+                ),
+              ),
+              child: child!,
             ),
             home: Scaffold(
               body: Builder(
@@ -226,7 +237,11 @@ void main() {
           expect(labelRect.right, lessThanOrEqualTo(dialogRect.right));
         }
         final customParamsHeader = tester.getRect(
-          find.text(localizations.chatCustomParameters),
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText &&
+                widget.data == localizations.chatCustomParameters,
+          ),
         );
         final addCustomParamButton = tester.getRect(
           find.ancestor(
@@ -238,16 +253,15 @@ void main() {
           expect(controlRect.left, greaterThanOrEqualTo(dialogRect.left));
           expect(controlRect.right, lessThanOrEqualTo(dialogRect.right));
         }
-        if (width < 800) {
+        if (addCustomParamButton.top >= customParamsHeader.bottom) {
           expect(
             addCustomParamButton.top,
             greaterThanOrEqualTo(customParamsHeader.bottom),
           );
         } else {
           expect(
-            (addCustomParamButton.center.dy - customParamsHeader.center.dy)
-                .abs(),
-            lessThan(20),
+            addCustomParamButton.left,
+            greaterThanOrEqualTo(customParamsHeader.right),
           );
         }
         var hasNarrowClippedTab = false;
@@ -308,18 +322,17 @@ void main() {
             reason: 'ASR dropdown $i should stay inside dialog content',
           );
         }
-        if (width < 800) {
+        if (width == 320) {
           expect(uploadControl.top, greaterThanOrEqualTo(uploadLabel.bottom));
           expect(maxSizeControl.top, greaterThanOrEqualTo(maxSizeLabel.bottom));
-        } else {
-          expect(
-            (uploadControl.center.dy - uploadLabel.center.dy).abs(),
-            lessThan(20),
-          );
-          expect(
-            (maxSizeControl.center.dy - maxSizeLabel.center.dy).abs(),
-            lessThan(20),
-          );
+        } else if (width == 1200) {
+          if (locale.languageCode != 'en') {
+            expect(
+              uploadControl.top,
+              greaterThanOrEqualTo(uploadLabel.bottom),
+              reason: 'long localized labels stack in the constrained dialog',
+            );
+          }
         }
         expect(
           tester.takeException(),

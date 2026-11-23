@@ -133,4 +133,46 @@ void main() {
     expect(insertion.onPressed, isNull);
     expect(find.byTooltip('没有同时兼容相邻步骤的功能块，请先调整相邻步骤'), findsOneWidget);
   });
+
+  testWidgets('temporary output controls reflow at narrow large-text widths',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('pt', 'BR'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.6),
+          ),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: BlockChainEditor(
+            blocks: [
+              TaskFlowBlock(typeKey: BlockType.audioSeparation),
+              TaskFlowBlock(typeKey: BlockType.asr),
+            ],
+            inputType: IOType.video,
+            onInputTypeChanged: (_) {},
+            onAddBlock: (_) {},
+            onEditBlock: (_) {},
+            onDeleteBlock: (_) {},
+            onReplaceBlock: (_, __) {},
+            onTemporaryOutputsChanged: (_) {},
+          ),
+        ),
+      ),
+    ));
+
+    expect(tester.takeException(), isNull);
+    final checkbox = tester.getRect(find.byType(Checkbox));
+    final addButton = tester.getRect(find.byType(OutlinedButton));
+    expect(addButton.top, greaterThan(checkbox.bottom));
+  });
 }

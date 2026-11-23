@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
 
 import 'constrained_text.dart';
+import 'code_line_number_gutter.dart';
 
 // ============================================================================
 // 代码编辑辅助（自定义参数 JSON 值编辑器共享组件）
@@ -332,6 +334,9 @@ class CodeEditorField extends StatefulWidget {
 
 class _CodeEditorFieldState extends State<CodeEditorField> {
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _editorKey = GlobalKey();
+  List<double> _measuredLineHeights = const [];
+  Object? _lastMeasurementFingerprint;
   double _scrollOffset = 0;
 
   @override
@@ -354,6 +359,60 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
     if (mounted) setState(() {});
   }
 
+  void _measureLineHeightsAfterLayout(String text, Object fingerprint) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final editorContext = _editorKey.currentContext;
+      final root = editorContext?.findRenderObject();
+      if (root == null) return;
+      final renderEditable = _findRenderEditable(root);
+      if (renderEditable == null ||
+          fingerprint == _lastMeasurementFingerprint) {
+        return;
+      }
+
+      final lines = text.split('\n');
+      var offset = 0;
+      final lineStarts = <int>[];
+      for (final line in lines) {
+        lineStarts.add(offset);
+        offset += line.length + 1;
+      }
+      final lineTops = lineStarts
+          .map((start) => renderEditable
+              .getLocalRectForCaret(TextPosition(offset: start))
+              .top)
+          .toList();
+      final heights = <double>[];
+      for (var i = 0; i < lineTops.length - 1; i++) {
+        heights.add(lineTops[i + 1] - lineTops[i]);
+      }
+      final lastLineEnd = renderEditable
+          .getLocalRectForCaret(TextPosition(offset: text.length))
+          .top;
+      heights.add(
+        lastLineEnd - lineTops.last + renderEditable.preferredLineHeight,
+      );
+      _lastMeasurementFingerprint = fingerprint;
+      if (heights.length != _measuredLineHeights.length ||
+          List<int>.generate(heights.length, (i) => i).any(
+            (i) => (heights[i] - _measuredLineHeights[i]).abs() > 0.25,
+          )) {
+        setState(() => _measuredLineHeights = heights);
+      }
+    });
+  }
+
+  RenderEditable? _findRenderEditable(RenderObject root) {
+    final pending = <RenderObject>[root];
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (current is RenderEditable) return current;
+      current.visitChildren(pending.add);
+    }
+    return null;
+  }
+
   void _onScrolled() {
     if (!mounted) return;
     final offset =
@@ -368,16 +427,56 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
     final colorScheme = Theme.of(context).colorScheme;
     final lineCount = widget.controller.text.split('\n').length;
     final digitCount = lineCount.toString().length;
-    final lineNumWidth = (digitCount * 8.0 + 20.0).clamp(36.0, 80.0);
-    // 与文本区行高一致（fontSize 13 × height 1.3），行号与文本逐行对齐。
-    const lineHeight = 16.9;
-    const textTopPadding = 11.0; // 与 contentPadding 顶部一致
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
+    const editorTextStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 13,
+      height: 1.3,
+    );
+    const contentPadding = EdgeInsets.fromLTRB(8, 11, 8, 12);
+    final lineNumStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 12,
+      color: colorScheme.onSurfaceVariant,
+      height: 1.3,
+    );
+    final lineNumWidth = codeLineNumberGutterWidth(
+      lineNumber: lineCount.toString(),
+      textStyle: lineNumStyle,
+      textScaler: textScaler,
+      textDirection: textDirection,
+      locale: Localizations.maybeLocaleOf(context),
+      minimumWidth: (digitCount * 8.0 + 20.0).clamp(36.0, 80.0).toDouble(),
+      horizontalPadding: 12.0,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
         // 行号列与文本区同高，随滚动偏移平移，避免长内容滚动时行号
         // 溢出或与文本错位。
         final height = constraints.maxHeight;
+        final lineMetrics = TextPainter(
+          text: const TextSpan(text: '0', style: editorTextStyle),
+          textDirection: Directionality.of(context),
+          textScaler: textScaler,
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout();
+        final lineHeight = lineMetrics.preferredLineHeight;
+        lineMetrics.dispose();
+        final lineHeights = _measuredLineHeights.length == lineCount
+            ? _measuredLineHeights
+            : List<double>.filled(lineCount, lineHeight);
+        _measureLineHeightsAfterLayout(
+          widget.controller.text,
+          (
+            widget.controller.text,
+            constraints.maxWidth,
+            textScaler,
+            textDirection,
+            Localizations.maybeLocaleOf(context),
+          ),
+        );
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -388,27 +487,30 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
               child: ClipRect(
                 child: Transform.translate(
                   offset: Offset(0, -_scrollOffset),
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      top: textTopPadding,
-                      right: 4,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(lineCount, (i) {
-                        return SizedBox(
-                          height: lineHeight,
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              color: colorScheme.onSurfaceVariant,
-                              height: 1.3,
+                  child: OverflowBox(
+                    alignment: Alignment.topRight,
+                    minWidth: lineNumWidth,
+                    maxWidth: lineNumWidth,
+                    minHeight: 0,
+                    maxHeight: double.infinity,
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: contentPadding.top,
+                        right: 4,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: List.generate(lineCount, (i) {
+                          return SizedBox(
+                            height: lineHeights[i],
+                            child: Text(
+                              '${i + 1}',
+                              style: lineNumStyle,
                             ),
-                          ),
-                        );
-                      }),
+                          );
+                        }),
+                      ),
                     ),
                   ),
                 ),
@@ -421,17 +523,14 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
             // 可编辑文本区
             Expanded(
               child: TextField(
+                key: _editorKey,
                 controller: widget.controller,
                 scrollController: _scrollController,
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
                 autofocus: widget.autofocus,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  height: 1.3,
-                ),
+                style: editorTextStyle,
                 inputFormatters: const [CodeSmartInputFormatter()],
                 decoration: InputDecoration(
                   hintText: widget.hintText,
@@ -441,7 +540,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
                     color: colorScheme.onSurfaceVariant,
                   ),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.fromLTRB(8, 11, 8, 12),
+                  contentPadding: contentPadding,
                   isCollapsed: true,
                 ),
                 onChanged: widget.onChanged,
@@ -516,21 +615,36 @@ Future<void> showJsonValueEditorDialog(
       child: StatefulBuilder(
         builder: (ctx, setDlgState) => Dialog(
           insetPadding: const EdgeInsets.all(8),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // 标题栏
-                Row(
-                  children: [
-                    Icon(
-                      type == 'json' ? Icons.data_object : Icons.edit_note,
-                      size: 20,
-                      color: type == 'json' ? Colors.amber.shade700 : null,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: ConstrainedText(
+          child: LayoutBuilder(
+            builder: (ctx, constraints) {
+              final largeText = MediaQuery.textScalerOf(ctx).scale(1) > 1;
+              final scrollContent = largeText || constraints.maxHeight < 480;
+              final editor = Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                  border: Border.all(
+                    color: Theme.of(ctx).colorScheme.outlineVariant,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: CodeEditorField(
+                  controller: editingController,
+                  hintText: hintText,
+                  autofocus: true,
+                  onChanged: (_) => setDlgState(validateLive),
+                ),
+              );
+              final content = Column(
+                mainAxisSize:
+                    scrollContent ? MainAxisSize.min : MainAxisSize.max,
+                children: [
+                  // 标题栏
+                  LayoutBuilder(
+                    builder: (ctx, _) {
+                      final largeText =
+                          MediaQuery.textScalerOf(ctx).scale(1) > 1;
+                      final title = ConstrainedText(
                         AppLocalizations.of(ctx)!.codeEditorTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -538,10 +652,8 @@ Future<void> showJsonValueEditorDialog(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                         ),
-                      ),
-                    ),
-                    if (type == 'json') ...[
-                      Container(
+                      );
+                      final jsonBadge = Container(
                         margin: const EdgeInsets.only(left: 8),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
@@ -559,143 +671,201 @@ Future<void> showJsonValueEditorDialog(
                             color: Colors.amber.shade900,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.format_align_left, size: 16),
-                          label: ConstrainedText(
-                            AppLocalizations.of(ctx)!.codeEditorFormat,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          onPressed: (liveError == null &&
-                                  editingController.text.trim().isNotEmpty)
-                              ? () => setDlgState(formatPretty)
-                              : null,
+                      );
+                      final formatButton = TextButton.icon(
+                        icon: const Icon(Icons.format_align_left, size: 16),
+                        label: ConstrainedText(
+                          AppLocalizations.of(ctx)!.codeEditorFormat,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                      },
-                      tooltip: AppLocalizations.of(ctx)!.codeEditorCancel,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // 代码编辑区
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(ctx).colorScheme.surfaceContainerHigh,
-                      border: Border.all(
-                        color: Theme.of(ctx).colorScheme.outlineVariant,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: CodeEditorField(
-                      controller: editingController,
-                      hintText: hintText,
-                      autofocus: true,
-                      onChanged: (_) => setDlgState(validateLive),
-                    ),
-                  ),
-                ),
-                // 错误信息栏
-                if (liveError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(ctx).colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(ctx)
-                              .colorScheme
-                              .error
-                              .withValues(alpha: 0.35),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
-                      ),
-                      child: Row(
+                        onPressed: (liveError == null &&
+                                editingController.text.trim().isNotEmpty)
+                            ? () => setDlgState(formatPretty)
+                            : null,
+                      );
+                      final closeButton = IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                        tooltip: AppLocalizations.of(ctx)!.codeEditorCancel,
+                      );
+                      final leading = Icon(
+                        type == 'json' ? Icons.data_object : Icons.edit_note,
+                        size: 20,
+                        color: type == 'json' ? Colors.amber.shade700 : null,
+                      );
+
+                      if (largeText) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                leading,
+                                const SizedBox(width: 8),
+                                Flexible(child: title),
+                                if (type == 'json') jsonBadge,
+                                closeButton,
+                              ],
+                            ),
+                            if (type == 'json')
+                              Align(
+                                alignment: AlignmentDirectional.centerEnd,
+                                child: formatButton,
+                              ),
+                          ],
+                        );
+                      }
+
+                      return Row(
                         children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 16,
-                            color: Theme.of(ctx).colorScheme.onErrorContainer,
-                          ),
+                          leading,
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              liveError!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color:
-                                    Theme.of(ctx).colorScheme.onErrorContainer,
-                                fontFamily: 'monospace',
+                          Flexible(child: title),
+                          if (type == 'json') ...[
+                            jsonBadge,
+                            const SizedBox(width: 8),
+                            Flexible(child: formatButton),
+                          ],
+                          const Spacer(),
+                          closeButton,
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  // 代码编辑区
+                  if (scrollContent)
+                    SizedBox(height: 160, child: editor)
+                  else
+                    Expanded(child: editor),
+                  // 错误信息栏
+                  if (liveError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(ctx)
+                                .colorScheme
+                                .error
+                                .withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 16,
+                              color: Theme.of(ctx).colorScheme.onErrorContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                liveError!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .onErrorContainer,
+                                  fontFamily: 'monospace',
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                const SizedBox(height: 8),
-                // 操作按钮
-                Row(
-                  children: [
-                    if (liveError != null)
-                      Text(
+                  const SizedBox(height: 8),
+                  // 操作按钮
+                  LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      final status = Text(
                         AppLocalizations.of(ctx)!.codeEditorInvalidJson,
                         style: TextStyle(
                           fontSize: 11,
                           color: Theme.of(ctx).colorScheme.error,
                         ),
-                      ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                      },
-                      child: ConstrainedText(
-                        AppLocalizations.of(ctx)!.codeEditorCancel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.check, size: 18),
-                      label: ConstrainedText(
-                        AppLocalizations.of(ctx)!.codeEditorConfirm,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onPressed: liveError != null
-                          ? null
-                          : () {
-                              final text = editingController.text;
-                              Navigator.pop(ctx);
-                              onSave(text);
-                            },
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                      );
+                      final cancelButton = TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: ConstrainedText(
+                          AppLocalizations.of(ctx)!.codeEditorCancel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                      final confirmButton = FilledButton.icon(
+                        icon: const Icon(Icons.check, size: 18),
+                        label: ConstrainedText(
+                          AppLocalizations.of(ctx)!.codeEditorConfirm,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onPressed: liveError != null
+                            ? null
+                            : () {
+                                final text = editingController.text;
+                                Navigator.pop(ctx);
+                                onSave(text);
+                              },
+                      );
+                      final compact = constraints.maxWidth < 360 ||
+                          MediaQuery.textScalerOf(ctx).scale(1) > 1;
+
+                      if (compact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (liveError != null) ...[
+                              status,
+                              const SizedBox(height: 8),
+                            ],
+                            Wrap(
+                              alignment: WrapAlignment.end,
+                              spacing: 8,
+                              children: [cancelButton, confirmButton],
+                            ),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          if (liveError != null) Flexible(child: status),
+                          if (liveError != null)
+                            const SizedBox(width: 8)
+                          else
+                            const Spacer(),
+                          cancelButton,
+                          const SizedBox(width: 8),
+                          confirmButton,
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              );
+              final paddedContent = Padding(
+                padding: const EdgeInsets.all(16),
+                child: content,
+              );
+              if (scrollContent) {
+                return SingleChildScrollView(child: paddedContent);
+              }
+              return paddedContent;
+            },
           ),
         ),
       ),

@@ -27,6 +27,28 @@ import 'tts_create_page.dart';
 
 import '../widgets/constrained_text.dart';
 
+/// Builds the audio text picker's character-count and file-size metadata.
+Widget buildAudioTextPickerSubtitle(
+  BuildContext context, {
+  required String characterCount,
+  required String fileSize,
+}) {
+  final color = Theme.of(context).colorScheme.onSurfaceVariant;
+  return Wrap(
+    spacing: 8,
+    children: [
+      Text(
+        characterCount,
+        style: TextStyle(fontSize: 12, color: color),
+      ),
+      Text(
+        fileSize,
+        style: TextStyle(fontSize: 12, color: color),
+      ),
+    ],
+  );
+}
+
 /// 音频播放器页面
 /// 跨平台：Web 用 HTML5 AudioElement，Native 用 just_audio
 class AudioPlayerPage extends ConsumerStatefulWidget {
@@ -232,24 +254,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           loadFolders: TextManifest.getAllFolders,
           readFile: (record) => TextManifest.readFile(record.storagePath),
           displayName: (record) => record.name,
-          subtitleBuilder: (record) => Row(
-            children: [
-              Text(
-                _l10n.audioPlayerCharacterCount(record.textLength),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                formatFileSize(record.size),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+          subtitleBuilder: (record) => buildAudioTextPickerSubtitle(
+            context,
+            characterCount: _l10n.audioPlayerCharacterCount(record.textLength),
+            fileSize: formatFileSize(record.size),
           ),
         ),
       );
