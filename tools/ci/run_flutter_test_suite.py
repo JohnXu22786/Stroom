@@ -76,6 +76,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/context_management_settings_test.dart",
         "providers/provider_config*_test.dart",
         "providers/provider_entries_legacy_effort_migration_test.dart",
+        "pages/mcp_server_config_page_test.dart",
         "providers/temporary_conversation_test.dart",
         "utils/model_order_test.dart",
         "utils/attachment_preview_lifecycle_test.dart",
