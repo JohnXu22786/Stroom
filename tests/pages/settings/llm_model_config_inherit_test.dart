@@ -1126,6 +1126,11 @@ void main() {
     testWidgets('resetting to JSON discards converted option block state', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final model = ModelConfig(
         name: 'test-model',
         modelId: 'test-model',
@@ -1161,6 +1166,7 @@ void main() {
           await _selectAdditionalParamType(tester, 'mode', '字符串');
           expect(find.text('{"mode":"original"}'), findsOneWidget);
           expect(find.text('pending'), findsNothing);
+          expect(tester.takeException(), isNull);
         },
       );
 
