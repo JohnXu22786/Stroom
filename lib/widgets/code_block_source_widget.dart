@@ -11,6 +11,7 @@ import 'package:stroom/utils/file_picker_utils.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
 
 import 'constrained_text.dart';
+import 'code_line_number_gutter.dart';
 
 /// A reusable widget that displays source code with line numbers and a
 /// toolbar of copy / save / wrap buttons, providing a consistent "code
@@ -616,7 +617,15 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     );
 
     final digitCount = lines.length.toString().length;
-    final lineNumWidth = (digitCount * 8.0 + 12.0).clamp(32.0, 80.0);
+    final lineNumWidth = codeLineNumberGutterWidth(
+      lineNumber: lines.length.toString(),
+      textStyle: lineNumStyle,
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+      locale: Localizations.maybeLocaleOf(context),
+      minimumWidth: (digitCount * 8.0 + 12.0).clamp(32.0, 80.0).toDouble(),
+      horizontalPadding: 12.0,
+    );
 
     return _buildCodeBlock(
       lines: lines,

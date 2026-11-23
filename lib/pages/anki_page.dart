@@ -272,6 +272,7 @@ class AnkiDroidPage extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: ConstrainedText(
           l10n.ankiDeleteDeckTitle,
           maxLines: 1,

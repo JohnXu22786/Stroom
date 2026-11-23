@@ -64,12 +64,15 @@ void showChatAttachmentPanel({
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Text(
-                    AppLocalizations.of(context)!.chatAttachmentFile,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
+                  Expanded(
+                    child: ConstrainedText(
+                      AppLocalizations.of(context)!.chatAttachmentFile,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
                 ],

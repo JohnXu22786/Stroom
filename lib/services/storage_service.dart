@@ -17,7 +17,6 @@ class AppStorage {
   AppStorage._();
 
   static String? _resolved;
-  static String? _testDirectory;
 
   /// Appends one durable line to a native storage file, adding a separator if
   /// an interrupted prior write left the file without a trailing newline.
@@ -153,8 +152,7 @@ class AppStorage {
     // Check for test environment (dart:io Platform might be partially available)
     try {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return _testDirectory ??=
-            Directory.systemTemp.createTempSync('stroom_test_data_').path;
+        return _safeTempPath();
       }
     } catch (e) {
       AppLogService.warning('AppStorage', '检查 FLUTTER_TEST 环境变量失败: $e');

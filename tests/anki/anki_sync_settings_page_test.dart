@@ -177,7 +177,117 @@ void main() {
     expect(find.text('自建服务器'), findsOneWidget);
     expect(find.text('登录AnkiWeb'), findsOneWidget);
     expect(find.textContaining('双向同步会合并 collection'), findsOneWidget);
+    final segmented = find.byWidgetPredicate(
+      (widget) => widget is SegmentedButton<AnkiSyncMode>,
+    );
+    expect(
+      find.descendant(of: segmented, matching: find.byType(ConstrainedText)),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(of: segmented, matching: find.byType(Transform)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: segmented, matching: find.byIcon(Icons.check)),
+      findsOneWidget,
+    );
   });
+
+  testWidgets(
+    'sync mode labels stay operable when clipped at narrow width and large text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ankiSyncSecureStorageProvider.overrideWith(
+              (_) => const _FakeSecureStorage(),
+            ),
+          ],
+          child: MaterialApp(
+            locale: const Locale('de', 'DE'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: const AnkiSyncSettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Selbst gehosteter Server'),
+        160,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      final segmented = find.byWidgetPredicate(
+        (widget) => widget is SegmentedButton<AnkiSyncMode>,
+      );
+      expect(segmented, findsOneWidget);
+      final button = tester.widget<SegmentedButton<AnkiSyncMode>>(segmented);
+      expect(button.selected, {AnkiSyncMode.ankiWeb});
+      expect(button.segments.map((segment) => segment.value), [
+        AnkiSyncMode.ankiWeb,
+        AnkiSyncMode.selfHosted,
+      ]);
+      expect(
+        button.segments.map((segment) => segment.icon).whereType<Icon>().map(
+              (icon) => icon.icon,
+            ),
+        [Icons.cloud_outlined, Icons.dns_outlined],
+      );
+      expect(
+        find.descendant(of: segmented, matching: find.byType(ConstrainedText)),
+        findsNWidgets(2),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      final selfHostedLabel = find.ancestor(
+        of: find.text('Selbst gehosteter Server'),
+        matching: find.byType(ConstrainedText),
+      );
+      expect(
+        find.descendant(of: selfHostedLabel, matching: find.byType(Transform)),
+        findsOneWidget,
+      );
+      expect(find.text('Selbst gehosteter Server'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      final segmentButtons =
+          find.descendant(of: segmented, matching: find.byType(TextButton));
+      await tester.tap(segmentButtons.at(1));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      final selfHosted =
+          tester.widget<SegmentedButton<AnkiSyncMode>>(segmented);
+      expect(selfHosted.selected, {AnkiSyncMode.selfHosted});
+      expect(find.text('Serveradresse'), findsOneWidget);
+      expect(
+        find.descendant(of: segmented, matching: find.byIcon(Icons.check)),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(segmentButtons.first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      final ankiWeb = tester.widget<SegmentedButton<AnkiSyncMode>>(segmented);
+      expect(ankiWeb.selected, {AnkiSyncMode.ankiWeb});
+      expect(find.text('Serveradresse'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('dismissing the login dialog does not use disposed controllers', (
     tester,

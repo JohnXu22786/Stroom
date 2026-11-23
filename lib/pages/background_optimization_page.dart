@@ -12,6 +12,7 @@ import '../services/desktop_app_service.dart';
 import '../services/ios_continued_task_service.dart';
 import 'platform_tutorial_page.dart';
 
+import '../widgets/background_service_control_buttons.dart';
 import '../widgets/constrained_text.dart';
 
 /// A page that detects current system environment, checks background optimization
@@ -533,75 +534,17 @@ class _BackgroundOptimizationPageState
             // ── Action buttons (visible when not checking and platform is supported) ──
             if (!_isCheckingService && _isServiceSupported) ...[
               const SizedBox(height: 16),
-              // Primary action: start / stop
-              if (_isServiceRunning)
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        onPressed: _isOperating ? null : _stopService,
-                        icon: _isOperating
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.stop, size: 18),
-                        label: Text(_strings.backgroundOptimizationStopService),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _isOperating ? null : _restartService,
-                        icon: _isOperating
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.restart_alt, size: 18),
-                        label: ConstrainedText(
-                          _strings.backgroundOptimizationRestartService,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              else
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.tonalIcon(
-                    onPressed: _isOperating ? null : _startService,
-                    icon: _isOperating
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.play_arrow, size: 18),
-                    label: Text(_strings.backgroundOptimizationStartService),
-                  ),
-                ),
-              // Re-detect button
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isOperating ? null : _checkBackgroundService,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: ConstrainedText(
-                    _strings.backgroundOptimizationRedetect,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+              BackgroundServiceControlButtons(
+                isServiceRunning: _isServiceRunning,
+                isOperating: _isOperating,
+                startLabel: _strings.backgroundOptimizationStartService,
+                stopLabel: _strings.backgroundOptimizationStopService,
+                restartLabel: _strings.backgroundOptimizationRestartService,
+                redetectLabel: _strings.backgroundOptimizationRedetect,
+                onStart: _startService,
+                onStop: _stopService,
+                onRestart: _restartService,
+                onRedetect: _checkBackgroundService,
               ),
             ],
             // ── Unsupported platform info ──

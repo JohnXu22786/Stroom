@@ -37,7 +37,11 @@ Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
           const SizedBox(height: 8),
           FilledButton.tonalIcon(
             icon: const Icon(Icons.download_outlined, size: 18),
-            label: Text(AppLocalizations.of(context)!.chatSaveDevice),
+            label: ConstrainedText(
+              AppLocalizations.of(context)!.chatSaveDevice,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             onPressed: () =>
                 Navigator.of(ctx).pop(MessageSaveDestination.device),
           ),

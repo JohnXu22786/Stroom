@@ -399,14 +399,6 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       if (!mounted || ref.read(activeConversationIdProvider) != convId) {
         return null;
       }
-      final fullHistoryForRequest = historyForRequestPrefix == null
-          ? await ref
-              .read(conversationsProvider.notifier)
-              .loadFullMessagesForContext(convId)
-          : null;
-      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
-        return null;
-      }
 
       // Save the current enabled tools to the conversation before sending.
       // This ensures the tool preferences are persisted even if the user
@@ -447,11 +439,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // Persist the user message before starting the background stream. If the
       // page is disposed during generation, the next page instance can load
       // this message even before the manager's periodic partial save runs.
-      final historyForStream =
-          fullHistoryForRequest ?? List<ChatMessage>.from(_history);
-      if (fullHistoryForRequest != null) {
-        historyForStream.add(_history.last);
-      }
+      final historyForStream = List<ChatMessage>.from(_history);
       final requestHistory = historyForRequestPrefix == null
           ? null
           : <ChatMessage>[

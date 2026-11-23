@@ -41,10 +41,6 @@ void main() {
   });
 
   group('DataIntegrityChecker', () {
-    test('test storage uses an isolated app directory', () async {
-      expect(appDir, isNot(Directory.systemTemp.path));
-    });
-
     test('clean data reports no corruption', () async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',

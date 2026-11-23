@@ -109,6 +109,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(picked, ['app-files']);
   });
+
+  testWidgets('attachment title stays within the sheet at large text scale', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(320, 640));
+    await _openPanel(
+      tester,
+      <String>[],
+      textScaler: const TextScaler.linear(4),
+    );
+
+    final title = find.byWidgetPredicate(
+      (widget) => widget is ConstrainedText && widget.data == 'Attach file',
+    );
+    expect(title, findsOneWidget);
+    final titleRect = tester.getRect(title);
+    expect(titleRect.left, greaterThanOrEqualTo(54));
+    expect(titleRect.right, lessThanOrEqualTo(304));
+    expect(find.bySemanticsLabel('Attach file'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _setViewport(WidgetTester tester, Size size) async {
@@ -121,12 +142,16 @@ Future<void> _setViewport(WidgetTester tester, Size size) async {
 }
 
 Future<void> _openPanel(WidgetTester tester, List<String> picked,
-    {Locale? locale}) async {
+    {Locale? locale, TextScaler? textScaler}) async {
   await tester.pumpWidget(
     MaterialApp(
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: child!,
+      ),
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(

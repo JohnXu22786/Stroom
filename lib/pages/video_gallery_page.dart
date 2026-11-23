@@ -882,8 +882,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       child: Row(
         children: [
           Expanded(
-            child: SizedBox(
-              height: 48,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: ElevatedButton.icon(
                 onPressed: _recordVideo,
                 style: ElevatedButton.styleFrom(
@@ -903,8 +903,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: SizedBox(
-              height: 48,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: ElevatedButton.icon(
                 onPressed: _importFromGallery,
                 style: ElevatedButton.styleFrom(

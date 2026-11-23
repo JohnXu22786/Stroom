@@ -575,9 +575,7 @@ class DataMigrationService {
         if (version == 0) {
           await _migrateSettingsV0ToV1(prefs);
         } else if (version == 1) {
-          // Provider-model IDs are staged and saved with credential migration
-          // when the provider settings are loaded. Do not rewrite the source
-          // independently during startup, before secure migration can commit.
+          await ProviderModelMigration.migrateSettings(prefs);
         }
         break;
       case DataParts.tasks:

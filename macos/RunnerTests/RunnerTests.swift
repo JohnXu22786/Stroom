@@ -6,8 +6,8 @@ import XCTest
 class RunnerTests: XCTestCase {
 
   @MainActor
-  func testLastWindowCloseKeepsApplicationRunningInBackground() {
-    XCTAssertFalse(
+  func testLastWindowCloseAllowsApplicationToTerminate() {
+    XCTAssertTrue(
       AppDelegate().applicationShouldTerminateAfterLastWindowClosed(NSApplication.shared)
     )
   }

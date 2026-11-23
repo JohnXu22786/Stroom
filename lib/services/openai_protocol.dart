@@ -103,7 +103,10 @@ class OpenAIProtocol implements ChatProtocol {
             final audioFormat = audioFormatFromMimeType(att.mimeType);
             parts.add({
               'type': 'input_audio',
-              'input_audio': {'data': outcome.base64, 'format': audioFormat},
+              'input_audio': {
+                'data': outcome.base64,
+                'format': audioFormat,
+              },
             });
           } else if (att.fileType == 'video') {
             // ── Video files: send as video_url with base64 data URI ──
@@ -134,10 +137,7 @@ class OpenAIProtocol implements ChatProtocol {
           } else {
             if (isTextAttachment(att)) {
               final textContent = await readTextAttachmentContent(
-                att.fileName,
-                att.storagePath,
-                att.fileSize,
-              );
+                  att.fileName, att.storagePath, att.fileSize);
               if (textContent != null) {
                 parts.add({
                   'type': 'text',
@@ -158,19 +158,21 @@ class OpenAIProtocol implements ChatProtocol {
                 att,
                 maxBytes: maxAttachmentBytes,
               );
-              if (outcome.status == AttachmentReadStatus.tooLarge) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[文件过大已跳过: ${att.fileName}]',
-                });
-              } else if (outcome.status == AttachmentReadStatus.ok &&
-                  outcome.bytes != null &&
-                  outcome.bytes!.isNotEmpty) {
-                final b64 = base64Encode(outcome.bytes!);
+              final bytes = outcome.bytes;
+              if (bytes != null && bytes.isNotEmpty) {
+                final b64 = base64Encode(bytes);
                 final dataUri = 'data:${att.mimeType};base64,$b64';
                 parts.add({
                   'type': 'file',
-                  'file': {'filename': att.fileName, 'file_data': dataUri},
+                  'file': {
+                    'filename': att.fileName,
+                    'file_data': dataUri,
+                  },
+                });
+              } else if (outcome.status == AttachmentReadStatus.tooLarge) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[文件过大已跳过: ${att.fileName}]',
                 });
               } else {
                 parts.add({
@@ -208,6 +210,12 @@ class OpenAIProtocol implements ChatProtocol {
             },
         ],
       };
+      // DeepSeek 兼容：重建时保留推理内容
+      final reasoningContent =
+          msg.reasoningContent ?? msg.reasoningSections?.join('\n');
+      if (reasoningContent != null && reasoningContent.isNotEmpty) {
+        assistantMsg['reasoning_content'] = reasoningContent;
+      }
       result.add(assistantMsg);
       for (final tc in toolCalls) {
         result.add({
@@ -232,8 +240,10 @@ class OpenAIProtocol implements ChatProtocol {
     String? roundReasoning,
     String? thinkingSignature,
   }) {
-    // This legacy protocol builder cannot verify provider/account affinity.
-    // Routed requests restore source reasoning only after a scoped cache hit.
+    // Per DeepSeek Tool Calls guide: messages.append(message)
+    // preserves the COMPLETE assistant message (including
+    // reasoning_content) when sending subsequent requests
+    // in the same tool call chain.
     final assistantMsg = <String, dynamic>{
       'role': 'assistant',
       'tool_calls': [
@@ -241,13 +251,16 @@ class OpenAIProtocol implements ChatProtocol {
           {
             'id': tc.id,
             'type': 'function',
-            if (tc.thoughtSignature != null)
-              'thoughtSignature': tc.thoughtSignature,
             'function': {'name': tc.name, 'arguments': tc.argumentsJson},
           },
       ],
       'content': content.isNotEmpty ? content : null,
     };
+    // Preserve reasoning content so the model retains full context
+    // across tool call chain rounds.
+    if (roundReasoning != null && roundReasoning.isNotEmpty) {
+      assistantMsg['reasoning_content'] = roundReasoning;
+    }
     return [assistantMsg];
   }
 

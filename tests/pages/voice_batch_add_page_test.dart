@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/pages/voice_batch_add_page.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
 // Synthetic extended labels exercise wrapping without changing other copy.
@@ -32,6 +33,89 @@ class _LongOrderLocalizationsDelegate
 }
 
 void main() {
+  // Unit owner: vertical_separator_hint.
+  // Functional suite mapping: feature-ui.
+  testWidgets('custom separator hint reveals clipping without animating input',
+      (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('de', 'DE'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Ignore the page title's pre-existing narrow German app-bar overflow.
+    tester.takeException();
+
+    final dropdown = find.byType(DropdownButton<String>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(tester.element(dropdown))!;
+    await tester.tap(find.text(l10n.voiceCustomSeparator).last);
+    await tester.pumpAndSettle();
+
+    final field = find.byType(TextField).first;
+    final textField = tester.widget<TextField>(field);
+    final hint = textField.decoration!.hint! as ConstrainedText;
+    final hintFinder = find.byWidget(hint);
+    expect(hint.data, l10n.voiceBatchCustomSeparatorHint);
+    expect(tester.getSemantics(hintFinder).label, hint.data);
+    final hintContext = tester.element(hintFinder);
+    final hintPainter = TextPainter(
+      text: TextSpan(
+        text: hint.data,
+        style: DefaultTextStyle.of(hintContext).style.merge(hint.style),
+      ),
+      textDirection: Directionality.of(hintContext),
+      textScaler: MediaQuery.textScalerOf(hintContext),
+      locale: Localizations.localeOf(hintContext),
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: tester.getSize(hintFinder).width);
+    expect(hintPainter.didExceedMaxLines, isTrue);
+    expect(tester.takeException(), isNull);
+
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(hintFinder).label, hint.data);
+    expect(tester.takeException(), isNull);
+
+    await tester.showKeyboard(field);
+    final editableText = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    expect(
+      tester.widget<EditableText>(editableText).focusNode.hasFocus,
+      isTrue,
+    );
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.enterText(field, '::');
+    await tester.pumpAndSettle();
+    final editable = tester.widget<EditableText>(editableText);
+    expect(editable.controller.text, '::');
+    expect(editable.controller.selection.extentOffset, 2);
+    expect(
+      tester.widget<TextField>(field).decoration!.hint,
+      isA<ConstrainedText>(),
+    );
+
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+    await tester.enterText(field, '');
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('long German separator stays within a narrow card', (
     tester,
   ) async {

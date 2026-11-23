@@ -649,7 +649,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
         isSynthesizing: true,
         currentText: text,
         progress: 0,
-        error: null,
+        clearError: true,
       );
 
       state = state.copyWith(progress: 0.3);
@@ -748,7 +748,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       state = state.copyWith(
         isStreaming: true,
         currentText: text,
-        error: null,
+        clearError: true,
       );
 
       // 构建参数：通用参数 + 模型ID + 自定义参数
@@ -791,7 +791,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
   }
 
   void clearError() {
-    state = state.copyWith(error: null);
+    state = state.copyWith(clearError: true);
   }
 
   Future<AudioRecord> _saveAudioFile(

@@ -172,4 +172,74 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'rename preview keeps complete before and after names available while excluding items',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 640);
+      const oldName =
+          'A very long original filename that must be completely readable.txt';
+      const newName =
+          'A very long replacement filename that must be completely readable.txt';
+      final item = file('long', oldName.substring(0, oldName.length - 4));
+      await tester.pumpWidget(
+        _localizedApp(
+          BatchRenameDialog(
+            items: [item],
+            allFiles: [item],
+            allFolders: const {},
+            bridge: bridge,
+            initialConfig: const BatchRenameConfig(
+              rules: [
+                BatchReplaceOp(
+                  enabled: true,
+                  find: 'original',
+                  replace: 'replacement',
+                ),
+              ],
+            ),
+          ),
+          const Locale('en', 'US'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('batch_preview_tab')));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const Key('batch_rename_preview_list')),
+        const Offset(0, -700),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final previewItem = find.byKey(const Key('batch_rename_preview_0'));
+      expect(previewItem, findsOneWidget);
+      final oldText = find.descendant(
+        of: previewItem,
+        matching: find.byKey(const Key('batch_rename_old_name_file:long')),
+      );
+      final newText = find.descendant(
+        of: previewItem,
+        matching: find.byKey(const Key('batch_rename_new_name_file:long')),
+      );
+      expect(tester.widget<Text>(oldText).data, oldName);
+      expect(tester.widget<Text>(newText).data, newName);
+      expect(tester.widget<Text>(oldText).maxLines, isNull);
+      expect(tester.widget<Text>(newText).maxLines, isNull);
+      expect(tester.widget(oldText), isA<Text>());
+      expect(tester.widget(newText), isA<Text>());
+
+      final checkbox = find.byKey(const Key('batch_include_file:long'));
+      expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+      await tester.ensureVisible(checkbox);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(checkbox);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+      expect(item.name,
+          'A very long original filename that must be completely readable');
+    },
+  );
 }

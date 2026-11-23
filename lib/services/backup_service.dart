@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -19,14 +19,11 @@ import 'package:uuid/uuid.dart';
 
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
-import 'conversation_repository.dart';
-import 'conversation_migration_service.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/backup_operation_error_dialog.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
-import 'llm_account_migration_service.dart';
-import 'llm_credential_store.dart';
 import '../utils/file_picker_utils.dart';
 import '../utils/file_manifest.dart' show AudioRecord;
 import 'manifest_database.dart';
@@ -230,7 +227,6 @@ class BackupSelection {
 
 class BackupService {
   static int? _lastBackupFileTimestampSeconds;
-  static Future<void>? _testRestoreQueue;
   @visibleForTesting
   static bool? restorePathsCaseInsensitiveForTesting;
   @visibleForTesting
@@ -467,10 +463,8 @@ class BackupService {
         skipRollbackSnapshot: true,
         replaceBrowserCookiesExactly: true,
       );
-      final absentSelection = _selectionDifference(
-        originalSelection,
-        recoverySelection,
-      );
+      final absentSelection =
+          _selectionDifference(originalSelection, recoverySelection);
       if (absentSelection.selectedPartIds.isNotEmpty) {
         await clearSelectedData(
           absentSelection,
@@ -788,13 +782,14 @@ class BackupService {
     );
   }
 
-  static bool _isSelectedWebStoreKey(String key, BackupSelection selection) {
+  static bool _isSelectedWebStoreKey(
+    String key,
+    BackupSelection selection,
+  ) {
     final rootKey = key.startsWith('/') ? key.substring(1) : key;
     if (selection.tasks &&
-        const {
-          'task_list_last_read.json',
-          'app_launches.json',
-        }.contains(rootKey)) {
+        const {'task_list_last_read.json', 'app_launches.json'}
+            .contains(rootKey)) {
       return true;
     }
     if (selection.ankiData &&
@@ -2167,12 +2162,10 @@ class BackupService {
         });
         // A temporary artifact is only meaningful while its file reference
         // exists. Drop the ownership marker together with the omitted file.
-        mapped.removeWhere(
-          (key, child) =>
-              key == 'temporaryArtifact' &&
-              child is Map &&
-              !child.containsKey('reference'),
-        );
+        mapped.removeWhere((key, child) =>
+            key == 'temporaryArtifact' &&
+            child is Map &&
+            !child.containsKey('reference'));
       }
       return mapped;
     }
@@ -2771,8 +2764,6 @@ class BackupService {
     bool skipRollbackSnapshot = false,
     bool skipAnkiMigrationMarkerInvalidation = false,
     bool replaceBrowserCookiesExactly = false,
-    LlmCredentialStore? credentialStore,
-    Future<void> Function()? afterCredentialStagingForTest,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2866,16 +2857,18 @@ class BackupService {
     final stagedEntries =
         <({String subDir, String fileName, Uint8List bytes})>[];
     for (final entry in fileMap.entries) {
-      await _restoreArchiveEntry(entry.key, restoreSelection, (
-        subDir,
-        fileName,
-      ) async {
-        stagedEntries.add((
-          subDir: subDir,
-          fileName: fileName,
-          bytes: entry.value,
-        ));
-      }, deferAnkiMigrationMarkerInvalidation: true);
+      await _restoreArchiveEntry(
+        entry.key,
+        restoreSelection,
+        (subDir, fileName) async {
+          stagedEntries.add((
+            subDir: subDir,
+            fileName: fileName,
+            bytes: entry.value,
+          ));
+        },
+        deferAnkiMigrationMarkerInvalidation: true,
+      );
     }
 
     final rollbackBytes = skipRollbackSnapshot
@@ -2886,33 +2879,6 @@ class BackupService {
             ? null
             : await _snapshotSelectedWebStoreFiles(restoreSelection);
     try {
-      if (restoreSelection.settings && !skipRollbackSnapshot) {
-        final restoredProviderEntries = metadata.isV1
-            ? (metadata.v1Prefs == null
-                ? null
-                : metadata.v1Prefs!['provider_entries'])
-            : (metadata.settingsPrefs == null
-                ? null
-                : metadata.settingsPrefs!['provider_entries']);
-        if (restoredProviderEntries is String &&
-            restoredProviderEntries.isNotEmpty) {
-          await _migrateRestoredLlmCredentials(
-            sourceProviderEntriesJson: restoredProviderEntries,
-            credentialStore: credentialStore,
-            afterCredentialStagingForTest: afterCredentialStagingForTest,
-          );
-          final prefs = await SharedPreferences.getInstance();
-          final sanitizedProviderEntries = prefs.getString('provider_entries');
-          if (sanitizedProviderEntries != null) {
-            if (metadata.isV1) {
-              metadata.v1Prefs?['provider_entries'] = sanitizedProviderEntries;
-            } else {
-              metadata.settingsPrefs?['provider_entries'] =
-                  sanitizedProviderEntries;
-            }
-          }
-        }
-      }
       // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
       // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
       await _prepareSelectedFilesForRestore(
@@ -3022,7 +2988,9 @@ class BackupService {
       }
       Error.throwWithStackTrace(restoreError, restoreStackTrace);
     }
-    if (await _deleteTaskFlowTemporaryArtifacts(deferredTaskFlowExecutionIds)) {
+    if (await _deleteTaskFlowTemporaryArtifacts(
+      deferredTaskFlowExecutionIds,
+    )) {
       throw _RestoreTemporaryArtifactCleanupException();
     }
     onProgress?.call(1.0);
@@ -3195,10 +3163,8 @@ class BackupService {
           rollbackDirectory = await rollbackParent.createTemp(
             '$_restoreRollbackDirectoryPrefix$pid-',
           );
-          rollbackArchivePath = p.join(
-            rollbackDirectory.path,
-            'pre-restore.zip',
-          );
+          rollbackArchivePath =
+              p.join(rollbackDirectory.path, 'pre-restore.zip');
           await _createBackup(
             outputPath: rollbackArchivePath,
             selection: restoreSelection,
@@ -3206,9 +3172,8 @@ class BackupService {
             skipMissingSelectedFiles: true,
           );
           if (appDir != null) {
-            final snapshotState = await _readSnapshotSelection(
-              rollbackArchivePath,
-            );
+            final snapshotState =
+                await _readSnapshotSelection(rollbackArchivePath);
             rollbackMarker = File(
               p.join(rollbackDirectory.path, _restoreInProgressMarker),
             );
@@ -3216,12 +3181,14 @@ class BackupService {
               'version': 2,
               'useStartupPreferenceAdapter': useStartupPreferenceAdapter,
               'selection': _restoreSelectionMarkerFields(restoreSelection),
-              'snapshotSelection': _restoreSelectionMarkerFields(
-                snapshotState.selection,
-              ),
+              'snapshotSelection':
+                  _restoreSelectionMarkerFields(snapshotState.selection),
             });
             final temporaryMarker = File('${rollbackMarker.path}.tmp');
-            await temporaryMarker.writeAsString(markerContents, flush: true);
+            await temporaryMarker.writeAsString(
+              markerContents,
+              flush: true,
+            );
             await temporaryMarker.rename(rollbackMarker.path);
           }
         }
@@ -3296,7 +3263,6 @@ class BackupService {
               validateRestoredDataBeforeVersionCommit: deferVersionCommit,
             );
           }
-          await _migrateRestoredLlmCredentials();
           await _restoreBrowserCookiesAfterDataRestore(
             restoreSelection,
             metadata.browserCookiesData,
@@ -5229,7 +5195,9 @@ class BackupService {
       final resolvedParent = await directory.resolveSymbolicLinks();
       return p.normalize(p.joinAll([resolvedParent, ...missingSegments]));
     } catch (error) {
-      throw DataManagementPreflightException('无法检查恢复目标目录是否指向相同位置，已取消导入：$error');
+      throw DataManagementPreflightException(
+        '无法检查恢复目标目录是否指向相同位置，已取消导入：$error',
+      );
     }
   }
 
@@ -5331,7 +5299,9 @@ class BackupService {
       final windowsNamesMatch = windowsNameNormalization &&
           _windowsNormalizedCaseInsensitiveRestorePath(leftPart) ==
               _windowsNormalizedCaseInsensitiveRestorePath(rightPart);
-      final parentDirectory = p.joinAll([...leftParts.take(i)]);
+      final parentDirectory = p.joinAll([
+        ...leftParts.take(i),
+      ]);
       if (caseEquivalent) {
         if (!await _restoreTargetNamesAreEquivalent(
           parentDirectory,
@@ -5897,11 +5867,10 @@ class BackupService {
   ///
   /// [writeEntry] 负责把条目内容写出到 (subDir, fileName)。
   static Future<bool> _restoreArchiveEntry(
-    String rawKey,
-    BackupSelection selection,
-    Future<void> Function(String subDir, String fileName) writeEntry, {
-    bool deferAnkiMigrationMarkerInvalidation = false,
-  }) async {
+      String rawKey,
+      BackupSelection selection,
+      Future<void> Function(String subDir, String fileName) writeEntry,
+      {bool deferAnkiMigrationMarkerInvalidation = false}) async {
     var key = rawKey;
 
     // ZIP 归档可能包含显式目录条目；它们不是数据文件，不能作为类别
@@ -6291,13 +6260,9 @@ class BackupService {
       try {
         if (v is String) {
           if (prefs != null) {
-            if (!await prefs.setString(entry.key, v)) {
-              throw StateError('Could not restore preference ${entry.key}.');
-            }
+            await prefs.setString(entry.key, v);
           } else {
-            if (!await startupPrefs!.setString(entry.key, v)) {
-              throw StateError('Could not restore preference ${entry.key}.');
-            }
+            await startupPrefs!.setString(entry.key, v);
           }
         } else if (v is bool) {
           if (prefs != null) {
@@ -6377,6 +6342,7 @@ class BackupService {
   ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
+  /// [onError] 由调用方提供自定义错误提示时，替代默认错误对话框。
   ///
   /// 内存策略（与旧自动备份一致，避免大备份 OOM）：
   /// - Web：没有 dart:io，只能整体构建后在浏览器下载（内存构建）。
@@ -6389,6 +6355,7 @@ class BackupService {
     BuildContext context, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    void Function(String errorDetail)? onError,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     final operationClock = Stopwatch()..start();
@@ -6518,12 +6485,15 @@ class BackupService {
         final errorDetail = isMissingBackupFolderError
             ? l10n.backupServiceNoBackupFolderSelected
             : errorText;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.backupServiceExportFailed(errorDetail)),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (onError != null) {
+          onError(errorDetail);
+        } else {
+          unawaited(showBackupOperationErrorDialog(
+            context: context,
+            title: l10n.backupServiceExportFailed(''),
+            diagnostic: errorDetail,
+          ));
+        }
       }
       return false;
     }
@@ -6534,10 +6504,12 @@ class BackupService {
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
   /// 返回 `true` 表示恢复成功，`false` 表示用户取消选择文件；
   /// 恢复过程中出错时抛出异常（并已弹出错误提示）。
+  /// [onError] 由调用方提供自定义错误提示时，替代默认错误对话框。
   static Future<bool> importBackup(
     BuildContext context, {
     BackupSelection selection = BackupSelection.all,
     void Function(List<String> skippedCategories)? onSkippedCategories,
+    void Function(Object error)? onError,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     final operationClock = Stopwatch()..start();
@@ -6618,12 +6590,15 @@ class BackupService {
         s,
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.backupServiceRestoreFailed(e.toString())),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (onError != null) {
+          onError(e);
+        } else {
+          unawaited(showBackupOperationErrorDialog(
+            context: context,
+            title: l10n.backupServiceRestoreFailed(''),
+            diagnostic: e.toString(),
+          ));
+        }
       }
       // 重新抛出：让调用方区分"恢复失败"与"用户取消"
       // （失败时恢复可能已部分完成，需要提示用户重启应用）
@@ -7448,72 +7423,13 @@ class BackupService {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
     bool skipMissingCategories = false,
-    bool skipPostRestoreMigration = false,
-    LlmCredentialStore? credentialStore,
-    Future<void> Function()? afterCredentialStagingForTest,
   }) async {
-    final previous = _testRestoreQueue;
-    final completed = Completer<void>();
-    _testRestoreQueue = completed.future;
-    if (previous != null) await previous;
-    try {
-      await _restoreFromBytes(
-        bytes,
-        onProgress: onProgress,
-        selection: selection,
-        skipMissingCategories: skipMissingCategories,
-        skipPostRestoreMigration: skipPostRestoreMigration,
-        credentialStore: credentialStore,
-        afterCredentialStagingForTest: afterCredentialStagingForTest,
-      );
-    } finally {
-      if (identical(_testRestoreQueue, completed.future)) {
-        _testRestoreQueue = null;
-      }
-      completed.complete();
-    }
-  }
-
-  static Future<void> _migrateRestoredLlmCredentials({
-    String? sourceProviderEntriesJson,
-    LlmCredentialStore? credentialStore,
-    Future<void> Function()? afterCredentialStagingForTest,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedSource = prefs.getString('provider_entries');
-    final source = sourceProviderEntriesJson ?? storedSource;
-    if (source == null || source.isEmpty) return;
-    try {
-      await LlmAccountMigrationService(
-        preferences: _SharedPreferencesLlmAccountPreferences(prefs),
-        credentialStore: credentialStore ?? PlatformLlmCredentialStore(),
-      ).migrate(
-        sourceProviderEntriesJson: source,
-        expectedStoredProviderEntriesJson: storedSource,
-        afterCredentialStagingForTest: afterCredentialStagingForTest,
-      );
-    } on LlmAccountMigrationException catch (error) {
-      if (error.preferenceWriteFailure) {
-        throw StateError('Could not persist restored LLM preferences.');
-      }
-      throw const BackupValidationException(
-        'Restored account credentials could not be validated.',
-      );
-    }
-  }
-
-  @visibleForTesting
-  static Future<bool> clearSelectedDataForTest(
-    BackupSelection selection, {
-    ConversationRepository? repository,
-  }) async {
-    if (selection.chatRecordsAndAttachments && repository != null) {
-      await repository.clearConversations();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(ConversationMigrationService.backupKey);
-      await prefs.remove(ConversationMigrationService.stateKey);
-    }
-    return clearSelectedData(selection);
+    await _restoreFromBytes(
+      bytes,
+      onProgress: onProgress,
+      selection: selection,
+      skipMissingCategories: skipMissingCategories,
+    );
   }
 
   /// 公开 [_restoreDatabaseFromJson] 供测试使用。
@@ -7526,22 +7442,6 @@ class BackupService {
         jsonDecode(json) as Map<String, dynamic>,
         selection: selection,
       );
-}
-
-class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
-  final SharedPreferences _preferences;
-
-  const _SharedPreferencesLlmAccountPreferences(this._preferences);
-
-  @override
-  Future<String?> getString(String key) async => _preferences.getString(key);
-
-  @override
-  Future<bool> setString(String key, String value) =>
-      _preferences.setString(key, value);
-
-  @override
-  Future<bool> remove(String key) => _preferences.remove(key);
 }
 
 // ====================================================================
