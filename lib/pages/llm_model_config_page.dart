@@ -84,6 +84,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 顺序，用于块顺序回退）。
   final Map<ReasoningParam, List<String>> _providerAdditionalValues = {};
 
+  /// The selected option when an additional parameter entered JSON editing.
+  /// Used to reconcile a JSON edit back into its option block on type change.
+  final Map<ReasoningParam, String?> _additionalJsonInitialValues = {};
+
   /// 自定义参数（CustomParam）选项的勾选集合（照搬推理力度块交互，
   /// 默认全选；保存时 options = 勾选的选项）。
   final Map<CustomParam, Set<String>> _customParamSelectedValues = {};
