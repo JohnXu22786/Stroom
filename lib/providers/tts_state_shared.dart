@@ -71,6 +71,7 @@ class TTSState {
     double? progress,
     String? currentText,
     String? error,
+    bool clearError = false,
     AudioRecord? lastGeneratedAudio,
   }) {
     return TTSState(
@@ -78,7 +79,7 @@ class TTSState {
       isStreaming: isStreaming ?? this.isStreaming,
       progress: progress ?? this.progress,
       currentText: currentText ?? this.currentText,
-      error: error ?? this.error,
+      error: clearError ? null : error ?? this.error,
       lastGeneratedAudio: lastGeneratedAudio ?? this.lastGeneratedAudio,
     );
   }
