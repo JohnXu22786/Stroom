@@ -6905,6 +6905,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get ankiBrowserEmpty => 'Aucune carte';
 
   @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Échec du chargement des cartes : $error';
+  }
+
+  @override
   String get ankiSyncTooltip => 'Synchronisation AnkiWeb';
 
   @override
@@ -19237,6 +19242,11 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get ankiBrowserEmpty => 'Aucune carte';
+
+  @override
+  String ankiCardBrowserLoadError(String error) {
+    return 'Échec du chargement des cartes : $error';
+  }
 
   @override
   String get ankiSyncTooltip => 'Synchronisation AnkiWeb';
