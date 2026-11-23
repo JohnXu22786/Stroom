@@ -15,7 +15,7 @@ import '../widgets/constrained_text.dart';
 /// A page that detects current system environment, checks notification
 /// permission status, and provides a switch to enable/disable task completion
 /// notifications. The switch is only enabled when the system permission is
-/// granted.
+/// granted or provisionally granted.
 class NotificationSettingsPage extends ConsumerStatefulWidget {
   const NotificationSettingsPage({super.key});
 
@@ -183,7 +183,7 @@ class _NotificationSettingsPageState
   bool get _canToggle {
     // Only allow toggling when permission is granted and we're not on web
     if (kIsWeb) return false;
-    return _permissionStatus.isGranted;
+    return _permissionStatus.isGranted || _permissionStatus.isProvisional;
   }
 
   // ── Permission status label ──────────────────────────────────────────
