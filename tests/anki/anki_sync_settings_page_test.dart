@@ -388,13 +388,36 @@ void main() {
     final requests = await _loginUntilSyncPrompt(
       tester,
       locale: const Locale('de', 'DE'),
+      serviceLoginLabel: 'Bei AnkiWeb anmelden',
+      dialogLoginLabel: 'Anmelden',
+      successPromptContinueLabel: 'Fortfahren',
     );
     await tester.tap(find.text('Fortfahren'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     final label = find.text('Serverdaten durch lokale Daten ersetzen');
-    await tester.ensureVisible(label);
+    await tester.scrollUntilVisible(
+      label,
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
 
+    final overwriteButton = find.ancestor(
+      of: label,
+      matching: find.byType(FilledButton),
+    );
+    expect(overwriteButton, findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(overwriteButton).onPressed,
+      isNotNull,
+    );
+    expect(
+      find.descendant(
+        of: overwriteButton,
+        matching: find.byIcon(Icons.cloud_upload_outlined),
+      ),
+      findsOneWidget,
+    );
     final constrainedLabel = find.ancestor(
       of: label,
       matching: find.byType(ConstrainedText),
@@ -1011,6 +1034,9 @@ Future<List<Uri>> _loginUntilSyncPrompt(
   WidgetTester tester, {
   List<dynamic> additionalOverrides = const [],
   Locale locale = const Locale('zh', 'CN'),
+  String serviceLoginLabel = '登录AnkiWeb',
+  String dialogLoginLabel = '登录',
+  String successPromptContinueLabel = '继续使用',
 }) async {
   SharedPreferences.setMockInitialValues({});
   final requests = <Uri>[];
@@ -1035,12 +1061,21 @@ Future<List<Uri>> _loginUntilSyncPrompt(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.login));
+  await tester.scrollUntilVisible(
+    find.text(serviceLoginLabel),
+    160,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.text(serviceLoginLabel));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
   await tester.enterText(find.byType(TextFormField).at(1), 'password');
-  await tester.tap(find.byType(FilledButton).last);
-  await tester.pumpAndSettle();
+  await tester.tap(find.text(dialogLoginLabel).last);
+  for (var frame = 0;
+      frame < 20 && find.text(successPromptContinueLabel).evaluate().isEmpty;
+      frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
   return requests;
 }
 
