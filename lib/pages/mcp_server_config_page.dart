@@ -960,22 +960,41 @@ class _McpServerConfigDialogState
             : const <String>[];
     if (labels.isEmpty) return false;
 
-    final labelStyle = Theme.of(context).textTheme.labelLarge;
     final textScaler = MediaQuery.textScalerOf(context);
-    final labelsWidth = labels.fold<double>(0, (width, label) {
+    final actionsWidth = labels.fold<double>(0, (width, label) {
+      final button = TextButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.save, size: 20),
+        label: Text(label),
+      );
+      final themeStyle = button.themeStyleOf(context);
+      final defaultStyle = button.defaultStyleOf(context);
+      final labelStyle = button.style?.textStyle?.resolve(const {}) ??
+          themeStyle?.textStyle?.resolve(const {}) ??
+          defaultStyle.textStyle?.resolve(const {}) ??
+          Theme.of(context).textTheme.labelLarge;
       final painter = TextPainter(
         text: TextSpan(text: label, style: labelStyle),
         textDirection: Directionality.of(context),
         textScaler: textScaler,
       )..layout();
-      return width + painter.width;
+      final fontSize = labelStyle?.fontSize ?? 14.0;
+      final scale = (textScaler.scale(fontSize) / 14).clamp(1.0, 2.0) - 1.0;
+      final iconGap = 8 - 4 * scale;
+      final iconWidth =
+          _isSaving && label == AppLocalizations.of(context)!.mcpSaving
+              ? 16.0
+              : 20.0;
+      // Reflow only when the complete label, icon, gap, and minimum button
+      // width do not fit. Use the active TextButton theme and text scale.
+      final intrinsicWidth = painter.width + iconWidth + iconGap;
+      return width + intrinsicWidth.clamp(64.0, double.infinity).toDouble();
     });
-    // TextButton.icon reserves 16 dp on each side, a 20 dp icon, and an 8 dp
-    // icon-to-label gap. AppBar's leading back button reserves 56 dp.
-    final requiredWidth = labelsWidth + labels.length * 60;
+    // Preserve the current AppBar row until the localized action buttons, using
+    // the active TextButton.icon theme, exceed the room beside the leading icon.
     final dialogWidth =
         (MediaQuery.sizeOf(context).width - 48).clamp(0.0, 560.0).toDouble();
-    return requiredWidth > dialogWidth - kToolbarHeight;
+    return actionsWidth > dialogWidth - kToolbarHeight;
   }
 
   List<Widget> _buildCompactAppBarActions() {
