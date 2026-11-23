@@ -33,7 +33,7 @@ class AvailableUpdate {
 ///   - Base version (major.minor.patch) is compared first.
 ///   - If base versions differ, the higher base wins regardless of pre-release.
 ///   - If base versions are equal, release (no pre-release) > any pre-release.
-///   - If both have pre-release, compare the identifiers lexicographically.
+///   - If both have pre-release, compare dot-separated identifiers by SemVer.
 class Version implements Comparable<Version> {
   final int major;
   final int minor;
@@ -80,8 +80,34 @@ class Version implements Comparable<Version> {
     // Release (no pre-release) > pre-release
     if (preRelease == null) return 1;
     if (other.preRelease == null) return -1;
-    // Both have pre-release: compare lexicographically
-    return preRelease!.compareTo(other.preRelease!);
+    // Both have pre-release: compare dot-separated identifiers by SemVer.
+    final identifiers = preRelease!.split('.');
+    final otherIdentifiers = other.preRelease!.split('.');
+    for (var i = 0;
+        i < identifiers.length && i < otherIdentifiers.length;
+        i++) {
+      final identifier = identifiers[i];
+      final otherIdentifier = otherIdentifiers[i];
+      final isNumeric = RegExp(r'^\d+$').hasMatch(identifier);
+      final otherIsNumeric = RegExp(r'^\d+$').hasMatch(otherIdentifier);
+
+      if (isNumeric && otherIsNumeric) {
+        // Compare digit strings by length first so arbitrarily large numeric
+        // identifiers are ordered without overflowing an integer parse.
+        final lengthComparison = identifier.length.compareTo(
+          otherIdentifier.length,
+        );
+        if (lengthComparison != 0) return lengthComparison;
+        final numericComparison = identifier.compareTo(otherIdentifier);
+        if (numericComparison != 0) return numericComparison;
+      } else if (isNumeric != otherIsNumeric) {
+        return isNumeric ? -1 : 1;
+      } else {
+        final lexicalComparison = identifier.compareTo(otherIdentifier);
+        if (lexicalComparison != 0) return lexicalComparison;
+      }
+    }
+    return identifiers.length.compareTo(otherIdentifiers.length);
   }
 
   bool operator <(Version other) => compareTo(other) < 0;

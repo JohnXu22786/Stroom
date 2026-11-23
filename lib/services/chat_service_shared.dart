@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 
 /// Map MIME type to file extension for data URI.
-String imageExtension(String mimeType) {
+String? imageExtension(String mimeType) {
   switch (mimeType) {
     case 'image/png':
       return 'png';
+    case 'image/jpeg':
+      return 'jpeg';
     case 'image/gif':
       return 'gif';
     case 'image/webp':
@@ -12,7 +14,7 @@ String imageExtension(String mimeType) {
     case 'image/bmp':
       return 'bmp';
     default:
-      return 'jpeg';
+      return null;
   }
 }
 
