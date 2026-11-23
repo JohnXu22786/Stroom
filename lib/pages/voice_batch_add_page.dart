@@ -116,16 +116,21 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     final Set<String> seenIds = {};
     final existingIds = widget.existingVoices.map((v) => v.id).toSet();
 
-    int maxColumns = 0;
+    final fieldsByLine =
+        lines.map((line) => _extractFields(line, separator)).toList();
+    final maxColumns = fieldsByLine.fold<int>(
+      0,
+      (max, fields) => fields.length > max ? fields.length : max,
+    );
+    final selectedColumnStart = maxColumns > 2 && _detectedColumns == maxColumns
+        ? _selectedColumnStart
+        : 0;
     List<String>? firstRowFields;
 
-    for (int i = 0; i < lines.length; i++) {
-      final fields = _extractFields(lines[i], separator);
+    for (int i = 0; i < fieldsByLine.length; i++) {
+      final fields = fieldsByLine[i];
       if (fields.isEmpty) continue;
 
-      if (fields.length > maxColumns) {
-        maxColumns = fields.length;
-      }
       firstRowFields ??= List.from(fields);
 
       // ── 根据不同列数解析 ──
@@ -140,9 +145,20 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         parsed.add(ParsedLine(index: i, name: id, id: id, status: status));
       } else if (fields.length >= 2) {
         // 两列或更多列：取用户选择的起始列开始的两个字段
-        final start = (_detectedColumns > 2) ? _selectedColumnStart : 0;
+        final start = selectedColumnStart;
+        if (start + 1 >= fields.length) {
+          parsed.add(
+            ParsedLine(
+              index: i,
+              name: '',
+              id: '',
+              status: LineStatus.formatError,
+            ),
+          );
+          continue;
+        }
         final first = fields[start];
-        final second = (start + 1 < fields.length) ? fields[start + 1] : '';
+        final second = fields[start + 1];
 
         if (second.isEmpty || first.isEmpty) {
           parsed.add(
@@ -167,15 +183,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       }
     }
 
-    final prevDetected = _detectedColumns;
-
     setState(() {
       _detectedColumns = maxColumns;
       _columnSamples = firstRowFields ?? [];
-      // 如果是首次检测到多列，重置列选择
-      if (prevDetected != maxColumns && maxColumns > 2) {
-        _selectedColumnStart = 0;
-      }
+      _selectedColumnStart = selectedColumnStart;
       _parsedLines = parsed;
     });
   }
@@ -398,11 +409,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 }
 
                 return Row(
-                  children: [
-                    label,
-                    const SizedBox(width: 8),
-                    dropdown,
-                  ],
+                  children: [label, const SizedBox(width: 8), dropdown],
                 );
               },
             ),
