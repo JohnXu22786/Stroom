@@ -257,4 +257,32 @@ void main() {
     expect(tester.getRect(secondChoice).top, tester.getRect(firstChoice).top);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('changing to fewer columns resets the selected column safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: VoiceBatchAddPage(existingVoices: []),
+      ),
+    );
+
+    final input = find.byType(TextField).first;
+    await tester.enterText(input, 'name1,id1,extra,last\nname2,id2,extra,last');
+    await tester.pumpAndSettle();
+
+    final l10n = AppLocalizations.of(tester.element(input))!;
+    await tester.tap(find.text(l10n.voiceBatchColumn(3, 'extra')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(input, 'Name,Identifier');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Name'), findsOneWidget);
+    expect(find.text('Identifier'), findsOneWidget);
+  });
 }
