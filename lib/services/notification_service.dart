@@ -405,13 +405,25 @@ class InAppNotificationBanner extends StatefulWidget {
 }
 
 class _InAppNotificationBannerState extends State<InAppNotificationBanner>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _controller;
   late final Animation<Offset> _slideAnimation;
+  Timer? _dismissTimer;
+  Duration? _scheduledDismissal;
+  Duration? _remainingDismissal;
+  int _dismissalGeneration = 0;
+  bool _dismissStarted = false;
+  bool _appVisible = false;
+  bool _tickerEnabled = true;
+  double _measuredOverflow = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appVisible =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -422,21 +434,88 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     _controller.forward();
+  }
 
-    // Auto-dismiss after 4 seconds
-    Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) _dismiss();
-    });
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appVisible = state == AppLifecycleState.resumed;
+    _scheduleDismissal(
+      _measuredOverflow,
+      _appVisible && _tickerEnabled,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant InAppNotificationBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.payload.taskId != widget.payload.taskId ||
+        oldWidget.payload.type != widget.payload.type ||
+        oldWidget.payload.title != widget.payload.title) {
+      _dismissTimer?.cancel();
+      _dismissTimer = null;
+      _scheduledDismissal = null;
+      _remainingDismissal = null;
+      _dismissStarted = false;
+      _dismissalGeneration++;
+      _controller.forward();
+    }
   }
 
   void _dismiss() {
+    if (_dismissStarted) return;
+    _dismissStarted = true;
+    final generation = ++_dismissalGeneration;
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
     _controller.reverse().then((_) {
-      if (mounted) widget.onDismiss();
+      if (mounted && generation == _dismissalGeneration) widget.onDismiss();
     });
+  }
+
+  void _scheduleDismissal(double overflow, bool visible) {
+    if (!visible) {
+      _pauseDismissalTimer();
+      return;
+    }
+    final duration = overflow <= 0
+        ? const Duration(seconds: 4)
+        : Duration(
+            milliseconds: 3400 + (overflow / 24 * 1000).ceil(),
+          );
+    if (_dismissStarted) return;
+    if (duration == _scheduledDismissal && _dismissTimer != null) return;
+    if (duration != _scheduledDismissal) {
+      _dismissTimer?.cancel();
+      _dismissTimer = null;
+      _remainingDismissal = duration;
+      _scheduledDismissal = duration;
+    }
+    _remainingDismissal ??= duration;
+    const tick = Duration(milliseconds: 50);
+    _dismissTimer = Timer.periodic(tick, (timer) {
+      final remaining = _remainingDismissal ?? Duration.zero;
+      if (remaining <= tick) {
+        timer.cancel();
+        _dismissTimer = null;
+        _remainingDismissal = Duration.zero;
+        if (mounted) _dismiss();
+      } else {
+        _remainingDismissal = remaining - tick;
+      }
+    });
+  }
+
+  void _pauseDismissalTimer() {
+    final timer = _dismissTimer;
+    if (timer == null) return;
+    timer.cancel();
+    _dismissTimer = null;
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _dismissTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -517,14 +596,67 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
                           ),
                         ),
                         const SizedBox(height: 2),
-                        ConstrainedText(
-                          widget.payload.title,
-                          style: TextStyle(
-                            color: fg.withValues(alpha: 0.7),
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final titleStyle = TextStyle(
+                              color: fg.withValues(alpha: 0.7),
+                              fontSize: 12,
+                            );
+                            final direction = Directionality.of(context);
+                            final textScaler = MediaQuery.textScalerOf(context);
+                            final locale = widget.locale ??
+                                Localizations.maybeLocaleOf(context);
+                            final painter = TextPainter(
+                              text: TextSpan(
+                                text: widget.payload.title,
+                                style: titleStyle,
+                              ),
+                              textDirection: direction,
+                              textScaler: textScaler,
+                              locale: locale,
+                              maxLines: 1,
+                              ellipsis: '…',
+                            )..layout(maxWidth: constraints.maxWidth);
+                            final measured = TextPainter(
+                              text: TextSpan(
+                                text: widget.payload.title,
+                                style: titleStyle,
+                              ),
+                              textDirection: direction,
+                              textScaler: textScaler,
+                              locale: locale,
+                              maxLines: 1,
+                            )..layout();
+                            final overflow = painter.didExceedMaxLines
+                                ? (measured.width - constraints.maxWidth)
+                                    .clamp(0.0, double.infinity)
+                                    .toDouble()
+                                : 0.0;
+                            final reducedMotion =
+                                MediaQuery.disableAnimationsOf(context);
+                            _tickerEnabled =
+                                TickerMode.valuesOf(context).enabled;
+                            final timingOverflow =
+                                reducedMotion ? 0.0 : overflow;
+                            _measuredOverflow = timingOverflow;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                _scheduleDismissal(
+                                  _measuredOverflow,
+                                  _appVisible && _tickerEnabled,
+                                );
+                              }
+                            });
+                            return ConstrainedText(
+                              widget.payload.title,
+                              style: titleStyle,
+                              locale: locale,
+                              maxLines:
+                                  reducedMotion && overflow > 0 ? null : 1,
+                              overflow: TextOverflow.ellipsis,
+                              semanticsLabel: widget.payload.title,
+                            );
+                          },
                         ),
                       ],
                     ),
