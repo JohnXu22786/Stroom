@@ -155,10 +155,12 @@ Widget _disableTestAnimations(BuildContext context, Widget? child) =>
 Widget _buildTestApp(
   Widget body, {
   Locale locale = const Locale('zh', 'CN'),
+  ThemeData? theme,
 }) {
   return MaterialApp(
     builder: _disableTestAnimations,
     locale: locale,
+    theme: theme,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -1703,6 +1705,109 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(deletedFolders, ['a']);
+      },
+    );
+
+    testWidgets(
+      'long nested folder delete confirmation scrolls and preserves actions',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const folder =
+            'top-level-folder-with-a-long-name/second-level-folder-with-a-long-name/'
+            'third-level-folder-with-a-long-name/fourth-level-folder-with-a-long-name/'
+            'fifth-level-folder-with-a-long-name/sixth-level-folder-with-a-long-name/'
+            'seventh-level-folder-with-a-long-name/eighth-level-folder-with-a-long-name';
+        final folderSegments = folder.split('/');
+        final folders = <String>{};
+        var folderPrefix = '';
+        for (final segment in folderSegments) {
+          folderPrefix =
+              folderPrefix.isEmpty ? segment : '$folderPrefix/$segment';
+          folders.add(folderPrefix);
+        }
+        final deletedFolders = <String>[];
+
+        Future<void> openDeleteMenu() async {
+          var parentPath = '';
+          for (final segment
+              in folderSegments.take(folderSegments.length - 1)) {
+            parentPath = parentPath.isEmpty ? segment : '$parentPath/$segment';
+            await tester.tap(find.byKey(Key('fm_folder_$parentPath')));
+            await tester.pumpAndSettle();
+          }
+          await tester.tap(find.byKey(Key('fm_folder_popup_$folder')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+          await tester.pumpAndSettle();
+        }
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: folders,
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+            locale: const Locale('en', 'US'),
+          ),
+        );
+
+        await openDeleteMenu();
+
+        expect(tester.takeException(), isNull);
+        expect(
+            find.byKey(const Key('fm_delete_folder_dialog')), findsOneWidget);
+        expect(
+          find.byKey(const Key('fm_delete_folder_cancel_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('fm_delete_folder_confirm_btn')),
+          findsOneWidget,
+        );
+        expect(find.textContaining(folder), findsOneWidget);
+        final dialogScrollable = find.descendant(
+          of: find.byKey(const Key('fm_delete_folder_dialog')),
+          matching: find.byType(Scrollable),
+        );
+        expect(dialogScrollable, findsOneWidget);
+        await tester.drag(
+          dialogScrollable,
+          const Offset(0, -400),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(deletedFolders, isEmpty);
+
+        await tester.tap(find.byKey(const Key('fm_delete_folder_cancel_btn')));
+        await tester.pumpAndSettle();
+        expect(deletedFolders, isEmpty);
+        for (final _ in folderSegments.take(folderSegments.length - 1)) {
+          await tester.tap(find.byKey(const Key('fm_back_btn')));
+          await tester.pumpAndSettle();
+        }
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: folders,
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+            locale: const Locale('fr', 'FR'),
+            theme: ThemeData.dark(useMaterial3: true),
+          ),
+        );
+        await openDeleteMenu();
+        expect(find.textContaining(folder), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(const Key('fm_delete_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+        expect(deletedFolders, [folder]);
       },
     );
 
