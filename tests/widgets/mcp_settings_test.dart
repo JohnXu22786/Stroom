@@ -73,7 +73,8 @@ Finder _commandFieldFinder() => find.byWidgetPredicate(
 Finder _argsFieldFinder() => find.byWidgetPredicate(
       (w) =>
           w is TextField &&
-          w.decoration?.hintText?.startsWith('用逗号分隔参数') == true,
+          w.decoration?.prefixIcon is Icon &&
+          (w.decoration!.prefixIcon as Icon).icon == Icons.list,
     );
 
 Finder _urlFieldFinder() => find.byWidgetPredicate(
