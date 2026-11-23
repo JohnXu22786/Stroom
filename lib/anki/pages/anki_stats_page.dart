@@ -63,6 +63,16 @@ class AnkiStatsPage extends ConsumerWidget {
         db.revlog.count(),
       ]),
       builder: (ctx, snap) {
+        if (snap.hasError) {
+          return LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(child: Text(snap.error.toString())),
+              ),
+            ),
+          );
+        }
         if (!snap.hasData)
           return const Center(child: CircularProgressIndicator());
         final data = snap.data as List<int>;
