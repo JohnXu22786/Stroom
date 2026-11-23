@@ -13,7 +13,6 @@ extension _ChatPageSearchExt on _ChatPageState {
       _searchMatches.clear();
       _currentMatchIndex = 0;
       if (query.isNotEmpty) {
-        final lowerQuery = query.toLowerCase();
         for (final msg in _history) {
           // AI messages are rendered as markdown: matches inside code blocks,
           // inline code or math can never be highlighted (those are rendered
@@ -24,13 +23,9 @@ extension _ChatPageSearchExt on _ChatPageState {
           final text = msg.role == 'user'
               ? msg.content
               : stripSearchIrrelevantMarkdown(msg.content);
-          final lowerContent = text.toLowerCase();
-          int start = 0;
-          while (true) {
-            final idx = lowerContent.indexOf(lowerQuery, start);
-            if (idx == -1) break;
-            _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
-            start = idx + query.length;
+          for (final (matchStart, matchEnd)
+              in caseInsensitiveMatchOffsets(text, query)) {
+            _searchMatches.add(SearchMatch(msg.id, matchStart, matchEnd));
           }
         }
       }

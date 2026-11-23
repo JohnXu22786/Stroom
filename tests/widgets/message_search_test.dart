@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/message_search_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -400,6 +401,27 @@ void main() {
       final text = 'I love Flutter';
       final snippet = MessageSearchPage.getSnippet(text, 7, 14);
       expect(snippet, 'I love Flutter');
+    });
+  });
+
+  group('In-conversation search offset tests', () {
+    test('case-insensitive match offsets refer to original Unicode text', () {
+      final text = '\u0130x';
+      final matches = caseInsensitiveMatchOffsets(text, 'x');
+
+      expect(matches, hasLength(1));
+      expect(matches.single.$1, 1);
+      expect(matches.single.$2, 2);
+      expect(text.substring(matches.single.$1, matches.single.$2), 'x');
+
+      final ordinaryMatches = caseInsensitiveMatchOffsets('Hi hi', 'HI');
+      expect(ordinaryMatches, [(0, 2), (3, 5)]);
+
+      final repeatedText = List.filled(2000, '\u0130x').join();
+      final repeatedMatches = caseInsensitiveMatchOffsets(repeatedText, 'x');
+      expect(repeatedMatches, hasLength(2000));
+      expect(repeatedMatches.first, (1, 2));
+      expect(repeatedMatches.last, (3999, 4000));
     });
   });
 }
