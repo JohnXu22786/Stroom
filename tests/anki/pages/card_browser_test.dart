@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:stroom/anki/database/card_dao.dart';
 import 'package:stroom/anki/database/note_dao.dart';
 import 'package:stroom/anki/models/card.dart' as anki;
@@ -59,6 +63,17 @@ class _StaticNoteDao implements NoteDao {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _ThrowingNoteDao implements NoteDao {
+  final String message;
+  _ThrowingNoteDao(this.message);
+
+  @override
+  Future<Note?> get(int id) async => throw StateError(message);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _FailingNoteDao implements NoteDao {
   @override
   Future<Note?> get(int id) async => throw StateError('note query failed');
@@ -69,6 +84,21 @@ class _FailingNoteDao implements NoteDao {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot == null) return;
+    final fontDirectory = '$flutterRoot/bin/cache/artifacts/material_fonts';
+    for (final (family, fileName) in [
+      ('Roboto', 'Roboto-Regular.ttf'),
+      ('MaterialIcons', 'MaterialIcons-Regular.otf'),
+    ]) {
+      final bytes = File('$fontDirectory/$fileName').readAsBytesSync();
+      await (FontLoader(family)
+            ..addFont(Future.value(ByteData.sublistView(bytes))))
+          .load();
+    }
+  });
 
   testWidgets(
     'localizes browser title, search hint, and empty state in English and Chinese',
@@ -213,6 +243,95 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  // Unit owner: vertical_anki_card_error.
+  // Functional suite mapping: component-integrations; the CI test owner is component-integrations.
+  testWidgets(
+    'keeps a long note-load diagnostic fully reachable in a narrow row',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final diagnostic = List.filled(
+        24,
+        'SQLiteException: note query failed near the stored field value',
+      ).join(' — ');
+      final card = anki.Card(id: 1234, note_id: 1, deck_id: 1);
+
+      for (final (locale, textScale, isDark) in [
+        (const Locale('fr', 'FR'), 1.0, false),
+        (const Locale('zh', 'CN'), 2.0, false),
+        (const Locale('en', 'US'), 1.5, true),
+      ]) {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              ankiCardDaoProvider.overrideWithValue(
+                AsyncData(_StaticCardDao([card])),
+              ),
+              ankiNoteDaoProvider
+                  .overrideWith((_) async => _ThrowingNoteDao(diagnostic)),
+            ],
+            child: MaterialApp(
+              locale: locale,
+              theme: isDark
+                  ? ThemeData.dark(useMaterial3: true)
+                  : ThemeData.light(useMaterial3: true),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(textScale),
+                ),
+                child: child!,
+              ),
+              home: const AnkiCardBrowser(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final diagnosticFinder = find.byWidgetPredicate(
+          (widget) =>
+              widget is Text && widget.data?.contains(diagnostic) == true,
+        );
+        final errorText = tester.widget<Text>(diagnosticFinder);
+        expect(errorText.maxLines, isNull);
+        expect(errorText.overflow, isNull);
+        expect(errorText.data, contains(diagnostic));
+        final queueRect = tester.getRect(find.byIcon(Icons.fiber_new));
+        final deleteRect = tester.getRect(find.byIcon(Icons.delete_outline));
+        expect(queueRect.top, greaterThanOrEqualTo(0));
+        expect(queueRect.bottom, lessThanOrEqualTo(640));
+        expect(deleteRect.top, greaterThanOrEqualTo(0));
+        expect(deleteRect.bottom, lessThanOrEqualTo(640));
+
+        if (locale == const Locale('fr', 'FR')) {
+          await expectLater(
+            find.byType(Scaffold),
+            matchesGoldenFile(
+              '../../../docs/ui-constrained-text-qa/vertical-anki-card-error/card-error-fr-320x640-scale1-light.png',
+            ),
+          );
+        }
+
+        final scrollable =
+            tester.state<ScrollableState>(find.byType(Scrollable).last);
+        expect(scrollable.position.maxScrollExtent, greaterThan(0));
+        await scrollable.position.ensureVisible(
+          tester.renderObject(diagnosticFinder),
+          alignment: 1,
+        );
+        await tester.pumpAndSettle();
+        expect(diagnosticFinder, findsOneWidget);
+        expect(tester.takeException(), isNull);
+        scrollable.position.jumpTo(0);
+        await tester.pumpAndSettle();
+      }
+    },
+  );
 
   testWidgets('shows a visible error when loading the card query fails', (
     tester,

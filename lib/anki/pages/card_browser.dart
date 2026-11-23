@@ -147,14 +147,15 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                                       ? note!.fields[0]
                                       : l10n.ankiNoCardContent;
                                   return ListTile(
+                                    titleAlignment: snap.hasError
+                                        ? ListTileTitleAlignment.top
+                                        : null,
                                     leading: _queueIcon(card.queue.value),
                                     title: snap.hasError
                                         ? Text(
                                             l10n.ankiCardBrowserLoadError(
                                               snap.error.toString(),
                                             ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(color: cs.error),
                                           )
                                         : ConstrainedText(
