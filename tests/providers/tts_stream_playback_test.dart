@@ -91,6 +91,7 @@ void main() {
       );
       final header = output.current;
       final headerData = ByteData.sublistView(header);
+      expect(headerData.getUint32(24, Endian.little), 16000);
       expect(headerData.getUint32(4, Endian.little), 0xffffffff);
       expect(headerData.getUint32(40, Endian.little), 0xffffffff);
       expect(await output.moveNext(), isTrue);
