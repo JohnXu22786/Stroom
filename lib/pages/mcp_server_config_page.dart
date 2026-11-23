@@ -692,7 +692,7 @@ class _McpServerConfigDialogState
                           AppLocalizations.of(context)!.mcpArgumentsHint,
                           style: Theme.of(context)
                               .textTheme
-                              .bodyMedium
+                              .bodyLarge
                               ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                         border: OutlineInputBorder(),

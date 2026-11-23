@@ -12,16 +12,18 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = Path('/workspace/.cloud-profile-state/vertical_mcp_arguments_hint')
-TMP = STATE / 'tmp'
+TMP = STATE / 't'
 PUB_CACHE = STATE / 'pub-cache'
 WEB_BUILD = STATE / 'web-build'
 OUTPUT = ROOT / 'docs/ui-constrained-text-qa/vertical-mcp-arguments-hint'
 SCREENSHOT = OUTPUT / 'mcp-arguments-hint-en-320x640-scale1-light.png'
 OUTPUT.mkdir(parents=True, exist_ok=True)
 TMP.mkdir(parents=True, exist_ok=True)
+os.environ['TMPDIR'] = str(TMP)
 
 environment = os.environ.copy()
 environment['TMPDIR'] = str(TMP)
+environment['XDG_CACHE_HOME'] = str(STATE / 'xdg-cache')
 environment['PUB_CACHE'] = str(PUB_CACHE)
 env = Path('/workspace/toolchains/flutter-linux-deps/env')
 environment['PKG_CONFIG_PATH'] = f'{env}/lib/pkgconfig:{env}/share/pkgconfig'
@@ -32,23 +34,20 @@ environment['LD_LIBRARY_PATH'] = str(env / 'lib')
 environment['PATH'] = f'{env}/bin:{environment["PATH"]}'
 
 entrypoint = ROOT / 'tool/qa/mcp_arguments_hint_capture.dart'
-if not (WEB_BUILD / 'index.html').exists() or entrypoint.stat().st_mtime > (
-    WEB_BUILD / 'index.html'
-).stat().st_mtime:
-    subprocess.run(
-        [
-            '/workspace/sdks/flutter/bin/flutter',
-            'build',
-            'web',
-            '--no-pub',
-            '--release',
-            f'--target={entrypoint}',
-            f'--output={WEB_BUILD}',
-        ],
-        cwd=ROOT,
-        env=environment,
-        check=True,
-    )
+subprocess.run(
+    [
+        '/workspace/sdks/flutter/bin/flutter',
+        'build',
+        'web',
+        '--no-pub',
+        '--release',
+        f'--target={entrypoint}',
+        f'--output={WEB_BUILD}',
+    ],
+    cwd=ROOT,
+    env=environment,
+    check=True,
+)
 
 with socket.socket() as listener:
     listener.bind(('127.0.0.1', 0))
@@ -96,9 +95,17 @@ try:
         )
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto(base_url, wait_until='load', timeout=120_000)
-        page.wait_for_timeout(1_500)
+        page.wait_for_function(
+            "document.documentElement.hasAttribute("
+            "'data-mcp-capture-launcher-ready')",
+            timeout=30_000,
+        )
         page.mouse.click(160, 320)
-        page.wait_for_timeout(500)
+        page.wait_for_function(
+            "document.documentElement.hasAttribute("
+            "'data-mcp-arguments-dialog-ready')",
+            timeout=30_000,
+        )
         # The stdio option is the left transport choice near the top of the
         # dialog. Keep the page unfocused so the capture shows helper wrapping
         # without a software keyboard covering the content.
@@ -107,6 +114,15 @@ try:
         page.mouse.move(160, 480)
         page.mouse.wheel(0, 260)
         page.wait_for_timeout(500)
+        if not page.locator('html').get_attribute(
+            'data-mcp-arguments-dialog-ready'
+        ):
+            raise RuntimeError('MCP configuration dialog did not open')
+        page.get_by_text(
+            'Separate arguments with commas, for example: -y, '
+            '@modelcontextprotocol/server-filesystem, /tmp',
+            exact=True,
+        ).wait_for(timeout=10_000)
         page.screenshot(path=str(SCREENSHOT))
         browser.close()
 
