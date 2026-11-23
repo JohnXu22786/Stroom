@@ -51,7 +51,7 @@ void main() {
   }
 
   // Unit owner: vertical_backup_info_scroll.
-  // Functional suite mapping: feature-ui; production page dialog layout.
+  // Functional suite mapping: files-data; UI tests run in feature-ui.
   testWidgets(
     'long German Anki details scroll at 320x640 and 2.5x while action stays visible',
     (tester) async {
