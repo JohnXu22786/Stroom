@@ -105,6 +105,103 @@ List<String> _collectPlainText(List<m.Node> nodes) {
 }
 
 void main() {
+  group('Markdown image error rendering', () {
+    testWidgets('calls ImgConfig.errorBuilder for network image failures',
+        (WidgetTester tester) async {
+      const imageUrl = 'https://example.invalid/missing.png';
+      const alt = 'network image';
+      Object? callbackError;
+      String? callbackUrl;
+      String? callbackAlt;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, imageAlt, error) {
+          callbackUrl = url;
+          callbackAlt = imageAlt;
+          callbackError = error;
+          return const Text('custom image error');
+        }),
+      ]);
+      final widgets = MarkdownGenerator().buildWidgets(
+        '![$alt]($imageUrl)',
+        config: config,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('custom image error'), findsOneWidget);
+      expect(callbackUrl, imageUrl);
+      expect(callbackAlt, alt);
+      expect(callbackError, isNotNull);
+    });
+
+    testWidgets('calls ImgConfig.errorBuilder for asset image failures',
+        (WidgetTester tester) async {
+      const imageUrl = 'missing-markdown-image.png';
+      const alt = 'asset image';
+      Object? callbackError;
+      String? callbackUrl;
+      String? callbackAlt;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, imageAlt, error) {
+          callbackUrl = url;
+          callbackAlt = imageAlt;
+          callbackError = error;
+          return const Text('custom image error');
+        }),
+      ]);
+      final widgets = MarkdownGenerator().buildWidgets(
+        '![$alt]($imageUrl)',
+        config: config,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('custom image error'), findsOneWidget);
+      expect(callbackUrl, imageUrl);
+      expect(callbackAlt, alt);
+      expect(callbackError, isNotNull);
+    });
+
+    testWidgets('uses the default broken-image widget without a callback',
+        (WidgetTester tester) async {
+      final widgets = MarkdownGenerator().buildWidgets(
+        '![missing image](missing.png)',
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+    });
+
+    testWidgets('keeps the default rendering when a direct error is null',
+        (WidgetTester tester) async {
+      var callbackCalled = false;
+      final config = MarkdownConfig(configs: [
+        ImgConfig(errorBuilder: (url, alt, error) {
+          callbackCalled = true;
+          return const Text('custom image error');
+        }),
+      ]);
+      final node = ImageNode({}, config, WidgetVisitor(config: config));
+
+      await tester.pumpWidget(MaterialApp(
+        home: node.buildErrorImage('image.png', 'image alt', null),
+      ));
+
+      expect(callbackCalled, isFalse);
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+    });
+  });
+
   group('HTML block source ranges', () {
     test(
       'unterminated block ends at EOF while terminated block is consumed',
