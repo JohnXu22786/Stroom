@@ -51,15 +51,14 @@ void main() {
           protocol: protocol,
         );
 
-        final cancelledStream = service
-            .sendStreamWithTools('cancelled', history: []);
+        final cancelledStream =
+            service.sendStreamWithTools('cancelled', history: []);
         final cancelledDone = cancelledStream.drain<void>();
         await protocol.firstBuildStarted.future;
 
         service.cancel();
         final replacementDone = service
-            .sendStreamWithTools('replacement', history: [])
-            .drain<void>();
+            .sendStreamWithTools('replacement', history: []).drain<void>();
         await provider.firstCall.future;
 
         protocol.firstBuild.complete(_request);
