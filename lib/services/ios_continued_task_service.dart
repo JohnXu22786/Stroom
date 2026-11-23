@@ -29,14 +29,22 @@ class IosContinuedTaskService {
   @visibleForTesting
   static bool debugForceSupported = false;
 
+  @visibleForTesting
+  static bool isSupportedVersion(String version) {
+    final match = RegExp(
+      r'^(?:Version\s+)?(\d+(?:\.\d+)*)(?:\s|\(|$)',
+      caseSensitive: false,
+    ).firstMatch(version.trim());
+    final major = int.tryParse(match?.group(1)?.split('.').first ?? '');
+    return major != null && major >= 26;
+  }
+
   /// 当前平台是否支持常驻后台任务（iOS 26+）。
   bool get isSupported {
     if (debugForceSupported) return true;
     if (kIsWeb || !Platform.isIOS) return false;
     try {
-      final parts = Platform.operatingSystemVersion.split('.');
-      final major = parts.isEmpty ? 0 : int.tryParse(parts.first) ?? 0;
-      return major >= 26;
+      return isSupportedVersion(Platform.operatingSystemVersion);
     } catch (_) {
       return false;
     }

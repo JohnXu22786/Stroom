@@ -33,6 +33,38 @@ void main() {
   });
 
   group('IosContinuedTaskService', () {
+    test('recognizes iOS versions with the Version prefix', () {
+      expect(
+        IosContinuedTaskService.isSupportedVersion(
+          'Version 26.1 (Build 23B74)',
+        ),
+        isTrue,
+      );
+      expect(
+        IosContinuedTaskService.isSupportedVersion(
+          'Version 27.0 (Build 24A5298h)',
+        ),
+        isTrue,
+      );
+      expect(IosContinuedTaskService.isSupportedVersion('26.0'), isTrue);
+    });
+
+    test('rejects older and malformed iOS version strings', () {
+      expect(
+        IosContinuedTaskService.isSupportedVersion('Version 25.7 (Build 22H)'),
+        isFalse,
+      );
+      expect(
+        IosContinuedTaskService.isSupportedVersion('Version unknown'),
+        isFalse,
+      );
+      expect(IosContinuedTaskService.isSupportedVersion(''), isFalse);
+      expect(
+        IosContinuedTaskService.isSupportedVersion('Version 26.foo (Build)'),
+        isFalse,
+      );
+    });
+
     test('isSupported is false on non-iOS platforms by default', () {
       // 测试机为 Windows/macOS 主机，Platform.isIOS 为 false。
       expect(IosContinuedTaskService.instance.isSupported, isFalse);

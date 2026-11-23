@@ -188,6 +188,8 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/video_gallery_shared_test.dart",
         "pages/content/ocr*_test.dart",
         "pages/content/media_preview_sheet_test.dart",
+        "pages/content/media_preview_sheet_scroll_test.dart",
+        "qa/media_preview_sheet_scroll_capture_test.dart",
         "pages/media_preview_audio_classification_test.dart",
         "pages/audio_player_shared_test.dart",
         "widgets/audio_player_selection_toolbar_test.dart",
