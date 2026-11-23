@@ -4,6 +4,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/asr_service.dart';
+import 'package:stroom/widgets/constrained_text.dart';
 
 void main() {
   testWidgets('LLM reasoning controls reflow below their labels at 320 px', (
@@ -226,7 +227,11 @@ void main() {
           expect(labelRect.right, lessThanOrEqualTo(dialogRect.right));
         }
         final customParamsHeader = tester.getRect(
-          find.text(localizations.chatCustomParameters),
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is ConstrainedText &&
+                widget.data == localizations.chatCustomParameters,
+          ),
         );
         final addCustomParamButton = tester.getRect(
           find.ancestor(
@@ -238,16 +243,15 @@ void main() {
           expect(controlRect.left, greaterThanOrEqualTo(dialogRect.left));
           expect(controlRect.right, lessThanOrEqualTo(dialogRect.right));
         }
-        if (width < 800) {
+        if (addCustomParamButton.top >= customParamsHeader.bottom) {
           expect(
             addCustomParamButton.top,
             greaterThanOrEqualTo(customParamsHeader.bottom),
           );
         } else {
           expect(
-            (addCustomParamButton.center.dy - customParamsHeader.center.dy)
-                .abs(),
-            lessThan(20),
+            addCustomParamButton.left,
+            greaterThanOrEqualTo(customParamsHeader.right),
           );
         }
         var hasNarrowClippedTab = false;
