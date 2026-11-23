@@ -1,4 +1,5 @@
 from pathlib import Path
+from io import BytesIO
 import subprocess
 import tempfile
 import time
@@ -37,20 +38,52 @@ with sync_playwright() as playwright:
 
     with tempfile.TemporaryDirectory(prefix="notification-banner-") as tmp:
         frames = Path(tmp)
-        # Include the full outbound and return reveal on the production speed.
-        for index in range(400):
-            page.screenshot(path=str(frames / f"frame-{index:03d}.png"))
-            time.sleep(0.1)
+        frame_times = []
+        banner_seen = False
+        hidden_frames = 0
+        for index in range(500):
+            screenshot = page.screenshot(path=str(frames / f"frame-{index:03d}.png"))
+            frame_times.append(time.monotonic())
+            image = Image.open(BytesIO(screenshot)).convert("RGB")
+            card_pixel = image.getpixel((45, 45))
+            background_pixel = image.getpixel((45, 120))
+            banner_visible = sum(
+                abs(card - background)
+                for card, background in zip(card_pixel, background_pixel)
+            ) > 10
+            banner_seen |= banner_visible
+            hidden_frames = 0 if banner_visible else hidden_frames + 1
+            if banner_seen and hidden_frames >= 5:
+                break
+            wait = 0.1 - (time.monotonic() - frame_times[-1])
+            if wait > 0:
+                time.sleep(wait)
+
+        manifest = frames / "frames.txt"
+        lines = []
+        for index, frame_time in enumerate(frame_times):
+            lines.extend([f"file 'frame-{index:03d}.png'\n"])
+            next_time = frame_times[min(index + 1, len(frame_times) - 1)]
+            duration = next_time - frame_time
+            if duration <= 0 and index:
+                duration = frame_time - frame_times[index - 1]
+            lines.append(f"duration {max(duration, 0.04):.6f}\n")
+        lines.append(f"file 'frame-{len(frame_times) - 1:03d}.png'\n")
+        manifest.write_text("".join(lines), encoding="utf-8")
         subprocess.run(
             [
                 "ffmpeg",
                 "-y",
                 "-loglevel",
                 "error",
-                "-framerate",
-                "10",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
                 "-i",
-                str(frames / "frame-%03d.png"),
+                str(manifest),
+                "-vsync",
+                "vfr",
                 "-c:v",
                 "libvpx-vp9",
                 "-pix_fmt",
