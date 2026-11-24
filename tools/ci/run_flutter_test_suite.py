@@ -318,6 +318,7 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
 # steps in .github/workflows/ci.yml, not by the native Flutter test runner.
 BROWSER_ONLY_TESTS: dict[str, str] = {
     "services/sse_client_web_connect_test.dart": "chat-taskflow-core",
+    "services/userscript_http_web_test.dart": "component-integrations",
     "utils/web_file_store_blob_web_test.dart": "built-in-components",
 }
 

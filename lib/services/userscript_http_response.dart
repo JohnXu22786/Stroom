@@ -24,10 +24,31 @@ class UserscriptHttpException implements Exception {
   const UserscriptHttpException(this.statusCode);
 }
 
+bool isTrustedUserscriptUri(Uri candidate) {
+  final host = candidate.host.toLowerCase();
+  return candidate.scheme == 'https' &&
+      candidate.port == 443 &&
+      candidate.userInfo.isEmpty &&
+      (host == 'greasyfork.org' ||
+          host == 'www.greasyfork.org' ||
+          host == 'update.greasyfork.org' ||
+          host == 'raw.githubusercontent.com');
+}
+
+Uri validateUserscriptResponseUrl(String? responseUrl) {
+  if (responseUrl == null || responseUrl.isEmpty) {
+    throw const FormatException('redirectedUrl');
+  }
+  final uri = Uri.parse(responseUrl);
+  if (!isTrustedUserscriptUri(uri)) {
+    throw const FormatException('redirectedUrl');
+  }
+  return uri;
+}
+
 UserscriptHttpResponse mapUserscriptWebResponse({
   required int statusCode,
-  required String requestUrl,
-  String? responseUrl,
+  required Uri responseUrl,
   String? location,
   String? contentType,
   String? body,
@@ -38,9 +59,7 @@ UserscriptHttpResponse mapUserscriptWebResponse({
   }
   return UserscriptHttpResponse(
     statusCode: statusCode,
-    responseUrl: responseUrl == null || responseUrl.isEmpty
-        ? Uri.parse(requestUrl)
-        : Uri.parse(responseUrl),
+    responseUrl: responseUrl,
     location: location,
     contentType: contentType,
     body: body,
