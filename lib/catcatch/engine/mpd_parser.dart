@@ -372,6 +372,13 @@ class MPDParser {
         result.add((url: _resolveBase(media, baseUrl), duration: 0));
       }
     }
+    final initialization = list.children.firstWhereOrNull(
+      (node) => _isDash(node, 'Initialization'),
+    );
+    final sourceUrl = initialization?.attributes['sourceURL'];
+    if (sourceUrl != null) {
+      result.insert(0, (url: _resolveBase(sourceUrl, baseUrl), duration: 0));
+    }
     return result;
   }
 

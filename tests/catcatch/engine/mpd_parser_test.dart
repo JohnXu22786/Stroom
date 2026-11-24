@@ -2,6 +2,96 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/mpd_parser.dart';
 
 void main() {
+  test('puts SegmentList Initialization before media segments', () async {
+    const manifest = r'''
+<MPD>
+  <Period>
+    <AdaptationSet>
+      <Representation id="v1">
+        <SegmentList>
+          <Initialization sourceURL="init.mp4"/>
+          <SegmentURL media="segment-1.m4s"/>
+          <SegmentURL media="segment-2.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+    final segments = await MPDParser.parseManifest(
+      manifest,
+      'https://example.com/video/manifest.mpd',
+    );
+
+    expect(segments, [
+      'https://example.com/video/init.mp4',
+      'https://example.com/video/segment-1.m4s',
+      'https://example.com/video/segment-2.m4s',
+    ]);
+  });
+
+  test(
+    'resolves SegmentList Initialization against the effective BaseURL',
+    () async {
+      const manifest = r'''
+<MPD>
+  <Period>
+    <AdaptationSet>
+      <Representation id="v1">
+        <BaseURL>video/</BaseURL>
+        <SegmentList>
+          <Initialization sourceURL="init/init.mp4"/>
+          <SegmentURL media="segment.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+      final segments = await MPDParser.parseManifest(
+        manifest,
+        'https://example.com/manifest.mpd',
+      );
+
+      expect(segments, [
+        'https://example.com/video/init/init.mp4',
+        'https://example.com/video/segment.m4s',
+      ]);
+    },
+  );
+
+  test(
+    'keeps SegmentList media sequence when Initialization is absent',
+    () async {
+      const manifest = r'''
+<MPD>
+  <Period>
+    <AdaptationSet>
+      <Representation id="v1">
+        <SegmentList>
+          <SegmentURL media="segment-1.m4s"/>
+          <SegmentURL media="segment-2.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
+''';
+
+      final segments = await MPDParser.parseManifest(
+        manifest,
+        'https://example.com/video/manifest.mpd',
+      );
+
+      expect(segments, [
+        'https://example.com/video/segment-1.m4s',
+        'https://example.com/video/segment-2.m4s',
+      ]);
+    },
+  );
+
   test('inherits an AdaptationSet SegmentTemplate and timeline', () async {
     const manifest = r'''
 <MPD mediaPresentationDuration="PT4S">
