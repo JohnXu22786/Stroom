@@ -167,6 +167,7 @@ class AssistantCatalogService {
     final iterator = StreamIterator<List<int>>(stream);
     final bytes = BytesBuilder(copy: false);
     var length = 0;
+    var streamCompleted = false;
     try {
       while (await iterator.moveNext()) {
         final chunk = iterator.current;
@@ -178,9 +179,10 @@ class AssistantCatalogService {
         bytes.add(chunk);
         length += chunk.length;
       }
+      streamCompleted = true;
       return bytes.takeBytes();
     } finally {
-      await iterator.cancel();
+      if (!streamCompleted) await iterator.cancel();
     }
   }
 
