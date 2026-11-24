@@ -239,6 +239,7 @@ class OpenAiFileService {
       'file': MultipartFile.fromBytes(
         bytes,
         filename: filename,
+        contentType: DioMediaType.parse(mimeType),
       ),
       'purpose': purpose,
     });
