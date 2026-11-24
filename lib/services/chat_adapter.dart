@@ -384,21 +384,17 @@ class ChatAdapter {
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
     // this conversation's adapter-set assistant template).
-    final conversationConfig = convId == null
-        ? null
-        : _assistantConfigsByConversation[convId];
-    final prompt =
-        assistant?.prompt ??
+    final conversationConfig =
+        convId == null ? null : _assistantConfigsByConversation[convId];
+    final prompt = assistant?.prompt ??
         (conversationConfig?.hasPrompt == true
             ? conversationConfig!.prompt
             : null);
-    final settings =
-        assistant?.settings ??
+    final settings = assistant?.settings ??
         (conversationConfig?.hasSettings == true
             ? conversationConfig!.settings
             : null);
-    final customParams =
-        assistant?.settings.customParameters ??
+    final customParams = assistant?.settings.customParameters ??
         (conversationConfig?.hasCustomParams == true
             ? conversationConfig!.customParams
             : null);
@@ -569,9 +565,8 @@ class ChatAdapter {
       endpointType: endpointType,
       localeOverride: _localeOverride,
     );
-    final conversationConfig = convId == null
-        ? null
-        : _assistantConfigsByConversation[convId];
+    final conversationConfig =
+        convId == null ? null : _assistantConfigsByConversation[convId];
     final prompt = conversationConfig?.hasPrompt == true
         ? conversationConfig!.prompt
         : null;
