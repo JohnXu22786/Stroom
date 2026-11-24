@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,13 +10,28 @@ import 'package:stroom/services/assistant_catalog_service.dart';
 
 void main() {
   group('AssistantCatalogService', () {
+    if (kIsWeb) {
+      test('fails closed when guarded DNS resolution is unavailable', () async {
+        final service = AssistantCatalogService();
+
+        await expectLater(
+          service.fetchCatalog('https://catalog.example/catalog.json'),
+          throwsA(isA<FormatException>()),
+        );
+        service.close();
+      });
+    }
+
     test('fetches a direct Stroom JSON assistant over HTTPS', () async {
       final body = _assistantJson(version: '1.0.0');
       final client = MockClient((request) async {
         expect(request.url.toString(), 'https://example.com/assistant.json');
         return http.Response.bytes(utf8.encode(body), 200, request: request);
       });
-      final service = AssistantCatalogService(client: client);
+      final service = AssistantCatalogService.testing(
+        client: client,
+        addressLookup: _publicAddressLookup,
+      );
 
       final result = await service.fetchDirectAssistant(
         'https://example.com/assistant.json',
@@ -32,11 +48,12 @@ void main() {
       'rejects non-HTTPS and private host URLs before making a request',
       () async {
         var requestCount = 0;
-        final service = AssistantCatalogService(
+        final service = AssistantCatalogService.testing(
           client: MockClient((_) async {
             requestCount++;
             return http.Response('{}', 200);
           }),
+          addressLookup: _publicAddressLookup,
         );
 
         await expectLater(
@@ -81,7 +98,10 @@ void main() {
         );
         return http.Response.bytes(utf8.encode(body), 200, request: request);
       });
-      final service = AssistantCatalogService(client: client);
+      final service = AssistantCatalogService.testing(
+        client: client,
+        addressLookup: _publicAddressLookup,
+      );
 
       final result = await service.fetchDirectAssistant(
         'https://[2001:4860:4860::8888]/assistant.json',
@@ -90,6 +110,131 @@ void main() {
 
       expect(result.definition.id, 'stroom.test');
       expect(result.definition.version, '1.0.0');
+    });
+
+    test(
+      'rejects a public hostname resolving to a private IPv4 address',
+      () async {
+        var requestCount = 0;
+        final service = AssistantCatalogService.testing(
+          client: MockClient((_) async {
+            requestCount++;
+            return http.Response('{}', 200);
+          }),
+          addressLookup: (_) async => ['93.184.216.34', '10.0.0.8'],
+        );
+
+        await expectLater(
+          service.fetchCatalog('https://catalog.example/catalog.json'),
+          throwsA(isA<FormatException>()),
+        );
+        expect(requestCount, 0);
+        service.close();
+      },
+    );
+
+    test(
+      'rejects a public hostname resolving to a private IPv6 address',
+      () async {
+        var requestCount = 0;
+        final service = AssistantCatalogService.testing(
+          client: MockClient((_) async {
+            requestCount++;
+            return http.Response('{}', 200);
+          }),
+          addressLookup: (_) async => ['2001:4860:4860::8888', 'fd12::1'],
+        );
+
+        await expectLater(
+          service.fetchCatalog('https://catalog.example/catalog.json'),
+          throwsA(isA<FormatException>()),
+        );
+        expect(requestCount, 0);
+        service.close();
+      },
+    );
+
+    test('rejects IPv6 transition addresses that encode private IPv4',
+        () async {
+      for (final address in [
+        '64:ff9b::a00:1',
+        '64:ff9b:1::a00:1',
+        '::a00:1',
+        '2002:0a00:0001::1',
+        '2001:0000:4136:e378:8000:63bf:3fff:fdd2',
+        '2002:5db8:d822::1',
+        '2001:4860:4860::5efe:a00:1',
+      ]) {
+        var requestCount = 0;
+        final service = AssistantCatalogService.testing(
+          client: MockClient((_) async {
+            requestCount++;
+            return http.Response('{}', 200);
+          }),
+          addressLookup: (_) async => [address],
+        );
+
+        await expectLater(
+          service.fetchCatalog('https://catalog.example/catalog.json'),
+          throwsA(isA<FormatException>()),
+          reason: 'DNS answer $address encodes a private IPv4 endpoint',
+        );
+        expect(requestCount, 0, reason: 'DNS answer $address was requested');
+        service.close();
+      }
+    });
+
+    test('rejects IPv6 special-purpose addresses from DNS', () async {
+      for (final address in [
+        '100::1',
+        '2001:2::1',
+        '3fff::1',
+        '5f00::1',
+        '4000::1',
+      ]) {
+        var requestCount = 0;
+        final service = AssistantCatalogService.testing(
+          client: MockClient((_) async {
+            requestCount++;
+            return http.Response('{}', 200);
+          }),
+          addressLookup: (_) async => [address],
+        );
+
+        await expectLater(
+          service.fetchCatalog('https://catalog.example/catalog.json'),
+          throwsA(isA<FormatException>()),
+          reason: 'DNS answer $address is a special-purpose destination',
+        );
+        expect(requestCount, 0, reason: 'DNS answer $address was requested');
+        service.close();
+      }
+    });
+
+    test('does not follow a redirect to a private address', () async {
+      final requests = <Uri>[];
+      var lookupCount = 0;
+      final service = AssistantCatalogService.testing(
+        client: MockClient((request) async {
+          requests.add(request.url);
+          return http.Response(
+            '',
+            302,
+            headers: {'location': 'https://catalog.example/private'},
+            request: request,
+          );
+        }),
+        addressLookup: (_) async =>
+            lookupCount++ == 0 ? ['93.184.216.34'] : ['10.0.0.8'],
+      );
+
+      await expectLater(
+        service.fetchCatalog('https://catalog.example/catalog.json'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(requests, [Uri.parse('https://catalog.example/catalog.json')]);
+      expect(lookupCount, 2);
+      service.close();
     });
 
     test(
@@ -104,7 +249,10 @@ void main() {
           );
           return http.Response.bytes(utf8.encode(file), 200, request: request);
         });
-        final service = AssistantCatalogService(client: client);
+        final service = AssistantCatalogService.testing(
+          client: client,
+          addressLookup: _publicAddressLookup,
+        );
         final entry = RemoteAssistantCatalogEntry.fromMap({
           'id': 'stroom.test',
           'name': 'Test assistant',
@@ -131,7 +279,7 @@ void main() {
       'rejects mismatched hashes and catalog paths outside the origin',
       () async {
         var requestCount = 0;
-        final service = AssistantCatalogService(
+        final service = AssistantCatalogService.testing(
           client: MockClient((request) async {
             requestCount++;
             return http.Response.bytes(
@@ -140,6 +288,7 @@ void main() {
               request: request,
             );
           }),
+          addressLookup: _publicAddressLookup,
         );
         final entry = RemoteAssistantCatalogEntry.fromMap({
           'id': 'stroom.test',
@@ -192,3 +341,6 @@ String _assistantJson({required String version}) => '''
   "prompt": "Be helpful."
 }
 ''';
+
+Future<List<String>> _publicAddressLookup(String _) async =>
+    const ['93.184.216.34'];
