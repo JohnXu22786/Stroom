@@ -277,6 +277,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // ============================================================
 
   void _autoDetectSeparator(String text) {
+    if (_selectedSeparator == '自定义...') return;
+
     const candidates = [
       ('Tab', '\t'),
       ('逗号 (,)', ','),
