@@ -401,6 +401,12 @@ class LinkSyntax extends DelimiterSyntax {
           buffer.writeCharCode(char);
           break;
 
+        case $lt:
+        case $gt:
+          // Angle brackets are not allowed in a bare destination unless
+          // escaped (which is handled by the backslash case above).
+          return null;
+
         default:
           buffer.writeCharCode(char);
       }
