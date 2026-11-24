@@ -945,6 +945,14 @@ class ManifestDatabase {
     }
   }
 
+  static Map<String, dynamic> _jsonRecordWithTextId(
+    Map<String, dynamic> record,
+  ) {
+    final id = record['id'];
+    if (id == null || id is String) return record;
+    return {...record, 'id': id.toString()};
+  }
+
   /// 插入一条图片记录
   static Future<void> insertImageRecord(Map<String, dynamic> record) async {
     try {
@@ -953,13 +961,16 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list =
               data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-          final index =
-              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          final jsonRecord = _jsonRecordWithTextId(record);
+          final id = jsonRecord['id'] as String?;
+          final index = id == null
+              ? -1
+              : list.indexWhere((r) => (r as Map)['id']?.toString() == id);
           if (index == -1) {
-            list.add(record);
+            list.add(jsonRecord);
           } else {
-            list.removeWhere((r) => (r as Map)['id'] == record['id']);
-            list.insert(index, record);
+            list.removeWhere((r) => (r as Map)['id']?.toString() == id);
+            list.insert(index, jsonRecord);
           }
           await _saveWebData();
         });
@@ -1088,13 +1099,16 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list =
               data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-          final index =
-              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          final jsonRecord = _jsonRecordWithTextId(record);
+          final id = jsonRecord['id'] as String?;
+          final index = id == null
+              ? -1
+              : list.indexWhere((r) => (r as Map)['id']?.toString() == id);
           if (index == -1) {
-            list.add(record);
+            list.add(jsonRecord);
           } else {
-            list.removeWhere((r) => (r as Map)['id'] == record['id']);
-            list.insert(index, record);
+            list.removeWhere((r) => (r as Map)['id']?.toString() == id);
+            list.insert(index, jsonRecord);
           }
           await _saveWebData();
         });
@@ -1259,13 +1273,16 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list =
               data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-          final index =
-              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          final jsonRecord = _jsonRecordWithTextId(record);
+          final id = jsonRecord['id'] as String?;
+          final index = id == null
+              ? -1
+              : list.indexWhere((r) => (r as Map)['id']?.toString() == id);
           if (index == -1) {
-            list.add(record);
+            list.add(jsonRecord);
           } else {
-            list.removeWhere((r) => (r as Map)['id'] == record['id']);
-            list.insert(index, record);
+            list.removeWhere((r) => (r as Map)['id']?.toString() == id);
+            list.insert(index, jsonRecord);
           }
           await _saveWebData();
         });
@@ -1393,21 +1410,26 @@ class ManifestDatabase {
           final data = await _loadWebData();
           final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
           beforeCommit?.call();
-          final index =
-              list.indexWhere((r) => (r as Map)['id'] == record['id']);
+          final jsonRecord = _jsonRecordWithTextId(record);
+          final id = jsonRecord['id'] as String?;
+          final index = id == null
+              ? -1
+              : list.indexWhere((r) => (r as Map)['id']?.toString() == id);
           final previousList = index == -1 ? null : List<dynamic>.from(list);
           if (index == -1) {
-            list.add(record);
+            list.add(jsonRecord);
           } else {
-            list.removeWhere((r) => (r as Map)['id'] == record['id']);
-            list.insert(index, record);
+            list.removeWhere((r) => (r as Map)['id']?.toString() == id);
+            list.insert(index, jsonRecord);
           }
           await _saveWebData();
           try {
             beforeCommit?.call();
           } catch (_) {
             if (index == -1) {
-              list.removeWhere((r) => (r as Map)['id'] == record['id']);
+              final insertedIndex =
+                  list.lastIndexWhere((r) => identical(r, jsonRecord));
+              if (insertedIndex != -1) list.removeAt(insertedIndex);
             } else {
               list
                 ..clear()
