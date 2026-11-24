@@ -48,7 +48,7 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
 
     final newIdToFirst = <String, int>{};
     for (int i = 0; i < _working.length; i++) {
-      newIdToFirst[_working[i].id.trim()] = i;
+      newIdToFirst.putIfAbsent(_working[i].id.trim(), () => i);
     }
     _idToFirstIdx = newIdToFirst;
 
@@ -74,7 +74,7 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
 
     final newIdToFirst = <String, int>{};
     for (int i = 0; i < _working.length; i++) {
-      newIdToFirst[_working[i].id.trim()] = i;
+      newIdToFirst.putIfAbsent(_working[i].id.trim(), () => i);
     }
     _idToFirstIdx = newIdToFirst;
 
