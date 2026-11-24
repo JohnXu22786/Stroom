@@ -283,6 +283,86 @@ void main() {
     expect(confirm.onPressed, isNotNull);
   });
 
+  testWidgets(
+    'implicit video confirmation includes only its paired split audio',
+    (tester) async {
+      const video = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+        mimeType: 'video/mp4',
+        groupId: 'split-group',
+        isLikelySplitTrack: true,
+      );
+      const pairedAudio = MediaResource(
+        url: 'https://example.com/audio.m4a',
+        name: 'audio',
+        ext: 'm4a',
+        mimeType: 'audio/mp4',
+        groupId: 'split-group',
+        isLikelySplitTrack: true,
+      );
+      const playlistSegment = MediaResource(
+        url: 'https://example.com/playlist-segment.m4a',
+        name: 'playlist segment',
+        ext: 'm4a',
+        mimeType: 'audio/mp4',
+        initiator: 'https://example.com/playlist.m3u8',
+        groupId: 'split-group',
+        isLikelySplitTrack: true,
+      );
+      const unrelatedAudio = MediaResource(
+        url: 'https://example.com/unrelated.m4a',
+        name: 'unrelated audio',
+        ext: 'm4a',
+        mimeType: 'audio/mp4',
+        groupId: 'other-group',
+        isLikelySplitTrack: true,
+      );
+      final service = _TaskFlowServiceMock();
+      final notifier = _CatCatchNotifierMock();
+      when(
+        () => service.performManualCatCatchAction(
+          any(),
+          any(),
+          any(),
+          selectedMediaUrl: any(named: 'selectedMediaUrl'),
+          selectedMediaIdentity: any(named: 'selectedMediaIdentity'),
+          selectedMediaHasByteRange: any(named: 'selectedMediaHasByteRange'),
+        ),
+      ).thenAnswer((invocation) async {
+        final action = invocation.positionalArguments[2] as void Function(
+          CatCatchNotifier,
+        );
+        action(notifier);
+        return true;
+      });
+      await _pumpFlowSelection(
+        tester,
+        [video, playlistSegment, pairedAudio, unrelatedAudio],
+        candidates: [video],
+        service: service,
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('catcatch_media_selection_dialog')),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      verify(
+        () => notifier.selectMedia(
+          'flow-task',
+          video,
+          mergeAudioUrl: pairedAudio.url,
+        ),
+      ).called(1);
+    },
+  );
+
   testWidgets('allowed split audio is not duplicated as a companion', (
     tester,
   ) async {

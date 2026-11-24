@@ -159,6 +159,32 @@ extension _HomePageMediaDialogExt on _HomePageState {
                   confirmableIdentities == null &&
                   mediaList.length == 1 &&
                   visibleResources.length == 1;
+          final implicitlySelectedMedia = implicitSingleIdentity == null
+              ? <MediaResource>[]
+              : mediaList
+                  .where(
+                    (media) =>
+                        media.selectionIdentity == implicitSingleIdentity,
+                  )
+                  .toList();
+          final implicitlySelectedVideo = implicitlySelectedMedia
+              .where((media) => media.isVideo && media.isLikelySplitTrack)
+              .firstOrNull;
+          final implicitCompanionAudio =
+              implicitlySelectedVideo?.groupId == null
+                  ? <MediaResource>[]
+                  : mediaList
+                      .where(
+                        (media) =>
+                            media.isAudio &&
+                            media.isLikelySplitTrack &&
+                            !media.isPlaylistSegment &&
+                            media.groupId == implicitlySelectedVideo!.groupId &&
+                            !confirmableIdentities!.contains(
+                              media.selectionIdentity,
+                            ),
+                      )
+                      .toList();
           // Keep the resource scroller to two-thirds of this dialog's content
           // viewport. The title, segment toggle, and dialog actions stay fixed.
           final contentViewportHeight = MediaQuery.sizeOf(ctx).height * 0.5;
@@ -477,13 +503,10 @@ extension _HomePageMediaDialogExt on _HomePageState {
                     ? () async {
                         final selectedMediaList = selectedIdentities.isEmpty &&
                                 implicitSingleIdentity != null
-                            ? mediaList
-                                .where(
-                                  (media) =>
-                                      media.selectionIdentity ==
-                                      implicitSingleIdentity,
-                                )
-                                .toList()
+                            ? [
+                                ...implicitlySelectedMedia,
+                                ...implicitCompanionAudio,
+                              ]
                             : mediaList.length == 1 &&
                                     visibleResources.length == 1
                                 ? mediaList
