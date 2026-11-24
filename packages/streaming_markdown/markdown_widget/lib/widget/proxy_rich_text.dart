@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/markdown_generator.dart';
+import 'link_recognizer_lifecycle.dart';
 
 ///use [ProxyRichText] to give `textScaleFactor` a default value
 class ProxyRichText extends StatelessWidget {
@@ -9,12 +10,15 @@ class ProxyRichText extends StatelessWidget {
 
   const ProxyRichText(
     this.textSpan, {
-    Key? key,
+    super.key,
     this.richTextBuilder,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
-    return richTextBuilder?.call(textSpan) ?? Text.rich(textSpan);
+    return LinkRecognizerLifecycle(
+      span: textSpan,
+      child: richTextBuilder?.call(textSpan) ?? Text.rich(textSpan),
+    );
   }
 }

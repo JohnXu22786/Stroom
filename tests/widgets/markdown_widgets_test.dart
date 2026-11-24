@@ -10,10 +10,11 @@ import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
-import 'package:visibility_detector/visibility_detector.dart';
+import 'package:markdown_widget/widget/link_recognizer_lifecycle.dart';
 
 /// Helper: creates a [m.Document] with the [LatexSyntax] registered and
 /// parses [text], returning the root nodes so tests can inspect the AST.
@@ -39,6 +40,11 @@ List<m.Node> _parseLikeMarkdownGenerator(String text) {
   return doc.parse(text);
 }
 
+Widget _unwrapLinkRecognizerLifecycle(Widget widget) =>
+    widget is LinkRecognizerLifecycle
+        ? _unwrapLinkRecognizerLifecycle(widget.child)
+        : widget;
+
 List<Widget> _widgetsFromInlineSpans(List<Widget> widgets) {
   final found = <Widget>[];
 
@@ -52,8 +58,10 @@ List<Widget> _widgetsFromInlineSpans(List<Widget> widgets) {
   }
 
   for (final widget in widgets) {
-    if (widget is Padding && widget.child is Text) {
-      final textSpan = (widget.child as Text).textSpan;
+    if (widget is Padding) {
+      final child = _unwrapLinkRecognizerLifecycle(widget.child!);
+      if (child is! Text) continue;
+      final textSpan = child.textSpan;
       if (textSpan != null) visit(textSpan);
     }
   }
@@ -283,6 +291,67 @@ void main() {
     ));
     expect(secondActiveBuilderCalls, greaterThan(0));
     expect(paragraphColor('Coalesced paragraph later'), Colors.blue);
+  });
+
+  group('Markdown link recognizer lifecycle', () {
+    testWidgets('releases links replaced or disposed during a pointer press',
+        (WidgetTester tester) async {
+      VisibilityDetectorController.instance.updateInterval = Duration.zero;
+      addTearDown(() {
+        VisibilityDetectorController.instance.updateInterval =
+            const Duration(milliseconds: 500);
+      });
+      final tappedUrls = <String>[];
+      final config = MarkdownConfig(configs: [
+        LinkConfig(onTap: tappedUrls.add),
+      ]);
+
+      Widget markdown(String data) => MaterialApp(
+            home: Scaffold(
+              body: MarkdownWidget(
+                key: const ValueKey('markdown'),
+                data: data,
+                selectable: false,
+                shrinkWrap: true,
+                config: config,
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(markdown('[old](https://old.example)'));
+      Finder link(String value) => find.textContaining(
+            value,
+            findRichText: true,
+          );
+
+      final oldLink = link('old');
+      expect(oldLink, findsOneWidget);
+      final oldLinkRect = tester.getRect(oldLink);
+      final linkStart = Offset(oldLinkRect.left + 1, oldLinkRect.center.dy);
+      final replacementGesture = await tester.startGesture(linkStart);
+      await tester.pump();
+
+      await tester.pumpWidget(markdown('[new](https://new.example)'));
+      await replacementGesture.up();
+      await tester.pump();
+
+      expect(tappedUrls, isEmpty,
+          reason: 'a replaced link must not retain its active pointer route');
+      final newLinkRect = tester.getRect(link('new'));
+      await tester.tapAt(Offset(newLinkRect.left + 1, newLinkRect.center.dy));
+      expect(tappedUrls, ['https://new.example']);
+
+      final disposalGesture = await tester.startGesture(
+        Offset(newLinkRect.left + 1, newLinkRect.center.dy),
+      );
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await disposalGesture.up();
+      await tester.pump();
+
+      expect(tappedUrls, ['https://new.example'],
+          reason: 'a disposed link must not invoke its stale callback');
+    });
   });
 
   group('Markdown image URL schemes', () {
@@ -583,8 +652,8 @@ $$
       );
       final spans = [
         for (final widget in widgets)
-          if (widget is Padding && widget.child is Text)
-            (widget.child as Text).textSpan!,
+          if (widget is Padding)
+            (_unwrapLinkRecognizerLifecycle(widget.child!) as Text).textSpan!,
       ];
       TextSpan? findSpan(String text) {
         for (final span in spans) {
@@ -2884,7 +2953,9 @@ $$
 
       // The underline must be scoped to exactly the tagged content: the
       // inner leaf span is underlined, the surrounding text is not.
-      final rootSpan = (widgets.single as Padding).child as Text;
+      final rootSpan = _unwrapLinkRecognizerLifecycle(
+        (widgets.single as Padding).child!,
+      ) as Text;
       expect(_leafSpanWithText(rootSpan.textSpan!, '下划线文本')!.style?.decoration,
           TextDecoration.underline,
           reason: 'the tagged text must carry TextDecoration.underline');
@@ -2910,7 +2981,9 @@ $$
         ),
       ));
 
-      final rootSpan = (widgets.single as Padding).child as Text;
+      final rootSpan = _unwrapLinkRecognizerLifecycle(
+        (widgets.single as Padding).child!,
+      ) as Text;
       final boldLeaf = _leafSpanWithText(rootSpan.textSpan!, '加粗')!;
       expect(boldLeaf.style?.fontWeight, FontWeight.bold,
           reason: 'nested **bold** must keep the bold weight');
