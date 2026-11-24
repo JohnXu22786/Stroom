@@ -657,6 +657,99 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     }
 
     final selectedIndex = _selectedModelOptionIndex(modelOptions);
+    final modelLabel = AppLocalizations.of(context)!.asrModel;
+    final modelLabelStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: cs.onSurfaceVariant,
+    );
+    final modelIcon = Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
+      child: Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+    );
+    final modelDropdown = Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: cs.surface.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
+          value: selectedIndex,
+          hint: ConstrainedText(
+            _modelSelectionRequired || _selectedModelReference != null
+                ? AppLocalizations.of(context)!.reselectModel
+                : AppLocalizations.of(context)!.selectAsrModel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          isDense: true,
+          isExpanded: true,
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 20,
+            color: cs.primary,
+          ),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+          onChanged: _isProcessing || _retryLoading
+              ? null
+              : (idx) {
+                  if (idx == null || idx >= modelOptions.length) return;
+                  final option = modelOptions[idx];
+                  final newReference = {
+                    'configId': option.configId,
+                    'modelId': option.modelId,
+                  };
+                  final resetRetryState =
+                      _modelSelectionRequired ||
+                      !_sameModelReference(
+                        _selectedModelReference,
+                        newReference,
+                      );
+                  setState(() {
+                    _selectedModelReference = newReference;
+                    _modelSelectionRequired = false;
+                    _errorMessage = null;
+                    if (resetRetryState) {
+                      _retryConfigSnapshot = null;
+                      _clearCompletedChunkCheckpoints();
+                    }
+                  });
+                },
+          items: List.generate(modelOptions.length, (i) {
+            final opt = modelOptions[i];
+            final modelName = opt.model.name.isNotEmpty
+                ? opt.model.name
+                : opt.model.modelId;
+            final displayText = opt.providerName.isNotEmpty
+                ? '$modelName | ${opt.providerName}'
+                : modelName;
+            return DropdownMenuItem<int>(
+              value: i,
+              child: ConstrainedText(
+                displayText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }),
+        ),
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -667,115 +760,50 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
-              child: Icon(
-                Icons.smart_toy_outlined,
-                size: 16,
-                color: cs.primary,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              AppLocalizations.of(context)!.asrModel,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                height: 34,
-                decoration: BoxDecoration(
-                  color: cs.surface.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    dropdownColor: StroomMenuStyle.surface(context),
-                    borderRadius: StroomMenuStyle.borderRadius,
-                    value: selectedIndex,
-                    hint: ConstrainedText(
-                      _modelSelectionRequired || _selectedModelReference != null
-                          ? AppLocalizations.of(context)!.reselectModel
-                          : AppLocalizations.of(context)!.selectAsrModel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    isDense: true,
-                    isExpanded: true,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: cs.primary,
-                    ),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
-                    onChanged: _isProcessing || _retryLoading
-                        ? null
-                        : (idx) {
-                            if (idx == null || idx >= modelOptions.length) {
-                              return;
-                            }
-                            final option = modelOptions[idx];
-                            final newReference = {
-                              'configId': option.configId,
-                              'modelId': option.modelId,
-                            };
-                            final resetRetryState = _modelSelectionRequired ||
-                                !_sameModelReference(
-                                  _selectedModelReference,
-                                  newReference,
-                                );
-                            setState(() {
-                              _selectedModelReference = newReference;
-                              _modelSelectionRequired = false;
-                              _errorMessage = null;
-                              if (resetRetryState) {
-                                _retryConfigSnapshot = null;
-                                _clearCompletedChunkCheckpoints();
-                              }
-                            });
-                          },
-                    items: List.generate(modelOptions.length, (i) {
-                      final opt = modelOptions[i];
-                      final modelName = opt.model.name.isNotEmpty
-                          ? opt.model.name
-                          : opt.model.modelId;
-                      final displayText = opt.providerName.isNotEmpty
-                          ? '$modelName | ${opt.providerName}'
-                          : modelName;
-                      return DropdownMenuItem<int>(
-                        value: i,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final labelPainter = TextPainter(
+              text: TextSpan(text: modelLabel, style: modelLabelStyle),
+              textDirection: Directionality.of(context),
+              textScaler: MediaQuery.textScalerOf(context),
+            )..layout();
+            final needsStackedLayout =
+                28 + 10 + labelPainter.width + 8 + 104 > constraints.maxWidth;
+
+            if (needsStackedLayout) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      modelIcon,
+                      const SizedBox(width: 10),
+                      Expanded(
                         child: ConstrainedText(
-                          displayText,
+                          modelLabel,
+                          style: modelLabelStyle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      );
-                    }),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ),
-          ],
+                  const SizedBox(height: 8),
+                  SizedBox(width: double.infinity, child: modelDropdown),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                modelIcon,
+                const SizedBox(width: 10),
+                Text(modelLabel, style: modelLabelStyle),
+                const SizedBox(width: 8),
+                Expanded(child: modelDropdown),
+              ],
+            );
+          },
         ),
       ),
     );
