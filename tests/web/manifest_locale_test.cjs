@@ -49,6 +49,8 @@ test('browser language selection chooses the matching PWA manifest', () => {
     path.resolve(__dirname, '../../web/index.html'),
     'utf8',
   );
+  assert.match(indexHtml, /<meta name="description" content="An AI study workspace/);
+  assert.match(indexHtml, /<title>Stroom — An AI study workspace<\/title>/);
   const inlineManifestLoader = indexHtml.match(/<script>\s*([\s\S]*?)\s*<\/script>/);
   assert.ok(inlineManifestLoader, 'Index must select and install a manifest link');
   assert.ok(
@@ -60,21 +62,38 @@ test('browser language selection chooses the matching PWA manifest', () => {
     'Manifest link must be inserted before Flutter starts',
   );
 
-  for (const [languages, expectedManifest] of [
-    [['zh-CN'], 'manifest.zh_CN.json'],
-    [['en-US'], 'manifest.json'],
+  for (const [languages, expectedManifest, expectedTitle, expectedDescription] of [
+    [
+      ['zh-CN'],
+      'manifest.zh_CN.json',
+      'Stroom — 你的学习助理',
+      'Stroom — 你的学习助理：番茄钟、任务管理、学习笔记与 AI 助手。',
+    ],
+    [
+      ['en-US'],
+      'manifest.json',
+      'Stroom — An AI study workspace',
+      'An AI study workspace for organizing learning materials, understanding content, and preparing for review.',
+    ],
   ]) {
     let insertedManifest;
+    const description = {
+      content: 'An AI study workspace for organizing learning materials, understanding content, and preparing for review.',
+    };
     const context = {
       navigator: {languages},
       selectStroomManifest: selectManifest,
       document: {
+        title: 'Stroom — An AI study workspace',
         createElement: () => ({}),
+        querySelector: () => description,
         head: {appendChild: (link) => { insertedManifest = link; }},
       },
     };
     vm.runInNewContext(inlineManifestLoader[1], context);
     assert.equal(insertedManifest.rel, 'manifest');
     assert.equal(insertedManifest.href, expectedManifest);
+    assert.equal(context.document.title, expectedTitle);
+    assert.equal(description.content, expectedDescription);
   }
 });

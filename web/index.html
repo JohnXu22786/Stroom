@@ -18,7 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Stroom — 你的学习助理：番茄钟、任务管理、学习笔记与 AI 助手。">
+  <meta name="description" content="An AI study workspace for organizing learning materials, understanding content, and preparing for review.">
   <meta name="theme-color" content="#0D47A1">
 
   <!-- iOS meta tags & icons -->
@@ -30,7 +30,7 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Stroom — 你的学习助理</title>
+  <title>Stroom — An AI study workspace</title>
   <script src="manifest_locale.js"></script>
   <script>
     const manifestLink = document.createElement('link');
@@ -38,8 +38,15 @@
     const browserLanguages = navigator.languages?.length
       ? navigator.languages
       : [navigator.language];
-    manifestLink.href = selectStroomManifest(browserLanguages);
+    const manifestFile = selectStroomManifest(browserLanguages);
+    manifestLink.href = manifestFile;
     document.head.appendChild(manifestLink);
+
+    if (manifestFile === 'manifest.zh_CN.json') {
+      document.title = 'Stroom — 你的学习助理';
+      document.querySelector('meta[name="description"]').content =
+        'Stroom — 你的学习助理：番茄钟、任务管理、学习笔记与 AI 助手。';
+    }
   </script>
 
 </head>
