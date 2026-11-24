@@ -25,8 +25,7 @@ class _SearchPanelState extends State<SearchPanel> {
   bool _searchByContent = false;
   String _query = '';
 
-  List<Conversation> get _filteredConversations {
-    final query = _query.trim().toLowerCase();
+  List<Conversation> _filteredConversations(String query) {
     if (query.isEmpty) return [];
 
     // 稳定排序（pinnedFirstStable）：Dart 的 List.sort 对 >33 个元素
@@ -55,7 +54,8 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final filtered = _filteredConversations;
+    final query = _query.trim().toLowerCase();
+    final filtered = _filteredConversations(query);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -133,7 +133,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final l10n = AppLocalizations.of(context)!;
-                    final hasResults = _query.isNotEmpty;
+                    final hasResults = query.isNotEmpty;
                     const gap = 8.0;
                     final resultSlotWidth =
                         hasResults ? constraints.maxWidth / 3 : 0.0;
@@ -221,7 +221,7 @@ class _SearchPanelState extends State<SearchPanel> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              _query.isEmpty
+                              query.isEmpty
                                   ? AppLocalizations.of(context)!
                                       .searchPanelPrompt
                                   : AppLocalizations.of(context)!
@@ -240,7 +240,7 @@ class _SearchPanelState extends State<SearchPanel> {
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final conv = filtered[index];
-                          return _buildSearchResultCard(conv, cs);
+                          return _buildSearchResultCard(conv, cs, query);
                         },
                       ),
               ),
@@ -251,12 +251,16 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  Widget _buildSearchResultCard(Conversation conv, ColorScheme cs) {
+  Widget _buildSearchResultCard(
+    Conversation conv,
+    ColorScheme cs,
+    String query,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final title = conv.title.isEmpty
         ? AppLocalizations.of(context)!.searchPanelNewConversation
         : conv.title;
-    final matchCount = countMessageMatches(conv, _query);
+    final matchCount = countMessageMatches(conv, query);
 
     return Card(
       elevation: 0,

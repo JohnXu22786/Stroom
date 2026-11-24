@@ -195,6 +195,65 @@ void main() {
     expect(find.text('Enter a keyword...'), findsOneWidget);
   });
 
+  testWidgets('search panel treats whitespace-only input as an empty query', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SearchPanel(
+            conversations: [Conversation(title: 'Conversation')],
+            onConversationSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(SearchPanel)))!;
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.pump();
+
+    expect(find.text(l10n.searchPanelPrompt), findsOneWidget);
+    expect(find.text(l10n.searchPanelNoResults), findsNothing);
+    expect(find.text(l10n.searchPanelResults(0)), findsNothing);
+  });
+
+  testWidgets('search panel counts matches for padded content queries', (
+    tester,
+  ) async {
+    final conversation = Conversation(
+      title: 'Conversation',
+      messages: [ChatMessage(role: 'user', content: 'needle needle')],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SearchPanel(
+            conversations: [conversation],
+            onConversationSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(SearchPanel)))!;
+    await tester.tap(find.byType(FilterChip).at(1));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), ' needle ');
+    await tester.pump();
+
+    expect(find.text(l10n.searchPanelResults(1)), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+  });
+
   testWidgets('search panel heading handles long text at narrow width', (
     tester,
   ) async {
