@@ -257,8 +257,16 @@ class DartCatCatchSniffer {
       totalDuration =
           segDurations.fold<double>(0, (sum, s) => sum + s.duration);
     } else if (ext == 'mpd') {
-      segments = await MPDParser.parseManifest(content, targetUrl);
-      final mpdSegments = await MPDParser.parseSegments(content, targetUrl);
+      segments = await MPDParser.parseManifest(
+        content,
+        targetUrl,
+        maxSegments: MPDParser.defaultMaxSegments,
+      );
+      final mpdSegments = await MPDParser.parseSegments(
+        content,
+        targetUrl,
+        maxSegments: MPDParser.defaultMaxSegments,
+      );
       totalDuration = mpdSegments.fold<double>(0, (sum, s) => sum + s.duration);
     } else {
       segments = [];
