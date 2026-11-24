@@ -216,6 +216,10 @@ extension _SettingsPageAboutExt on _SettingsPageState {
 
     final notifier = ref.read(updateProvider.notifier);
     await notifier.checkForUpdate();
+    if (!mounted) {
+      snackBar.close();
+      return;
+    }
     final state = ref.read(updateProvider);
 
     // Dismiss the checking snackbar
