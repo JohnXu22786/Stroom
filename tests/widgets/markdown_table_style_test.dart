@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:markdown/markdown.dart' as markdown;
 import 'package:markdown_widget/markdown_widget.dart';
 
 TextStyle? _styleForText(InlineSpan span, String text) {
@@ -13,6 +14,36 @@ TextStyle? _styleForText(InlineSpan span, String text) {
 }
 
 void main() {
+  testWidgets('ignores body cells beyond the table header column count', (
+    WidgetTester tester,
+  ) async {
+    final table = markdown.Element('table', [
+      markdown.Element('thead', [
+        markdown.Element('tr', [
+          markdown.Element('th', [markdown.Text('Header')]),
+        ]),
+      ]),
+      markdown.Element('tbody', [
+        markdown.Element('tr', [
+          markdown.Element('td', [markdown.Text('Visible')]),
+          markdown.Element('td', [markdown.Text('Overflow')]),
+        ]),
+      ]),
+    ]);
+    final widgets = MarkdownGenerator().buildWidgetsFromNodes([table]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: Column(children: widgets)),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Header'), findsOneWidget);
+    expect(find.text('Visible'), findsOneWidget);
+    expect(find.text('Overflow'), findsNothing);
+  });
+
   testWidgets('table header and body use their configured text styles', (
     WidgetTester tester,
   ) async {
