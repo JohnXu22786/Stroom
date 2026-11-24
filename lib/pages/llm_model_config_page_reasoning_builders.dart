@@ -482,7 +482,33 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               .toList(),
           onChanged: (v) {
             if (v != null) {
-              setState(() => param.type = v);
+              setState(() {
+                if (param.isReasoningToggle || param.isEffortParam) {
+                  param.type = v;
+                  return;
+                }
+
+                final previousType = param.type;
+                if (previousType == 'json') {
+                  _syncJsonValueIntoAdditionalOptionBlocks(param);
+                } else if (previousType != 'boolean') {
+                  _saveAdditionalOptionBlocks(param);
+                }
+
+                param.type = v;
+                if (v != 'json' && v != 'boolean') {
+                  _initializeAdditionalOptionBlocks(param);
+                  _saveAdditionalOptionBlocks(param);
+                } else if (v == 'json') {
+                  _initializeAdditionalOptionBlocks(param);
+                  _saveAdditionalOptionBlocks(param);
+                  _additionalJsonInitialValues[param] =
+                      param.options.isEmpty ? null : param.options.first;
+                } else if (v == 'boolean') {
+                  _initializeAdditionalOptionBlocks(param);
+                  _saveAdditionalOptionBlocks(param);
+                }
+              });
             }
           },
         ),
@@ -541,6 +567,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 const SizedBox(width: 4),
                 _buildTypeDropdown(param, cs),
                 const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  tooltip:
+                      AppLocalizations.of(context)!.reasoningResetParameter,
+                  onPressed: () => _resetReasoningParam(param),
+                ),
                 // 供应商传递下来的附加参数不允许删除（只可取消勾选/
                 // 排序）；模型自己添加的参数保留删除按钮。
                 if (!_isReasoningParamInherited(param))

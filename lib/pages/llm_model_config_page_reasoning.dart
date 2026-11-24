@@ -11,6 +11,94 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   // 推理参数
   // ===================================================================
 
+  /// Ensures an additional parameter has an option list while it is edited as
+  /// a string or number, including parameters that started as JSON/boolean.
+  void _initializeAdditionalOptionBlocks(ReasoningParam param) {
+    if (_additionalBlockValues.containsKey(param)) return;
+
+    var providerOptions = _providerAdditionalValues[param];
+    if (providerOptions == null) {
+      for (final providerParam
+          in widget.provider?.reasoningParams ?? const <ReasoningParam>[]) {
+        if (providerParam.paramName.trim() == param.paramName.trim()) {
+          providerOptions = List<String>.of(providerParam.options);
+          break;
+        }
+      }
+      providerOptions ??= <String>[];
+      _providerAdditionalValues[param] = providerOptions;
+    }
+
+    final savedOptions = List<String>.of(param.options);
+    final blocks = mergeOptionBlocks(
+      providerOptions: providerOptions,
+      savedOptions: savedOptions,
+      savedOrder: param.optionOrder,
+    ).toSet().toList();
+    _additionalBlockValues[param] = blocks;
+    final hasSavedSelection =
+        savedOptions.isNotEmpty || param.optionOrder.isNotEmpty;
+    _additionalSelectedValues[param] =
+        hasSavedSelection ? savedOptions.toSet() : {...providerOptions};
+  }
+
+  void _saveAdditionalOptionBlocks(ReasoningParam param) {
+    final blocks = _additionalBlockValues[param];
+    final selected = _additionalSelectedValues[param];
+    if (blocks == null || selected == null) return;
+    final uniqueBlocks = blocks.toSet().toList();
+    _additionalBlockValues[param] = uniqueBlocks;
+    _additionalSelectedValues[param] = selected.intersection(
+      uniqueBlocks.toSet(),
+    );
+    param.options =
+        uniqueBlocks.where(_additionalSelectedValues[param]!.contains).toList();
+    param.optionOrder = List.of(uniqueBlocks);
+  }
+
+  /// Applies the latest JSON editor value to the selectable option state.
+  void _syncJsonValueIntoAdditionalOptionBlocks(ReasoningParam param) {
+    _initializeAdditionalOptionBlocks(param);
+    final blocks = _additionalBlockValues[param]!;
+    final selected = _additionalSelectedValues[param]!;
+    final hadJsonBaseline = _additionalJsonInitialValues.containsKey(param);
+    final previousValue = _additionalJsonInitialValues.remove(param);
+    final currentValue = param.options.isEmpty ? '' : param.options.first;
+    final providerValues = _providerAdditionalValues[param] ?? const <String>[];
+
+    if (hadJsonBaseline &&
+        previousValue != null &&
+        blocks.contains(previousValue)) {
+      final previousIndex = blocks.indexOf(previousValue);
+      if (currentValue.isEmpty) {
+        if (!providerValues.contains(previousValue)) {
+          blocks.removeAt(previousIndex);
+        }
+        selected.remove(previousValue);
+      } else if (currentValue != previousValue &&
+          blocks.contains(currentValue)) {
+        if (!providerValues.contains(previousValue)) {
+          blocks.removeAt(previousIndex);
+        }
+        selected.remove(previousValue);
+        selected.add(currentValue);
+      } else {
+        if (providerValues.contains(previousValue)) {
+          if (!blocks.contains(currentValue)) blocks.add(currentValue);
+        } else {
+          blocks[previousIndex] = currentValue;
+        }
+        selected.remove(previousValue);
+        selected.add(currentValue);
+      }
+    } else if (currentValue.isNotEmpty) {
+      if (!blocks.contains(currentValue)) blocks.add(currentValue);
+      selected.add(currentValue);
+    }
+
+    _saveAdditionalOptionBlocks(param);
+  }
+
   void _addReasoningParam() {
     setState(() {
       final param = ReasoningParam(
@@ -24,6 +112,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       _additionalBlockValues[param] = [];
       _additionalSelectedValues[param] = {};
       _providerAdditionalValues[param] = [];
+      _initialParamSnapshots[param] = param.copy();
     });
   }
 
@@ -46,9 +135,12 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       // 仅附加推理参数可删除（推理开关/推理力度是固定结构，删除按钮
       // 已被启用开关替代）——删除附加参数时清理其勾选块状态。
       final removed = _reasoningParams.removeAt(index);
+      _initialReasoningParams.remove(removed);
+      _initialParamSnapshots.remove(removed);
       _additionalBlockValues.remove(removed);
       _additionalSelectedValues.remove(removed);
       _providerAdditionalValues.remove(removed);
+      _additionalJsonInitialValues.remove(removed);
     });
   }
 
@@ -444,22 +536,28 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       if (param.isEffortParam) {
         _effortBlockValues = List.of(_initialBlockValues);
         _effortSelectedValues = {..._initialSelectedValues};
-      } else if (!param.isReasoningToggle &&
-          param.type != 'json' &&
-          param.type != 'boolean') {
-        // 附加参数：还原勾选块状态（块顺序与打开时一致）
-        final providerOptions = _providerAdditionalValues[param];
-        if (providerOptions != null) {
-          _additionalBlockValues[param] = mergeOptionBlocks(
-            providerOptions: providerOptions,
-            savedOptions: snapshot.options,
-            savedOrder: snapshot.optionOrder,
-          );
-          final hasSavedSelection =
-              snapshot.options.isNotEmpty || snapshot.optionOrder.isNotEmpty;
-          _additionalSelectedValues[param] = hasSavedSelection
-              ? snapshot.options.toSet()
-              : {...providerOptions};
+      } else if (!param.isReasoningToggle) {
+        _additionalJsonInitialValues.remove(param);
+        if (param.type == 'json' || param.type == 'boolean') {
+          // A reset to a value-less type must discard the option state created
+          // during an earlier type conversion.
+          _additionalBlockValues.remove(param);
+          _additionalSelectedValues.remove(param);
+        } else {
+          // 附加参数：还原勾选块状态（块顺序与打开时一致）
+          final providerOptions = _providerAdditionalValues[param];
+          if (providerOptions != null) {
+            _additionalBlockValues[param] = mergeOptionBlocks(
+              providerOptions: providerOptions,
+              savedOptions: snapshot.options,
+              savedOrder: snapshot.optionOrder,
+            );
+            final hasSavedSelection =
+                snapshot.options.isNotEmpty || snapshot.optionOrder.isNotEmpty;
+            _additionalSelectedValues[param] = hasSavedSelection
+                ? snapshot.options.toSet()
+                : {...providerOptions};
+          }
         }
       }
       _reasoningResetVersion++;
@@ -484,6 +582,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   /// 自定义，可删除。与 [_paramSourceLabel] 的「当前：供应商」判定
   /// 共用同一逻辑。
   bool _isReasoningParamInherited(ReasoningParam param) {
+    if (!_initialReasoningParams.contains(param)) return false;
     final snapshot = _initialParamSnapshots[param];
     if (snapshot == null) {
       // 本会话新建的参数（添加按钮创建，无初始快照）
